@@ -1,0 +1,12 @@
+name: rurec
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python>=3.6
+  - ipython
+  - matplotlib
+  - pandas
+  - jupyter
+  - jupyterlab
+  - nbdime
