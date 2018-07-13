@@ -1,0 +1,9 @@
+data/
+tmp/
+
+# Vim
+*.swp
+
+# Python
+.ipynb_checkpoints/
+*.pyc
