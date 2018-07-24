@@ -1,5 +1,6 @@
-data/
+data/*
 tmp/
+!data/fai.json
 
 # Vim
 *.swp
