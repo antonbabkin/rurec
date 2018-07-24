@@ -3,6 +3,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
+  - numba
   - python>=3.6
   - ipython
   - matplotlib
@@ -13,4 +14,9 @@ dependencies:
   - jupyterlab
   - nbdime
   - pip:
+    - scipy
+    - sympy
+    - quilt
     - google-cloud-bigquery
+    - quantecon
+    - sphinxcontrib-jupyter

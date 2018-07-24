@@ -2,6 +2,9 @@ data*
 tmp/
 !data/fai.json
 
+notes.md
+todo.md
+
 # Vim
 *.swp
 
