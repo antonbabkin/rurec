@@ -7,6 +7,10 @@ dependencies:
   - ipython
   - matplotlib
   - pandas
+  - pandas-gbq
+  - geopandas
   - jupyter
   - jupyterlab
   - nbdime
+  - pip:
+    - google-cloud-bigquery
