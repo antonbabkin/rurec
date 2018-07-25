@@ -1,6 +1,7 @@
 data/*
 tmp/
 !data/fai.json
+fig/
 
 # Vim
 *.swp
