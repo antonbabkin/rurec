@@ -1,6 +1,7 @@
 data*
 tmp/
 !data/fai.json
+fig/
 
 notes.md
 todo.md
