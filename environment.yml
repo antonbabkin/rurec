@@ -13,10 +13,12 @@ dependencies:
   - jupyter
   - jupyterlab
   - nbdime
+  - scipy
+  - sympy
+  - lxml
   - pip:
-    - scipy
-    - sympy
     - quilt
     - google-cloud-bigquery
     - quantecon
     - sphinxcontrib-jupyter
+    - beautifulsoup4
