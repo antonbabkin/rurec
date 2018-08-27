@@ -4,13 +4,9 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.6
-  - ipython
   - matplotlib
   - pandas
-  - pandas-gbq
-  - geopandas
+  - geopandas>=0.4
   - jupyter
-  - jupyterlab
-  - nbdime
   - pip:
-    - google-cloud-bigquery
+    - google-cloud-storage
