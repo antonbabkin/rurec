@@ -6,9 +6,3 @@ Start with main.ipynb.
 
 Clone this repository and install Conda environment from specified file.
 
-```bash
-git clone git@gitlab.com:antonbabkin/rurec.git
-cd rurec
-conda env create
-conda activate rurec
-```
