@@ -9,6 +9,7 @@ dependencies:
   - matplotlib
   - pandas
   - xlrd
+  - ipywidgets
 #   - geopandas>=0.4
 #   - pip:
 #     - google-cloud-storage
