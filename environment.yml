@@ -3,11 +3,12 @@ channels:
   - defaults
   - conda-forge
 dependencies:
-  - python>=3.6
+  - python>=3.7
+  - requests
+  - jupyterlab
   - matplotlib
   - pandas
   - xlrd
-  - geopandas>=0.4
-  - jupyter
-  - pip:
-    - google-cloud-storage
+#   - geopandas>=0.4
+#   - pip:
+#     - google-cloud-storage
