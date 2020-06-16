@@ -4,12 +4,14 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.7
+  - pip
   - requests
   - jupyterlab
   - matplotlib
   - pandas
   - xlrd
-  - ipywidgets
-#   - geopandas>=0.4
-#   - pip:
-#     - google-cloud-storage
+# - ipywidgets
+# - geopandas>=0.4
+  - pip:
+    - nbdev
+#   - google-cloud-storage
