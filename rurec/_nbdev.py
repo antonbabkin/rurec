@@ -2,8 +2,7 @@
 
 __all__ = ["index", "modules", "custom_doc_links", "git_url"]
 
-index = {"root_dir": "ers_codes.ipynb",
-         "ruc_dir": "ers_codes.ipynb",
+index = {"ruc_dir": "ers_codes.ipynb",
          "ui_dir": "ers_codes.ipynb",
          "ruca_dir": "ers_codes.ipynb",
          "download_and_combine_ruc": "ers_codes.ipynb",
@@ -13,13 +12,14 @@ index = {"root_dir": "ers_codes.ipynb",
          "get_ruc_df": "ers_codes.ipynb",
          "get_ui_df": "ers_codes.ipynb",
          "get_ruca_df": "ers_codes.ipynb",
-         "get_root_dir": "util.ipynb",
+         "paths": "resources.ipynb",
          "download_file": "util.ipynb"}
 
 modules = ["ers_codes.py",
+           "resources.py",
            "util.py"]
 
-doc_url = "https://antonbabkin.github.io/rurec/"
+doc_url = "https://antonbabkin.github.io/rurec"
 
 git_url = "https://github.com/antonbabkin/rurec/tree/master/"
 
