@@ -1,0 +1,44 @@
+{
+  "ers/ruc": {
+    "key": "ers/ruc",
+    "path": "data/ers_codes/ruc/ruc.csv",
+    "description": "ERS Rural-Urban Continuum codes - data",
+    "sync": true,
+    "public": false
+  },
+  "ers/ruc_doc": {
+    "key": "ers/ruc_doc",
+    "path": "data/ers_codes/ruc/ruc_doc.txt",
+    "description": "ERS Rural-Urban Continuum codes - documentation",
+    "sync": true,
+    "public": false
+  },
+  "ers/ruca": {
+    "key": "ers/ruca",
+    "path": "data/ers_codes/ruca/ruca.csv",
+    "description": "ERS Rural-Urban Commuting Area codes - data",
+    "sync": true,
+    "public": false
+  },
+  "ers/ruca_doc": {
+    "key": "ers/ruca_doc",
+    "path": "data/ers_codes/ruca/ruca_doc.txt",
+    "description": "ERS Rural-Urban Commuting Area codes - documentation",
+    "sync": true,
+    "public": false
+  },
+  "ers/ui": {
+    "key": "ers/ui",
+    "path": "data/ers_codes/ui/ui.csv",
+    "description": "ERS Urban Influence codes - data",
+    "sync": true,
+    "public": false
+  },
+  "ers/ui_doc": {
+    "key": "ers/ui_doc",
+    "path": "data/ers_codes/ui/ui_doc.txt",
+    "description": "ERS Urban Influence codes - documentation",
+    "sync": true,
+    "public": false
+  }
+}
