@@ -189,9 +189,13 @@ remove = _registry.remove
 
 def pull(key_pattern='*'):
     """Get resources matching `key_pattern` from remote repository."""
-    pass
+    for r in _registry.get(key_pattern):
+        if r.sync:
+            r.pull()
 
 #export
 def push(key_pattern='*'):
     """Send resources matching `key_pattern` to remote repository."""
-    pass
+    for r in _registry.get(key_pattern):
+        if r.sync:
+            r.push()
