@@ -12,12 +12,21 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from rurec import resources
+from .resources import Resource
 from .util import download_file
 
 # Cell
-ruc_dir = resources.paths['ers_codes'] / 'ruc'
-ui_dir = resources.paths['ers_codes'] / 'ui'
-ruca_dir = resources.paths['ers_codes'] / 'ruca'
+resources.add(Resource('ers/ruc', 'data/ers_codes/ruc/ruc.csv', 'ERS Rural-Urban Continuum codes - data'))
+resources.add(Resource('ers/ruc_doc', 'data/ers_codes/ruc/ruc_doc.txt', 'ERS Rural-Urban Continuum codes - documentation'))
+ruc_dir = resources.get('ers/ruc').path.parent
+
+resources.add(Resource('ers/ui', 'data/ers_codes/ui/ui.csv', 'ERS Urban Influence codes - data'))
+resources.add(Resource('ers/ui_doc', 'data/ers_codes/ui/ui_doc.txt', 'ERS Urban Influence codes - documentation'))
+ui_dir = resources.get('ers/ui').path.parent
+
+resources.add(Resource('ers/ruca', 'data/ers_codes/ruca/ruca.csv', 'ERS Rural-Urban Commuting Area codes - data'))
+resources.add(Resource('ers/ruca_doc', 'data/ers_codes/ruca/ruca_doc.txt', 'ERS Rural-Urban Commuting Area codes - documentation'))
+ruca_dir = resources.get('ers/ruca').path.parent
 
 # Cell
 def download_and_combine_ruc():
@@ -385,21 +394,24 @@ def download_and_combine_all():
 
 def get_ruc_df():
     """Return `pandas.DataFrame` of Rural-Urban Continuum codes for all years."""
-    df = pd.read_csv(ruc_dir / 'ruc.csv', dtype='str')
+    res = resources.get('ers/ruc')
+    df = pd.read_csv(res.path, dtype='str')
     for c in ['RUC_YEAR', 'POPULATION_YEAR', 'POPULATION', 'PERCENT_NONMETRO_COMMUTERS']:
         df[c] = pd.to_numeric(df[c])
     return df
 
 def get_ui_df():
     """Return `pandas.DataFrame` of Urban Influence codes for all years."""
-    df = pd.read_csv(ui_dir / 'ui.csv', dtype='str')
+    res = resources.get('ers/ui')
+    df = pd.read_csv(res.path, dtype='str')
     for c in ['UI_YEAR', 'POPULATION_YEAR', 'POPULATION', 'POPULATION_DENSITY']:
         df[c] = pd.to_numeric(df[c])
     return df
 
 def get_ruca_df():
     """Return `pandas.DataFrame` of Rural-Urban Commuting Area codes for all years."""
-    df = pd.read_csv(ruca_dir / 'ruca.csv', dtype='str')
+    res = resources.get('ers/ruca')
+    df = pd.read_csv(res.path, dtype='str')
     for c in ['YEAR', 'POPULATION', 'AREA']:
         # ValueError: Unable to parse string "6 23.063" at position 269
         # todo: input files probably had this error, add manual fix to `download_and_convert_ruca()`
