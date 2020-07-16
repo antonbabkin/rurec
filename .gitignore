@@ -9,6 +9,7 @@ www/
 
 # Python
 .ipynb_checkpoints/
+.last_checked
 *.pyc
 
 *DS_Store*
