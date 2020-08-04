@@ -12,6 +12,10 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "get_ruc_df": "ers_codes.ipynb",
          "get_ui_df": "ers_codes.ipynb",
          "get_ruca_df": "ers_codes.ipynb",
+         "validate_raw_strings": "infogroup.ipynb",
+         "convert_dtypes": "infogroup.ipynb",
+         "validate_raw_numbers": "infogroup.ipynb",
+         "get_df": "infogroup.ipynb",
          "abs_path": "resources.ipynb",
          "Resource": "resources.ipynb",
          "Registry": "resources.ipynb",
@@ -21,11 +25,15 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "add": "resources.ipynb",
          "get": "resources.ipynb",
          "remove": "resources.ipynb",
-         "download_file": "util.ipynb"}
+         "download_file": "util.ipynb",
+         "tag_invalid_values": "util.ipynb",
+         "validate_values": "util.ipynb"}
 
 modules = ["ers_codes.py",
+           "infogroup.py",
            "resources.py",
-           "util.py"]
+           "util.py",
+           "rurality.py"]
 
 doc_url = "https://antonbabkin.github.io/rurec"
 

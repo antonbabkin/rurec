@@ -40,5 +40,740 @@
     "description": "ERS Urban Influence codes - documentation",
     "sync": true,
     "public": false
+  },
+  "infogroup/csv/1997": {
+    "key": "infogroup/csv/1997",
+    "path": "/InfoGroup/data/processed/1997.csv",
+    "description": "Processed InfoGroup data, 1997, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/1998": {
+    "key": "infogroup/csv/1998",
+    "path": "/InfoGroup/data/processed/1998.csv",
+    "description": "Processed InfoGroup data, 1998, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/1999": {
+    "key": "infogroup/csv/1999",
+    "path": "/InfoGroup/data/processed/1999.csv",
+    "description": "Processed InfoGroup data, 1999, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2000": {
+    "key": "infogroup/csv/2000",
+    "path": "/InfoGroup/data/processed/2000.csv",
+    "description": "Processed InfoGroup data, 2000, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2001": {
+    "key": "infogroup/csv/2001",
+    "path": "/InfoGroup/data/processed/2001.csv",
+    "description": "Processed InfoGroup data, 2001, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2002": {
+    "key": "infogroup/csv/2002",
+    "path": "/InfoGroup/data/processed/2002.csv",
+    "description": "Processed InfoGroup data, 2002, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2003": {
+    "key": "infogroup/csv/2003",
+    "path": "/InfoGroup/data/processed/2003.csv",
+    "description": "Processed InfoGroup data, 2003, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2004": {
+    "key": "infogroup/csv/2004",
+    "path": "/InfoGroup/data/processed/2004.csv",
+    "description": "Processed InfoGroup data, 2004, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2005": {
+    "key": "infogroup/csv/2005",
+    "path": "/InfoGroup/data/processed/2005.csv",
+    "description": "Processed InfoGroup data, 2005, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2006": {
+    "key": "infogroup/csv/2006",
+    "path": "/InfoGroup/data/processed/2006.csv",
+    "description": "Processed InfoGroup data, 2006, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2007": {
+    "key": "infogroup/csv/2007",
+    "path": "/InfoGroup/data/processed/2007.csv",
+    "description": "Processed InfoGroup data, 2007, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2008": {
+    "key": "infogroup/csv/2008",
+    "path": "/InfoGroup/data/processed/2008.csv",
+    "description": "Processed InfoGroup data, 2008, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2009": {
+    "key": "infogroup/csv/2009",
+    "path": "/InfoGroup/data/processed/2009.csv",
+    "description": "Processed InfoGroup data, 2009, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2010": {
+    "key": "infogroup/csv/2010",
+    "path": "/InfoGroup/data/processed/2010.csv",
+    "description": "Processed InfoGroup data, 2010, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2011": {
+    "key": "infogroup/csv/2011",
+    "path": "/InfoGroup/data/processed/2011.csv",
+    "description": "Processed InfoGroup data, 2011, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2012": {
+    "key": "infogroup/csv/2012",
+    "path": "/InfoGroup/data/processed/2012.csv",
+    "description": "Processed InfoGroup data, 2012, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2013": {
+    "key": "infogroup/csv/2013",
+    "path": "/InfoGroup/data/processed/2013.csv",
+    "description": "Processed InfoGroup data, 2013, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2014": {
+    "key": "infogroup/csv/2014",
+    "path": "/InfoGroup/data/processed/2014.csv",
+    "description": "Processed InfoGroup data, 2014, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2015": {
+    "key": "infogroup/csv/2015",
+    "path": "/InfoGroup/data/processed/2015.csv",
+    "description": "Processed InfoGroup data, 2015, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2016": {
+    "key": "infogroup/csv/2016",
+    "path": "/InfoGroup/data/processed/2016.csv",
+    "description": "Processed InfoGroup data, 2016, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/csv/2017": {
+    "key": "infogroup/csv/2017",
+    "path": "/InfoGroup/data/processed/2017.csv",
+    "description": "Processed InfoGroup data, 2017, CSV format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/1997": {
+    "key": "infogroup/orig/1997",
+    "path": "/InfoGroup/data/original/raw/1997_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 1997",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/1998": {
+    "key": "infogroup/orig/1998",
+    "path": "/InfoGroup/data/original/raw/1998_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 1998",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/1999": {
+    "key": "infogroup/orig/1999",
+    "path": "/InfoGroup/data/original/raw/1999_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 1999",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2000": {
+    "key": "infogroup/orig/2000",
+    "path": "/InfoGroup/data/original/raw/2000_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2000",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2001": {
+    "key": "infogroup/orig/2001",
+    "path": "/InfoGroup/data/original/raw/2001_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2001",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2002": {
+    "key": "infogroup/orig/2002",
+    "path": "/InfoGroup/data/original/raw/2002_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2002",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2003": {
+    "key": "infogroup/orig/2003",
+    "path": "/InfoGroup/data/original/raw/2003_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2003",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2004": {
+    "key": "infogroup/orig/2004",
+    "path": "/InfoGroup/data/original/raw/2004_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2004",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2005": {
+    "key": "infogroup/orig/2005",
+    "path": "/InfoGroup/data/original/raw/2005_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2005",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2006": {
+    "key": "infogroup/orig/2006",
+    "path": "/InfoGroup/data/original/raw/2006_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2006",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2007": {
+    "key": "infogroup/orig/2007",
+    "path": "/InfoGroup/data/original/raw/2007_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2007",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2008": {
+    "key": "infogroup/orig/2008",
+    "path": "/InfoGroup/data/original/raw/2008_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2008",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2009": {
+    "key": "infogroup/orig/2009",
+    "path": "/InfoGroup/data/original/raw/2009_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2009",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2010": {
+    "key": "infogroup/orig/2010",
+    "path": "/InfoGroup/data/original/raw/2010_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2010",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2011": {
+    "key": "infogroup/orig/2011",
+    "path": "/InfoGroup/data/original/raw/2011_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2011",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2012": {
+    "key": "infogroup/orig/2012",
+    "path": "/InfoGroup/data/original/raw/2012_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2012",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2013": {
+    "key": "infogroup/orig/2013",
+    "path": "/InfoGroup/data/original/raw/2013_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2013",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2014": {
+    "key": "infogroup/orig/2014",
+    "path": "/InfoGroup/data/original/raw/2014_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2014",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2015": {
+    "key": "infogroup/orig/2015",
+    "path": "/InfoGroup/data/original/raw/2015_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2015",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2016": {
+    "key": "infogroup/orig/2016",
+    "path": "/InfoGroup/data/original/raw/2016_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2016",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/orig/2017": {
+    "key": "infogroup/orig/2017",
+    "path": "/InfoGroup/data/original/raw/2017_Business_Academic_QCQ.csv",
+    "description": "Original unprocessed InfoGroup data, 2017",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/1997": {
+    "key": "infogroup/pq/1997",
+    "path": "/InfoGroup/data/processed/1997.pq",
+    "description": "Processed InfoGroup data, 1997, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/1998": {
+    "key": "infogroup/pq/1998",
+    "path": "/InfoGroup/data/processed/1998.pq",
+    "description": "Processed InfoGroup data, 1998, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/1999": {
+    "key": "infogroup/pq/1999",
+    "path": "/InfoGroup/data/processed/1999.pq",
+    "description": "Processed InfoGroup data, 1999, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2000": {
+    "key": "infogroup/pq/2000",
+    "path": "/InfoGroup/data/processed/2000.pq",
+    "description": "Processed InfoGroup data, 2000, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2001": {
+    "key": "infogroup/pq/2001",
+    "path": "/InfoGroup/data/processed/2001.pq",
+    "description": "Processed InfoGroup data, 2001, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2002": {
+    "key": "infogroup/pq/2002",
+    "path": "/InfoGroup/data/processed/2002.pq",
+    "description": "Processed InfoGroup data, 2002, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2003": {
+    "key": "infogroup/pq/2003",
+    "path": "/InfoGroup/data/processed/2003.pq",
+    "description": "Processed InfoGroup data, 2003, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2004": {
+    "key": "infogroup/pq/2004",
+    "path": "/InfoGroup/data/processed/2004.pq",
+    "description": "Processed InfoGroup data, 2004, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2005": {
+    "key": "infogroup/pq/2005",
+    "path": "/InfoGroup/data/processed/2005.pq",
+    "description": "Processed InfoGroup data, 2005, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2006": {
+    "key": "infogroup/pq/2006",
+    "path": "/InfoGroup/data/processed/2006.pq",
+    "description": "Processed InfoGroup data, 2006, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2007": {
+    "key": "infogroup/pq/2007",
+    "path": "/InfoGroup/data/processed/2007.pq",
+    "description": "Processed InfoGroup data, 2007, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2008": {
+    "key": "infogroup/pq/2008",
+    "path": "/InfoGroup/data/processed/2008.pq",
+    "description": "Processed InfoGroup data, 2008, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2009": {
+    "key": "infogroup/pq/2009",
+    "path": "/InfoGroup/data/processed/2009.pq",
+    "description": "Processed InfoGroup data, 2009, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2010": {
+    "key": "infogroup/pq/2010",
+    "path": "/InfoGroup/data/processed/2010.pq",
+    "description": "Processed InfoGroup data, 2010, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2011": {
+    "key": "infogroup/pq/2011",
+    "path": "/InfoGroup/data/processed/2011.pq",
+    "description": "Processed InfoGroup data, 2011, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2012": {
+    "key": "infogroup/pq/2012",
+    "path": "/InfoGroup/data/processed/2012.pq",
+    "description": "Processed InfoGroup data, 2012, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2013": {
+    "key": "infogroup/pq/2013",
+    "path": "/InfoGroup/data/processed/2013.pq",
+    "description": "Processed InfoGroup data, 2013, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2014": {
+    "key": "infogroup/pq/2014",
+    "path": "/InfoGroup/data/processed/2014.pq",
+    "description": "Processed InfoGroup data, 2014, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2015": {
+    "key": "infogroup/pq/2015",
+    "path": "/InfoGroup/data/processed/2015.pq",
+    "description": "Processed InfoGroup data, 2015, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2016": {
+    "key": "infogroup/pq/2016",
+    "path": "/InfoGroup/data/processed/2016.pq",
+    "description": "Processed InfoGroup data, 2016, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/pq/2017": {
+    "key": "infogroup/pq/2017",
+    "path": "/InfoGroup/data/processed/2017.pq",
+    "description": "Processed InfoGroup data, 2017, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/1997": {
+    "key": "infogroup/rural/1997",
+    "path": "/InfoGroup/data/rurality/1997.pq",
+    "description": "InfoGroup data with rural codes, 1997, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/1998": {
+    "key": "infogroup/rural/1998",
+    "path": "/InfoGroup/data/rurality/1998.pq",
+    "description": "InfoGroup data with rural codes, 1998, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/1999": {
+    "key": "infogroup/rural/1999",
+    "path": "/InfoGroup/data/rurality/1999.pq",
+    "description": "InfoGroup data with rural codes, 1999, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2000": {
+    "key": "infogroup/rural/2000",
+    "path": "/InfoGroup/data/rurality/2000.pq",
+    "description": "InfoGroup data with rural codes, 2000, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2001": {
+    "key": "infogroup/rural/2001",
+    "path": "/InfoGroup/data/rurality/2001.pq",
+    "description": "InfoGroup data with rural codes, 2001, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2002": {
+    "key": "infogroup/rural/2002",
+    "path": "/InfoGroup/data/rurality/2002.pq",
+    "description": "InfoGroup data with rural codes, 2002, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2003": {
+    "key": "infogroup/rural/2003",
+    "path": "/InfoGroup/data/rurality/2003.pq",
+    "description": "InfoGroup data with rural codes, 2003, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2004": {
+    "key": "infogroup/rural/2004",
+    "path": "/InfoGroup/data/rurality/2004.pq",
+    "description": "InfoGroup data with rural codes, 2004, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2005": {
+    "key": "infogroup/rural/2005",
+    "path": "/InfoGroup/data/rurality/2005.pq",
+    "description": "InfoGroup data with rural codes, 2005, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2006": {
+    "key": "infogroup/rural/2006",
+    "path": "/InfoGroup/data/rurality/2006.pq",
+    "description": "InfoGroup data with rural codes, 2006, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2007": {
+    "key": "infogroup/rural/2007",
+    "path": "/InfoGroup/data/rurality/2007.pq",
+    "description": "InfoGroup data with rural codes, 2007, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2008": {
+    "key": "infogroup/rural/2008",
+    "path": "/InfoGroup/data/rurality/2008.pq",
+    "description": "InfoGroup data with rural codes, 2008, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2009": {
+    "key": "infogroup/rural/2009",
+    "path": "/InfoGroup/data/rurality/2009.pq",
+    "description": "InfoGroup data with rural codes, 2009, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2010": {
+    "key": "infogroup/rural/2010",
+    "path": "/InfoGroup/data/rurality/2010.pq",
+    "description": "InfoGroup data with rural codes, 2010, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2011": {
+    "key": "infogroup/rural/2011",
+    "path": "/InfoGroup/data/rurality/2011.pq",
+    "description": "InfoGroup data with rural codes, 2011, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2012": {
+    "key": "infogroup/rural/2012",
+    "path": "/InfoGroup/data/rurality/2012.pq",
+    "description": "InfoGroup data with rural codes, 2012, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2013": {
+    "key": "infogroup/rural/2013",
+    "path": "/InfoGroup/data/rurality/2013.pq",
+    "description": "InfoGroup data with rural codes, 2013, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2014": {
+    "key": "infogroup/rural/2014",
+    "path": "/InfoGroup/data/rurality/2014.pq",
+    "description": "InfoGroup data with rural codes, 2014, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2015": {
+    "key": "infogroup/rural/2015",
+    "path": "/InfoGroup/data/rurality/2015.pq",
+    "description": "InfoGroup data with rural codes, 2015, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2016": {
+    "key": "infogroup/rural/2016",
+    "path": "/InfoGroup/data/rurality/2016.pq",
+    "description": "InfoGroup data with rural codes, 2016, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/rural/2017": {
+    "key": "infogroup/rural/2017",
+    "path": "/InfoGroup/data/rurality/2017.pq",
+    "description": "InfoGroup data with rural codes, 2017, parquet format",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/1997": {
+    "key": "infogroup/schema/1997",
+    "path": "/InfoGroup/data/processed/1997_schema.json",
+    "description": "Processed InfoGroup data, 1997, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/1998": {
+    "key": "infogroup/schema/1998",
+    "path": "/InfoGroup/data/processed/1998_schema.json",
+    "description": "Processed InfoGroup data, 1998, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/1999": {
+    "key": "infogroup/schema/1999",
+    "path": "/InfoGroup/data/processed/1999_schema.json",
+    "description": "Processed InfoGroup data, 1999, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2000": {
+    "key": "infogroup/schema/2000",
+    "path": "/InfoGroup/data/processed/2000_schema.json",
+    "description": "Processed InfoGroup data, 2000, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2001": {
+    "key": "infogroup/schema/2001",
+    "path": "/InfoGroup/data/processed/2001_schema.json",
+    "description": "Processed InfoGroup data, 2001, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2002": {
+    "key": "infogroup/schema/2002",
+    "path": "/InfoGroup/data/processed/2002_schema.json",
+    "description": "Processed InfoGroup data, 2002, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2003": {
+    "key": "infogroup/schema/2003",
+    "path": "/InfoGroup/data/processed/2003_schema.json",
+    "description": "Processed InfoGroup data, 2003, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2004": {
+    "key": "infogroup/schema/2004",
+    "path": "/InfoGroup/data/processed/2004_schema.json",
+    "description": "Processed InfoGroup data, 2004, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2005": {
+    "key": "infogroup/schema/2005",
+    "path": "/InfoGroup/data/processed/2005_schema.json",
+    "description": "Processed InfoGroup data, 2005, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2006": {
+    "key": "infogroup/schema/2006",
+    "path": "/InfoGroup/data/processed/2006_schema.json",
+    "description": "Processed InfoGroup data, 2006, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2007": {
+    "key": "infogroup/schema/2007",
+    "path": "/InfoGroup/data/processed/2007_schema.json",
+    "description": "Processed InfoGroup data, 2007, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2008": {
+    "key": "infogroup/schema/2008",
+    "path": "/InfoGroup/data/processed/2008_schema.json",
+    "description": "Processed InfoGroup data, 2008, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2009": {
+    "key": "infogroup/schema/2009",
+    "path": "/InfoGroup/data/processed/2009_schema.json",
+    "description": "Processed InfoGroup data, 2009, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2010": {
+    "key": "infogroup/schema/2010",
+    "path": "/InfoGroup/data/processed/2010_schema.json",
+    "description": "Processed InfoGroup data, 2010, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2011": {
+    "key": "infogroup/schema/2011",
+    "path": "/InfoGroup/data/processed/2011_schema.json",
+    "description": "Processed InfoGroup data, 2011, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2012": {
+    "key": "infogroup/schema/2012",
+    "path": "/InfoGroup/data/processed/2012_schema.json",
+    "description": "Processed InfoGroup data, 2012, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2013": {
+    "key": "infogroup/schema/2013",
+    "path": "/InfoGroup/data/processed/2013_schema.json",
+    "description": "Processed InfoGroup data, 2013, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2014": {
+    "key": "infogroup/schema/2014",
+    "path": "/InfoGroup/data/processed/2014_schema.json",
+    "description": "Processed InfoGroup data, 2014, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2015": {
+    "key": "infogroup/schema/2015",
+    "path": "/InfoGroup/data/processed/2015_schema.json",
+    "description": "Processed InfoGroup data, 2015, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2016": {
+    "key": "infogroup/schema/2016",
+    "path": "/InfoGroup/data/processed/2016_schema.json",
+    "description": "Processed InfoGroup data, 2016, schema",
+    "sync": false,
+    "public": false
+  },
+  "infogroup/schema/2017": {
+    "key": "infogroup/schema/2017",
+    "path": "/InfoGroup/data/processed/2017_schema.json",
+    "description": "Processed InfoGroup data, 2017, schema",
+    "sync": false,
+    "public": false
   }
 }
