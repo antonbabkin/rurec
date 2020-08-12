@@ -27,7 +27,10 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "remove": "resources.ipynb",
          "download_file": "util.ipynb",
          "tag_invalid_values": "util.ipynb",
-         "validate_values": "util.ipynb"}
+         "validate_values": "util.ipynb",
+         "convert_schema": "infogroup.ipynb",
+         "pad_with_zeroes": "infogroup.ipynb",
+         "replace_invalid": "infogroup.ipynb"}
 
 modules = ["ers_codes.py",
            "infogroup.py",
