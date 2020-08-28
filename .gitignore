@@ -13,3 +13,9 @@ www/
 *.pyc
 
 *DS_Store*
+
+# Notebooks, etc.
+nbs/**/*sandbox*
+nbs/**/*for_later*
+nbs/**/shapes/
+nbs/**/*obsolete*
