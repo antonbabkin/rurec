@@ -6,16 +6,22 @@
   
   
   <url>
-    <loc>http://localhost:4000/dynamics/</loc>
+    <loc>http://localhost:4000/dynamics.html</loc>
   </url>
   
   
   
   <url>
-    <loc>http://localhost:4000/ers_codes/</loc>
+    <loc>http://localhost:4000/ers_codes.html</loc>
   </url>
   
   
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/geo_gazetteer.html</loc>
+  </url>
   
   
   
@@ -26,17 +32,35 @@
   
   
   <url>
-    <loc>http://localhost:4000/maps/</loc>
+    <loc>http://localhost:4000/infogroup.html</loc>
+  </url>
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/maps.html</loc>
+  </url>
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/resources.html</loc>
   </url>
   
   
   
   
   
+  <url>
+    <loc>http://localhost:4000/test_nbdev_collapse.html</loc>
+  </url>
+  
+  
+  
   
   
   <url>
-    <loc>http://localhost:4000/util/</loc>
+    <loc>http://localhost:4000/util.html</loc>
   </url>
   
   

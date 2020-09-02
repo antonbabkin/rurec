@@ -2,11 +2,13 @@
 
 title: Various utilities
 
+
 keywords: fastai
 sidebar: home_sidebar
 
 
 
+nb_path: "nbs/util.ipynb"
 ---
 <!--
 
@@ -52,10 +54,12 @@ sidebar: home_sidebar
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h4 id="get_root_dir" class="doc_header"><code>get_root_dir</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/util.py#L12" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>get_root_dir</code>()</p>
+<h4 id="download_file" class="doc_header"><code>download_file</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/util.py#L14" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>download_file</code>(<strong><code>url</code></strong>, <strong><code>dir</code></strong>=<em><code>None</code></em>, <strong><code>fname</code></strong>=<em><code>None</code></em>, <strong><code>overwrite</code></strong>=<em><code>False</code></em>)</p>
 </blockquote>
-<p>Return <code>pathlib.Path</code> to project root directory.
-Root is identified by presence of specific files and directories in it.</p>
+<p>Download file from given <code>url</code> and put it into <code>dir</code>.
+Current working directory is used as default. Missing directories are created.
+File name from <code>url</code> is used as default.
+Return absolute pathlib.Path of the downloaded file.</p>
 
 </div>
 
@@ -67,6 +71,12 @@ Root is identified by presence of specific files and directories in it.</p>
 </div>
     {% endraw %}
 
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Pandas-extensions">Pandas extensions<a class="anchor-link" href="#Pandas-extensions"> </a></h2>
+</div>
+</div>
+</div>
     {% raw %}
     
 <div class="cell border-box-sizing code_cell rendered">
@@ -85,17 +95,89 @@ Root is identified by presence of specific files and directories in it.</p>
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h4 id="download_file" class="doc_header"><code>download_file</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/util.py#L24" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>download_file</code>(<strong><code>url</code></strong>, <strong><code>dir</code></strong>=<em><code>None</code></em>, <strong><code>fname</code></strong>=<em><code>None</code></em>, <strong><code>overwrite</code></strong>=<em><code>False</code></em>)</p>
+<h4 id="tag_invalid_values" class="doc_header"><code>tag_invalid_values</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/util.py#L42" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>tag_invalid_values</code>(<strong><code>ser</code></strong>, <strong><code>notna</code></strong>=<em><code>False</code></em>, <strong><code>unique</code></strong>=<em><code>False</code></em>, <strong><code>nchar</code></strong>=<em><code>None</code></em>, <strong><code>number</code></strong>=<em><code>False</code></em>, <strong><code>cats</code></strong>=<em><code>None</code></em>, <strong><code>eq</code></strong>=<em><code>None</code></em>, <strong><code>gt</code></strong>=<em><code>None</code></em>, <strong><code>ge</code></strong>=<em><code>None</code></em>, <strong><code>lt</code></strong>=<em><code>None</code></em>, <strong><code>le</code></strong>=<em><code>None</code></em>)</p>
 </blockquote>
-<p>Download file from given <code>url</code> and put it into <code>dir</code>.
-Current working directory is used as default. Missing directories are created.
-File name from <code>url</code> is used as default.
-Return absolute pathlib.Path of the downloaded file.</p>
+<p>Return array with indicators of invalid values in <code>ser</code>.</p>
+<p>Validity checks are performed against flags given as keyword arguments.
+If multiple flags are present, value is only valid if it satisfies all of them.</p>
+<p>If a value is missing, it will be marked invalid by <code>notna</code> flag.
+IMPORTANT: missing values will NOT be flagged invalid by any other flags.</p>
+<p><code>unique</code> will tag all duplicates as invalid.</p>
 
 </div>
 
 </div>
 
+</div>
+</div>
+
+</div>
+    {% endraw %}
+
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+
+<div class="output_markdown rendered_html output_subarea ">
+<h4 id="validate_values" class="doc_header"><code>validate_values</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/util.py#L89" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>validate_values</code>(<strong><code>df</code></strong>, <strong><code>constraints</code></strong>)</p>
+</blockquote>
+<p>Return list of invalid values in a dataframe.
+<code>constraints</code> should be a dictionary of column names and
+their respective constraints as dict to be passed to validator function.</p>
+
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+    {% endraw %}
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Tests">Tests<a class="anchor-link" href="#Tests"> </a></h1>
+</div>
+</div>
+</div>
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">s</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="s1">&#39;alpha&#39;</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">,</span> <span class="s1">&#39;0123&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s1">&#39;str&#39;</span><span class="p">)</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">notna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">nchar</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">cats</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;alpha&#39;</span><span class="p">,</span> <span class="s1">&#39;beta&#39;</span><span class="p">])</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="s1">&#39;beta&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mf">7.5</span><span class="p">,</span> <span class="o">-</span><span class="mi">99999999</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">])</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">notna</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">cats</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mf">7.5</span><span class="p">])</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">eq</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">le</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">gt</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">lt</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">ge</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">lt</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">gt</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">lt</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="p">[</span><span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">False</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+
+<span class="n">s</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;15&#39;</span><span class="p">,</span> <span class="s1">&#39;-15&#39;</span><span class="p">,</span> <span class="s1">&#39;.15&#39;</span><span class="p">,</span> <span class="s1">&#39;1.5&#39;</span><span class="p">,</span> <span class="s1">&#39;-.15&#39;</span><span class="p">,</span> <span class="s1">&#39;-1.5&#39;</span><span class="p">,</span> <span class="s1">&#39;1a&#39;</span><span class="p">,</span> <span class="s1">&#39;ab&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">])</span>
+<span class="k">assert</span> <span class="p">(</span><span class="n">tag_invalid_values</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="n">number</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span> <span class="o">*</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">*</span> <span class="p">[</span><span class="kc">True</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+</pre></div>
+
+    </div>
 </div>
 </div>
 

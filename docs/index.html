@@ -2,11 +2,13 @@
 
 title: Rural economy
 
+
 keywords: fastai
 sidebar: home_sidebar
 
 summary: "Exploring economic dynamics in rural areas of the United States."
 description: "Exploring economic dynamics in rural areas of the United States."
+nb_path: "nbs/index.ipynb"
 ---
 <!--
 
@@ -39,6 +41,211 @@ description: "Exploring economic dynamics in rural areas of the United States."
 </div>
 </div>
 </div>
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Installation">Installation<a class="anchor-link" href="#Installation"> </a></h2><ol>
+<li>Clone this git project.</li>
+<li>Create and activate conda environment from <code>environment.yml</code> file.</li>
+<li>Pull resources from shared repository.</li>
+</ol>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Project-structure">Project structure<a class="anchor-link" href="#Project-structure"> </a></h1><ul>
+<li>InfoGroup preparation: validate, clean, convert</li>
+<li>ERS codes preparation: download, combine, format<ul>
+<li>Other geo codes will be added as well</li>
+</ul>
+</li>
+<li>Rurality: merge ERS codes into InfoGroup</li>
+<li>Dynamics: summary statistics by geography</li>
+</ul>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Resource-repository">Resource repository<a class="anchor-link" href="#Resource-repository"> </a></h2>
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="List-of-registered-resources">List of registered resources<a class="anchor-link" href="#List-of-registered-resources"> </a></h3>
+</div>
+</div>
+</div>
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">rurec</span> <span class="kn">import</span> <span class="n">resources</span>
+
+<span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">resources</span><span class="o">.</span><span class="n">get</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="n">r</span><span class="o">.</span><span class="n">key</span><span class="si">:</span><span class="s1">30</span><span class="si">}{</span><span class="n">r</span><span class="o">.</span><span class="n">description</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>ers/ruc                       ERS Rural-Urban Continuum codes - data
+ers/ruc_doc                   ERS Rural-Urban Continuum codes - documentation
+ers/ruca                      ERS Rural-Urban Commuting Area codes - data
+ers/ruca_doc                  ERS Rural-Urban Commuting Area codes - documentation
+ers/ui                        ERS Urban Influence codes - data
+ers/ui_doc                    ERS Urban Influence codes - documentation
+infogroup/full                Processed InfoGroup data, all years, partitioned parquet
+infogroup/orig/1997           Original unprocessed InfoGroup data, 1997
+infogroup/orig/1998           Original unprocessed InfoGroup data, 1998
+infogroup/orig/1999           Original unprocessed InfoGroup data, 1999
+infogroup/orig/2000           Original unprocessed InfoGroup data, 2000
+infogroup/orig/2001           Original unprocessed InfoGroup data, 2001
+infogroup/orig/2002           Original unprocessed InfoGroup data, 2002
+infogroup/orig/2003           Original unprocessed InfoGroup data, 2003
+infogroup/orig/2004           Original unprocessed InfoGroup data, 2004
+infogroup/orig/2005           Original unprocessed InfoGroup data, 2005
+infogroup/orig/2006           Original unprocessed InfoGroup data, 2006
+infogroup/orig/2007           Original unprocessed InfoGroup data, 2007
+infogroup/orig/2008           Original unprocessed InfoGroup data, 2008
+infogroup/orig/2009           Original unprocessed InfoGroup data, 2009
+infogroup/orig/2010           Original unprocessed InfoGroup data, 2010
+infogroup/orig/2011           Original unprocessed InfoGroup data, 2011
+infogroup/orig/2012           Original unprocessed InfoGroup data, 2012
+infogroup/orig/2013           Original unprocessed InfoGroup data, 2013
+infogroup/orig/2014           Original unprocessed InfoGroup data, 2014
+infogroup/orig/2015           Original unprocessed InfoGroup data, 2015
+infogroup/orig/2016           Original unprocessed InfoGroup data, 2016
+infogroup/orig/2017           Original unprocessed InfoGroup data, 2017
+infogroup/rural/1997          InfoGroup data with rural codes, 1997, parquet format
+infogroup/rural/1998          InfoGroup data with rural codes, 1998, parquet format
+infogroup/rural/1999          InfoGroup data with rural codes, 1999, parquet format
+infogroup/rural/2000          InfoGroup data with rural codes, 2000, parquet format
+infogroup/rural/2001          InfoGroup data with rural codes, 2001, parquet format
+infogroup/rural/2002          InfoGroup data with rural codes, 2002, parquet format
+infogroup/rural/2003          InfoGroup data with rural codes, 2003, parquet format
+infogroup/rural/2004          InfoGroup data with rural codes, 2004, parquet format
+infogroup/rural/2005          InfoGroup data with rural codes, 2005, parquet format
+infogroup/rural/2006          InfoGroup data with rural codes, 2006, parquet format
+infogroup/rural/2007          InfoGroup data with rural codes, 2007, parquet format
+infogroup/rural/2008          InfoGroup data with rural codes, 2008, parquet format
+infogroup/rural/2009          InfoGroup data with rural codes, 2009, parquet format
+infogroup/rural/2010          InfoGroup data with rural codes, 2010, parquet format
+infogroup/rural/2011          InfoGroup data with rural codes, 2011, parquet format
+infogroup/rural/2012          InfoGroup data with rural codes, 2012, parquet format
+infogroup/rural/2013          InfoGroup data with rural codes, 2013, parquet format
+infogroup/rural/2014          InfoGroup data with rural codes, 2014, parquet format
+infogroup/rural/2015          InfoGroup data with rural codes, 2015, parquet format
+infogroup/rural/2016          InfoGroup data with rural codes, 2016, parquet format
+infogroup/rural/2017          InfoGroup data with rural codes, 2017, parquet format
+infogroup/schema              Processed InfoGroup data, schema
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+    {% endraw %}
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Pull-everything">Pull everything<a class="anchor-link" href="#Pull-everything"> </a></h3>
+</div>
+</div>
+</div>
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">resources</span><span class="o">.</span><span class="n">pull</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Pulled &#34;ers/ruc&#34;: /shared_res/rurec_20200620/data/ers_codes/ruc/ruc.csv -&gt; /home/babkin/rurec/data/ers_codes/ruc/ruc.csv
+Pulled &#34;ers/ruc_doc&#34;: /shared_res/rurec_20200620/data/ers_codes/ruc/ruc_doc.txt -&gt; /home/babkin/rurec/data/ers_codes/ruc/ruc_doc.txt
+Pulled &#34;ers/ruca&#34;: /shared_res/rurec_20200620/data/ers_codes/ruca/ruca.csv -&gt; /home/babkin/rurec/data/ers_codes/ruca/ruca.csv
+Pulled &#34;ers/ruca_doc&#34;: /shared_res/rurec_20200620/data/ers_codes/ruca/ruca_doc.txt -&gt; /home/babkin/rurec/data/ers_codes/ruca/ruca_doc.txt
+Pulled &#34;ers/ui&#34;: /shared_res/rurec_20200620/data/ers_codes/ui/ui.csv -&gt; /home/babkin/rurec/data/ers_codes/ui/ui.csv
+Pulled &#34;ers/ui_doc&#34;: /shared_res/rurec_20200620/data/ers_codes/ui/ui_doc.txt -&gt; /home/babkin/rurec/data/ers_codes/ui/ui_doc.txt
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+    {% endraw %}
+
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Push-everything">Push everything<a class="anchor-link" href="#Push-everything"> </a></h3>
+</div>
+</div>
+</div>
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">resources</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Pushed &#34;ers/ruc&#34;: /home/babkin/rurec/data/ers_codes/ruc/ruc.csv -&gt; /shared_res/rurec_20200620/data/ers_codes/ruc/ruc.csv
+Pushed &#34;ers/ruc_doc&#34;: /home/babkin/rurec/data/ers_codes/ruc/ruc_doc.txt -&gt; /shared_res/rurec_20200620/data/ers_codes/ruc/ruc_doc.txt
+Pushed &#34;ers/ruca&#34;: /home/babkin/rurec/data/ers_codes/ruca/ruca.csv -&gt; /shared_res/rurec_20200620/data/ers_codes/ruca/ruca.csv
+Pushed &#34;ers/ruca_doc&#34;: /home/babkin/rurec/data/ers_codes/ruca/ruca_doc.txt -&gt; /shared_res/rurec_20200620/data/ers_codes/ruca/ruca_doc.txt
+Pushed &#34;ers/ui&#34;: /home/babkin/rurec/data/ers_codes/ui/ui.csv -&gt; /shared_res/rurec_20200620/data/ers_codes/ui/ui.csv
+Pushed &#34;ers/ui_doc&#34;: /home/babkin/rurec/data/ers_codes/ui/ui_doc.txt -&gt; /shared_res/rurec_20200620/data/ers_codes/ui/ui_doc.txt
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+    {% endraw %}
+
 </div>
  
 

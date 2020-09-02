@@ -11,16 +11,28 @@ entries:
       url: /
     - output: web,pdf
       title: FAI dynamics
-      url: /dynamics
+      url: dynamics.html
     - output: web,pdf
       title: ERS Rurality codes
-      url: /ers_codes
+      url: ers_codes.html
+    - output: web,pdf
+      title: Title
+      url: geo_gazetteer.html
+    - output: web,pdf
+      title: InfoGroup data
+      url: infogroup.html
     - output: web,pdf
       title: Maps
-      url: /maps
+      url: maps.html
+    - output: web,pdf
+      title: Resource management
+      url: resources.html
+    - output: web,pdf
+      title: Test nbdev "collapse" magics
+      url: test_nbdev_collapse.html
     - output: web,pdf
       title: Various utilities
-      url: /util
+      url: util.html
     output: web
     title: rurec
   output: web

@@ -1,9 +1,13 @@
 {
   "rurec": {
     "Overview": "/",
-    "FAI dynamics": "/dynamics",
-    "ERS Rurality codes": "/ers_codes",
-    "Maps": "/maps",
-    "Various utilities": "/util"
+    "FAI dynamics": "dynamics.html",
+    "ERS Rurality codes": "ers_codes.html",
+    "Title": "geo_gazetteer.html",
+    "InfoGroup data": "infogroup.html",
+    "Maps": "maps.html",
+    "Resource management": "resources.html",
+    "Test nbdev \"collapse\" magics": "test_nbdev_collapse.html",
+    "Various utilities": "util.html"
   }
 }
