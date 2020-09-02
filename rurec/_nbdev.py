@@ -30,7 +30,13 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "validate_values": "util.ipynb",
          "convert_schema": "infogroup.ipynb",
          "pad_with_zeroes": "infogroup.ipynb",
-         "replace_invalid": "infogroup.ipynb"}
+         "replace_invalid": "infogroup.ipynb",
+         "data_years": "infogroup.ipynb",
+         "get_schema": "infogroup.ipynb",
+         "describe_variable": "infogroup.ipynb",
+         "hash_args": "resources.ipynb",
+         "func_sig": "resources.ipynb",
+         "cacheable": "resources.ipynb"}
 
 modules = ["ers_codes.py",
            "infogroup.py",

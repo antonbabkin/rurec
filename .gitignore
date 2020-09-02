@@ -1,5 +1,6 @@
 data/*
 tmp/
+cache/
 !data/fai.json
 fig/
 www/
