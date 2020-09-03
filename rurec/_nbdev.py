@@ -36,7 +36,8 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "describe_variable": "infogroup.ipynb",
          "hash_args": "resources.ipynb",
          "func_sig": "resources.ipynb",
-         "cacheable": "resources.ipynb"}
+         "cacheable": "resources.ipynb",
+         "style": "infogroup.ipynb"}
 
 modules = ["ers_codes.py",
            "infogroup.py",
