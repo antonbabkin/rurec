@@ -4,6 +4,7 @@ cache/
 !data/fai.json
 fig/
 www/
+logs/
 
 # Vim
 *.swp
