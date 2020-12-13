@@ -16,5 +16,5 @@
         required = true
 [diff "ipynb"]
 	#textconv = nbdev_clean_nbs --disp True --fname
-	command = git-nbdiffdriver diff --ignore-metadata --ignore-outputs
+	command = git-nbdiffdriver diff --ignore-metadata --ignore-outputs --ignore-details
 

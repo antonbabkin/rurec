@@ -37,13 +37,18 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "hash_args": "resources.ipynb",
          "func_sig": "resources.ipynb",
          "cacheable": "resources.ipynb",
-         "style": "infogroup.ipynb"}
+         "style": "infogroup.ipynb",
+         "load_validate_convert": "infogroup.ipynb",
+         "create_parquet_dataset": "infogroup.ipynb",
+         "shared_cols": "infogroup.ipynb",
+         "build_parquet_dataset": "infogroup.ipynb"}
 
 modules = ["ers_codes.py",
            "infogroup.py",
            "resources.py",
            "util.py",
-           "rurality.py"]
+           "rurality.py",
+           "ui.py"]
 
 doc_url = "https://antonbabkin.github.io/rurec"
 

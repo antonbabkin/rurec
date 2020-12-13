@@ -1,4 +1,4 @@
+*.ipynb filter=clean-nbs
+*.ipynb diff=ipynb
 
 *.ipynb	diff=jupyternotebook
-
-*.ipynb	merge=jupyternotebook
