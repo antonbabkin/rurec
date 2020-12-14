@@ -41,7 +41,8 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "load_validate_convert": "infogroup.ipynb",
          "create_parquet_dataset": "infogroup.ipynb",
          "shared_cols": "infogroup.ipynb",
-         "build_parquet_dataset": "infogroup.ipynb"}
+         "build_parquet_dataset": "infogroup.ipynb",
+         "memory": "infogroup.ipynb"}
 
 modules = ["ers_codes.py",
            "infogroup.py",
