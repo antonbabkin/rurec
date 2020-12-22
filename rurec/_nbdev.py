@@ -23,6 +23,7 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "get_far_df": "rurality.ipynb",
          "add_rural_cols": "rurality.ipynb",
          "build_parquet_dataset": "rurality.ipynb",
+         "get_df": "rurality.ipynb",
          "download_file": "util.ipynb",
          "tag_invalid_values": "util.ipynb",
          "validate_values": "util.ipynb"}
