@@ -12,11 +12,23 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "get_ruc_df": "ers_codes.ipynb",
          "get_ui_df": "ers_codes.ipynb",
          "get_ruca_df": "ers_codes.ipynb",
+         "memory": "rurality.ipynb",
+         "prepare_outside_ua_df": "rurality.ipynb",
+         "nearest_gridpoint": "rurality.ipynb",
+         "prepare_ui_df": "rurality.ipynb",
+         "prepare_ruc_df": "rurality.ipynb",
+         "prepare_ruca_df": "rurality.ipynb",
+         "gen_rural_hrsa": "rurality.ipynb",
+         "get_hrsa_rural_in_cbsa": "rurality.ipynb",
+         "get_far_df": "rurality.ipynb",
+         "add_rural_cols": "rurality.ipynb",
+         "build_parquet_dataset": "rurality.ipynb",
          "download_file": "util.ipynb",
          "tag_invalid_values": "util.ipynb",
          "validate_values": "util.ipynb"}
 
 modules = ["ers_codes.py",
+           "rurality.py",
            "ui.py",
            "util.py"]
 
