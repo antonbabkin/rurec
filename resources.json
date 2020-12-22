@@ -195,6 +195,13 @@
     "sync": false,
     "public": false
   },
+  "infogroup/rural": {
+    "key": "infogroup/rural",
+    "path": "/InfoGroup/data/processed/rural.pq",
+    "description": "InfoGroup with rural columns",
+    "sync": false,
+    "public": false
+  },
   "infogroup/rural/1997": {
     "key": "infogroup/rural/1997",
     "path": "/InfoGroup/data/rurality/1997.pq",
