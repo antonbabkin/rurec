@@ -38,6 +38,18 @@
   
   
   <url>
+    <loc>http://localhost:4000/infogroup_orig_overview.html</loc>
+  </url>
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/infogroup_validate_geo.html</loc>
+  </url>
+  
+  
+  
+  <url>
     <loc>http://localhost:4000/maps.html</loc>
   </url>
   
@@ -45,6 +57,12 @@
   
   <url>
     <loc>http://localhost:4000/resources.html</loc>
+  </url>
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/rurality.html</loc>
   </url>
   
   
@@ -60,7 +78,19 @@
   
   
   <url>
+    <loc>http://localhost:4000/ui.html</loc>
+  </url>
+  
+  
+  
+  <url>
     <loc>http://localhost:4000/util.html</loc>
+  </url>
+  
+  
+  
+  <url>
+    <loc>http://localhost:4000/workflow.html</loc>
   </url>
   
   

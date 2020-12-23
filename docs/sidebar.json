@@ -1,13 +1,17 @@
 {
   "rurec": {
     "Overview": "/",
-    "FAI dynamics": "dynamics.html",
+    "Business dynamics": "dynamics.html",
     "ERS Rurality codes": "ers_codes.html",
-    "Title": "geo_gazetteer.html",
+    "Geographic gazetteer": "geo_gazetteer.html",
     "InfoGroup data": "infogroup.html",
+    "Overview of original InfoGroup data": "infogroup_orig_overview.html",
+    "Validate geo variables in InfoGroup": "infogroup_validate_geo.html",
     "Maps": "maps.html",
     "Resource management": "resources.html",
-    "Test nbdev \"collapse\" magics": "test_nbdev_collapse.html",
-    "Various utilities": "util.html"
+    "Adding rurality measures to InfoGroup": "rurality.html",
+    "User Interface": "ui.html",
+    "Various utilities": "util.html",
+    "Workflow visualization": "workflow.html"
   }
 }

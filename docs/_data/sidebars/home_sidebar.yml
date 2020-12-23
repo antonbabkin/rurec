@@ -10,17 +10,23 @@ entries:
       title: Overview
       url: /
     - output: web,pdf
-      title: FAI dynamics
+      title: Business dynamics
       url: dynamics.html
     - output: web,pdf
       title: ERS Rurality codes
       url: ers_codes.html
     - output: web,pdf
-      title: Title
+      title: Geographic gazetteer
       url: geo_gazetteer.html
     - output: web,pdf
       title: InfoGroup data
       url: infogroup.html
+    - output: web,pdf
+      title: Overview of original InfoGroup data
+      url: infogroup_orig_overview.html
+    - output: web,pdf
+      title: Validate geo variables in InfoGroup
+      url: infogroup_validate_geo.html
     - output: web,pdf
       title: Maps
       url: maps.html
@@ -28,11 +34,17 @@ entries:
       title: Resource management
       url: resources.html
     - output: web,pdf
-      title: Test nbdev "collapse" magics
-      url: test_nbdev_collapse.html
+      title: Adding rurality measures to InfoGroup
+      url: rurality.html
+    - output: web,pdf
+      title: User Interface
+      url: ui.html
     - output: web,pdf
       title: Various utilities
       url: util.html
+    - output: web,pdf
+      title: Workflow visualization
+      url: workflow.html
     output: web
     title: rurec
   output: web

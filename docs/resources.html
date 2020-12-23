@@ -29,13 +29,54 @@ nb_path: "nbs/resources.ipynb"
 </div>
     {% endraw %}
 
-    {% raw %}
-    
-<div class="cell border-box-sizing code_cell rendered">
+<div class="cell border-box-sizing text_cell rendered"><div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>This module serves two main purposes.</p>
+<ul>
+<li>Consolidate paths to resources used across project modules.</li>
+<li>Provide methods to sync resources between local and remote storage locations.</li>
+</ul>
+<p>Main parts of the interface, available in module namespace (<code>import resouces</code>):</p>
+<ul>
+<li><code>paths</code>: paths to project root and remote data repo.</li>
+<li><code>Resouce</code>: representation of a single file resouce.</li>
+<li><code>add</code>, <code>get</code> and <code>remove</code> functions: interact with default resouce registry.</li>
+</ul>
+<p>Resources are either synced or not. "Sync" resouce has local and remote paths and can be sent both ways. "Non-sync" resource has only single path.</p>
+<p>Registered resources are added to a JSON registry file (<code>resources.json</code> in project root by default), which is intended to be version controlled by Git.</p>
+<h3 id="Example-1.-Refer-to-file-and-directory-paths">Example 1. Refer to file and directory paths<a class="anchor-link" href="#Example-1.-Refer-to-file-and-directory-paths"> </a></h3><p>To support portability, use absolute paths defined relative to <code>paths['root']</code>. It is encouraged to use <code>pathlib.Path</code> objects.</p>
+<div class="highlight"><pre><span></span><span class="n">temp_table_path</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">paths</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="s1">&#39;tmp/tab.csv&#39;</span>
+<span class="n">temp_table</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">temp_table_path</span><span class="p">)</span>
+</pre></div>
+<h3 id="Example-2.-Read-only-use-of-resource-created-and-registered-by-others">Example 2. Read-only use of resource created and registered by others<a class="anchor-link" href="#Example-2.-Read-only-use-of-resource-created-and-registered-by-others"> </a></h3><p>Use <code>resouces.get()</code> without arguments to see all resources registered in the project. Pass a key argument to obtain a single resouce or a specific subset.</p>
+<p>Non-sync resource example.</p>
+<div class="highlight"><pre><span></span><span class="n">raw_data_res</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;raw/table/csv&#39;</span><span class="p">)</span>
+<span class="n">raw_data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">raw_data_res</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+</pre></div>
+<p>Sync resource example.</p>
+<div class="highlight"><pre><span></span><span class="n">proc_data_res</span> <span class="o">=</span> <span class="n">resouces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;proc/table/csv&#39;</span><span class="p">)</span>
+<span class="n">proc_data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">proc_data_res</span><span class="o">.</span><span class="n">remote_path</span><span class="p">)</span>
+</pre></div>
+<h3 id="Example-3.-Pull-modify-push-sync-resource">Example 3. Pull-modify-push sync resource<a class="anchor-link" href="#Example-3.-Pull-modify-push-sync-resource"> </a></h3><p>Take something created by others, modify it and share the updated version.</p>
+<div class="highlight"><pre><span></span><span class="n">proc_data_res</span> <span class="o">=</span> <span class="n">resouces</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;proc/table/csv&#39;</span><span class="p">)</span>
+<span class="c1"># get local copy</span>
+<span class="n">proc_data_res</span><span class="o">.</span><span class="n">pull</span><span class="p">()</span>
+<span class="c1"># modify and save local copy</span>
+<span class="n">proc_data_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">proc_data_res</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+<span class="n">modified</span> <span class="o">=</span> <span class="n">proc_data_df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">()</span>
+<span class="n">modified</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">proc_data_res</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+<span class="c1"># share updated version</span>
+<span class="n">proc_data_res</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
+</pre></div>
+<h3 id="Example-4.-Create-and-register-new-resource">Example 4. Create and register new resource<a class="anchor-link" href="#Example-4.-Create-and-register-new-resource"> </a></h3><div class="highlight"><pre><span></span><span class="n">fig_res</span> <span class="o">=</span> <span class="n">resources</span><span class="o">.</span><span class="n">Resource</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="s1">&#39;out/fig&#39;</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s1">&#39;output/fig.png&#39;</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="s1">&#39;Rise and fall&#39;</span><span class="p">)</span>
+<span class="n">resources</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">fig_res</span><span class="p">)</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">fig_res</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+<span class="n">fig_res</span><span class="o">.</span><span class="n">push</span><span class="p">()</span>
+</pre></div>
 
 </div>
-    {% endraw %}
-
+</div>
+</div>
     {% raw %}
     
 <div class="cell border-box-sizing code_cell rendered">
@@ -54,8 +95,9 @@ nb_path: "nbs/resources.ipynb"
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h4 id="abs_path" class="doc_header"><code>abs_path</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L43" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>abs_path</code>(<strong><code>path</code></strong>)</p>
+<h2 id="Paths" class="doc_header"><code>class</code> <code>Paths</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L20" class="source_link" style="float:right">[source]</a></h2><blockquote><p><code>Paths</code>(<strong><code>root</code></strong>=<em><code>None</code></em>)</p>
 </blockquote>
+<p>Collection of project paths.</p>
 
 </div>
 
@@ -85,7 +127,7 @@ nb_path: "nbs/resources.ipynb"
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h2 id="Resource" class="doc_header"><code>class</code> <code>Resource</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L50" class="source_link" style="float:right">[source]</a></h2><blockquote><p><code>Resource</code>(<strong><code>key</code></strong>, <strong><code>path</code></strong>, <strong><code>description</code></strong>=<em><code>''</code></em>, <strong><code>sync</code></strong>=<em><code>True</code></em>, <strong><code>public</code></strong>=<em><code>False</code></em>)</p>
+<h2 id="Resource" class="doc_header"><code>class</code> <code>Resource</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L57" class="source_link" style="float:right">[source]</a></h2><blockquote><p><code>Resource</code>(<strong><code>key</code></strong>, <strong><code>path</code></strong>, <strong><code>description</code></strong>=<em><code>''</code></em>, <strong><code>sync</code></strong>=<em><code>True</code></em>, <strong><code>public</code></strong>=<em><code>False</code></em>)</p>
 </blockquote>
 <p>Abstraction of a single file.</p>
 
@@ -117,7 +159,7 @@ nb_path: "nbs/resources.ipynb"
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h2 id="Registry" class="doc_header"><code>class</code> <code>Registry</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L126" class="source_link" style="float:right">[source]</a></h2><blockquote><p><code>Registry</code>(<strong><code>registry_file</code></strong>=<em><code>'resources.json'</code></em>)</p>
+<h2 id="Registry" class="doc_header"><code>class</code> <code>Registry</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L133" class="source_link" style="float:right">[source]</a></h2><blockquote><p><code>Registry</code>(<strong><code>registry_file</code></strong>=<em><code>'resources.json'</code></em>)</p>
 </blockquote>
 <p>Registry of resources, synced with file on disk.</p>
 
@@ -127,6 +169,13 @@ nb_path: "nbs/resources.ipynb"
 
 </div>
 </div>
+
+</div>
+    {% endraw %}
+
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
 
 </div>
     {% endraw %}
@@ -141,13 +190,6 @@ nb_path: "nbs/resources.ipynb"
     
 <div class="cell border-box-sizing code_cell rendered">
 
-</div>
-    {% endraw %}
-
-    {% raw %}
-    
-<div class="cell border-box-sizing code_cell rendered">
-
 <div class="output_wrapper">
 <div class="output">
 
@@ -155,7 +197,7 @@ nb_path: "nbs/resources.ipynb"
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h4 id="pull" class="doc_header"><code>pull</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L192" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>pull</code>(<strong><code>key_pattern</code></strong>=<em>`'</em>'`*)</p>
+<h4 id="pull" class="doc_header"><code>pull</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L197" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>pull</code>(<strong><code>key_pattern</code></strong>=<em>`'</em>'`*)</p>
 </blockquote>
 <p>Get resources matching <code>key_pattern</code> from remote repository.</p>
 
@@ -180,7 +222,7 @@ nb_path: "nbs/resources.ipynb"
 
 
 <div class="output_markdown rendered_html output_subarea ">
-<h4 id="push" class="doc_header"><code>push</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L198" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>push</code>(<strong><code>key_pattern</code></strong>=<em>`'</em>'`*)</p>
+<h4 id="push" class="doc_header"><code>push</code><a href="https://github.com/antonbabkin/rurec/tree/master/rurec/resources.py#L203" class="source_link" style="float:right">[source]</a></h4><blockquote><p><code>push</code>(<strong><code>key_pattern</code></strong>=<em>`'</em>'`*)</p>
 </blockquote>
 <p>Send resources matching <code>key_pattern</code> to remote repository.</p>
 
@@ -190,6 +232,13 @@ nb_path: "nbs/resources.ipynb"
 
 </div>
 </div>
+
+</div>
+    {% endraw %}
+
+    {% raw %}
+    
+<div class="cell border-box-sizing code_cell rendered">
 
 </div>
     {% endraw %}
@@ -246,6 +295,23 @@ nb_path: "nbs/resources.ipynb"
 </div>
 </div>
 
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Pulled &#34;test/pull-upd-push&#34;: /shared_res/rurec_20200620/tmp/pull-upd-push.txt -&gt; /home/babkin/rurec/tmp/pull-upd-push.txt
+Pushed &#34;test/pull-upd-push&#34;: /home/babkin/rurec/tmp/pull-upd-push.txt -&gt; /shared_res/rurec_20200620/tmp/pull-upd-push.txt
+Removed local &#34;test/pull-upd-push&#34;: /home/babkin/rurec/tmp/pull-upd-push.txt
+Removed remote &#34;test/pull-upd-push&#34;: /home/babkin/rurec/tmp/pull-upd-push.txt
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
 </div>
     {% endraw %}
 
@@ -280,6 +346,27 @@ nb_path: "nbs/resources.ipynb"
 </pre></div>
 
     </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+<div class="output_area">
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>Resource &#34;in/data&#34; added to registry.
+Resource &#34;out/data&#34; added to registry.
+Resource &#34;out/data&#34; removed from registry.
+Resource &#34;out/data&#34; added to registry.
+Resource &#34;out/fig&#34; added to registry.
+Resource &#34;in/data&#34; removed from registry.
+Resource &#34;out/data&#34; removed from registry.
+Resource &#34;out/fig&#34; removed from registry.
+</pre>
+</div>
+</div>
+
 </div>
 </div>
 
