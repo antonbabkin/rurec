@@ -26,12 +26,18 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "get_df": "rurality.ipynb",
          "download_file": "util.ipynb",
          "tag_invalid_values": "util.ipynb",
-         "validate_values": "util.ipynb"}
+         "validate_values": "util.ipynb",
+         "init": "geo_gazetteer.ipynb",
+         "download_data": "geo_gazetteer.ipynb",
+         "build_state_data": "geo_gazetteer.ipynb",
+         "data": "geo_gazetteer.ipynb",
+         "get_mapping": "geo_gazetteer.ipynb"}
 
 modules = ["ers_codes.py",
            "rurality.py",
            "ui.py",
-           "util.py"]
+           "util.py",
+           "geo_gazetteer.py"]
 
 doc_url = "https://antonbabkin.github.io/rurec/"
 
