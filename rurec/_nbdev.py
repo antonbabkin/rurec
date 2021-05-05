@@ -31,7 +31,8 @@ index = {"ruc_dir": "ers_codes.ipynb",
          "download_data": "geo_gazetteer.ipynb",
          "build_state_data": "geo_gazetteer.ipynb",
          "data": "geo_gazetteer.ipynb",
-         "get_mapping": "geo_gazetteer.ipynb"}
+         "get_mapping": "geo_gazetteer.ipynb",
+         "PATH": "ers_codes.ipynb"}
 
 modules = ["ers_codes.py",
            "rurality.py",
