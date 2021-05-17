@@ -1,17 +1,14 @@
 name: rurec
 channels:
-  - defaults
   - conda-forge
+  - nodefaults
 dependencies:
-  - python>=3.7
-  - pip
+  - python>=3.8
+  - jupyterlab>=3
+  - ipywidgets
   - requests
-  - jupyterlab
   - matplotlib
   - pandas
-  - xlrd
-# - ipywidgets
-# - geopandas>=0.4
-  - pip:
-    - nbdev
-#   - google-cloud-storage
+  - openpyxl # new .xlsx format
+  - xlrd # old .xls format
+  - geopandas
