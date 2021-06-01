@@ -8,6 +8,7 @@
 - Richard A. Dunn (UConn)
 - Brent Hueth (UW-Madison)
 - Thomas Flory (UW-Madison)
+- Griffin O'Neill (UConn)
 
 ## Installation
 
