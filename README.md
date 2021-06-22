@@ -14,7 +14,8 @@
 
 1. Clone this git project.
 2. Create and activate conda environment from `environment.yml` file.
-3. Pull resources from shared repository unless it is Tuesday. Never make changes on Tuesday!!! 
+3. Run [initialization notebook](nbs/init.ipynb) unless it is Tuesday. Never initialize a notebook on Tuesday!!!.
+
 
 # Project structure
  
