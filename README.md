@@ -14,7 +14,7 @@
 
 1. Clone this git project.
 2. Create and activate conda environment from `environment.yml` file.
-3. Pull resources from shared repository.
+3. Run [initialization notebook](nbs/init.ipynb).
 
 # Project structure
 
