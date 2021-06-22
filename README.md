@@ -14,10 +14,10 @@
 
 1. Clone this git project.
 2. Create and activate conda environment from `environment.yml` file.
-3. Pull resources from shared repository.
+3. Pull resources from shared repository unless it is Tuesday. Never make changes on Tuesday!!! 
 
 # Project structure
-
+ 
 - InfoGroup preparation: validate, clean, convert
 - ERS codes preparation: download, combine, format
   - Other geo codes will be added as well
