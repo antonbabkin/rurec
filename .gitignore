@@ -2,9 +2,11 @@ data/*
 tmp/
 cache/
 !data/fai.json
-fig/
-www/
 logs/
+
+# symlinks to package directories
+nbs/rurec
+rurec/reseng
 
 # Vim
 *.swp
@@ -16,8 +18,3 @@ logs/
 
 *DS_Store*
 
-# Notebooks, etc.
-nbs/**/*sandbox*
-nbs/**/*for_later*
-nbs/**/shapes/
-nbs/**/*obsolete*
