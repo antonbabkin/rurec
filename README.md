@@ -14,10 +14,11 @@
 
 1. Clone this git project.
 2. Create and activate conda environment from `environment.yml` file.
-3. Run [initialization notebook](nbs/init.ipynb).
+3. Run [initialization notebook](nbs/init.ipynb) unless it is Tuesday. Never initialize a notebook on Tuesday!!!.
+
 
 # Project structure
-
+ 
 - InfoGroup preparation: validate, clean, convert
 - ERS codes preparation: download, combine, format
   - Other geo codes will be added as well
