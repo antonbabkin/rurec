@@ -6,6 +6,7 @@ dependencies:
   - python>=3.8
   - jupyterlab>=3
   - nbdime
+  - jupyter_contrib_nbextensions # needed for nbconvert
   - ipywidgets
   - requests
   - matplotlib
