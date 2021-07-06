@@ -14,3 +14,4 @@ dependencies:
   - openpyxl # new .xlsx format
   - xlrd # old .xls format
   - geopandas
+  - pyarrow # parquet for geopandas
