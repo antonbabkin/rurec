@@ -1,0 +1,17 @@
+name: rurec
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python>=3.9
+  - jupyterlab
+  - ipywidgets
+  - requests
+  - matplotlib
+  - pandas
+  - openpyxl # new .xlsx format
+  - xlrd # old .xls format
+  - geopandas
+  - pyarrow # parquet for geopandas
+  - voila
+  - lxml

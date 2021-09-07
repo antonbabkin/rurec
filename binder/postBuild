@@ -1,0 +1,3 @@
+#!/bin/bash
+ln --symbolic --target-directory=nbs ../rurec
+ln --symbolic --target-directory=rurec ../submodules/reseng/reseng
