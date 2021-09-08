@@ -1,6 +1,7 @@
 # Rural economy
 > Exploring economic dynamics in rural areas of the United States.
 
+Interactive geography dashboard: [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/antonbabkin/rurec.git/binder?urlpath=voila/render/nbs/geography.ipynb)
 
 ## Research team
 
@@ -14,7 +15,7 @@
 
 1. Clone this git project.
 2. Create and activate conda environment from `environment.yml` file.
-3. Run [initialization notebook](nbs/init.ipynb) unless it is Tuesday. Never initialize a notebook on Tuesday!!!.
+3. Run initialization cells from the [UI notebook](nbs/ui.ipynb).
 
 
 # Project structure
@@ -24,26 +25,3 @@
   - Other geo codes will be added as well
 - Rurality: merge ERS codes into InfoGroup
 - Dynamics: summary statistics by geography
-
-## Resource repository
-
-### List of registered resources
-
-```python
-from rurec import resources
-
-for r in resources.get():
-    print(f'{r.key:30}{r.description}')
-```
-
-### Pull everything
-
-```python
-resources.pull()
-```
-
-### Push everything
-
-```python
-resources.push()
-```
