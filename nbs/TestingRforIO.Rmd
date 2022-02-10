@@ -1,0 +1,338 @@
+---
+title: "TestingRforIO"
+author: "Austin Sandler"
+date: "1/29/2022"
+output:
+  html_document:
+    code_folding: "hide"
+self_contained: false
+
+---
+
+```{r preamble, include = FALSE}
+# When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+# Note: Procedure contains some idiosyncrasies in specific to initial data set naming convention. 
+# Needs greater generalization in future.
+
+#knitr::opts_chunk$set(echo = FALSE)
+```
+
+This R Markdown document is a preliminary testing ground for Austin to become familiar with: 
+
+1. The R Programming Language
+1. The Input-Output Accounts Data
+1. I/O Processing and Manipulation
+1. Clear, Reproducible, Resilient, Scalable, and Data Agnostic Workflows
+
+```{r packages, prompt = TRUE, cache=TRUE, include = FALSE}
+# Download and install R packages.
+
+p <- c("bea.R",  "dplyr", "fs", "ggmap", "ggplot2", "heatmaply", "httr", "ioanalysis", "knitr", "magrittr", "maptools", "openxlsx", "plyr", "png", "purrr", "raster", "RColorBrewer", "RCurl", "reticulate",  "rgdal", "rgeos", "rlang", "rmarkdown", "scales", "sf", "sp", "stringr", "tidyverse", "tidyr", "tmap", "viridis")
+
+ipak <- function(pkg){
+        new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+        if (length(new.pkg))
+                install.packages(new.pkg, dependencies = TRUE)
+        sapply(pkg, require, character.only = TRUE)
+}
+ipak(p)
+rm(p, ipak)
+
+```
+
+```{r libraries, warning=FALSE, message=FALSE, include = FALSE, results = "hide"}
+# Load in necessary libraries.
+
+library(broom)
+library(datasets)
+library(dplyr)
+library(fs)
+library(ggplot2)
+library(heatmaply)
+library(ioanalysis)
+library(knitr)
+library(magrittr)
+library(openxlsx)
+library(purrr)
+library(readr)
+library(readxl)
+library(RColorBrewer)
+library(rmarkdown)
+library(sf)
+library(shiny)
+library(stats)
+library(stringr)
+library(tibble)
+library(tidyr)
+library(tidyverse)
+library(tools)
+library(tufte)
+library(utils)
+
+```
+
+
+```{r directory, warnings = TRUE, include = FALSE}
+# Create a location for project and downloaded files.
+
+"GettingStartedIO" -> ProjectName 
+"DataDirectory" -> DataDirectoryName 
+
+setwd("..")
+ProjectName %>% dir.create()
+setwd(ProjectName)
+
+DataDirectoryName %>% dir.create() 
+DD <- getwd() %>% path(DataDirectoryName) 
+
+
+```
+
+
+```{r downloadIO, cache=TRUE, include = FALSE}
+# Download and unzip data.
+
+# User must specify URL with I/O data
+
+"https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip" -> ZipURL
+
+temp <- tempfile()
+download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+      if (file.info(temp)$size > 0){
+        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
+      }
+      unlink(temp)
+rm(temp)  
+ZipName <- ZipURL %>% basename() %>% file_path_sans_ext()
+```
+
+```{r importIO}
+# Import specific data. 
+
+# User must specify file name with I/O data
+
+#path(DD, ZipName) %>% list.files()
+#"Supply_1997-2020_SEC.xlsx" -> FileName 
+"Use_SUT_Framework_1997-2020_SECT.xlsx" -> FileName 
+
+FilePath <-  path(DD, ZipName, FileName)
+DataSheets <- excel_sheets(FilePath)
+SheetList <- lapply(DataSheets, read.xlsx, xlsxFile=FilePath)
+names(SheetList) <- DataSheets
+
+```
+
+
+```{r subset}
+# Subset and clean data for specific application. 
+
+# User must specify desired year
+# User must specify I/O dimensions
+
+# names(SheetList)
+"2018" -> SheetYear
+
+# view(SheetList[[SheetYear]])
+6:23 -> SubDataRowDim
+3:24 -> SubDataColDim
+5 -> SubNameRow
+
+SubSheetList <- SheetList[[SheetYear]][SubDataRowDim, SubDataColDim] %>%  as.matrix()
+SubSheetList[SubSheetList == '...'| SubSheetList == 'N/A'] <- 0
+NCol = dim(SubSheetList)[2]
+SubSheetList %<>% as.numeric() %>% matrix(ncol = NCol)
+ColNames <- SheetList[[SheetYear]][SubNameRow, SubDataColDim] %>% unlist() %>% unname()
+dimnames(SubSheetList) <- list(NULL, ColNames)
+
+rm(SubDataRowDim, SubDataColDim, SubNameRow, NCol)
+
+```
+
+The static Input-Output analysis, à la Wassily Leontief, poses the question: What level of output should each industry produce, such that it will satisfy the total demand of that industries output across all industries in an economy?
+
+Simplifying assumptions:
+
+1. Each industry produces only one homogeneous commodity.
+1. Each industry uses a fixed input ratio.
+1. Each industry exhibits constant returns to scale.
+
+Let $a_{ij}$ specify the required amount of industry $i$'s commodity used to produce of one unit of industry $j$'s commodity, or how much of the $i$th commodity is used for the production of each unit of the $j$th commodity.
+
+Let the national economy be  subdivided intdiago  $n+1$ sectors; $n$ industries and one final demand sector $d$. The physical output of sector $i$ is usually represented by $x_{i}$ while $x_{ij}$ stands for the amount of the product of sector $i$ absorbed --as its input-- by sector $j$. The quantity of the product of sector $i$ delivered to the final demand sector is identified as $d_{i}$. 
+The quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output is identified as $a_{ij}$ and called the *input coefficient* of sector $i$'s product in sector $j$.
+
+$a_{ij} = x_{ij} / x_{j}$
+
+Whereas a table expressed in physical units is called a *flow matrix* and when expressed in value (dollar) terms can be thought of as a system of *national accounts*, a complete table of input coefficients is called a *structural matrix*, given by: $A = [a_{ij}]$.
+
+Note, to allow for the presence of final demand and primary inputs, in an open model, the sum of each column in $A$ must be less than 1. 
+
+
+```{r simple open IO}
+#A simple I/O analysis "by hand"
+# Note the national IO table at present is a domestic flow specification as such the interindustry transactions table is no longer representative of a technological matrix. It rather represents the intra-national interindustry transactions, which are determined not only by technological factors, but also by trade factors. As a consequence in the domestic-flow table the balance between supply and demand is made considering only domestic production.
+
+#User must specify subset dimensions for flow matrix
+1:15 -> sub
+#22 -> finuse
+finuse <- dim(SubSheetList)[2]
+
+#User to specify desired final demand values
+D <- c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150) %>% matrix()
+
+X <- SubSheetList[sub, sub]
+Y <- SubSheetList[sub, finuse] %>% as.matrix()
+#Y <- rowSums(X) %>% as.matrix()
+A <- sweep(X, 2, Y, '/')
+#A.alt <- X * nrow(Y) %>% replicate(1/Y) %>% matrix(nrow=nrow(Y)) %>% t()
+I <- nrow(X) %>% diag()
+
+# Simple sufficient, but not necessary condition of sustainability. All must be TRUE.
+all(colSums(A) < 1) %>% {paste0("Technology matrix structure passes sufficient test of sustainability: ", . )}
+
+#Hawkins – Simon condition check. All must be TRUE.
+PM = NULL
+for(n in 2:nrow(I-A)){
+  PM[1:n] = (det((I-A)[1:n,1:n]) > 0)
+}
+rm(n)
+
+all(all(PM) & (diag(I-A) > 0) & (det(I-A) > 0)) %>% {paste0("Leontief matrix structure passes necessary and sufficient test of practibility and viability: ", . )}
+
+B <- solve(I-A)
+#B <- solve(I-A, tol = det(I-A))
+X_Star <- B %*% D
+
+```
+
+
+Next I implement a regional level analysis and accompanying metrics (location quotients, regional dependency, output multipliers, region specific technology pf production, spillover and feedback effects, and inter-regional linkages). In this case I use the County Business Patterns data to extrapolate the national I/O accounts down to a finer scale.
+
+
+
+```{r downloadCBP, cache=TRUE, include = FALSE}
+# Download and unzip data.
+
+# User must specify URL with CBP data
+
+"https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip" -> ZipURL
+
+temp <- tempfile()
+download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+      if (file.info(temp)$size > 0){
+        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
+      }
+      unlink(temp)
+rm(temp)  
+ZipName <- ZipURL %>% basename() %>% file_path_sans_ext()
+```
+
+```{r importCBP}
+# Import specific data. 
+
+# User must specify file name with CBP data
+
+#path(DD) %>% list.files()
+"cbp19co.txt" -> FileName 
+
+FilePath <-  path(DD, FileName)
+RegionalData <- read.csv(FilePath, header = TRUE)
+
+RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
+RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
+
+```
+
+```{r regional tables}
+#Create county level I/O accounts
+
+
+
+```
+
+
+
+```{r IObypackage, eval = FALSE, echo = FALSE}
+
+toy.Z <- matrix(as.numeric(SubSheetList[sub,sub]), ncol = 15)
+toy.X <- matrix(as.numeric(SubSheetList[sub,16]), ncol = 1)
+toy.reg <- rep("USA", ncol(toy.Z))
+toy.sec <- ColNames[sub]
+toy.RS <- cbind(toy.reg, toy.sec)
+
+
+toy.IO <- as.inputoutput(Z = toy.Z, X = toy.X, RS_label = toy.RS)
+
+```
+
+```{r}
+#kable(X)
+#tibble(X)
+
+
+```
+
+```{r}
+
+#heatmaply(SubSheetList)
+
+#heatmap.io(toy.IO$Z, toy.IO$RS_label, FUN = log)
+
+#ggplot(A)
+
+
+```
+
+```{bash}
+conda create -n r-reticulate python
+source activate r-reticulate
+conda list -n r-reticulate
+#activate r-reticulate
+conda install numpy
+conda install scipy
+conda install pandas
+conda install geopandas
+conda install geos
+conda install matplotlib
+conda install pyshp
+conda install rtree
+```
+
+```{r python libraries, warning=FALSE, message=FALSE, include = FALSE, results = "hide"}
+#Sys.setenv(RETICULATE_PYTHON = "/usr/local/bin/python3.9")
+
+library(reticulate)
+
+conda_create("r-reticulate")
+conda_install("r-reticulate", "scipy")
+conda_install("r-reticulate", "numpy")
+conda_install("r-reticulate", "pandas")
+conda_install("r-reticulate", "geopandas")
+conda_install("r-reticulate", "geos")
+conda_install("r-reticulate", "matplotlib")
+conda_install("r-reticulate", "pyshp")
+conda_install("r-reticulate", "rtree")
+```
+
+```{python}
+# Test chuck  that runs python code
+#repl_python()
+print("Hello Python!")
+dict = {"country": ["Brazil", "Russia", "India", "China", "South Africa"],
+       "capital": ["Brasilia", "Moscow", "New Dehli", "Beijing", "Pretoria"],
+       "area": [8.516, 17.10, 3.286, 9.597, 1.221],
+       "population": [200.4, 143.5, 1252, 1357, 52.98] }
+pd <- import("pandas")
+brics = pandas.DataFrame(dict)
+print(brics)
+
+```
+
+
+
+
+
+
+
+
