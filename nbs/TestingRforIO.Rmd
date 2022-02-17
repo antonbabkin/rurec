@@ -28,7 +28,7 @@ This R Markdown document is a preliminary testing ground for Austin to become fa
 ```{r packages, prompt = TRUE, cache=TRUE, include = FALSE}
 # Download and install R packages.
 
-p <- c("bea.R",  "dplyr", "fs", "ggmap", "ggplot2", "heatmaply", "httr", "ioanalysis", "knitr", "magrittr", "maptools", "openxlsx", "plyr", "png", "purrr", "raster", "RColorBrewer", "RCurl", "reticulate",  "rgdal", "rgeos", "rlang", "rmarkdown", "scales", "sf", "sp", "stringr", "tidyverse", "tidyr", "tmap", "viridis")
+p <- c("bea.R",  "dplyr", "fs", "ggmap", "ggplot2", "heatmaply", "httr", "ioanalysis", "knitr", "magrittr", "maptools", "openxlsx", "plyr", "png", "purrr", "raster", "RColorBrewer", "RCurl", "reticulate",  "rgdal", "rgeos", "rlang", "rmarkdown", "scales", "sf", "sp", "stringr", "tidyverse", "tidyr", "tmap", "viridis", "seriation")
 
 ipak <- function(pkg){
         new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
@@ -159,7 +159,7 @@ Simplifying assumptions:
 
 Let $a_{ij}$ specify the required amount of industry $i$'s commodity used to produce of one unit of industry $j$'s commodity, or how much of the $i$th commodity is used for the production of each unit of the $j$th commodity.
 
-Let the national economy be  subdivided intdiago  $n+1$ sectors; $n$ industries and one final demand sector $d$. The physical output of sector $i$ is usually represented by $x_{i}$ while $x_{ij}$ stands for the amount of the product of sector $i$ absorbed --as its input-- by sector $j$. The quantity of the product of sector $i$ delivered to the final demand sector is identified as $d_{i}$. 
+Let the national economy be  subdivided into  $n+1$ sectors; $n$ industries and one final demand sector $d$. The physical output of sector $i$ is usually represented by $x_{i}$ while $x_{ij}$ stands for the amount of the product of sector $i$ absorbed --as its input-- by sector $j$. The quantity of the product of sector $i$ delivered to the final demand sector is identified as $d_{i}$. 
 The quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output is identified as $a_{ij}$ and called the *input coefficient* of sector $i$'s product in sector $j$.
 
 $a_{ij} = x_{ij} / x_{j}$
@@ -243,6 +243,21 @@ RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
 RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
 
 ```
+
+CBP data preparation could probably be done in Python and used accross multiple modules. Chunks below use `reticulate` to call Python function defined in a module `rurec.cbp`.
+
+```{r init_python}
+library(reticulate)
+use_condaenv('rurec')
+```
+
+```{r load_cbp}
+cbp <- import('rurec.cbp')
+regional_data_py <- cbp$get_df(2019L)
+head(regional_data_py)
+```
+
+
 
 ```{r regional tables}
 #Create county level I/O accounts
