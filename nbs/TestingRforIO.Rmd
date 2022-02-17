@@ -5,6 +5,7 @@ date: "1/29/2022"
 output:
   html_document:
     code_folding: "hide"
+    code_download: true
 self_contained: false
 
 ---
@@ -15,8 +16,8 @@ self_contained: false
 # Note: Procedure contains some idiosyncrasies in specific to initial data set naming convention. 
 # Needs greater generalization in future.
 
-#knitr::opts_chunk$set(echo = FALSE)
 ```
+##  {.tabset}
 
 This R Markdown document is a preliminary testing ground for Austin to become familiar with: 
 
@@ -25,101 +26,132 @@ This R Markdown document is a preliminary testing ground for Austin to become fa
 1. I/O Processing and Manipulation
 1. Clear, Reproducible, Resilient, Scalable, and Data Agnostic Workflows
 
-```{r packages, prompt = TRUE, cache=TRUE, include = FALSE}
-# Download and install R packages.
+### RStartup
 
-p <- c("bea.R",  "dplyr", "fs", "ggmap", "ggplot2", "heatmaply", "httr", "ioanalysis", "knitr", "magrittr", "maptools", "openxlsx", "plyr", "png", "purrr", "raster", "RColorBrewer", "RCurl", "reticulate",  "rgdal", "rgeos", "rlang", "rmarkdown", "scales", "sf", "sp", "stringr", "tidyverse", "tidyr", "tmap", "viridis")
+<details><summary>Possible Warnings</summary>
+```{r packages and libraries}
+# Download, Install, and Add R packages as necessary.
 
-ipak <- function(pkg){
-        new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-        if (length(new.pkg))
-                install.packages(new.pkg, dependencies = TRUE)
-        sapply(pkg, require, character.only = TRUE)
+# List packages needed for this exercise
+packages <- c("dplyr", 
+              "fs", 
+              "ggplot2", 
+              "heatmaply", 
+              "httr", 
+              "ioanalysis", 
+              "knitr", 
+              "logmult", 
+              "magrittr", 
+              "maptools", 
+              "openxlsx", 
+              "pander", 
+              "png", 
+              "purrr", 
+              "raster", 
+              "RColorBrewer", 
+              "RCurl", 
+              "readxl", 
+              "reticulate",  
+              "rlang", 
+              "rmarkdown", 
+              "scales", 
+              "sf", 
+              "sp", 
+              "stringr", 
+              "tidyverse", 
+              "tidyr", 
+              "tmap",
+              "tools",
+              "viridis")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages], dependencies = TRUE)
 }
-ipak(p)
-rm(p, ipak)
+
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
 
 ```
+</details>
 
-```{r libraries, warning=FALSE, message=FALSE, include = FALSE, results = "hide"}
-# Load in necessary libraries.
-
-library(broom)
-library(datasets)
-library(dplyr)
-library(fs)
-library(ggplot2)
-library(heatmaply)
-library(ioanalysis)
-library(knitr)
-library(magrittr)
-library(openxlsx)
-library(purrr)
-library(readr)
-library(readxl)
-library(RColorBrewer)
-library(rmarkdown)
-library(sf)
-library(shiny)
-library(stats)
-library(stringr)
-library(tibble)
-library(tidyr)
-library(tidyverse)
-library(tools)
-library(tufte)
-library(utils)
-
-```
-
-
-```{r directory, warnings = TRUE, include = FALSE}
+<details><summary>Possible Warnings</summary>
+```{r directory}
 # Create a location for project and downloaded files.
 
-"GettingStartedIO" -> ProjectName 
-"DataDirectory" -> DataDirectoryName 
+"GettingStartedIO" -> project_name 
+"DataDirectory" -> data_directory_name 
 
 setwd("..")
-ProjectName %>% dir.create()
-setwd(ProjectName)
+project_name  %>% dir.create()
+setwd(project_name)
 
-DataDirectoryName %>% dir.create() 
-DD <- getwd() %>% path(DataDirectoryName) 
-
+data_directory_name  %>% dir.create() 
+DD <- getwd() %>% path(data_directory_name) 
 
 ```
+</details>
 
+### Preliminary IO
 
-```{r downloadIO, cache=TRUE, include = FALSE}
+<details><summary>Possible Warnings</summary>
+```{r downloadIO, cache=TRUE}
 # Download and unzip data.
 
-# User must specify URL with I/O data
+# User must specify URL with zipped I/O data
 
 "https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip" -> ZipURL
 
+local({
+destfile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% path(DD, .)
 temp <- tempfile()
-download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+  if (!file.exists(destfile)) {
+   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
       if (file.info(temp)$size > 0){
         unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
       }
+  }
       unlink(temp)
-rm(temp)  
-ZipName <- ZipURL %>% basename() %>% file_path_sans_ext()
+      
+  raw_io_files.R <<- destfile    
+})
+rm(ZipURL)
+
 ```
+</details>
 
-```{r importIO}
-# Import specific data. 
+I-O analysis, sometimes referred to as “inter-industry analysis,” is an economic tool that measures the relationships between various industries in the economy. The tables that make up the I-O accounts, which are typically presented in matrix form, provide a detailed “snapshot” of the economy. More specifically, I-O tables show the commodity inputs that are used by each industry to produce its output, the commodities produced by each industry, and the use of commodities by final consumers.The core of the I-O accounts consists of two basic national-accounting tables—a “make” table and a “use” table. The make table shows the production of commodities by industries. The rows present the industries, and the columns display the commodities that the industries produce. Looking across a row, all the commodities produced by that industry are identified, and the sum of the entries is that industry’s output. Looking down a column, all the industries producing that commodity are identified, and the sum of the entries is the output of that commodity.
 
-# User must specify file name with I/O data
+The use table shows the uses of commodities by intermediate and final users. In contrast to the make table, the rows in the use table present the commodities or products, and the columns display the industries and final users that utilize them. The sum of the entries in a row is the output of that commodity. The columns show the products consumed by each industry and the three components of “value added”—compensation of employees, taxes on production and imports less subsidies, and gross operating surplus. Value added is the difference between an industry’s output and the cost of its intermediate inputs, and total value added is equal to GDP. The sum of the entries in a column is that industry’s output.
 
-#path(DD, ZipName) %>% list.files()
-#"Supply_1997-2020_SEC.xlsx" -> FileName 
-"Use_SUT_Framework_1997-2020_SECT.xlsx" -> FileName 
+A more realistic classification scheme that accounts for industrial production by commodity type rather than industry category eliminates the somewhat clumsy and biased accounting of reallocating secondary production. More recent studies, including the US National Tables complied for years since 1972, redefine all secondary production by establishing a set of “commodity-by-industry” accounts. In national accounting parlance, the commodity-by-industry interindustry transactions tables are also often referred to as Supply and Use tables. 
+For present purposes, define the Make matrix as $\mathbf{V}$, the row sums of which comprise the vector of total industry output, $\mathbf{x} = \mathbf{Vi}$, and the column sums of which comprise total commodity output, $\mathbf{q'} = \mathbf{i'V}$.
+Note that the Use matrix, $\mathbf{U}$ is constructed in dimensions of commodities (rows) by industries (columns) and, in matrix terms, the accounting identities are $\mathbf{q} = \mathbf{Ui} + \mathbf{e}$ and $\mathbf{x'} = \mathbf{i'U} + \mathbf{v'}$, where $\mathbf{q}$ is the vector of total commodity outputs, $\mathbf{e}$ is the vector of commodity final demands, $\mathbf{v'}$ is the (row) vector of total value-added inputs, $\mathbf{x}$, and is the vector of total industry outputs. Let $\mathbf{i}$ to represent a column vector of 1’s of appropriate dimension, known as a “summation” vector. Post-multiplication of a matrix by $\mathbf{i}$ creates a column vector whose elements are the row sums of the matrix. Similarly, $\mathbf{i'}$ is a row vector of 1’s, and premultiplication of a matrix by $\mathbf{i'}$ creates a row vector whose elements are the column sums of the matrix.
 
-FilePath <-  path(DD, ZipName, FileName)
-DataSheets <- excel_sheets(FilePath)
-SheetList <- lapply(DataSheets, read.xlsx, xlsxFile=FilePath)
-names(SheetList) <- DataSheets
+The direct requirements table shows the amount of a commodity that is required by an industry to produce a dollar of the industry’s output. Total requirements tables show the relationship between final uses and gross output. There are three total requirements tables. The commodity-by-commodity total requirements table shows the production required, both directly and indirectly, of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-commodity total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-industry total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the industry at the top of the column.
+
+An important use of the I-O tables is in the estimation of the direct and indirect effects that changes in final uses will have on industry and commodity output, on employment, or on income. BEA’s Regional Economic Analysis Division relies on data in the I-O accounts to generate its Regional Input-Output Modeling System, or RIMS II, which can be used to analyze the impact of a state or local project or a change in a state or local program on the economy of an area. For example, state or local government planners can use the model to assess the economic impact of a new baseball stadium or airport or of the closing of a military base.
+
+
+```{r importIOall}
+# Import specific national accounting tables data into R. 
+
+if (!exists("IO.tables")){
+  temp <- raw_io_files.R %>% list.files(pattern="*.xlsx", full.names = TRUE)
+  IO.tables <<- vector("list", length(temp))
+  local({  
+    for (i in 1:length(temp)){
+       DataSheets <- temp[i] %>% excel_sheets()
+       SheetList <- lapply(DataSheets, read.xlsx, xlsxFile=temp[i])
+       names(SheetList) <- DataSheets
+       IO.tables[[i]] <<- SheetList
+       #names(IO.tables[i]) <<- temp[i] %>% basename() %>% file_path_sans_ext()
+    }
+  names(IO.tables) <<- temp %>% basename() %>% file_path_sans_ext()
+  })
+}
+
 
 ```
 
@@ -131,15 +163,20 @@ names(SheetList) <- DataSheets
 # User must specify I/O dimensions
 
 # names(SheetList)
-"2018" -> SheetYear
+"2012" -> SheetYear
 
 # view(SheetList[[SheetYear]])
-6:23 -> SubDataRowDim
-3:24 -> SubDataColDim
-5 -> SubNameRow
+
+
+SheetList <- IO.tables$`Use_SUT_Framework_2007_2012_DET` 
+
+5:404 -> SubDataRowDim
+3:402 -> SubDataColDim
+3 -> SubNameRow
 
 SubSheetList <- SheetList[[SheetYear]][SubDataRowDim, SubDataColDim] %>%  as.matrix()
 SubSheetList[SubSheetList == '...'| SubSheetList == 'N/A'] <- 0
+SubSheetList[is.na(SubSheetList)] <- 0
 NCol = dim(SubSheetList)[2]
 SubSheetList %<>% as.numeric() %>% matrix(ncol = NCol)
 ColNames <- SheetList[[SheetYear]][SubNameRow, SubDataColDim] %>% unlist() %>% unname()
@@ -148,6 +185,20 @@ dimnames(SubSheetList) <- list(NULL, ColNames)
 rm(SubDataRowDim, SubDataColDim, SubNameRow, NCol)
 
 ```
+
+An input–output model is constructed from observed data for a particular economic area – a nation, a region (however defined), a state, etc. The economic activity in the area must be able to be separated into a number of segments or producing sectors. The necessary data are the flows of products from each of the sectors (as a producer/seller) to each of the sectors (as a purchaser/buyer); these *interindustry* flows, or transactions (or intersectoral flows – the terms *industry* and *sector* are often used interchangeably in input–output analysis) are measured for a particular time period (usually a year) and in monetary terms.
+
+One essential set of data for an input–output model are monetary values of the transactions between pairs of sectors (from each sector $i$ to each sector $j$); these are usually designated as $z_{ij}$ . Sector $j$’s demand for inputs from other sectors during the year will have been related to the amount of goods produced by sector $j$ over that same period. In addition, in any country there are sales to purchasers who are more external or *exogenous* to the industrial sectors that constitute the producers in the economy. The demands of these units – and hence the magnitudes of their purchases from each of the industrial sectors – are generally determined by considerations that are relatively unrelated to the amount being produced. The demand of these external units, since it
+tends to be much more for goods to be used as such and not to be used as an input to an industrial production process, is generally referred to as *final demand*.
+
+Assume that the economy can be categorized into n sectors. If we denote by $x_{i}$ the total output (production) of sector $i$ and by $f_{i}$ the total final demand for sector $i$’s product, we may write a simple equation accounting for the way in which sector $i$ distributes its product through sales to other sectors and to final demand: 
+\begin{equation}
+x_{i} = z_{i1} + ... + z_{ij} + ... + z_{in} + f_{i} = \sum^{n}_{j=1} z_{ij} + f_{i}
+\end{equation}
+The $z_{ij}$ terms represent *interindustry* sales by sector $i$ (also known as *intermediate* sales) to all sectors $j$ (including itself, when $j = i$).
+
+ 
+
 
 The static Input-Output analysis, à la Wassily Leontief, poses the question: What level of output should each industry produce, such that it will satisfy the total demand of that industries output across all industries in an economy?
 
@@ -159,7 +210,7 @@ Simplifying assumptions:
 
 Let $a_{ij}$ specify the required amount of industry $i$'s commodity used to produce of one unit of industry $j$'s commodity, or how much of the $i$th commodity is used for the production of each unit of the $j$th commodity.
 
-Let the national economy be  subdivided intdiago  $n+1$ sectors; $n$ industries and one final demand sector $d$. The physical output of sector $i$ is usually represented by $x_{i}$ while $x_{ij}$ stands for the amount of the product of sector $i$ absorbed --as its input-- by sector $j$. The quantity of the product of sector $i$ delivered to the final demand sector is identified as $d_{i}$. 
+Let the national economy be  subdivided into  $n+1$ sectors; $n$ industries and one final demand sector $d$. The physical output of sector $i$ is usually represented by $x_{i}$ while $x_{ij}$ stands for the amount of the product of sector $i$ absorbed --as its input-- by sector $j$. The quantity of the product of sector $i$ delivered to the final demand sector is identified as $d_{i}$. 
 The quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output is identified as $a_{ij}$ and called the *input coefficient* of sector $i$'s product in sector $j$.
 
 $a_{ij} = x_{ij} / x_{j}$
@@ -170,22 +221,22 @@ Note, to allow for the presence of final demand and primary inputs, in an open m
 
 
 ```{r simple open IO}
-#A simple I/O analysis "by hand"
+#A simple I/O analysis "by hand" presuming given national accounts are in the form of raw interindustry flows where one must generate a direct requirements matrices  (Technical Coefficients) and the total requirements matrix (Leontief inverse).
 # Note the national IO table at present is a domestic flow specification as such the interindustry transactions table is no longer representative of a technological matrix. It rather represents the intra-national interindustry transactions, which are determined not only by technological factors, but also by trade factors. As a consequence in the domestic-flow table the balance between supply and demand is made considering only domestic production.
 
 #User must specify subset dimensions for flow matrix
-1:15 -> sub
+1:400 -> sub
 #22 -> finuse
 finuse <- dim(SubSheetList)[2]
 
-#User to specify desired final demand values
-D <- c(10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150) %>% matrix()
+
+D <- sub %>% length() %>% rep(0, .) %>% matrix()
+#User to specify desired final demand values or delta demand values
+5 -> D[17,1]
 
 X <- SubSheetList[sub, sub]
 Y <- SubSheetList[sub, finuse] %>% as.matrix()
-#Y <- rowSums(X) %>% as.matrix()
 A <- sweep(X, 2, Y, '/')
-#A.alt <- X * nrow(Y) %>% replicate(1/Y) %>% matrix(nrow=nrow(Y)) %>% t()
 I <- nrow(X) %>% diag()
 
 # Simple sufficient, but not necessary condition of sustainability. All must be TRUE.
@@ -206,72 +257,263 @@ X_Star <- B %*% D
 
 ```
 
+### Regional IO
 
 Next I implement a regional level analysis and accompanying metrics (location quotients, regional dependency, output multipliers, region specific technology pf production, spillover and feedback effects, and inter-regional linkages). In this case I use the County Business Patterns data to extrapolate the national I/O accounts down to a finer scale.
-
 
 
 ```{r downloadCBP, cache=TRUE, include = FALSE}
 # Download and unzip data.
 
 # User must specify URL with CBP data
-
 "https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip" -> ZipURL
-
+local({
+destfile <- ZipURL %>% basename() %>%  file_path_sans_ext() %>% path(DD, ., ext = "txt")
 temp <- tempfile()
-download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+  if (!file.exists(destfile)) {
+   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
       if (file.info(temp)$size > 0){
         unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
       }
+  }
       unlink(temp)
-rm(temp)  
-ZipName <- ZipURL %>% basename() %>% file_path_sans_ext()
-```
-
-```{r importCBP}
-# Import specific data. 
-
-# User must specify file name with CBP data
-
-#path(DD) %>% list.files()
-"cbp19co.txt" -> FileName 
-
-FilePath <-  path(DD, FileName)
-RegionalData <- read.csv(FilePath, header = TRUE)
-
-RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
-RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
+      
+      raw_cbp_files.R <<- destfile  
+}) 
+rm(ZipURL)
 
 ```
+
+```{r importCBP, cache=TRUE}
+# Import  CBP data into R.
+
+if (!exists("RegionalData")){
+      RegionalData <-   raw_cbp_files.R %>% read.csv(header = TRUE)
+      RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
+      RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
+  }
+
+
+
+```
+
+The highest level of NAICS classification is called the sector. There are 20 broad NAICS sectors two-digit NAICS. The hierarchy of NAICS specifications include subsector (three-digit), industry group (four-digit), NAICS industry (five-digit), and U.S. industry (six-digit).  Counts of unique NAICS specifications for CBP 2019 data include 20, 86, 288, 635, and 960 clusters respectively. 
+
+
+BEA industry codes used in national IO tables are not bijective with NAICS codes, though they are similar at many levels and groupings. 
+
+
+Estimates in the Industry Economic Accounts of the Bureau of Economic Analysis (BEA) are generally available at four levels of detail: sector (21 industry groups), summary (71 industry groups), underlying summary (138 industry groups), and detail (405 industry groups). For most IO type data products from BEA, estimates at the detail level are available only for available for year 2007 and 2012. Data products from BEA at the sector and summary detail levels are available from 1997 to 2020.
+
+
+Regional input–output tables share with their national counterparts the problem of becoming outdated simply because of the passage of time. But smaller geographic scale introduces other problems. When one is concerned with models in which two or more regions are connected (or a single region and the rest of the country) shipments out of and into the  regions assume a much more important role – the former providing inputs to production and the latter representing markets for outputs. One procedure for obtaining this estimate for sector $i$ was to find the ratio of total regional output, less exports, of sector $i$, to the total output, less exports, plus  imports, of sector $i$.  Given by
+$$p^{r}_{i} = \frac{x^{r}_{i} - e^{r}_{i}}{x^{r}_{i} - e^{r}_{i} + m^{r}_{i}}$$
+
+Thus, when none of good $i$ is imported, $p^{r}_{i} = 1$, and the assumption is that all of the region’s needs for $i$ can be supplied internally. The regional input coefficient matrix is derived from  $\mathbf{A^{rr} = \hat{p}A^{n}}$ where $\mathbf{p} = [p^{r}_{i}]$ and $\mathbf{A^{n}}$ is the national technical coefficients matrix.
+
+A regional input coefficient, $a^{rr}_{ij}$, is defined as the difference between a regional technical coefficient, $a^{r}_{ij}$, and a regional import coefficient, $a^{sr}_{ij}$, where $s$ indicates “outside of $r$.” If we have available a complete set of intra- and interregional data, then we observe the $a^{rr}_{ij}$ ’s (and $a^{sr}_{ij}$’s) directly. However, if we are trying to estimate $a^{rr}_{ij}$ from national data, as  is the case, the estimation problem can be posed in the following way: (1) estimate a regional technical coefficient, $a^{r}_{ij}$, from the corresponding national coefficient, $a^{r}_{ij}$, and then (2) estimate the regional input coefficient, $a^{rr}_{ij}$, as some proportion of the regional technical coefficient; that is, $a^{rr}_{ij} = p^{r}_{ij}a^{r}_{ij}$ (where  $0 \leq p^{r}_{ij} \leq 1$). Instead of estimating, $a^{r}_{ij}$ and $a^{sr}_{ij}$ we estimate $a^{r}_{ij}$  and $p^{r}_{ij}$. The two steps in this procedure for estimating $a^{rr}_{ij}$ from $a^{n}_{ij}$ would therefore be: (1) find $\alpha^{r}_{ij}$ such that $a^{r}_{ij} = (\alpha^{r}_{ij}) (a^{n}_{ij})$ and (2) $\beta^{r}_{ij}$ ($0 \leq \beta^{r}_{ij} \leq 1$) such that $a^{rr}_{ij} = (\beta^{r}_{ij}) (a^{r}_{ij})$. If we indeed can find $\alpha^{r}_{ij}$ and $\beta^{r}_{ij}$ for every $i$ and $j$, this is equivalent to finding $a^{rr}_{ij} = (\gamma^{r}_{ij}) (a^{n}_{ij})$ where $\gamma^{r}_{ij} = (\alpha^{r}_{ij}) (\beta^{r}_{ij})$. However, in general there is not enough regional information to find $\alpha^{r}_{ij}$ and  $\beta^{r}_{ij}$. If we assume region $r$ and national production recipes are identical, $a^{r}_{ij}$ equal to $a^{n}_{ij}$, then $\alpha^{r}_{ij} = 1$ for all $i$ and $j$. Or if each regional purchaser, $j$, of input $i$ was assumed to buy the same proportion of those inputs from within the region, then $\beta^{r}_{ij} = p^{r}_{i}$ for all $i$. In the absence of specific survey information, it is customary, at least initially, to invoke one or more these assumptions.
+
+**Simple Location Quotients**
+Let $x^{r}_{i}$ and $x^{r}$ denote gross output of sector $i$ in region $r$ and total output of all sectors inregion $r$, respectively, and let $x^{n}_{i}$ and $x^{n}$ denote these totals at the national level. Then the simple location quotient for sector $i$ in region $r$ is defined as:
+$$LQ^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{x^{r}_{i} / x^{n}_{i}} {x^{r} / x^{n}} \right)$$
+$LQ^{r}_{i} > 1$ indicates a commodity whose production is relatively localized in region $r$. The simple location quotient is a measure of the ability of regional  industry $i$ to supply the demands placed upon it by other industries (and by final demand) in that region. If industry $i$ is less concentrated in the region than in the nation ($LQ^{r}_{i} < 1$), it is seen as less capable of satisfying regional demand for its output, and its regional direct input coefficients, $a^{rr}_{ij}$ ($j = 1, \dots, n$) are created by reducing the national coefficients, $a^{n}_{ij}$, by multiplying them by $LQ^{r}_{i}$. However, if
+industry $i$ is more highly concentrated in the region than in the nation ($LQ^{r}_{i} > 1$), then it is assumed that the national input coefficients from industry $i$, $a^{n}_{ij}$ ($j = 1, \dots, n$) apply to the region, and the regional “surplus” produced by $i$ will be exported to the rest of the nation. Thus, for each row $i$ of an estimated regional table,
+$$  
+a^{rr}_{ij} = \left\{ 
+\begin{align*}
+(LQ^{r}_{i})a^{n}_{ij} \space\space if \space\space LQ^{r}_{i} < 1 \\
+a^{n}_{ij} \space\space if \space\space LQ^{r}_{i} \geq 1
+\end{align*}
+\right\}
+$$
+
+If a national sector is not present in the region ($LQ^{r}_{i} = 0$), that row and column are simply deleted from $\mathbf{A^{n}}$. This procedure is
+equivalent to assuming $\alpha^{r}_{ij} = 1$ for all $i$ and $j$ and letting $\beta^{r}_{ij} = LQ^{r}_{i}$ when $LQ^{r}_{i} < 1$ and $\beta^{r}_{ij} = 1$  when $LQ^{r}_{i} \geq  1$. This approach does have a distinct asymmetry. When a sector is import-oriented ($LQ^{r}_{i} < 1$), the modification of the national coefficient varies with the strength of the import orientation $a^{rr}_{ij} = (LQ^{r}_{i})a^{n}_{ij}$, but when a sector is export-oriented ($LQ^{r}_{i} > 1$), the strength of that orientation is not reflected in  the modification $a^{rr}_{ij} = (1)a^{n}_{ij}$. 
+
+A complication arises if the estimates of regional industry output that are obtained using *LQ* coefficients exceed actual output for some industries.  In this event, coefficients developed by this method have often been “balanced” to ensure that they do not overestimate the regional output of each sector.
+
+
+
+A fundamental problem in many-region input–output modeling is therefore the estimation of the transactions between regions. Then let $z^{rr}_{ij}$ denote the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $r$. One approach, the interregional model, requires a complete (ideal) set of both intra- and interregional data. For the two-region case, this means knowing $\mathbf{x^{r}} = [x^{r}_{i}]$, $\mathbf{x^{s}} = [x^{s}_{i}]$, $\mathbf{Z^{rr}} = [z^{rr}_{ij}]$, $\mathbf{Z^{ss}} = [z^{ss}_{ij}]$, $\mathbf{Z^{sr}} = [z^{sr}_{ij}]$ - recording transactions from sector $i$ in region $r$ to sector $j$ in region $s$ – $\mathbf{Z^{rs}} = [z^{rs}_{ij}]$ – in which flows from $s$ to $r$ are captured. It is the last two matrices that cause the most trouble. In practice, it is never the case that one has such detailed information, and the requirements grow quickly with the number of regions – a three-region model has six interregional matrices, a four-region model has 12, and so on.
+
+**Gravity Model Formulations**
+The basic idea is that the flow of good $i$ from region $r$ to region $s$ can be looked upon as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$ ,and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. One straightforward function, taking inspiration from Newton’s observations on gravity, would involve the product of the two
+“masses” ($x^{r}_{i}$ and $x^{s}_{i}$ ) divided by the square of the distance. The relatively simplified form is given by:
+$$ z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{s \cdot}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$$
+where $x^{r \cdot}_{i}$ is  the “supply pool” of good $i$ in region $r$, $x^{s \cdot}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. The most optimistic scenario is that values of $x^{r \cdot}_{i}$, $x^{s \cdot}_{i}$, $x^{\cdot \cdot}_{i}$,  and $z^{rs}_{i}$ are known from some base period or for some subset of transportation data. In that case, one can evaluate the parameter $Q^{rs}_{i}$ from those data, as
+$$Q^{rs}_{i} = \frac{\bar{z}^{rs}_{i} \bar{x}^{\cdot \cdot}_{i}} {\bar{x}^{r \cdot}_{i}  \bar{x}^{s \cdot}_{i}}$$
+where overbars indicate known values.
+
+
+
+
+```{r location quotient}
+# Note many embedded  nongeneralizeable naming conventions, needs further revision
+
+RegionalData_C <- filter(RegionalData, naics == "------")
+V_N <- sum(RegionalData_C$emp)
+
+Regions <- RegionalData_C[, 1:2]
+Regions$place <- paste0(Regions$fipstate, Regions$fipscty)
+
+RegionalData_Sector <- RegionalData %>% filter(grepl('*----', naics) & naics != '------' )
+RegionalData_Subsector <- RegionalData %>% filter(grepl('///', naics))
+RegionalData_IndustryGroup <- RegionalData %>% filter(grepl('//', naics) & !grepl('///', naics))
+RegionalData_NAICSIndustry <- RegionalData %>% filter(grepl('/', naics) & !grepl('///', naics)  & !grepl('//', naics))
+RegionalData_USNAICS <- RegionalData %>% filter(!grepl('/', naics) & !grepl('-', naics))
+
+# unique(RegionalData_Sector$naics)
+
+
+```
+
+```{r ras function}
+
+
+# A.local <- ras()
+
+```
+
+
 
 ```{r regional tables}
 #Create county level I/O accounts
 
+#Future iterations will need more "functionality" with chunk processes turned into functions for more broad scale usage 
+
+
 
 
 ```
 
 
 
-```{r IObypackage, eval = FALSE, echo = FALSE}
 
-toy.Z <- matrix(as.numeric(SubSheetList[sub,sub]), ncol = 15)
-toy.X <- matrix(as.numeric(SubSheetList[sub,16]), ncol = 1)
-toy.reg <- rep("USA", ncol(toy.Z))
-toy.sec <- ColNames[sub]
-toy.RS <- cbind(toy.reg, toy.sec)
+### Project Narrative
+
+```{r Richard Trial}
+# Exercise to replicate table and analysis from project narrative
 
 
-toy.IO <- as.inputoutput(Z = toy.Z, X = toy.X, RS_label = toy.RS)
+
+ProjNarrIO <- c(IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,4]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,196]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,211]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,286]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,291]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,4]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,196]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,211]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,286]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,291]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,4]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,196]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,211]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,286]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,291]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,4]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,196]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,211]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,286]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,291]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,4]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,196]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,211]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,286]],
+                IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,291]]) 
+
+ProjNarrIO[is.na(ProjNarrIO)] <- 0 
+
+codenames <- c(IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,1]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,1]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,1]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,1]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,1]])
+
+descriptionnames <- c(IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,2]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,2]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,2]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,2]],
+               IO.tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,2]])
+
+
+ProjNarrIO %<>%  as.numeric() %>% matrix(nrow = 5, ncol = 5, byrow = TRUE,  dimnames = list(descriptionnames, codenames))
+
+ProjNarrRegSales <- data.frame(A  = c(0, 500,	0,  1000,	500),  B = c(0, 100,	200,	500,	200) ) %>% t() %>% as.matrix()
+
+imat <- rep(c(1), each=ncol(ProjNarrIO)) %>% as.matrix()
+
+alpha <- sweep(ProjNarrIO[1, ] %*% t(ProjNarrRegSales), 1, ProjNarrIO[1, ] %*% imat, "/")
+rho <- sweep(alpha, 2, ProjNarrRegSales %*% imat, "/")
+
+
+colnames(ProjNarrRegSales) <- codenames
+sample.RUC<-cbind(ProjNarrRegSales, t(alpha), t(rho))
+colnames(sample.RUC)[6] <- "alpha"
+colnames(sample.RUC)[7] <- "rho"
 
 ```
 
-```{r}
-#kable(X)
-#tibble(X)
+
+**Generate Economic Catchment Area (ECA) codes** 
+
+Since 1880, the Census Bureau has applied formal rules to categorize geographic areas as urban for the purposes of statistical reporting. The most recent version of this taxonomic schema classifies areas as urban areas (UA, densely settled with a population greater than 50,000) and urban clusters (UC, densely settled with populations greater than 2,500 and less than 50,000). <u> For as long as the Census Bureau has been defining urbanicity, rural has **ALWAYS** been the residual category</u> : from the 2010 Census Urban-Rural Classification Criterion, “‘rural’ encompasses all population, housing, and territory not included within an urban area.”
+
+The construction of urban places follows a complex set of rules accounting for the attributes of urban land use and residential development patterns, but the intuition is fairly straight-forward. First, identify contiguous Census blocks (sometimes, tracts) above a minimum population density thereby defining a potential urban core. Then, continue to agglomerate adjacent-*ish* (again, there are complex rules allowing for hops, jumps, exclaves, enclaves, indentations, etc.) blocks/tracts meeting other density and population thresholds until the boundaries of the place are established. The population of this agglomeration then determines whether it is a UA, UC, or rural. The RUCA codes are a further refinement constructed by ERS to account for 1) the size of urban agglomerations and 2) resident commuting patterns, while applying the urban-rural typology employed by OMB. Thus, every UA is termed a Metropolitan Area Core. UCs are delimited by population into Micropolitan Area Core (10,000 to 49,999) and Small Town Core (2,500 to 9,999). Remaining blocks/tracts are then classified according to whether a high (more than 30%) or low (10% to 30%) percentage of residents commute to an urban core, as well as the type of core of the primary flow. Secondary codes are also assigned based upon the destination type of the secondary commuter flow.
+
+We propose to use core units as the basis for building Rural-Urban Economic Catchment Areas codes from InfoGroup and the Census of Agriculture in very much the same vein as ERS constructs the RUCA codes, but with a notable design distinction: we will classify tracts from low density to high density, rather than defining rural as a catch-all, non-urban residual. Specifically:
+
+1) We will define a *primary economic catchment area* (ECA) centered on each small UC core (RUCA 7) that includes associated commuting Census tracts (RUCA 8 and 9) and nearby rural tracts that include large employers in InfoGroup. The latter condition accommodates economic activities that may employ relatively large numbers of residents but are purposefully located far from residential areas, e.g., paper milling and government military installations. We will explore the sensitivity of our coding to various definitions of nearby, e.g. 5, 10, and 20 mile radii.
+
+2) We will use the Census of Agriculture to identify the *primary* crop and livestock production activities and the County Business Patterns to identify the presence of forestry and mining activity in rural Zip codes surrounding the primary ECA (the smallest published unit for both programs is the Zip code). We anticipate that for the overwhelming majority of the country, using the county as the basic unit will suffice for identifying agricultural, forestry, and extraction, but western counties are sufficiently large to benefit from a more disaggregated reporting unit.
+
+3) We will then use the most recent Use Tables published by BEA as part of its Input-Output Accounts program (2018 for 71 two- and three-digit NAICS industries and 2012 for 415 fourdigit NAICS industries) to calculate absolute and relative *rural use coefficients* for each *primary* ECA with respect to the agricultural, forestry, and extraction (AFE) activity in its vicinity.
+
+<p align="center">
+$\alpha^{r}_{i}  = \sum^{k} s^{k}_{i} \sum^{m} s^{m}_{i} \rho^{k}_{m}$ and $\rho^{r}_{i} = \sum^{k} s^{k}_{i} \left( \frac{\sum^{m} s^{m}_{i} \rho^{k}_{m}} {\sum^{m} \rho^{k}_{m} } \right)$ 
+</p>
+
+  where $s^{m}_{i}$ is the share of employment/sales for industry $m$ in business catchment area $i$ calculated from InfoGroup; $\rho^{k}_{m}$ is the use parameter for AFE activity $k$ in industry $m$ from the BEA Use Tables; $s^{k}_{i}$ is the share of agricultural or forestry activity $k$ of total AFE activities; and $M$ and $K$ are the set of non-AFE and AFE industries, respectively. 
+
+  To illustrate, a simplified five-sector economy based on the BEA 2012 Use Table might be:
+
+`r kable(ProjNarrIO, caption = "Use Factor")`
+
+4) We will then assign remaining rural tracts to *primary* ECAs using a gravity model based on the use coefficients defined above. Gravity models have been applied as far back as the 1850s (Carey, 1858) to describe social phenomena and continue to be used across disciplines (Erlander, 1980; Haynes and Fotheringham, 1984; Sen and Smith, 1995; Wilson 2000), including contemporary analyses of international trade (USITC, 2020). To illustrate, suppose that there were two *primary* ECAs with the following industry sales (in $1000s) and calculated rural use coefficients:
+
+`r kable(sample.RUC, caption = "Industry Sales", digits = c(0, 0, 0, 0, 0, 1, 3))`
+
+  To simplify, suppose Area A were at 0 on the unit interval and Area B at 1 with all intervening  space representing rural tracts. A gravity approach based on the use coefficient would assign the intervening rural tracts on (0,`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`) to Area A and tracts (`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`,1) to Area B. In contrast, a gravity approach using the adjusted use coefficient would assign the intervening rural tracts on (0,`r round(rho[1]/(rho[1]+rho[2]), 3)`) to Area A and tracts (`r round(rho[1]/(rho[1]+rho[2]), 3)`,1) to Area B. More generally, for either use coefficient, we will treat the United States as a plane over the unit simplex and apply a gravity approach to assign rural tracts to any *primary* ECA. 
+
+  A notable feature of this approach is that *primary* ECAs may exhibit sufficiently low gravity that they are effectively economic islands. For example, a small-town anchored by car manufacturing plant surrounded by cropland. Of course, that small-town may be associated with larger, discontiguous economic areas through the manufacturing supply chain, which will reveal itself at higher economic geographies described subsequently, but <u>**creating measures to make meaningful economic distinctions between population centers currently lumped as “small towns” is a valuable project output that will benefit policy-makers**</u>.
+
+5) We will then move to assigning the remaining tracts, beginning with Micropolitan low commuting (RUCA 6) tracts. For each tract, we will calculate the following *total use coefficients*:
+
+<p align="center">
+$\rho_{ij} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{j} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
+$\rho_{ji} = \sum^{M} s^{m}_{j} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{j}} {\rho^{n}_{j} } \right)$,
+$\rho_{ik} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{k} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
+$\rho_{ki} = \sum^{M} s^{m}_{k} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{k}} {\rho^{n}_{k} } \right)$
+</p>
+
+  where $i$ denotes the tract, $j$ denotes the adjacent primary ECA, and $k$ denotes the Micropolitan core (RUCA 4) [NB: There may be multiple adjacent *primary* ECA, so that for the general case of Z adjacent *primary* ECA, 2Z+2 total use coefficients are calculated]. These coefficients summarize the economic flow to and from the tract. Thus, we will assign the tract to either the Micropolitan Core or the adjacent *primary* ECA according to the magnitude of the largest total use coefficients, or leave the tract as an economic island if flows are insufficiently strong, i.e., gravity is sufficiently weak.
+
+6) After assigning all Micropolitan and Metropolitan commuting tracts (RUCA 2, 3, and 5) following a similar approach to the one above, we will define *secondary* ECAs. To do so, we will again treat the United States as a plane with nodes defined by Micropolitan cores and *primary* ECAs attracted to those nodes by *total use coefficients*. *Primary* ECAs are assigned to *secondary* ECAs centered on Micropolitan cores when gravity is sufficiently strong. Next, contiguous groups of yet-unassigned *primary* ECAs with sufficiently strong gravity will be aggregated into *secondary* ECAs independent of a Micropolitan core; those without are classified as isolated.
+
+7) Step 6 is repeated with Metropolitan cores to define *tertiary* ECAs.  
+
+The approach described above is based on the three categories of urbanized places from the RUCA system, but it generalizes broadly to an N-level hierarchy of nodes where the nth ECA is defined by the parameter pair ($\rho_{n}$, $\theta_{n}$), the upper limit on the population of the core and the gravity threshold that defines economic islands, respectively. Refinements based on the former would permit the definition of small and large metropolitan cores, or even Megapolitan cores. The latter parameter can be varied according to moments of the use coefficient distribution (the lowest quintile or decile) or absolute values with a priori relevance, e.g., a parameter from a specified decay function in a formal model. We will implement the gravity model in Python, as it is open-source and with spatial modeling packages, e.g., [SpInt](https://github.com/pysal/spint) [(Oshan 2016)](https://doi.org/10.18335/region.v3i2.175) and [GME](https://github.com/USITC-Gravity-Group/GME) [(USITC 2019)](http://dx.doi.org/10.2139/ssrn.3832208), that are already being used to model international trade, migration flows, and transportation networks.
 
 
-```
+
+
+
+
+
+
+
+
+
 
 ```{r}
 
@@ -284,48 +526,49 @@ toy.IO <- as.inputoutput(Z = toy.Z, X = toy.X, RS_label = toy.RS)
 
 ```
 
-```{bash}
-conda create -n r-reticulate python
-source activate r-reticulate
-conda list -n r-reticulate
-#activate r-reticulate
-conda install numpy
-conda install scipy
-conda install pandas
-conda install geopandas
-conda install geos
-conda install matplotlib
-conda install pyshp
-conda install rtree
-```
+<!-- ```{bash} -->
+<!-- <!-- conda create -n r-reticulate python --> -->
+<!-- <!-- source activate r-reticulate --> -->
+<!-- <!-- conda list -n r-reticulate --> -->
+<!-- <!-- #activate r-reticulate --> -->
+<!-- <!-- conda install numpy --> -->
+<!-- <!-- conda install scipy --> -->
+<!-- <!-- conda install pandas --> -->
+<!-- <!-- conda install geopandas --> -->
+<!-- <!-- conda install geos --> -->
+<!-- <!-- conda install matplotlib --> -->
+<!-- <!-- conda install pyshp --> -->
+<!-- <!-- conda install rtree --> -->
+<!-- ``` -->
 
 ```{r python libraries, warning=FALSE, message=FALSE, include = FALSE, results = "hide"}
-#Sys.setenv(RETICULATE_PYTHON = "/usr/local/bin/python3.9")
-
-library(reticulate)
-
-conda_create("r-reticulate")
-conda_install("r-reticulate", "scipy")
-conda_install("r-reticulate", "numpy")
-conda_install("r-reticulate", "pandas")
-conda_install("r-reticulate", "geopandas")
-conda_install("r-reticulate", "geos")
-conda_install("r-reticulate", "matplotlib")
-conda_install("r-reticulate", "pyshp")
-conda_install("r-reticulate", "rtree")
+# #Sys.setenv(RETICULATE_PYTHON = "/usr/local/bin/python3.9")
+# 
+# library(reticulate)
+# 
+# conda_create("r-reticulate")
+# conda_install("r-reticulate", "scipy")
+# conda_install("r-reticulate", "numpy")
+# conda_install("r-reticulate", "pandas")
+# conda_install("r-reticulate", "geopandas")
+# conda_install("r-reticulate", "geos")
+# conda_install("r-reticulate", "matplotlib")
+# conda_install("r-reticulate", "pyshp")
+# conda_install("r-reticulate", "rtree")
 ```
 
 ```{python}
 # Test chuck  that runs python code
 #repl_python()
-print("Hello Python!")
-dict = {"country": ["Brazil", "Russia", "India", "China", "South Africa"],
-       "capital": ["Brasilia", "Moscow", "New Dehli", "Beijing", "Pretoria"],
-       "area": [8.516, 17.10, 3.286, 9.597, 1.221],
-       "population": [200.4, 143.5, 1252, 1357, 52.98] }
-pd <- import("pandas")
-brics = pandas.DataFrame(dict)
-print(brics)
+
+# print("Hello Python!")
+# dict = {"country": ["Brazil", "Russia", "India", "China", "South Africa"],
+#        "capital": ["Brasilia", "Moscow", "New Dehli", "Beijing", "Pretoria"],
+#        "area": [8.516, 17.10, 3.286, 9.597, 1.221],
+#        "population": [200.4, 143.5, 1252, 1357, 52.98] }
+# pd <- import("pandas")
+# brics = pandas.DataFrame(dict)
+# print(brics)
 
 ```
 
