@@ -19,3 +19,5 @@ rurec/infogroup
 
 *DS_Store*
 
+# only track .md versions of notebooks
+*.ipynb
