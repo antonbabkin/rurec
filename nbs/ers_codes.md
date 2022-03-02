@@ -1,11 +1,37 @@
-#!/usr/bin/env python
-# coding: utf-8
+---
+jupytext:
+  formats: ipynb,md:myst
+  text_representation:
+    extension: .md
+    format_name: myst
+    format_version: 0.13
+    jupytext_version: 1.13.7
+kernelspec:
+  display_name: Python 3 (ipykernel)
+  language: python
+  name: python3
+---
+
+# ERS Rurality codes
+
+Prepare dataframes with [ERS rurality codes](https://www.ers.usda.gov/topics/rural-economy-population/rural-classifications/).
+
+The main interface functions of the module are `get_ruc_df`, `get_ui_df` and `get_ruca_df`. Importing module and calling one of these functions will return pandas DataFrame, downloading and constructing data if it does not exist.
+
+Construction of each dataframe takes the following steps.
+- Download Excel spreadsheets with code data and documentation.
+- Normalize column names.
+- Stack all years into a single dataframe and save it as CSV file.
+- Combine pieces of documentation and column renaming schemes into a text file. Text is tab-separated and can be loaded in tabular format.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
 
 import pandas as pd
 
-from .util import download_file
-from .reseng.config import Paths
-from . import geography
+from rurec.util import download_file
+from rurec.reseng.config import Paths
+from rurec import geography
 
 PATH = Paths(
     ruc='data/ers_codes/ruc.csv',
@@ -15,7 +41,23 @@ PATH = Paths(
     ruca='data/ers_codes/ruca.csv',
     ruca_doc='data/ers_codes/ruca_doc.txt'
 )
+```
 
+```{code-cell} ipython3
+:tags: []
+
+#hide
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import folium
+```
+
+# Rural-Urban Continuum
+
+[Homepage](https://www.ers.usda.gov/data-products/rural-urban-continuum-codes/)
+
+```{code-cell} ipython3
+:tags: [nbd-module]
 
 def get_ruc_df():
     """Return `pandas.DataFrame` of Rural-Urban Continuum codes for all years."""
@@ -166,7 +208,106 @@ def download_and_combine_ruc():
         df[col] = df[col].str.strip()
     df.to_csv(PATH.ruc_doc, '\t', header=False, index=False)
     print(f'Saved documentation to "{PATH.ruc_doc}".')
+```
 
+## Descriptive summary
+
+Documentation notes that not all years are directly comparable.
+
+In 1974, 1983 and 1993 there was code "0", join it with "1" for simplicity.
+
+```{code-cell} ipython3
+#collapse
+df = get_ruc_df()
+df['RUC_CODE'] = df['RUC_CODE'].replace('0', '1')
+df['POPULATION'] = df.groupby('FIPS')['POPULATION'].fillna(method='bfill')
+
+stats = df.groupby(['RUC_YEAR', 'RUC_CODE'])['POPULATION'].agg(['size', 'sum'])
+stats['sum'] /= 1000
+stats.columns = ['Counties', 'Population']
+stats = stats.astype(int).unstack()
+
+# 2003 and 2013 codes are identical
+codes = (df.loc[df['RUC_YEAR'] == 2013, ['RUC_CODE', 'RUC_CODE_DESCRIPTION']]
+         .dropna().drop_duplicates()
+         .sort_values('RUC_CODE')
+         .reset_index(drop=True))
+
+pd.options.display.max_colwidth = 200
+codes
+```
+
+### Number of counties
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+data = stats['Counties']
+data
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+fig, ax = plt.subplots(figsize=(6, 4))
+idx = [str(x) for x in data.index]
+bottom = pd.Series([0] * len(data), index=data.index)
+for code in data:
+    ax.bar(idx, data[code], bottom=bottom, label=code)
+    bottom += data[code]
+
+dummy = mpl.patches.Patch(fill=False, edgecolor='none')
+handles, labels = ax.get_legend_handles_labels()
+handles = [dummy] + handles[:3] + [dummy] + handles[3:6] + [dummy] + handles[6:]
+labels = ['metro'] + labels[:3] + ['nonmetro'] + labels[3:6] + [''] + labels[6:]
+ax.legend(handles, labels, ncol=3, loc='upper center', bbox_to_anchor=(0.5, -0.1))
+
+ax.set_title('Number of counties by Rural-Urban Continuum code')
+
+plt.show()
+```
+
+### Population
+
+No population in dataset before 2010, so 2010 is used for earlier years.
+
+```{code-cell} ipython3
+#collapse
+data = stats['Population']
+data
+```
+
+```{code-cell} ipython3
+#collapse
+fig, ax = plt.subplots(figsize=(6, 4))
+idx = [str(x) for x in data.index]
+bottom = pd.Series([0] * len(data), index=data.index)
+for code in data:
+    ax.bar(idx, data[code], bottom=bottom, label=code)
+    bottom += data[code]
+
+dummy = mpl.patches.Patch(fill=False, edgecolor='none')
+handles, labels = ax.get_legend_handles_labels()
+handles = [dummy] + handles[:3] + [dummy] + handles[3:6] + [dummy] + handles[6:]
+labels = ['metro'] + labels[:3] + ['nonmetro'] + labels[3:6] + [''] + labels[6:]
+ax.legend(handles, labels, ncol=3, loc='upper center', bbox_to_anchor=(0.5, -0.1))
+
+ax.set_title('Population in thousands by Rural-Urban Continuum code')
+
+plt.show()
+```
+
+# Urban Influence
+
+[Homepage](https://www.ers.usda.gov/data-products/urban-influence-codes/)
+[Documentation](https://www.ers.usda.gov/data-products/urban-influence-codes/documentation/)
+
+> The 2013 Urban Influence Codes form a classification scheme that distinguishes metropolitan counties by population size of their metro area, and nonmetropolitan counties by size of the largest city or town and proximity to metro and micropolitan areas.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
 
 def get_ui_df():
     """Return `pandas.DataFrame` of Urban Influence codes for all years."""
@@ -283,7 +424,157 @@ def download_and_combine_ui():
         df[col] = df[col].str.strip()
     df.to_csv(PATH.ui_doc, '\t', header=False, index=False)
     print(f'Saved documentation to "{PATH.ui_doc}".')
+```
 
+## Descriptive summary
+
+Simple visualization of the data.
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+
+df = get_ui_df()
+
+# df['UI_CODE']=df['UI_CODE'].str.zfill(2)
+         
+df['POPULATION'] = df.groupby('FIPS')['POPULATION'].fillna(method='bfill')
+
+stats = df.groupby(['UI_YEAR', 'UI_CODE'])['POPULATION'].agg(['size', 'sum'])
+stats['sum'] /= 1000
+stats.columns = ['Counties', 'Population']
+stats = stats.astype(int).unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# 2003 and 2013 codes are identical
+codes = (df.loc[df['UI_YEAR'] == 2013, ['UI_CODE', 'UI_CODE_DESCRIPTION']]
+         .dropna().drop_duplicates()
+         .sort_values('UI_CODE')
+         .reset_index(drop=True))
+
+with pd.option_context('display.max_colwidth', 200):
+    display(codes)
+```
+
+### Number of counties
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+data = stats['Counties']
+data
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+fig, ax = plt.subplots(figsize=(6, 4))
+idx = [str(x) for x in data.index]
+bottom = pd.Series([0] * len(data), index=data.index)
+for code in data:
+    ax.bar(idx, data[code], bottom=bottom, label=code)
+    bottom += data[code]
+    
+dummy = mpl.patches.Patch(fill=False, edgecolor='none')
+handles, labels = ax.get_legend_handles_labels()
+handles = [dummy] + handles[:2] + [dummy] + handles[2:7] + [dummy] + handles[7:10] + [dummy] + handles[10:12]
+labels = ['metro'] + labels[:2] + ['metro adj'] + labels[2:7] + ['micro'] + labels[7:10] + ['rural'] + labels[10:12]
+ax.legend(handles, labels, ncol=3, loc='upper center', bbox_to_anchor=(0.5, -0.1))
+
+ax.set_title('Number of Counties by UI Codes')
+
+plt.show()
+```
+
+### Population
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+data = stats['Population']
+data
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#collapse
+fig, ax = plt.subplots(figsize=(6, 4))
+idx = [str(x) for x in data.index]
+bottom = pd.Series([0] * len(data), index=data.index)
+for code in data:
+    ax.bar(idx, data[code], bottom=bottom, label=code)
+    bottom += data[code]
+    
+dummy = mpl.patches.Patch(fill=False, edgecolor='none')
+handles, labels = ax.get_legend_handles_labels()
+handles = [dummy] + handles[:2] + [dummy] + handles[2:7] + [dummy] + handles[7:10] + [dummy] + handles[10:12]
+labels = ['metro'] + labels[:2] + ['metro adj'] + labels[2:7] + ['micro'] + labels[7:10] + ['rural'] + labels[10:12]
+ax.legend(handles, labels, ncol=3, loc='upper center', bbox_to_anchor=(0.5, -0.1))
+
+ax.set_title('Population by UI Codes')
+
+plt.show()
+```
+
+## Map
+
+Map below compares UI codes of Wisconsin counties in 2003 and 2013, using 2010 county boundaries.
+
+Interesting example: Wasрburn county in the northwestern WI. It changed from "6" to "11", even though there is small metro county next to it (Douglas). It could still be reclassified. Why?
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_ui_df().query('UI_YEAR == 2003 or UI_YEAR == 2013')
+df['UI_CODE'] = df['UI_CODE'].astype(int)
+df['UI_DESC'] = df['UI_CODE'].map({
+    1: 'large metro',
+    2: 'small metro',
+    3: 'adj large: micro',
+    4: 'adj large: noncore',
+    5: 'adj small: micro',
+    6: 'adj small: noncore w/ town',
+    7: 'adj small: noncore no town',
+    8: 'not adj: micro',
+    9: 'adj micro: noncore w/ town',
+    10: 'adj micro: no town',
+    11: 'not adj: noncore w/ town',
+    12: 'not adj: noncore no town'
+})
+df['NAME'] = df['COUNTY'] + ', ' + df['STATE']
+df = df.rename(columns={'FIPS': 'FIPS_CODE'})
+d = df
+
+df = geography.get_county_df(2010)[['CODE', 'geometry']].rename(columns={'CODE': 'FIPS_CODE'})
+df = df.merge(d)
+
+d = df.query('STATE == "WI"')[['geometry', 'FIPS_CODE', 'NAME', 'UI_YEAR', 'UI_CODE', 'UI_DESC']]
+m = d.query('UI_YEAR == 2013').drop(columns='UI_YEAR')\
+    .merge(d.query('UI_YEAR == 2003')[['FIPS_CODE', 'UI_CODE', 'UI_DESC']], on='FIPS_CODE', suffixes=('_2013', '_2003'))\
+    .explore(column='UI_CODE_2013', tiles='CartoDB positron', name=2013)
+tile_layer = next(iter(m._children.values()))
+tile_layer.control = False
+d.query('UI_YEAR == 2003').drop(columns='UI_YEAR')\
+    .merge(d.query('UI_YEAR == 2013')[['FIPS_CODE', 'UI_CODE', 'UI_DESC']], on='FIPS_CODE', suffixes=('_2003', '_2013'))\
+    .explore(m=m, column='UI_CODE_2003', tiles='CartoDB positron', name=2003)
+folium.LayerControl(collapsed=False).add_to(m)
+m
+```
+
+# Rural-Urban Commuting Area
+
+[Homepage](https://www.ers.usda.gov/data-products/rural-urban-commuting-area-codes/)
+
+```{code-cell} ipython3
+:tags: [nbd-module]
 
 def get_ruca_df():
     """Return `pandas.DataFrame` of Rural-Urban Commuting Area codes for all years."""
@@ -418,4 +709,38 @@ def download_and_combine_ruca():
         df[col] = df[col].str.strip()
     df.to_csv(PATH.ruca_doc, '\t', header=False, index=False)
     print(f'Saved documentation to "{PATH.ruca_doc}".')
+```
 
+## Descriptive summary
+
++++
+
+# Tests
+
+```{code-cell} ipython3
+df = get_ruc_df()
+assert df.shape == (15864, 9)
+assert df['RUC_CODE'].notna().all()
+```
+
+```{code-cell} ipython3
+df = get_ui_df()
+assert df.shape == (9583, 9)
+assert df['UI_CODE'].notna().all()
+```
+
+```{code-cell} ipython3
+df = get_ruca_df()
+assert df.shape == (200581, 8)
+assert df['RUCA_CODE'].notna().all()
+```
+
+# Build this module
+
+```{code-cell} ipython3
+:tags: []
+
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
+nbd.nb2mod('ers_codes.ipynb')
+```
