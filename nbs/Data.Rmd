@@ -1,0 +1,387 @@
+---
+title: "Project"
+author: "Austin Sandler"
+date: "3/22/2022"
+output:
+  html_document:
+    code_folding: hide
+    code_download: yes
+    latex_engine: pdflatex
+  pdf_document: default
+self_contained: no
+---
+
+```{r preamble, include = FALSE}
+# When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+
+
+options(scipen=999)
+
+```
+##  {.tabset}
+
+This R Markdown document is for applied tests on real data
+
+### RStartup
+
+<details><summary>Possible Warnings</summary>
+```{r packages and libraries}
+# Download, Install, and Add R packages as necessary.
+
+# List packages needed for this exercise
+packages <- c("dlm",
+              "fs",
+              "knitr",
+              "readxl",
+              "tidyr",
+              "tools")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages], dependencies = TRUE)
+}
+
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+```
+</details>
+
+<details><summary>Possible Warnings</summary>
+```{r directory}
+# Create a location for project and downloaded files.
+
+"GettingStartedIO" -> project_name 
+"DataDirectory" -> data_directory_name 
+
+setwd("..")
+project_name  %>% dir.create()
+setwd(project_name)
+
+data_directory_name  %>% dir.create() 
+DD <- getwd() %>% path(data_directory_name) 
+
+```
+</details>
+
+`r paste0("Date: ",  Sys.Date())`
+
+`r kable((.packages()), col.names = "R Packages")`
+
+`r paste0("Project directory: ",  getwd())`
+
+
+
+### BEA IO 
+
+<details><summary>Possible Warnings</summary>
+```{r downloadIO, cache=TRUE}
+# Download and unzip data.
+
+# User must specify URL with zipped I/O data
+
+"https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip" -> ZipURL
+
+local({
+destfile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% path(DD, .)
+temp <- tempfile()
+  if (!file.exists(destfile)) {
+   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+      if (file.info(temp)$size > 0){
+        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
+      }
+  }
+      unlink(temp)
+      
+  raw_io_files <<- destfile    
+})
+rm(ZipURL)
+
+
+
+```
+</details>
+
+<details><summary>Possible Warnings</summary>
+```{r importIOall}
+# Import specific national accounting tables data into R. 
+
+if (!exists("IO_tables")){
+  temp <- raw_io_files %>% list.files(pattern="*.xlsx", full.names = TRUE)
+  IO_tables <<- vector("list", length(temp))
+  local({  
+    for (i in 1:length(temp)){
+       DataSheets <- temp[i] %>% excel_sheets()
+       SheetList <- lapply(DataSheets, read.xlsx, xlsxFile=temp[i])
+       names(SheetList) <- DataSheets
+       IO_tables[[i]] <<- SheetList
+       #names(IO_tables[i]) <<- temp[i] %>% basename() %>% file_path_sans_ext()
+    }
+  names(IO_tables) <<- temp %>% basename() %>% file_path_sans_ext()
+  })
+}
+
+```
+</details>
+
+### Census CBP 
+
+<details><summary>Possible Warnings</summary>
+```{r downloadCBP, cache=TRUE, include = FALSE}
+# Download and unzip data.
+
+# User must specify URL with CBP data
+"https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip" -> ZipURL
+
+local({
+destfile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% path(DD, ., ext = "txt")
+temp <- tempfile()
+  if (!file.exists(destfile)) {
+   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
+      if (file.info(temp)$size > 0){
+        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
+      }
+  }
+      unlink(temp)
+      
+      raw_cbp_files <<- destfile  
+}) 
+rm(ZipURL)
+
+```
+</details>
+
+<details><summary>Possible Warnings</summary>
+```{r importCBP, cache=TRUE}
+# Import  CBP data into R.
+
+if (!exists("RegionalData")){
+      RegionalData <-   raw_cbp_files %>% read.csv(header = TRUE)
+      RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
+      RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
+  }
+
+```
+</details>
+
+
+
+```{r CBP processing}
+# Note many embedded  nongeneralizeable naming conventions, needs further revision
+
+RegionalData_C <- filter(RegionalData, naics == "------")
+
+Regions <- RegionalData_C[, 1:2]
+Regions$place <- paste0(Regions$fipstate, Regions$fipscty)
+
+RegionalData_Sector <- RegionalData %>% filter(grepl('*----', naics) & naics != '------' )
+RegionalData_Subsector <- RegionalData %>% filter(grepl('///', naics))
+RegionalData_IndustryGroup <- RegionalData %>% filter(grepl('//', naics) & !grepl('///', naics))
+RegionalData_NAICSIndustry <- RegionalData %>% filter(grepl('/', naics) & !grepl('///', naics)  & !grepl('//', naics))
+RegionalData_USNAICS <- RegionalData %>% filter(!grepl('/', naics) & !grepl('-', naics))
+
+# unique(RegionalData_Sector$naics)
+
+
+```
+
+
+### Notes
+
+
+The highest level of NAICS classification is called the sector. There are 20 broad NAICS sectors two-digit NAICS. The subsiquent hierarchy of NAICS specifications include subsector (three-digit), industry group (four-digit), NAICS industry (five-digit), and U.S. industry (six-digit).  Counts of unique NAICS specifications for CBP 2019 data include 20, 86, 288, 635, and 960 clusters respectively. 
+
+Estimates in the Industry Economic Accounts of the Bureau of Economic Analysis (BEA) are generally available at four levels of detail: sector (21 industry groups), summary (71 industry groups), underlying summary (138 industry groups), and detail (405 industry groups). However, in practice the BEA industry codes present in the SUP (Use) tables are sector (SEC) with 15 $\times$ 15 commodities and industries, summary (SUM) with 71 $\times$ 71 commodities and industries, and detail (DET) with 401 $\times$ 405 commodities and industries. For most IO type data products from BEA, estimates at the detail level are available only for available for year 2007 and 2012. Data products from BEA at the sector and summary detail levels are available from 1997 to 2020. 
+
+BEA industry codes used in national IO tables are not bijective with NAICS codes. Though they are similar at many levels and groupings some codes are not applicable (government) or do not align at any higher detail specificity e.g., construction data published by BEA at the detail level do not align with 2012 NAICS industries. 
+
+"The *direct requirements table* shows the amount of a commodity that is required by an industry to produce a dollar of the industry’s output. Total requirements tables show the relationship between final uses and gross output. There are three *total requirements tables*. The commodity-by-commodity total requirements table shows the production required, both directly and indirectly, of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-commodity total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-industry total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the industry at the top of the column." -- Concepts and Methods of the Input-Output Accounts pg. 1-3
+
+
+
+Summary of Input–Output Relationships
+
+\begin{equation}
+\begin{matrix}
+&  \text{Economic } (n \times n) \\ 
+\hline
+\text{Transactions } & \mathbf{Z} \\ 
+& \mathbf{Zi} + \mathbf{f} = \mathbf{x} \\ 
+& \\
+\text{Direct Requirements } & \mathbf{A} = \mathbf{Z\hat{x}^{-1}} \\ 
+& \mathbf{Ax} + \mathbf{f} = \mathbf{x} \\ 
+& \\
+\text{Total Requirements } & \mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1} \\ 
+& \mathbf{x} = \mathbf{Lf} \\ 
+\hline
+\end{matrix}
+\end{equation}
+
+
+The (industry-by-industry) *Transactions* matrix shows monetary transactions between pairs of sectors or interindustry sales (intermediate sales) by sector $i$ to all sectors $j$.
+
+The (industry-by-industry) *Direct Requirements* matrix shows the quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output. This ratio specifies the required amount of industry $i$’s commodity used to produce of one unit of industry $j$’s commodity.  
+The (industry-by-industry) *Total Requirements* matrix shows, on a per-dollar basis, the industry output the economy generates in order to provide an industry’s commodities to final users: $\partial{x_{i}}/\partial{f_{j}} = l_{ij}$.
+
+Technically speaking, the *Direct Requirements* matrix constructed from the BEA *Total Requirements* matrix (from a *Make* and *Use* table framework) is an industry based technology, industry-by-industry class table $\underset{(i \times i)}{\mathbf{A}_{I}} = \mathbf{V}(\mathbf{\hat{V'i}})^{-1}\mathbf{U}(\mathbf{\hat{Vi}})^{-1}$
+
+
+
+
+
+### Project Narrative
+
+```{r Richard Trial}
+# Exercise to replicate table and analysis from project narrative
+
+
+
+ProjNarrIO <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,4]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,196]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,211]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,286]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,291]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,4]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,196]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,211]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,286]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,291]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,4]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,196]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,211]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,286]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,291]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,4]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,196]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,211]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,286]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,291]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,4]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,196]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,211]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,286]],
+                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,291]]) 
+
+ProjNarrIO[is.na(ProjNarrIO)] <- 0 
+
+codenames <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,1]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,1]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,1]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,1]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,1]])
+
+descriptionnames <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,2]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,2]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,2]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,2]],
+               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,2]])
+
+
+ProjNarrIO %<>%  as.numeric() %>% matrix(nrow = 5, ncol = 5, byrow = TRUE,  dimnames = list(descriptionnames, codenames))
+
+ProjNarrRegSales <- data.frame(A  = c(0, 500,	0,  1000,	500),  B = c(0, 100,	200,	500,	200) ) %>% t() %>% as.matrix()
+
+i_mat <- rep(c(1), each=ncol(ProjNarrIO)) %>% as.matrix()
+
+alpha <- sweep(ProjNarrIO[1, ] %*% t(ProjNarrRegSales), 1, ProjNarrIO[1, ] %*% i_mat, "/")
+rho <- sweep(alpha, 2, ProjNarrRegSales %*% i_mat, "/")
+
+
+colnames(ProjNarrRegSales) <- codenames
+sample_RUC<-cbind(ProjNarrRegSales, t(alpha), t(rho))
+colnames(sample_RUC)[6] <- "alpha"
+colnames(sample_RUC)[7] <- "rho"
+
+```
+
+
+### Project Trail
+
+```{r RUC Trial}
+# Recreate the project narrative absolute and relative "rural use coefficients" using BEA Use matrix and CBP employment data
+
+
+Use_table <- IO_tables[["Use_SUT_Framework_1997-2020_SECT"]][["2019"]]
+datatable(Use_table,
+          filter = 'top', options = list(
+            pageLength = 12, scrollX = T
+          ))
+
+
+
+CBP_table <- RegionalData_Sector
+CBP_table$place <- paste0(CBP_table$fipstate, CBP_table$fipscty)
+#CBP_table %<>% subset(select = c(place, naics, emp_nf, emp, qp1_nf, qp1, ap_nf, ap, est))
+CBP_table %<>% subset(select = c(place, naics, emp, qp1, ap, est))
+CBP_table$naics %<>% substr(0,2) %>% as.numeric()
+
+#Since BEA industry codes are not bijective with CBP's NAICS codes we must first make a transformation  
+
+CBP_table %<>% reshape(idvar = "naics", timevar = "place", direction = "wide")
+CBP_table[is.na(CBP_table)] <- 0
+CBP_table %<>%  as.data.frame() %>% arrange(naics)
+
+CBP_table %<>% t() %>%  as.data.frame()
+CBP_table %<>% mutate("11" = V1)
+CBP_table %<>% mutate("21" = V2)
+CBP_table %<>% mutate("22" = V3)
+CBP_table %<>% mutate("23" = V4)
+CBP_table %<>% mutate("31G" = V5)
+CBP_table %<>% mutate("42" = V6)
+CBP_table %<>% mutate("44RT" = V7)
+CBP_table %<>% mutate("48WT" = V8)
+CBP_table %<>% mutate("51" = V9)
+CBP_table %<>% mutate("FIRE" = V10 + V11)
+CBP_table %<>% mutate("PROF" = V12 + V13 + V14)
+CBP_table %<>% mutate("6" = V15 + V16)
+CBP_table %<>% mutate("7" = V17 + V18)
+CBP_table %<>% mutate("81" = V19)
+CBP_table %<>% mutate("G" = V20)
+CBP_table %<>% subset(select = -c(V1:V20)) %>% slice(-c(1)) %>% t()
+BEA_Sectors <- row.names(CBP_table)
+CBP_table <- cbind(BEA_Sectors, CBP_table) %>% as.data.frame()
+CBP_table %<>% reshape(idvar = "BEA_Sectors", varying = c(colnames(CBP_table)[-1]), direction = "long")
+rownames(CBP_table) <- 1:nrow(CBP_table)
+names(CBP_table)[names(CBP_table)=="time"] <- "place"
+CBP_table$place  %<>% formatC(width = 5, format = "d", flag = "0")
+
+
+Use_mat <- Use_table[6:20, 3:17]  %>% as.matrix()
+Use_mat[Use_mat == '...'] <- 0
+Use_mat %<>% as.numeric() %>% matrix(nrow = 15)
+colnames(Use_mat) = rownames(Use_mat) <- c("11", "21", "22", "23", "31G", "42", "44RT", "48TW", "51", "FIRE", "PROF", "6", "7", "81", "G")
+
+
+Sales_mat <- CBP_table[ , c('BEA_Sectors', 'place', 'emp')] 
+Sales_mat %<>% reshape(idvar = "BEA_Sectors", timevar = "place", direction = "wide") 
+Sales_mat <- Sales_mat[, 2:ncol(Sales_mat)] 
+cnames <- colnames(Sales_mat)
+Sales_mat %<>% unlist() %>% as.numeric() %>% matrix(nrow = 15)
+rownames(Sales_mat) <- c("11", "21", "22", "23", "31G", "42", "44RT", "48TW", "51", "FIRE", "PROF", "6", "7", "81", "G")
+colnames(Sales_mat) <- cnames 
+
+i_mat <- rep(c(1), each=ncol(Use_mat))  %>% as.matrix() 
+
+
+alpha_mat <- sweep(Use_mat %*% Sales_mat, 1, Use_mat %*% i_mat, "/")
+rho_mat <- sweep(alpha_mat, 2, t(i_mat) %*% Sales_mat, "/")
+
+Phi_mat <- vector(mode='list', length=ncol(Use_mat))
+names(Phi_mat) <- colnames(Use_mat)
+for(n in 1:ncol(Use_mat)){
+  Phi_tilde_mat <- matrix(diag(rho_mat[n,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
+  Phi_mat[[n]] <- Phi_tilde_mat / (Phi_tilde_mat + t(Phi_tilde_mat))
+  colnames(Phi_mat[[n]]) <- cnames
+  rownames(Phi_mat[[n]]) <- cnames
+}
+
+
+```
+
+
+
+
+
+
+
