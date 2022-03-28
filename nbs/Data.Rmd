@@ -30,9 +30,11 @@ This R Markdown document is for applied tests on real data
 
 # List packages needed for this exercise
 packages <- c("dlm",
+              "dplyr",
               "fs",
               "knitr",
-              "readxl",
+              "magrittr",
+              "openxlsx",
               "tidyr",
               "tools")
 
@@ -292,6 +294,9 @@ colnames(ProjNarrRegSales) <- codenames
 sample_RUC<-cbind(ProjNarrRegSales, t(alpha), t(rho))
 colnames(sample_RUC)[6] <- "alpha"
 colnames(sample_RUC)[7] <- "rho"
+
+
+
 
 ```
 
