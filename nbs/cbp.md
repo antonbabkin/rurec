@@ -24,6 +24,7 @@ import typing
 
 import pandas as pd
 import pyarrow
+import pyarrow.dataset
 
 from rurec.reseng.util import download_file
 from rurec.reseng.nbd import Nbd
@@ -145,6 +146,10 @@ with pd.option_context('display.max_columns', 50):
 ```
 
 Not sure how SIC classification works. There are only 9 unique 3-digit codes (`'399/', '497/', '519/', '599/', '899/', '679/', '149/', '179/', '098/'`), which seems too little. Maybe it is not nested in the same sense as NAICS is.
+
++++
+
+Source files are read and converted into parquet files. Some columns are left out, mainly flags and size class distributions.
 
 ```{code-cell} ipython3
 :tags: [nbd-module]
@@ -271,11 +276,13 @@ def get_parquet(geo, cols=None, filters=None):
                            partitioning=part)
 ```
 
+Example: 11511 in Wisconsin. emp in 2000, 2002, 2003 in WI NAICS 1151 is 0, why?
+
 ```{code-cell} ipython3
 :tags: []
 
 get_parquet('state', ['year', 'est', 'emp', 'industry', 'lfo', 'fipstate'],
-                 [('lfo', '=', '-'), ('industry', '=', '-'), ('fipstate', '=', '55')])
+                 [('lfo', '=', '-'), ('industry', '=', '11511'), ('fipstate', '=', '55')])
 ```
 
 ## Build this module
