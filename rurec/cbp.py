@@ -5,6 +5,7 @@ import typing
 
 import pandas as pd
 import pyarrow
+import pyarrow.dataset
 
 from .reseng.util import download_file
 from .reseng.nbd import Nbd
