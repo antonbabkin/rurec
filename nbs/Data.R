@@ -1,10 +1,15 @@
 
 # List packages needed for this exercise
 packages <- c("dlm",
+              "dplyr",
+              "fs",
               "gtools",
               "knitr",
+              "magrittr",
+              "readxl",
               "reticulate",
-              "tidyr")
+              "tidyr",
+              "tools")
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
