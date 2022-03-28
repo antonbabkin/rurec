@@ -6,6 +6,7 @@ packages <- c("dlm",
               "gtools",
               "knitr",
               "magrittr",
+              "openxlsx",
               "readxl",
               "reticulate",
               "tidyr",
@@ -46,7 +47,6 @@ data_getr <- function(ZipURL,
 
 
 # Download and unzip BEA IO data.
-
 data_getr(
   ZipURL = "https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip",
   DestDir = getwd() %>% path("data")
