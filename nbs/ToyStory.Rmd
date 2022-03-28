@@ -664,9 +664,9 @@ For example, the Fiber and Grains simple LQ for Dane County (i.e., Madison) are 
 
 ```{r  toyGravity}
 
-Toy_Lat <- c(0, 44.49, 41.84, 43.07)
-Toy_Lon <- c(0, -88.03, -87.77, -89.39)
-Toy_Dist_mat <- distm(cbind(Toy_Lat, Toy_Lon))/10000
+Toy_Lat <- c(42.3, 44.49, 41.84, 43.07)
+Toy_Lon <- c(-89.04, -88.03, -87.77, -89.39)
+Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))/1000
 colnames(Toy_Dist_mat) <- c("AllElse", "Brown", "Cook", "Dane")
 rownames(Toy_Dist_mat) <- c("AllElse", "Brown", "Cook", "Dane")
 
@@ -682,8 +682,10 @@ print("Gravity Model Formulations - Interreginal Flows by Industry")
 Toy_Gravity_mat 
 ```
 
+Similarly, the Gravity approach represents interregional interindustry transactions.  
 
-Note that strictly speaking, the $x^{r}_{j}$ terms throughout are specified as gross outputs of each sector in the region. In practice, however, these outputs are approximated through the use of employment, payroll, or number of establishments data, and they are not technically equivalent substitutes. Furthermore, the "supply pool" and "demand pool" total outputs called for in in the simple Gravity specification are even greater abstractions. First we assume $\alpha^{r}_{ij} = 1$ such that $a^{r}_{ij} = a^{n}_{ij}$, then assuming regional industry activity is equivalent to regional gross output $x^{r}_{j}$ and regional final demand is approximated by a single region model (i.e., $\mathbf{f^{r}} = \mathbf{(I} - \mathbf{A^{rr})x^{r}}$), which restricts by definition regional supply for good $i$ to be equivalent to regional demand for good $i$ (i.e., $x^{r \cdot}_{i} = x^{\cdot r}_{i}$).  Note, no national accounting data are needed for this gravity approach. Only regional industry activity and the impedance function, $Q^{rs}_{i}$, which is given by $1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between each region, are used.
+
+Note that strictly speaking, the $x^{r}_{j}$ terms throughout are specified as gross outputs of each sector in the region. In practice, however, these outputs are approximated through the use of employment, payroll, or number of establishments data, and they are not technically equivalent substitutes. Furthermore, the "supply pool" and "demand pool" total outputs called for in in the simple Gravity specification are even greater abstractions. First we assume $\alpha^{r}_{ij} = 1$ such that $a^{r}_{ij} = a^{n}_{ij}$, then assuming regional industry activity is equivalent to regional gross output $x^{r}_{j}$ and regional final demand is approximated by a single region model (i.e., $\mathbf{f^{r}} = \mathbf{(I} - \mathbf{A^{rr})x^{r}}$), which restricts by definition regional supply for good $i$ to be equivalent to regional demand for good $i$ (i.e., $x^{r \cdot}_{i} = x^{\cdot r}_{i}$). Note, no national accounting data are needed for this gravity approach. Only regional industry activity and the impedance function, $Q^{rs}_{i}$, which is given by $1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between each region, are used.
 
 *Interregional Models*
 

@@ -3,6 +3,7 @@
 packages <- c("dlm",
               "gtools",
               "knitr",
+              "reticulate",
               "tidyr")
 
 # Install packages not yet installed
@@ -137,6 +138,15 @@ CBP_table$emp <-  as.numeric(CBP_table$emp)
 CBP_table$qp1 <-  as.numeric(CBP_table$qp1)
 CBP_table$ap <-  as.numeric(CBP_table$ap)
 CBP_table$est <-  as.numeric(CBP_table$est)
+
+
+
+
+# Import CBP data using separate Python pre-processing
+use_condaenv('rurec')
+cbp <- import('rurec.cbp')
+regional_data_py <- cbp$get_df("state", 2019L)
+head(regional_data_py)
 
 
 
