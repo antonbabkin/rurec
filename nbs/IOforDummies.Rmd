@@ -1,38 +1,24 @@
 ---
-title: "TestingRforIO"
+title: "IO for Dummies"
 author: "Austin Sandler"
-date: "1/29/2022"
+date: "3/22/2022"
 output:
   html_document:
-    code_folding: "hide"
-    code_download: true
+    code_folding: hide
+    code_download: yes
     latex_engine: pdflatex
-self_contained: false
-
+  pdf_document: default
+self_contained: no
 ---
 
 ```{r preamble, include = FALSE}
 # When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 
-# Note: Procedure contains some idiosyncrasies in specific to initial data set naming convention. 
-# Needs greater generalization in future.    
+options(scipen=999)
 
-
-
-
-
-s
-
-#knitr::opts_chunk$set(eval=FALSE)
 ```
 ##  {.tabset}
 
-This R Markdown document is a preliminary testing ground for Austin to become familiar with: 
-
-1. The R Programming Language
-1. The Input-Output Accounts Data
-1. I/O Processing and Manipulation
-1. Clear, Reproducible, Resilient, Scalable, and Data Agnostic Workflows
  
 ### RStartup
 
@@ -41,40 +27,8 @@ This R Markdown document is a preliminary testing ground for Austin to become fa
 # Download, Install, and Add R packages as necessary.
 
 # List packages needed for this exercise
-packages <- c("dplyr",
-              "dlm",
-              "DT",
-              "fs", 
-              "ggplot2", 
-              "heatmaply", 
-              "httr", 
-              "ioanalysis",
-              "knitr", 
-              "logmult", 
-              "magrittr", 
-              "maptools", 
-              "openxlsx", 
-              "pander", 
-              "png", 
-              "purrr", 
-              "raster", 
-              "RColorBrewer", 
-              "RCurl", 
-              "readxl", 
-              "reticulate",  
-              "rlang", 
-              "rmarkdown", 
-              "scales", 
-              "sf", 
-              "sp", 
-              "stringr", 
-              "tidyverse", 
-              "tidyr", 
-              "tinytex",
-              "tmap",
-              "tools",
-              "viridis",
-              "xtable")
+packages <- c("knitr")
+
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -88,22 +42,6 @@ invisible(lapply(packages, library, character.only = TRUE))
 ```
 </details>
 
-<details><summary>Possible Warnings</summary>
-```{r directory}
-# Create a location for project and downloaded files.
-
-"GettingStartedIO" -> project_name 
-"DataDirectory" -> data_directory_name 
-
-setwd("..")
-project_name  %>% dir.create()
-setwd(project_name)
-
-data_directory_name  %>% dir.create() 
-DD <- getwd() %>% path(data_directory_name) 
-
-```
-</details>
 
 `r paste0("Date: ",  Sys.Date())`
 
@@ -364,170 +302,6 @@ and the *industry-by-commodity total requirements matrix*, connecting commodity 
 
 $$\mathbf{x} = [\mathbf{C}(\mathbf{I} - \mathbf{C}^{-1}\mathbf{B})^{-1}]\mathbf{f}$$
 
-### Toy IO 
-
-<details><summary>Possible Warnings</summary>
-```{r downloadIO, cache=TRUE}
-# Download and unzip data.
-
-# User must specify URL with zipped I/O data
-
-"https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip" -> ZipURL
-
-local({
-destfile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% path(DD, .)
-temp <- tempfile()
-  if (!file.exists(destfile)) {
-   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
-      if (file.info(temp)$size > 0){
-        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
-      }
-  }
-      unlink(temp)
-      
-  raw_io_files.R <<- destfile    
-})
-rm(ZipURL)
-
-
-
-```
-</details>
-
-<details><summary>Possible Warnings</summary>
-```{r importIOall}
-# Import specific national accounting tables data into R. 
-
-if (!exists("IO_tables")){
-  temp <- raw_io_files.R %>% list.files(pattern="*.xlsx", full.names = TRUE)
-  IO_tables <<- vector("list", length(temp))
-  local({  
-    for (i in 1:length(temp)){
-       DataSheets <- temp[i] %>% excel_sheets()
-       SheetList <- lapply(DataSheets, read.xlsx, xlsxFile=temp[i])
-       names(SheetList) <- DataSheets
-       IO_tables[[i]] <<- SheetList
-       #names(IO_tables[i]) <<- temp[i] %>% basename() %>% file_path_sans_ext()
-    }
-  names(IO_tables) <<- temp %>% basename() %>% file_path_sans_ext()
-  })
-}
-
-```
-</details>
-
-```{r subset}
-# Subset and clean data for specific application. 
-
-# User must specify desired year
-# User must specify I/O dimensions
-
-# names(SheetList)
-"2012" -> SheetYear
-
-# view(SheetList[[SheetYear]])
-
-
-SheetList <- IO_tables$`Use_SUT_Framework_2007_2012_DET` 
-
-5:404 -> SubDataRowDim
-3:402 -> SubDataColDim
-3 -> SubNameRow
-
-SubSheetList <- SheetList[[SheetYear]][SubDataRowDim, SubDataColDim] %>%  as.matrix()
-SubSheetList[SubSheetList == '...'| SubSheetList == 'N/A'] <- 0
-SubSheetList[is.na(SubSheetList)] <- 0
-NCol = dim(SubSheetList)[2]
-SubSheetList %<>% as.numeric() %>% matrix(ncol = NCol)
-ColNames <- SheetList[[SheetYear]][SubNameRow, SubDataColDim] %>% unlist() %>% unname()
-dimnames(SubSheetList) <- list(NULL, ColNames)
-
-rm(SubDataRowDim, SubDataColDim, SubNameRow, NCol)
-
-```
-
-
-The static Input-Output analysis, à la Wassily Leontief, poses the question: What level of output should each industry produce, such that it will satisfy the total demand of that industries output across all industries in an economy?
-
-Simplifying assumptions:
-
-1. Each industry produces only one homogeneous commodity.
-1. Each industry uses a fixed input ratio.
-1. Each industry exhibits constant returns to scale.
-
-Note, to allow for the presence of final demand and primary inputs, in an open model, the sum of each column in $A$ must be less than 1. 
-
-
-```{r simple open IO}
-#A simple I/O analysis "by hand" presuming given national accounts are in the form of raw interindustry flows where one must generate a direct requirements matrices  (Technical Coefficients) and the total requirements matrix (Leontief inverse).
-# Note the national IO table at present is a domestic flow specification as such the interindustry transactions table is no longer representative of a technological matrix. It rather represents the intra-national interindustry transactions, which are determined not only by technological factors, but also by trade factors. As a consequence in the domestic-flow table the balance between supply and demand is made considering only domestic production.
-
-#User must specify subset dimensions for flow matrix
-1:400 -> sub
-#22 -> finuse
-finuse <- dim(SubSheetList)[2]
-
-
-D <- sub %>% length() %>% rep(0, .) %>% matrix()
-#User to specify desired final demand values or delta demand values
-5 -> D[17,1]
-
-X <- SubSheetList[sub, sub]
-Y <- SubSheetList[sub, finuse] %>% as.matrix()
-A <- sweep(X, 2, Y, '/')
-I <- nrow(X) %>% diag()
-
-# Simple sufficient, but not necessary condition of sustainability. All must be TRUE.
-all(colSums(A) < 1) %>% {paste0("Technology matrix structure passes sufficient test of sustainability: ", . )}
-
-#Hawkins – Simon condition check. All must be TRUE.
-PM = NULL
-for(n in 2:nrow(I-A)){
-  PM[1:n] = (det((I-A)[1:n,1:n]) > 0)
-}
-rm(n)
-
-all(all(PM) & (diag(I-A) > 0) & (det(I-A) > 0)) %>% {paste0("Leontief matrix structure passes necessary and sufficient test of practibility and viability: ", . )}
-
-B <- solve(I-A)
-#B <- solve(I-A, tol = det(I-A))
-X_Star <- B %*% D
-
-```
-
-```{r downloadCBP, cache=TRUE, include = FALSE}
-# Download and unzip data.
-
-# User must specify URL with CBP data
-"https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip" -> ZipURL
-
-local({
-destfile <- ZipURL %>% basename() %>%  file_path_sans_ext() %>% path(DD, ., ext = "txt")
-temp <- tempfile()
-  if (!file.exists(destfile)) {
-   download.file(url=ZipURL, destfile=temp, quiet=TRUE)
-      if (file.info(temp)$size > 0){
-        unzip(zipfile = temp, exdir = DD, overwrite = FALSE)
-      }
-  }
-      unlink(temp)
-      
-      raw_cbp_files.R <<- destfile  
-}) 
-rm(ZipURL)
-
-```
-
-```{r importCBP, cache=TRUE}
-# Import  CBP data into R.
-
-if (!exists("RegionalData")){
-      RegionalData <-   raw_cbp_files.R %>% read.csv(header = TRUE)
-      RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
-      RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
-  }
-
-```
 
 ### Regional IO
 
@@ -562,8 +336,14 @@ $$a^{rr}_{ij} = \frac{z^{rr}_{ij}} {x^{r}_{j}}$$
 
 Let $\underset{(n \times n)}{\mathbf{Z^{rr}}} = [z^{rr}_{ij}]$ and $\underset{(n \times 1)}{\mathbf{x^{r}}} = [x^{r}_{j}]$; then the regional input coefficients matrix is
 
-$$\mathbf{A^{rr} = Z^{rr}\left(\hat{x}^{r}\right)^{-1} }$$
+$$\mathbf{A^{rr}} = \mathbf{Z^{rr}\left(\hat{x}^{r}\right)^{-1} }$$
+
 This matrix is approximated in the formula above by $\mathbf{\hat{p}^{r}A}$. Note that this specification utilizes *intra*regional information only.
+
+The impact on regional production of a final-demand change in region $r$ is found as
+
+$$\mathbf{x^{r}} = (\mathbf{I} - \mathbf{A^{rr})^{-1}f^{r} }$$
+
 
 **Many-Region Input–Output Models**
 
@@ -841,7 +621,7 @@ $$p^{r}_{i} = \frac{x^{r}_{i} - e^{r}_{i}}{x^{r}_{i} - e^{r}_{i} + m^{r}_{i}}$$
 Thus, when none of good $i$ is imported, $p^{r}_{i} = 1$, and the assumption is that all of the region’s needs for $i$ can be supplied internally. The regional input coefficient matrix is derived from $\mathbf{A^{rr} = \hat{p}A^{n}}$ where $\mathbf{p} = [p^{r}_{i}]$ and $\mathbf{A^{n}}$ is the national technical coefficients matrix.
 
 A regional input coefficient, $a^{rr}_{ij}$, is defined as the difference between a regional technical coefficient, $a^{r}_{ij}$, and a regional import coefficient, $a^{sr}_{ij}$, where $s$ indicates “outside of $r$.” If a complete set of intra- and interregional data is available, then the $a^{rr}_{ij}$’s (and $a^{sr}_{ij}$’s) are observable directly. However, if one is trying to estimate $a^{rr}_{ij}$ from national data, as is the case, the estimation problem can be posed in the following way: 
-(1) estimate a regional technical coefficient, $a^{r}_{ij}$, from the corresponding national coefficient, $a^{r}_{ij}$, and then 
+(1) estimate a regional technical coefficient, $a^{r}_{ij}$, from the corresponding national coefficient, $a^{n}_{ij}$, and then 
 (2) estimate the regional input coefficient, $a^{rr}_{ij}$, as some proportion of the regional technical coefficient; that is, $a^{rr}_{ij} = p^{r}_{ij}a^{r}_{ij}$ (where  $0 \leq p^{r}_{ij} \leq 1$). 
 
 Instead of estimating, $a^{r}_{ij}$ and $a^{sr}_{ij}$ one estimates $a^{r}_{ij}$ and $p^{r}_{ij}$. The two steps in this procedure for estimating $a^{rr}_{ij}$ from $a^{n}_{ij}$ would therefore be: 
@@ -1062,12 +842,12 @@ Many versions of gravity model formulations have been proposed and explored for 
 (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. 
 
 One straightforward function, taking inspiration from Newton’s observations on gravity, would involve the product of the two “masses” ($x^{r}_{i}$ and $x^{s}_{i}$ ) divided by the square of the distance. The relatively simplified form is given by:
-$$ z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{s \cdot}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$$
-where $x^{r \cdot}_{i}$ is  the “supply pool” of good $i$ in region $r$, $x^{s \cdot}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. Note that the denominator in this formulation is aspatial; that is, its magnitude is unrelated to any measure of “distance” between $r$ and $s$. Rather, it provides the flexibility necessary so that if, for good $i$, the supply pool in $r$, the demand pool in $s$ and total output all increase by $p$ percent, then $z^{rs}_{i}$ increases by that same percent (assuming $Q^{rs}_{i} > 0$). An important feature of this kind of formulation is that cross-hauling is allowed; that is, good $i$ can be shipped simultaneously from $r$ to $s$ and from $s$ to $r$.
+$$ z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$$
+where $x^{r \cdot}_{i}$ is  the “supply pool” of good $i$ in region $r$, $x^{\cdot s}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. Note that the denominator in this formulation is aspatial; that is, its magnitude is unrelated to any measure of “distance” between $r$ and $s$. Rather, it provides the flexibility necessary so that if, for good $i$, the supply pool in $r$, the demand pool in $s$ and total output all increase by $p$ percent, then $z^{rs}_{i}$ increases by that same percent (assuming $Q^{rs}_{i} > 0$). An important feature of this kind of formulation is that cross-hauling is allowed; that is, good $i$ can be shipped simultaneously from $r$ to $s$ and from $s$ to $r$.
 
 
-The most optimistic scenario is that values of $x^{r \cdot}_{i}$, $x^{s \cdot}_{i}$, $x^{\cdot \cdot}_{i}$,  and $z^{rs}_{i}$ are known from some base period or for some subset of transportation data. In that case, one can evaluate the parameter $Q^{rs}_{i}$ from those data, as
-$$Q^{rs}_{i} = \frac{\bar{z}^{rs}_{i} \bar{x}^{\cdot \cdot}_{i}} {\bar{x}^{r \cdot}_{i}  \bar{x}^{s \cdot}_{i}}$$
+The most optimistic scenario is that values of $x^{r \cdot}_{i}$, $x^{\cdot s}_{i}$, $x^{\cdot \cdot}_{i}$,  and $z^{rs}_{i}$ are known from some base period or for some subset of transportation data. In that case, one can evaluate the parameter $Q^{rs}_{i}$ from those data, as
+$$Q^{rs}_{i} = \frac{\bar{z}^{rs}_{i} \bar{x}^{\cdot \cdot}_{i}} {\bar{x}^{r \cdot}_{i}  \bar{x}^{\cdot s}_{i}}$$
 where overbars indicate known values.
 
 **Two-Region Interregional Models**
@@ -1098,192 +878,7 @@ The two-region logic may also be implemented across more than two regions. The i
 
 
 
-
-
-```{r CBP processing}
-# Note many embedded  nongeneralizeable naming conventions, needs further revision
-
-RegionalData_C <- filter(RegionalData, naics == "------")
-V_N <- sum(RegionalData_C$emp)
-
-Regions <- RegionalData_C[, 1:2]
-Regions$place <- paste0(Regions$fipstate, Regions$fipscty)
-
-RegionalData_Sector <- RegionalData %>% filter(grepl('*----', naics) & naics != '------' )
-RegionalData_Subsector <- RegionalData %>% filter(grepl('///', naics))
-RegionalData_IndustryGroup <- RegionalData %>% filter(grepl('//', naics) & !grepl('///', naics))
-RegionalData_NAICSIndustry <- RegionalData %>% filter(grepl('/', naics) & !grepl('///', naics)  & !grepl('//', naics))
-RegionalData_USNAICS <- RegionalData %>% filter(!grepl('/', naics) & !grepl('-', naics))
-
-# unique(RegionalData_Sector$naics)
-
-
-```
-
-```{r location quotient}
-
-
-
-```
-
-```{r ras function}
-
-
-# A.local <- ras()
-
-```
-
 ### Notes
-
-"The Assumption of Spatially Invariant Production Functions: The Problem of Heterogeneity
-All classic nonsurvey methods assume that national total use coefficients - the production functions in full - hold at every conceivable regional dimension. Various suggestions have been made as to why this is unlikely to be observed in practice. Smith and Morrison (1974 p.22) identify anything from differences in productive efficiency to climatic variation as contributing to the phenomenon. However, it is argued here that, apart from variation due to stochastic observation error, differences in total use can be attributed to the violation of one fundamental assumption of the Leontief model, and that is that each defined sector is homogeneous. Homogeneity implies that the set of coefficients which describes each defined commodity's production is wholly unique. Hence there can be no variation in the means of production for any defined commodity, and if there is, for whatever reason, the commodity would require separate definition in order for the homogeneity assumption to hold. The reason for the assumption is quite straightforward. If each production function describes a diverse set of commodities, the pattem of linkage is hidden within average relationships (see Table 5.1 below), and hence the precision with which one can calculate, for example, multipliers is eroded.
-It is argued here that differences in regional and national total use derive from the fact that the production functions of the national model are heterogeneously defined. The argument is as follows. At the broadest levels of commodity definition i.e. agriculture, manufacture, regional production functions are merged together, and as such cannot be identified in the national model. As the definitions of the national model are increased, the production functions of regionally specialised commodities emerge i.e. dair>' farming, sea fishing, fish farming. At some much higher level of disaggregation - where homogeneity is approached - the definitions o f the national model are so fine that it is possible to identify the individual factories and firms operating within the nation. At this point, the national model becomes one of infinite-regions because it is possible to extract the input-output table for any conceivable spatial subset of the nation. Not only the problem of estimating regional production functions evaporated, the trade estimation problem has ceased to exist." - (Brand, 1998)
-
-
-MRIO data requirements.
-
-Suppose we need to derive coeffecients for inputs for two regions. All the data we need are national *technical* coefficients, denoted $a^{N}_{ij}$ found in BEA I $\times$ I SUP tables, and total regional output (in dollars) of each sector for the two regions: $x^{r}_{j}$, and $x^{s}_{j}$. The regional output may be extrapolated the CBP data of regional sector firms/employment/payrolls.
-
-(location quotients, regional dependency, output multipliers, region specific technology of production, spillover and feedback effects, and inter-regional linkages).
-
-An important use of the I-O tables is in the estimation of the direct and indirect effects that changes in final uses will have on industry and commodity output, on employment, or on income. BEA’s Regional Economic Analysis Division relies on data in the I-O accounts to generate its Regional Input-Output Modeling System, or RIMS II, which can be used to analyze the impact of a state or local project or a change in a state or local program on the economy of an area. For example, state or local government planners can use the model to assess the economic impact of a new baseball stadium or airport or of the closing of a military base.
-
-
-
-
-
-```{r regional tables}
-#Create county level I/O accounts
-
-#Future iterations will need more "functionality" with chunk processes turned into functions for more broad scale usage 
-
-
-
-
-```
-
-
-
-
-### Project Narrative
-
-```{r Richard Trial}
-# Exercise to replicate table and analysis from project narrative
-
-
-
-ProjNarrIO <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,4]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,196]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,211]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,286]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,291]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,4]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,196]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,211]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,286]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,291]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,4]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,196]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,211]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,286]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,291]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,4]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,196]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,211]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,286]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,291]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,4]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,196]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,211]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,286]],
-                IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,291]]) 
-
-ProjNarrIO[is.na(ProjNarrIO)] <- 0 
-
-codenames <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,1]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,1]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,1]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,1]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,1]])
-
-descriptionnames <- c(IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[6,2]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[197,2]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[212,2]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[287,2]],
-               IO_tables$"Use_SUT_Framework_2007_2012_DET"$"2012"[[292,2]])
-
-
-ProjNarrIO %<>%  as.numeric() %>% matrix(nrow = 5, ncol = 5, byrow = TRUE,  dimnames = list(descriptionnames, codenames))
-
-ProjNarrRegSales <- data.frame(A  = c(0, 500,	0,  1000,	500),  B = c(0, 100,	200,	500,	200) ) %>% t() %>% as.matrix()
-
-i_mat <- rep(c(1), each=ncol(ProjNarrIO)) %>% as.matrix()
-
-alpha <- sweep(ProjNarrIO[1, ] %*% t(ProjNarrRegSales), 1, ProjNarrIO[1, ] %*% i_mat, "/")
-rho <- sweep(alpha, 2, ProjNarrRegSales %*% i_mat, "/")
-
-
-colnames(ProjNarrRegSales) <- codenames
-sample_RUC<-cbind(ProjNarrRegSales, t(alpha), t(rho))
-colnames(sample_RUC)[6] <- "alpha"
-colnames(sample_RUC)[7] <- "rho"
-
-```
-
-
-**Generate Economic Catchment Area (ECA) codes** 
-
-Since 1880, the Census Bureau has applied formal rules to categorize geographic areas as urban for the purposes of statistical reporting. The most recent version of this taxonomic schema classifies areas as urban areas (UA, densely settled with a population greater than 50,000) and urban clusters (UC, densely settled with populations greater than 2,500 and less than 50,000). <u> For as long as the Census Bureau has been defining urbanicity, rural has **ALWAYS** been the residual category</u>: from the 2010 Census Urban-Rural Classification Criterion, “‘rural’ encompasses all population, housing, and territory not included within an urban area.”
-
-The construction of urban places follows a complex set of rules accounting for the attributes of urban land use and residential development patterns, but the intuition is fairly straight-forward. First, identify contiguous Census blocks (sometimes, tracts) above a minimum population density thereby defining a potential urban core. Then, continue to agglomerate adjacent-*ish* (again, there are complex rules allowing for hops, jumps, exclaves, enclaves, indentations, etc.) blocks/tracts meeting other density and population thresholds until the boundaries of the place are established. The population of this agglomeration then determines whether it is a UA, UC, or rural. The RUCA codes are a further refinement constructed by ERS to account for 1) the size of urban agglomerations and 2) resident commuting patterns, while applying the urban-rural typology employed by OMB. Thus, every UA is termed a Metropolitan Area Core. UCs are delimited by population into Micropolitan Area Core (10,000 to 49,999) and Small Town Core (2,500 to 9,999). Remaining blocks/tracts are then classified according to whether a high (more than 30%) or low (10% to 30%) percentage of residents commute to an urban core, as well as the type of core of the primary flow. Secondary codes are also assigned based upon the destination type of the secondary commuter flow.
-
-We propose to use core units as the basis for building Rural-Urban Economic Catchment Areas codes from InfoGroup and the Census of Agriculture in very much the same vein as ERS constructs the RUCA codes, but with a notable design distinction: we will classify tracts from low density to high density, rather than defining rural as a catch-all, non-urban residual. Specifically:
-
-1) We will define a *primary economic catchment area* (ECA) centered on each small UC core (RUCA 7) that includes associated commuting Census tracts (RUCA 8 and 9) and nearby rural tracts that include large employers in InfoGroup. The latter condition accommodates economic activities that may employ relatively large numbers of residents but are purposefully located far from residential areas, e.g., paper milling and government military installations. We will explore the sensitivity of our coding to various definitions of nearby, e.g. 5, 10, and 20 mile radii.
-
-2) We will use the Census of Agriculture to identify the *primary* crop and livestock production activities and the County Business Patterns to identify the presence of forestry and mining activity in rural Zip codes surrounding the primary ECA (the smallest published unit for both programs is the Zip code). We anticipate that for the overwhelming majority of the country, using the county as the basic unit will suffice for identifying agricultural, forestry, and extraction, but western counties are sufficiently large to benefit from a more disaggregated reporting unit.
-
-3) We will then use the most recent Use Tables published by BEA as part of its Input-Output Accounts program (2018 for 71 two- and three-digit NAICS industries and 2012 for 415 fourdigit NAICS industries) to calculate absolute and relative *rural use coefficients* for each *primary* ECA with respect to the agricultural, forestry, and extraction (AFE) activity in its vicinity.
-
-<p align="center">
-$\alpha^{r}_{i}  = \sum^{k} s^{k}_{i} \sum^{m} s^{m}_{i} \rho^{k}_{m}$ and $\rho^{r}_{i} = \sum^{k} s^{k}_{i} \left( \frac{\sum^{m} s^{m}_{i} \rho^{k}_{m}} {\sum^{m} \rho^{k}_{m} } \right)$ 
-</p>
-
-  where $s^{m}_{i}$ is the share of employment/sales for industry $m$ in business catchment area $i$ calculated from InfoGroup; $\rho^{k}_{m}$ is the use parameter for AFE activity $k$ in industry $m$ from the BEA Use Tables; $s^{k}_{i}$ is the share of agricultural or forestry activity $k$ of total AFE activities; and $M$ and $K$ are the set of non-AFE and AFE industries, respectively. 
-
-  To illustrate, a simplified five-sector economy based on the BEA 2012 Use Table might be:
-
-`r kable(ProjNarrIO, caption = "Use Factor")`
-
-4) We will then assign remaining rural tracts to *primary* ECAs using a gravity model based on the use coefficients defined above. Gravity models have been applied as far back as the 1850s (Carey, 1858) to describe social phenomena and continue to be used across disciplines (Erlander, 1980; Haynes and Fotheringham, 1984; Sen and Smith, 1995; Wilson 2000), including contemporary analyses of international trade (USITC, 2020). To illustrate, suppose that there were two *primary* ECAs with the following industry sales (in $1000s) and calculated rural use coefficients:
-
-`r kable(sample_RUC, caption = "Industry Sales", digits = c(0, 0, 0, 0, 0, 1, 3))`
-
-  To simplify, suppose Area A were at 0 on the unit interval and Area B at 1 with all intervening  space representing rural tracts. A gravity approach based on the use coefficient would assign the intervening rural tracts on (0,`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`) to Area A and tracts (`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`,1) to Area B. In contrast, a gravity approach using the adjusted use coefficient would assign the intervening rural tracts on (0,`r round(rho[1]/(rho[1]+rho[2]), 3)`) to Area A and tracts (`r round(rho[1]/(rho[1]+rho[2]), 3)`,1) to Area B. More generally, for either use coefficient, we will treat the United States as a plane over the unit simplex and apply a gravity approach to assign rural tracts to any *primary* ECA. 
-
-  A notable feature of this approach is that *primary* ECAs may exhibit sufficiently low gravity that they are effectively economic islands. For example, a small-town anchored by car manufacturing plant surrounded by cropland. Of course, that small-town may be associated with larger, discontiguous economic areas through the manufacturing supply chain, which will reveal itself at higher economic geographies described subsequently, but <u>**creating measures to make meaningful economic distinctions between population centers currently lumped as “small towns” is a valuable project output that will benefit policy-makers**</u>.
-
-5) We will then move to assigning the remaining tracts, beginning with Micropolitan low commuting (RUCA 6) tracts. For each tract, we will calculate the following *total use coefficients*:
-
-<p align="center">
-$\rho_{ij} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{j} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
-$\rho_{ji} = \sum^{M} s^{m}_{j} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{j}} {\rho^{n}_{j} } \right)$,
-$\rho_{ik} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{k} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
-$\rho_{ki} = \sum^{M} s^{m}_{k} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{k}} {\rho^{n}_{k} } \right)$
-</p>
-
-  where $i$ denotes the tract, $j$ denotes the adjacent primary ECA, and $k$ denotes the Micropolitan core (RUCA 4) [NB: There may be multiple adjacent *primary* ECA, so that for the general case of Z adjacent *primary* ECA, 2Z+2 total use coefficients are calculated]. These coefficients summarize the economic flow to and from the tract. Thus, we will assign the tract to either the Micropolitan Core or the adjacent *primary* ECA according to the magnitude of the largest total use coefficients, or leave the tract as an economic island if flows are insufficiently strong, i.e., gravity is sufficiently weak.
-
-6) After assigning all Micropolitan and Metropolitan commuting tracts (RUCA 2, 3, and 5) following a similar approach to the one above, we will define *secondary* ECAs. To do so, we will again treat the United States as a plane with nodes defined by Micropolitan cores and *primary* ECAs attracted to those nodes by *total use coefficients*. *Primary* ECAs are assigned to *secondary* ECAs centered on Micropolitan cores when gravity is sufficiently strong. Next, contiguous groups of yet-unassigned *primary* ECAs with sufficiently strong gravity will be aggregated into *secondary* ECAs independent of a Micropolitan core; those without are classified as isolated.
-
-7) Step 6 is repeated with Metropolitan cores to define *tertiary* ECAs.  
-
-The approach described above is based on the three categories of urbanized places from the RUCA system, but it generalizes broadly to an N-level hierarchy of nodes where the nth ECA is defined by the parameter pair ($\rho_{n}$, $\theta_{n}$), the upper limit on the population of the core and the gravity threshold that defines economic islands, respectively. Refinements based on the former would permit the definition of small and large metropolitan cores, or even Megapolitan cores. The latter parameter can be varied according to moments of the use coefficient distribution (the lowest quintile or decile) or absolute values with a priori relevance, e.g., a parameter from a specified decay function in a formal model. We will implement the gravity model in Python, as it is open-source and with spatial modeling packages, e.g., [SpInt](https://github.com/pysal/spint) [(Oshan 2016)](https://doi.org/10.18335/region.v3i2.175) and [GME](https://github.com/USITC-Gravity-Group/GME) [(USITC 2019)](http://dx.doi.org/10.2139/ssrn.3832208), that are already being used to model international trade, migration flows, and transportation networks.
-
-
-### Project Trail
-
-**Data Notes**
 
 The highest level of NAICS classification is called the sector. There are 20 broad NAICS sectors two-digit NAICS. The subsiquent hierarchy of NAICS specifications include subsector (three-digit), industry group (four-digit), NAICS industry (five-digit), and U.S. industry (six-digit).  Counts of unique NAICS specifications for CBP 2019 data include 20, 86, 288, 635, and 960 clusters respectively. 
 
@@ -1291,363 +886,37 @@ Estimates in the Industry Economic Accounts of the Bureau of Economic Analysis (
 
 BEA industry codes used in national IO tables are not bijective with NAICS codes. Though they are similar at many levels and groupings some codes are not applicable (government) or do not align at any higher detail specificity e.g., construction data published by BEA at the detail level do not align with 2012 NAICS industries. 
 
+"The *direct requirements table* shows the amount of a commodity that is required by an industry to produce a dollar of the industry’s output. Total requirements tables show the relationship between final uses and gross output. There are three *total requirements tables*. The commodity-by-commodity total requirements table shows the production required, both directly and indirectly, of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-commodity total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-industry total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the industry at the top of the column." -- Concepts and Methods of the Input-Output Accounts pg. 1-3
 
 
+An important use of the I-O tables is in the estimation of the direct and indirect effects that changes in final uses will have on industry and commodity output, on employment, or on income. BEA’s Regional Economic Analysis Division relies on data in the I-O accounts to generate its Regional Input-Output Modeling System, or RIMS II, which can be used to analyze the impact of a state or local project or a change in a state or local program on the economy of an area. For example, state or local government planners can use the model to assess the economic impact of a new baseball stadium or airport or of the closing of a military base.
 
 
-```{r RUC Trial}
-# Recreate the project narrative absolute and relative "rural use coefficients" using BEA Use matrix and CBP employment data
-
-
-Use_table <- IO_tables[["Use_SUT_Framework_1997-2020_SECT"]][["2019"]]
-datatable(Use_table,
-          filter = 'top', options = list(
-            pageLength = 12, scrollX = T
-          ))
-
-
-
-CBP_table <- RegionalData_Sector
-CBP_table$place <- paste0(CBP_table$fipstate, CBP_table$fipscty)
-#CBP_table %<>% subset(select = c(place, naics, emp_nf, emp, qp1_nf, qp1, ap_nf, ap, est))
-CBP_table %<>% subset(select = c(place, naics, emp, qp1, ap, est))
-CBP_table$naics %<>% substr(0,2) %>% as.numeric()
-
-#Since BEA industry codes are not bijective with CBP's NAICS codes we must first make a transformation  
-
-CBP_table %<>% reshape(idvar = "naics", timevar = "place", direction = "wide")
-CBP_table[is.na(CBP_table)] <- 0
-CBP_table %<>%  as.data.frame() %>% arrange(naics)
-
-CBP_table %<>% t() %>%  as.data.frame()
-CBP_table %<>% mutate("11" = V1)
-CBP_table %<>% mutate("21" = V2)
-CBP_table %<>% mutate("22" = V3)
-CBP_table %<>% mutate("23" = V4)
-CBP_table %<>% mutate("31G" = V5)
-CBP_table %<>% mutate("42" = V6)
-CBP_table %<>% mutate("44RT" = V7)
-CBP_table %<>% mutate("48WT" = V8)
-CBP_table %<>% mutate("51" = V9)
-CBP_table %<>% mutate("FIRE" = V10 + V11)
-CBP_table %<>% mutate("PROF" = V12 + V13 + V14)
-CBP_table %<>% mutate("6" = V15 + V16)
-CBP_table %<>% mutate("7" = V17 + V18)
-CBP_table %<>% mutate("81" = V19)
-CBP_table %<>% mutate("G" = V20)
-CBP_table %<>% subset(select = -c(V1:V20)) %>% slice(-c(1)) %>% t()
-BEA_Sectors <- row.names(CBP_table)
-CBP_table <- cbind(BEA_Sectors, CBP_table) %>% as.data.frame()
-CBP_table %<>% reshape(idvar = "BEA_Sectors", varying = c(colnames(CBP_table)[-1]), direction = "long")
-rownames(CBP_table) <- 1:nrow(CBP_table)
-names(CBP_table)[names(CBP_table)=="time"] <- "place"
-CBP_table$place  %<>% formatC(width = 5, format = "d", flag = "0")
-
-
-Use_mat <- Use_table[6:20, 3:17]  %>% as.matrix()
-Use_mat[Use_mat == '...'] <- 0
-Use_mat %<>% as.numeric() %>% matrix(nrow = 15)
-colnames(Use_mat) = rownames(Use_mat) <- c("11", "21", "22", "23", "31G", "42", "44RT", "48TW", "51", "FIRE", "PROF", "6", "7", "81", "G")
-
-
-
-Sales_mat <- CBP_table[ , c('BEA_Sectors', 'place', 'emp')] 
-Sales_mat %<>% reshape(idvar = "BEA_Sectors", timevar = "place", direction = "wide") 
-Sales_mat <- Sales_mat[, 2:ncol(Sales_mat)] 
-cnames <- colnames(Sales_mat)
-Sales_mat %<>% unlist() %>% as.numeric() %>% matrix(nrow = 15)
-rownames(Sales_mat) <- c("11", "21", "22", "23", "31G", "42", "44RT", "48TW", "51", "FIRE", "PROF", "6", "7", "81", "G")
-colnames(Sales_mat) <- cnames 
-
-i_mat <- rep(c(1), each=ncol(Use_mat))  %>% as.matrix() 
-
-
-alpha_mat <- sweep(Use_mat %*% Sales_mat, 1, Use_mat %*% i_mat, "/")
-rho_mat <- sweep(alpha_mat, 2, t(i_mat) %*% Sales_mat, "/")
-
-
-Phi_tilde_mat_11 <- matrix(diag(rho_mat[1,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_21 <- matrix(diag(rho_mat[2,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_22 <- matrix(diag(rho_mat[3,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_23 <- matrix(diag(rho_mat[4,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_31G <- matrix(diag(rho_mat[5,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_42 <- matrix(diag(rho_mat[6,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_44RT <- matrix(diag(rho_mat[7,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_48TW <- matrix(diag(rho_mat[8,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_51 <- matrix(diag(rho_mat[9,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_FIRE <- matrix(diag(rho_mat[10,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_PROF <- matrix(diag(rho_mat[11,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_6 <- matrix(diag(rho_mat[12,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_7 <- matrix(diag(rho_mat[13,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_81 <- matrix(diag(rho_mat[14,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-Phi_tilde_mat_G <- matrix(diag(rho_mat[15,], nrow = ncol(rho_mat)),  ncol = ncol(rho_mat)) %*%  replicate(ncol(rho_mat), 1) %*% t(replicate(ncol(rho_mat), 1))
-
-
-Phi_tilde_mat_11 <-  Phi_tilde_mat_11 / (Phi_tilde_mat_11 + t(Phi_tilde_mat_11))
-Phi_tilde_mat_21 <-  Phi_tilde_mat_21 / (Phi_tilde_mat_21 + t(Phi_tilde_mat_21))
-Phi_tilde_mat_22 <-  Phi_tilde_mat_22 / (Phi_tilde_mat_22 + t(Phi_tilde_mat_22))
-Phi_tilde_mat_23 <-  Phi_tilde_mat_23 / (Phi_tilde_mat_23 + t(Phi_tilde_mat_23))
-Phi_tilde_mat_31G <-  Phi_tilde_mat_31G / (Phi_tilde_mat_31G + t(Phi_tilde_mat_31G))
-Phi_tilde_mat_42 <-  Phi_tilde_mat_42 / (Phi_tilde_mat_42 + t(Phi_tilde_mat_42))
-Phi_tilde_mat_44RT <-  Phi_tilde_mat_44RT / (Phi_tilde_mat_44RT + t(Phi_tilde_mat_44RT))
-Phi_tilde_mat_48TW <-  Phi_tilde_mat_48TW / (Phi_tilde_mat_48TW + t(Phi_tilde_mat_48TW))
-Phi_tilde_mat_51 <-  Phi_tilde_mat_51 / (Phi_tilde_mat_51 + t(Phi_tilde_mat_51))
-Phi_tilde_mat_FIRE <-  Phi_tilde_mat_FIRE / (Phi_tilde_mat_FIRE + t(Phi_tilde_mat_FIRE))
-Phi_tilde_mat_PROF <-  Phi_tilde_mat_PROF / (Phi_tilde_mat_PROF + t(Phi_tilde_mat_PROF))
-Phi_tilde_mat_6 <-  Phi_tilde_mat_6 / (Phi_tilde_mat_6 + t(Phi_tilde_mat_6))
-Phi_tilde_mat_7 <-  Phi_tilde_mat_7 / (Phi_tilde_mat_7 + t(Phi_tilde_mat_7))
-Phi_tilde_mat_81 <-  Phi_tilde_mat_81 / (Phi_tilde_mat_81 + t(Phi_tilde_mat_81))
-Phi_tilde_mat_G <-  Phi_tilde_mat_G / (Phi_tilde_mat_G + t(Phi_tilde_mat_G))
-
-
-
-
-```
-
-
-
-
-
-
-
-
-
-**Retrospective** 
-
-What are absolute and relative "rural use coefficients" exactly?
-
-In practice, for two *primary ECAs* $A$ and $B$, we construct the absolute rural use coefficients as:
-
-<p align="center">
-$\displaystyle \alpha^{r}_{A} = \frac{\sum^{n}_{j=1} u_{cj} s_{Aj}} {\sum^{n}_{j=1} u_{cj}}$,
-$\displaystyle \alpha^{r}_{B} = \frac{\sum^{n}_{j=1} u_{cj} s_{Bj}} {\sum^{n}_{j=1} u_{cj}}$
-</p>
-
-where $u_{cj}$ the the value of purchases of a single commodity $c$ by industry $j$ from the BEA's the *Use* matrix, and $s_{Aj}$ and $s_{Bj}$ are the annual sales of industry $j$ in *primary* ECA regions $A$ and $B$, for $j = 1, \dots, n$ industries. Similarly, we construct the relative rural use coefficients as:
-
-<p align="center">
-$\displaystyle \rho^{r}_{A} = \frac{\alpha^{r}_{A}} {\sum^{n}_{j=1} s_{Aj}}$,
-$\displaystyle \rho^{r}_{B} = \frac{\alpha^{r}_{B}} {\sum^{n}_{j=1} s_{Bj}}$
-</p>
-
-But what do these coefficients mean? 
-
-In the absolute specification, the numerator is a uniform modification of the elements in a row of the national *Use* matrix. The national value of purchases of commodity $c$ by each industry $j$ weighted by the regional value of "sales" by each industry $j$ (CBP will offer values of county-level industry employment, Q1 payroll, and annual payroll). This is divided by the total intermediate value of commodity $c$ at the national level.
-
-The relative specification then takes the absolute coefficient divided by the sum of the regional "sales" by each industry $j$. 
-
-This procedure is somewhat akin to those of a single-region IO through the application of *regional supply percentages* $p^{r}_{i}$ to estimate a matrix showing inputs from firms in the region to production in that region i.e., a regional technical coefficients matrix. Where $\mathbf{A^{rr} = \hat{p}^{r}A}$.
-
-
-Here the gravity is defined as the relative proportions for each coefficient across the two regions.
-
-
-The basic idea of a *Gravity Model* is that the flow of good $i$ from region $r$ to region $s$ can be looked upon as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$ ,and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. Leontief and Strout (1963) suggested the relatively simplified gravity model specification:
-
-$$ z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{s \cdot}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$$
-where $x^{r \cdot}_{i}$ is the “supply pool” of good $i$ in region $r$, $x^{s \cdot}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated.
-
-The most optimistic scenario is that values of $x^{r \cdot}_{i}$, $x^{s \cdot}_{i}$, $x^{\cdot \cdot}_{i}$,  and $z^{rs}_{i}$ are known from some base period or for some subset of transportation data. In that case, one can evaluate the parameter $Q^{rs}_{i}$ from those data, as
-
-$$Q^{rs}_{i} = \frac{\bar{z}^{rs}_{i} \bar{x}^{\cdot \cdot}_{i}} {\bar{x}^{r \cdot}_{i} \bar{x}^{s \cdot}_{i}}$$
-
-where overbars indicate known values.
-
-
-**Total Use Objective** 
-
-One objective of the project is to use *Total Use Coefficients* to quantify and match the economic connectedness of Micropolitian and Urban clusters to large Metropolitan economies. This is done by analyzing how well the commodity output mix of Micropolitian and Urban clusters to the commodity uses of industries in large Metropolitan cores.
-
-### Toy TUC 
-
-**Toy Model**
-
-Suppose there is 1 **N**ational level economy composed of 2 industries (e.g., Hydrocarbon **E**xtraction and **F**arming), 3 commodities (e.g., **G**asoline, **H**ogs,  and **I**ce cream), and 4 regions (e.g., **D**ane county (Madison , WI), **C**ook county (Chicago, IL), **B**rown County (Green Bay, WI), and the **A**ll the rest as a collective residual).  
-
-Available data consists of a $3 \times 2$ **N**ational level commodity by industry *Use table* ($\underset{(3 \times 2)}{\mathbf{U}} = [u_{ij}]$) that depicts the value of purchases of commodity  $i$  by industry  $j$.(In conjunction with a column vector of total industry outputs ($\underset{(2 \times 1)}{\mathbf{x}} = [x_{j}]$),  this gives  rise to the standard *Use coefficients* $\mathbf{B} = [b_{ij}] = u_{ij}/x_{j}$ in which column $j$ represents the value of inputs of each commodity per dollar’s worth  $\mathbf{B}$ are therefore commodities-by-industries.) Similarly, other available data consists of a  $2 \times 3$ **N**ational level commodity by industry *Make table* ($\underset{(2 \times 3)}{\mathbf{V}} = [v_{ij}]$) that depicts  the value of output of commodity $j$ that is produced  by industry $i$. (Note, the row  sums of $\mathbf{V}$ are total industry output $\mathbf{x}$ and column sums of $\mathbf{V}$ are total [commodity] output $\mathbf{q}'$.)
-
-Available data of at the region level consists of sector specific industry activity ($\underset{(2 \times 4)}{\mathbf{x}^r} = [x^{r}_{j}]$) in the form of either employment, payroll, or simply number of establishments. 
-
-As such let,  
+Summary of Input–Output Relationships
 
 \begin{equation}
-\underset{(c \times i)}{\mathbf{U}^{n}} = 
-  \begin{bmatrix} 
-    u^{n}_{11} & u^{n}_{12} \\ 
-    u^{n}_{21} & u^{n}_{22} \\ 
-    u^{n}_{31} & u^{n}_{32} \\ 
-  \end{bmatrix}
-  = 
-  \begin{bmatrix} 
-    u^{n}_{GE} & u^{n}_{GF} \\ 
-    u^{n}_{HE} & u^{n}_{HF} \\ 
-    u^{n}_{IE} & u^{n}_{IF} \\ 
-  \end{bmatrix}, \;  \text{ and} \; \;
-\underset{(i \times g)}{\mathbf{X}^{r}_{empl/pay}} = 
-  \begin{bmatrix} 
-    x^{1}_{1} & x^{2}_{1} & x^{3}_{1} & x^{4}_{1} \\ 
-    x^{1}_{2} & x^{2}_{2} & x^{3}_{2} & x^{4}_{2} \\ 
-  \end{bmatrix}
-  = 
-    \begin{bmatrix} 
-    x^{A}_{E} & x^{B}_{E} & x^{C}_{E} & x^{D}_{E} \\ 
-    x^{A}_{F} & x^{B}_{F} & x^{C}_{F} & x^{D}_{F} \\  
-    \end{bmatrix}
+\begin{matrix}
+&  \text{Economic } (n \times n) \\ 
+\hline
+\text{Transactions } & \mathbf{Z} \\ 
+& \mathbf{Zi} + \mathbf{f} = \mathbf{x} \\ 
+& \\
+\text{Direct Requirements } & \mathbf{A} = \mathbf{Z\hat{x}^{-1}} \\ 
+& \mathbf{Ax} + \mathbf{f} = \mathbf{x} \\ 
+& \\
+\text{Total Requirements } & \mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1} \\ 
+& \mathbf{x} = \mathbf{Lf} \\ 
+\hline
+\end{matrix}
 \end{equation}
 
-As such the project narrative use coefficients (as demonstrated in the excel trial) are:
+The (industry-by-industry) *Transactions* matrix shows monetary transactions between pairs of sectors or interindustry sales (intermediate sales) by sector $i$ to all sectors $j$.
 
+The (industry-by-industry) *Direct Requirements* (technical coefficients) matrix specifies the required amount of industry $i$’s commodity used to produce of one unit of industry $j$’s commodity.  
 
-$$
-\underset{(c \times g)}{\mathbf{\alpha}} = (\hat{\mathbf{u}}^{n})^{-1}\mathbf{U}^{n}\mathbf{X}^{r} = 
-\begin{bmatrix} 
-    \frac{u^{n}_{GE}x^{A}_{E}+u^{n}_{GF}x^{A}_{F}}{u^{n}_{GE}+u^{n}_{GF}} & \frac{u^{n}_{GE}x^{B}_{E}+u^{n}_{GF}x^{B}_{F}}{u^{n}_{GE}+u^{n}_{GF}} & \frac{u^{n}_{GE}x^{C}_{E}+u^{n}_{GF}x^{C}_{F}}{u^{n}_{GE}+u^{n}_{GF}} & \frac{u^{n}_{GE}x^{D}_{E}+u^{n}_{GF}x^{D}_{F}}{u^{n}_{GE}+u^{n}_{GF}} \\ 
-    \frac{u^{n}_{HE}x^{A}_{E}+u^{n}_{HF}x^{A}_{F}}{u^{n}_{HE}+u^{n}_{HF}} & \frac{u^{n}_{HE}x^{B}_{E}+u^{n}_{HF}x^{B}_{F}}{u^{n}_{HE}+u^{n}_{HF}} & \frac{u^{n}_{HE}x^{C}_{E}+u^{n}_{HF}x^{C}_{F}}{u^{n}_{HE}+u^{n}_{HF}} & \frac{u^{n}_{HE}x^{D}_{E}+u^{n}_{HF}x^{D}_{F}}{u^{n}_{HE}+u^{n}_{HF}} \\ 
-    \frac{u^{n}_{IE}x^{A}_{E}+u^{n}_{IF}x^{A}_{F}}{u^{n}_{IE}+u^{n}_{IF}} & \frac{u^{n}_{IE}x^{B}_{E}+u^{n}_{IF}x^{B}_{F}}{u^{n}_{IE}+u^{n}_{IF}} & \frac{u^{n}_{IE}x^{C}_{E}+u^{n}_{IF}x^{C}_{F}}{u^{n}_{IE}+u^{n}_{IF}} & \frac{u^{n}_{IE}x^{D}_{E}+u^{n}_{IF}x^{D}_{F}}{u^{n}_{IE}+u^{n}_{IF}} \\
-\end{bmatrix}
-$$
-and 
+The (industry-by-industry) *Total Requirements* matrix shows, on a per-dollar basis, the industry output the economy generates in order to provide an industry’s commodities to final users: $\partial{x_{i}}/\partial{f_{j}} = l_{ij}$.
 
-$$
-\underset{(c \times g)}{\mathbf{\rho}} = (\hat{\mathbf{u}}^{n})^{-1}\mathbf{U}^{n}\mathbf{X}^{r}(\hat{\mathbf{x}}^{r})^{-1} = 
-\begin{bmatrix} 
-    \frac{u^{n}_{GE}x^{A}_{E}+u^{n}_{GF}x^{A}_{F}}{(u^{n}_{GE}+u^{n}_{GF})(x^{A}_{E} + x^{A}_{F})} & \frac{u^{n}_{GE}x^{B}_{E}+u^{n}_{GF}x^{B}_{F}}{(u^{n}_{GE}+u^{n}_{GF})(x^{B}_{E} + x^{B}_{F})} &  \frac{u^{n}_{GE}x^{C}_{E}+u^{n}_{GF}x^{C}_{F}}{(u^{n}_{GE}+u^{n}_{GF})(x^{C}_{E} + x^{C}_{F})} & \frac{u^{n}_{GE}x^{D}_{E}+u^{n}_{GF}x^{D}_{F}}{(u^{n}_{GE}+u^{n}_{GF})(x^{D}_{E} + x^{D}_{F})} \\ 
-    \frac{u^{n}_{HE}x^{A}_{E}+u^{n}_{HF}x^{A}_{F}}{(u^{n}_{HE}+u^{n}_{HF})(x^{A}_{E} + x^{A}_{F})} & \frac{u^{n}_{HE}x^{B}_{E}+u^{n}_{HF}x^{B}_{F}}{(u^{n}_{HE}+u^{n}_{HF})(x^{B}_{E} + x^{B}_{F})} & \frac{u^{n}_{HE}x^{C}_{E}+u^{n}_{HF}x^{C}_{F}}{(u^{n}_{HE}+u^{n}_{HF})(x^{C}_{E} + x^{C}_{F})} & \frac{u^{n}_{HE}x^{D}_{E}+u^{n}_{HF}x^{D}_{F}}{(u^{n}_{HE}+u^{n}_{HF})(x^{D}_{E} + x^{D}_{F})} \\ 
-    \frac{u^{n}_{IE}x^{A}_{E}+u^{n}_{IF}x^{A}_{F}}{(u^{n}_{IE}+u^{n}_{IF})(x^{A}_{E} + x^{A}_{F})} & \frac{u^{n}_{IE}x^{B}_{E}+u^{n}_{IF}x^{B}_{F}}{(u^{n}_{IE}+u^{n}_{IF})(x^{B}_{E} + x^{B}_{F})} & \frac{u^{n}_{IE}x^{C}_{E}+u^{n}_{IF}x^{C}_{F}}{(u^{n}_{IE}+u^{n}_{IF})(x^{C}_{E} + x^{C}_{F})} & \frac{u^{n}_{IE}x^{D}_{E}+u^{n}_{IF}x^{D}_{F}}{(x^{C}_{E} + x^{C}_{F})(x^{D}_{E} + x^{D}_{F})} \\
-\end{bmatrix}
-$$
-
-
-**What are the interpretations of these coefficients  explicitly?**
-
-From here we can ask the question: Is Madison more economically connected to Chicago or Green Bay or is it an economic island? More specifically, is the commodity(?) output (mix?) of Madison more congruent with the commodity(?) output (mix?) of Chicago or Green Bay?  (Note: there is no claim/evidence of trade and commodity flows across space using this specification, instead we are measuring possible (one direction) sector compatibility.)
-
-Given the commodity by geography, relative use coefficient matrix $\mathbf{\rho}$, we can now construct a geography by geography (from-to) score for each commodity given by:
-
-$$
-\mathbf{\phi}_{Gasoline} = \hat{\rho}_{G}\mathbf{i}\mathbf{i}'[\hat{\rho}_{G}\mathbf{i}\mathbf{i}'+\hat{\rho}'_{G}\mathbf{i}\mathbf{i}']^{-1} = 
-  \begin{bmatrix} 
-    \frac{\rho_{G}^{A}}{\rho_{G}^{A} + \rho_{G}^{A}} & \frac{\rho_{G}^{A}}{\rho_{G}^{A} + \rho_{G}^{B}} & \frac{\rho_{G}^{A}}{\rho_{G}^{A} + \rho_{G}^{C}} & \frac{\rho_{G}^{A}}{\rho_{G}^{A} + \rho_{G}^{D}} \\
-    \frac{\rho_{G}^{B}}{\rho_{G}^{B} + \rho_{G}^{A}} & \frac{\rho_{G}^{B}}{\rho_{G}^{B} + \rho_{G}^{B}} & \frac{\rho_{G}^{B}}{\rho_{G}^{B} + \rho_{G}^{C}} & \frac{\rho_{G}^{B}}{\rho_{G}^{B} + \rho_{G}^{D}} \\
-    \frac{\rho_{G}^{C}}{\rho_{G}^{C} + \rho_{G}^{A}} & \frac{\rho_{G}^{C}}{\rho_{G}^{C} + \rho_{G}^{B}} & \frac{\rho_{G}^{C}}{\rho_{G}^{C} + \rho_{G}^{C}} & \frac{\rho_{G}^{C}}{\rho_{G}^{C} + \rho_{G}^{D}} \\
-    \frac{\rho_{G}^{D}}{\rho_{G}^{D} + \rho_{G}^{A}} & \frac{\rho_{G}^{D}}{\rho_{G}^{D} + \rho_{G}^{B}} & \frac{\rho_{G}^{D}}{\rho_{G}^{D} + \rho_{G}^{C}} & \frac{\rho_{G}^{D}}{\rho_{G}^{D} + \rho_{G}^{D}} \\
-  \end{bmatrix}
-$$
-The maximum value by row of $\mathbf{\phi}_{G}$ determines which typology each region is assigned on a per commodity basis.
-
-
-Similarly the other commodities are given by:
-
-$$
-\mathbf{\phi}_{Hogs} = \hat{\rho}_{H}\mathbf{i}\mathbf{i}'[\hat{\rho}_{H}\mathbf{i}\mathbf{i}'+\hat{\rho}'_{H}\mathbf{i}\mathbf{i}']^{-1} = 
-  \begin{bmatrix} 
-    \frac{\rho_{H}^{A}}{\rho_{H}^{A} + \rho_{H}^{A}} & \frac{\rho_{H}^{A}}{\rho_{H}^{A} + \rho_{H}^{B}} & \frac{\rho_{H}^{A}}{\rho_{H}^{A} + \rho_{H}^{C}} & \frac{\rho_{H}^{A}}{\rho_{H}^{A} + \rho_{H}^{D}} \\
-    \frac{\rho_{H}^{B}}{\rho_{H}^{B} + \rho_{H}^{A}} & \frac{\rho_{H}^{B}}{\rho_{H}^{B} + \rho_{H}^{B}} & \frac{\rho_{H}^{B}}{\rho_{H}^{B} + \rho_{H}^{C}} & \frac{\rho_{H}^{B}}{\rho_{H}^{B} + \rho_{H}^{D}} \\
-    \frac{\rho_{H}^{C}}{\rho_{H}^{C} + \rho_{H}^{A}} & \frac{\rho_{H}^{C}}{\rho_{H}^{C} + \rho_{H}^{B}} & \frac{\rho_{H}^{C}}{\rho_{H}^{C} + \rho_{H}^{C}} & \frac{\rho_{H}^{C}}{\rho_{H}^{C} + \rho_{H}^{D}} \\
-    \frac{\rho_{H}^{D}}{\rho_{H}^{D} + \rho_{H}^{A}} & \frac{\rho_{H}^{D}}{\rho_{H}^{D} + \rho_{H}^{B}} & \frac{\rho_{H}^{D}}{\rho_{H}^{D} + \rho_{H}^{C}} & \frac{\rho_{H}^{D}}{\rho_{H}^{D} + \rho_{H}^{D}} \\
-  \end{bmatrix}
-$$
-
-
-$$
-\mathbf{\phi}_{Ice cream} = \hat{\rho}_{I}\mathbf{i}\mathbf{i}'[\hat{\rho}_{I}\mathbf{i}\mathbf{i}'+\hat{\rho}'_{I}\mathbf{i}\mathbf{i}']^{-1} = 
-  \begin{bmatrix} 
-    \frac{\rho_{I}^{A}}{\rho_{I}^{A} + \rho_{I}^{A}} & \frac{\rho_{I}^{A}}{\rho_{I}^{A} + \rho_{I}^{B}} & \frac{\rho_{I}^{A}}{\rho_{I}^{A} + \rho_{I}^{C}} & \frac{\rho_{I}^{A}}{\rho_{I}^{A} + \rho_{I}^{D}} \\
-    \frac{\rho_{I}^{B}}{\rho_{I}^{B} + \rho_{I}^{A}} & \frac{\rho_{I}^{B}}{\rho_{I}^{B} + \rho_{I}^{B}} & \frac{\rho_{I}^{B}}{\rho_{I}^{B} + \rho_{I}^{C}} & \frac{\rho_{I}^{B}}{\rho_{I}^{B} + \rho_{I}^{D}} \\
-    \frac{\rho_{I}^{C}}{\rho_{I}^{C} + \rho_{I}^{A}} & \frac{\rho_{I}^{C}}{\rho_{I}^{C} + \rho_{I}^{B}} & \frac{\rho_{I}^{C}}{\rho_{I}^{C} + \rho_{I}^{C}} & \frac{\rho_{I}^{C}}{\rho_{I}^{C} + \rho_{I}^{D}} \\
-    \frac{\rho_{I}^{D}}{\rho_{I}^{D} + \rho_{I}^{A}} & \frac{\rho_{I}^{D}}{\rho_{I}^{D} + \rho_{I}^{B}} & \frac{\rho_{I}^{D}}{\rho_{I}^{D} + \rho_{I}^{C}} & \frac{\rho_{I}^{D}}{\rho_{I}^{D} + \rho_{I}^{D}} \\
-  \end{bmatrix}
-$$
-
-Such that 
-
-$$
-\mathbf{\phi} = 
-\begin{bmatrix}
-\mathbf{\phi}_{G} & 0 & 0 \\
-0 & \mathbf{\phi}_{H} & 0 \\
-0 & 0 & \mathbf{\phi}_{I} \\
-\end{bmatrix}
-$$
-
-
-The maximum value by row of $\mathbf{\phi}$ determines which typology each region is assigned on an overall commodity basis.
-
-(Alternative assignment procedures may incorporate a weighted mix of commodities or alternatively measure the "gravity" of regions by commodities to determine a regions commodity center of gravity.)
-
-
-Suppose,  
-
-\begin{equation}
-\underset{(c \times i)}{\mathbf{U}^{n}} = 
-  \begin{bmatrix} 
-    18 & 12 \\ 
-    20 & 16 \\ 
-    2 & 6 \\ 
-  \end{bmatrix}, \;  \text{ and} \; \;
-\underset{(i \times g)}{\mathbf{X}^{r}_{employment}} = 
-  \begin{bmatrix} 
-    500 & 10 & 30 & 4 \\ 
-    6000 & 200 & 400 & 50 \\ 
-  \end{bmatrix}
-\end{equation}
-
-
-```{r  toyexample}
-Toy_U_mat <-  matrix(c(18, 12, 20, 16, 2, 6), nrow = 3, byrow = TRUE)
-rownames(Toy_U_mat) <- c("Gas", "Hogs", "Ice")
-colnames(Toy_U_mat) <- c("Extract", "Farm")
-Toy_X_mat <-  matrix(c(500, 10,  30, 4, 6000, 200, 400, 50), nrow = 2, byrow = TRUE)
-rownames(Toy_X_mat) <- c("Extract", "Farm")
-colnames(Toy_X_mat) <- c("AllElse", "Brown", "Cook", "Dane")
-Toy_u_vec <- as.vector(Toy_U_mat %*% c(1, 1))
-Toy_x_vec <- as.vector(t(c(1, 1)) %*% Toy_X_mat)
-
-Toy_Alpha_mat <- solve(matrix(diag(Toy_u_vec, nrow = 3),  ncol=3)) %*% Toy_U_mat %*% Toy_X_mat
-rownames(Toy_Alpha_mat) <- c("Gas", "Hogs", "Ice")
-Toy_Alpha_mat
-
-Toy_Rho_mat <- Toy_Alpha_mat %*% solve(matrix(diag(Toy_x_vec, nrow = 4),  ncol=4)) 
-colnames(Toy_Rho_mat) <- c("AllElse", "Brown", "Cook", "Dane")
-Toy_Rho_mat
-
-Toy_Phi_tilde_mat_G <- matrix(diag(Toy_Rho_mat[1,], nrow = 4),  ncol=4) %*%  c(1, 1, 1, 1)  %*% t(c(1, 1, 1, 1))
-Toy_Phi_mat_G <-  Toy_Phi_tilde_mat_G / (Toy_Phi_tilde_mat_G + t(Toy_Phi_tilde_mat_G))
-rownames(Toy_Phi_mat_G) <- c("AllElse", "Brown", "Cook", "Dane")
-colnames(Toy_Phi_mat_G) <- c("AllElse", "Brown", "Cook", "Dane")
-Toy_Phi_mat_G
- 
-Toy_Phi_tilde_mat_H <- matrix(diag(Toy_Rho_mat[2,], nrow = 4),  ncol=4) %*%  c(1, 1, 1, 1)  %*% t(c(1, 1, 1, 1))
-Toy_Phi_mat_H <-  Toy_Phi_tilde_mat_H / (Toy_Phi_tilde_mat_H + t(Toy_Phi_tilde_mat_H))
-rownames(Toy_Phi_mat_H) <- c("AllElse", "Brown", "Cook", "Dane")
-colnames(Toy_Phi_mat_H) <- c("AllElse", "Brown", "Cook", "Dane")
-Toy_Phi_mat_H
-
-Toy_Phi_tilde_mat_I <- matrix(diag(Toy_Rho_mat[3,], nrow = 4),  ncol=4) %*%  c(1, 1, 1, 1)  %*% t(c(1, 1, 1, 1))
-Toy_Phi_mat_I <-  Toy_Phi_tilde_mat_I / (Toy_Phi_tilde_mat_I + t(Toy_Phi_tilde_mat_I))
-rownames(Toy_Phi_mat_I) <- c("AllElse", "Brown", "Cook", "Dane")
-colnames(Toy_Phi_mat_I) <- c("AllElse", "Brown", "Cook", "Dane")
-Toy_Phi_mat_I
-  
-Toy_Phi_mat <- bdiag(Toy_Phi_mat_G, Toy_Phi_mat_H, Toy_Phi_mat_I)
-Toy_Phi_mat 
-  
-```
-
-
-```{r init_python}
-library(reticulate)
-use_condaenv('rurec')
-```
-
-```{r load_cbp}
-cbp <- import('rurec.cbp')
-regional_data_py <- cbp$get_df(2019L)
-head(regional_data_py)
-```
-
-
-
+Technically speaking, the *Direct Requirements* matrix constructed from the BEA *Total Requirements* matrix (from a *Make* and *Use* table framework) is an industry based technology, industry-by-industry class table $\underset{(i \times i)}{\mathbf{A}_{I}} = \mathbf{V}(\mathbf{\hat{V'i}})^{-1}\mathbf{U}(\mathbf{\hat{Vi}})^{-1}$
 
 
 
