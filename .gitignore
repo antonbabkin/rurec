@@ -3,6 +3,7 @@ tmp/
 cache/
 !data/fai.json
 logs/
+census_api_key.txt
 
 # symlinks to package directories
 nbs/rurec
