@@ -17,33 +17,18 @@ kernelspec:
 > How different slices of economy evolve over time.
 
 ```{code-cell} ipython3
-#hide
-import json
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import fastparquet
-
-from rurec import resources, rurality, ers_codes
-```
-
-# Rurality
-
-Business dynamics in rural areas, based on different definitions of rurality.
-
-+++
-
-## CBP
-
-```{code-cell} ipython3
 :tags: []
 
 import functools
 
+import json
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from rurec import ers_codes, cbp
+from rurec import ers_codes, cbp, pop
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
 ```
 
 ```{code-cell} ipython3
@@ -52,53 +37,162 @@ from rurec import ers_codes, cbp
 pd.options.display.max_colwidth = 300
 ```
 
+## Data
+
+GDP price deflator from BEA, downloaded from [FRED](https://fred.stlouisfed.org/series/A191RD3A086NBEA).
+
+```{code-cell} ipython3
+:tags: []
+
+def get_deflator():
+    d = pd.read_csv(nbd.root / 'data/A191RD3A086NBEA.csv').rename(columns={'DATE': 'year', 'A191RD3A086NBEA': 'deflator'})
+    d['year'] = d['year'].str[:4].astype('int16')
+    d = d.sort_values('year', ignore_index=True)
+    # normalize latest year = 1
+    d['deflator'] /= d['deflator'].iloc[-1]
+    return d
+```
+
+```{code-cell} ipython3
+:tags: []
+
+get_deflator().set_index('year').plot(grid=True)
+```
+
+# Rurality
+
+Business dynamics in rural areas, based on different definitions of rurality.
+
++++
+
+## OMB definition
+
+Rural = micropolitan and noncore. Non-rural = metropolitan.
+
+For now, using ERS UI codes because I have them ready. They are a finer county level subdivision of CBSAs.
+
 ```{code-cell} ipython3
 :tags: []
 
 df = ers_codes.get_ui_df().rename(columns=str.lower)
 df['rural'] = ~df['ui_code'].isin(['1', '2'])
-df = df[['fips', 'ui_year', 'rural']]
+df = df[['fips', 'ui_year', 'rural']].rename(columns={'fips': 'stcty'})
 rural = df
 ```
+
+CODO: FIPS county code 999 probably means state-wide, and can not be classified as rural or non-rural.
 
 ```{code-cell} ipython3
 :tags: []
 
 @functools.cache
 def load_cbp():
-    return cbp.get_parquet('county', cols=['year', 'fipstate', 'fipscty', 'emp', 'est', 'ap'],
-                     filters=[('industry', '=', '-')])
+    df = cbp.get_parquet('county', cols=['year', 'fipstate', 'fipscty', 'emp', 'est', 'ap'],
+                         filters=[('industry', '=', '-')])
+    df['stcty'] = df['fipstate'] + df['fipscty']
+    del df['fipstate']
+    del df['fipscty']
+    return df
 ```
+
+Timing. OMB classification is using data from decennial censuses. So if a county was classified as rural in 2013 revision of UI was rural from at least 2010, the year of preceeding decennial census.
 
 ```{code-cell} ipython3
 :tags: []
 
 df = load_cbp()
-df['fips'] = df['fipstate'] + df['fipscty']
 
-df['ui_year'] = 1993
-df = df.merge(rural, 'left', on=['ui_year', 'fips']).rename(columns={'rural': 'rural_1993'})
-df['ui_year'] = 2003
-df = df.merge(rural, 'left', on=['ui_year', 'fips']).rename(columns={'rural': 'rural_2003'})
+# deflate payroll
+df = df.merge(get_deflator(), 'left', 'year')
+df['ap'] /= df['deflator']
+
+# add population
+d = pop.pop()
+d['stcty'] = d['st'] + d['cty']
+del d['st']
+del d['cty']
+df = df.merge(d, 'left', ['year', 'stcty'])
+
+# rural using constant definition
+for y in [1993, 2003, 2013]:
+    df['ui_year'] = y
+    df = df.merge(rural, 'left', on=['ui_year', 'stcty']).rename(columns={'rural': f'rural_{y}'})
+
+# rural using changing definition
 df['ui_year'] = 2013
-df = df.merge(rural, 'left', on=['ui_year', 'fips']).rename(columns={'rural': 'rural_2013'})
-
-df.loc[df['year'] < 2013, 'ui_year'] = 2003
-df.loc[df['year'] < 2003, 'ui_year'] = 1993
-df = df.merge(rural, 'left', on=['ui_year', 'fips']).rename(columns={'rural': 'rural_chng'})
+df.loc[df['year'] < 2010, 'ui_year'] = 2003
+df.loc[df['year'] < 2000, 'ui_year'] = 1993
+df = df.merge(rural, 'left', on=['ui_year', 'stcty']).rename(columns={'rural': 'rural_chng'})
 ```
 
 ```{code-cell} ipython3
 :tags: []
 
-fig, ax = plt.subplots(1, 3, figsize=(18, 6))
+agg = {}
+for ry in [1993, 2003, 2013, 'chng']:
+    rc = f'rural_{ry}'
+    d = df.groupby(['year', rc])[['pop', 'emp', 'est', 'ap']].sum()
+    d.columns.name = 'measure'
+    d = d.stack().unstack(rc)
+    d = d.rename(columns={False: 'nonrural', True: 'rural'})
+    d['all'] = d.sum(1)
+    agg[rc] = d
+agg = pd.concat(agg, axis=1, names=['rural_defn', 'rural'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 4, figsize=(24, 6))
 
 colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-for y, c in zip([1993, 2003, 2013, 'chng'], colors):
-    t = df.groupby(['year', f'rural_{y}'])[['est', 'emp', 'ap']].sum().stack().unstack(1)
-    t = t[True] / t.sum(1)
-    t = t.unstack().add_suffix(f' {y}')
-    t.plot(ax=ax, subplots=True, ylim=(0, 0.25), color=c, grid=True)
+for ry, c in zip([1993, 2003, 2013, 'chng'], colors):
+    t = agg[f'rural_{ry}']['rural'].unstack('measure')
+    t = t.apply(lambda row: row / t.iloc[0], 1).add_suffix(f' {ry} rural')
+    t.plot(ax=ax, subplots=True, color=c, grid=True)
+    t = agg[f'rural_{ry}']['nonrural'].unstack('measure')
+    t = t.apply(lambda row: row / t.iloc[0], 1).add_suffix(f' {ry} nonrural')
+    t.plot(ax=ax, subplots=True, color=c, ls='--', grid=True)
+    
+fig.suptitle('Cumulative growth of population, employment, establishments and payroll');
+```
+
+```{code-cell} ipython3
+:tags: []
+
+pfit, pval = np.polynomial.polynomial.polyfit, np.polynomial.polynomial.polyval
+fig, ax = plt.subplots(1, 4, figsize=(24, 6))
+
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+t = agg['rural_2003']['rural'].unstack('measure')
+t = (t / t.shift() * 100 - 100).add_suffix(f' {ry} rural')
+t.plot(ax=ax, subplots=True, color=colors[0])
+t = t.dropna().add_suffix(' trend').apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+t.plot(ax=ax, subplots=True, color=colors[0], ls='--')
+
+t = agg['rural_2003']['nonrural'].unstack('measure')
+t = (t / t.shift() * 100 - 100).add_suffix(f' {ry} nonrural')
+t.plot(ax=ax, subplots=True, color=colors[1])
+t = t.dropna().add_suffix(' trend').apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+t.plot(ax=ax, subplots=True, color=colors[1], ls='--', grid=True)
+
+[a.axhline(c='black', lw=1) for a in ax]
+fig.suptitle('Growth rate of population, employment, establishments and payroll');
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 4, figsize=(24, 6))
+
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+for ry, c in zip([1993, 2003, 2013, 'chng'], colors):
+    t = agg[f'rural_{ry}']
+    t = t['rural'] / t['all'] * 100
+    t = t.unstack().add_suffix(f' {ry}')
+    t.plot(ax=ax, subplots=True, ylim=(0, 25), color=c, grid=True)
+    
+fig.suptitle('Share of population, employment, establishments and payroll in rural areas, %');
 ```
 
 ## Infogroup
