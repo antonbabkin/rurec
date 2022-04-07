@@ -834,6 +834,21 @@ $$RPC^{r}_{i} = z^{rr}_{i} / (z^{rr}_{i} + z^{sr}_{i})$$
 Various relationships between $RPC^{r}_{i}$ and proxies for these relative terms have been proposed and fitted by regression techniques to data that are available in US published sources such as *County Business Patterns*, *Census of Transportation*, and *Census of Manufactures*, as well as a national input–output technical coefficients table. An alternative approach to
 estimation of RPCs are gravity models of commodity flows.
 
+**Regional RAS**
+
+A traditional RAS is concerned with adjusting coefficient matrices across time (the updating problem), however, it may also be used to adjust coefficient matrices across space (the regionalization problem). Therefore, one can perform a regional RAS to estimate $\mathbf{A^{r}}$, given a national input–output table, $\mathbf{A^{n}}$, and current marginal information about regional economic activity – regional total gross outputs, $\mathbf{x^{r}}$, regional total interindustry (intermediate) sales, $\mathbf{u^{r}}$, and regional total interindustry purchases $\mathbf{v^{r}}$.
+
+Unlike the many other clean I/O accounting procedures, RAS is an iterative maximization process. Step 1 is to assume $\mathbf{A^{r}} = \mathbf{A^{r}}$ such that $\mathbf{Z^{0}} = \mathbf{A^{n}\hat{x}^{r}}$, where zero superscript denotes the base  or zeroth iteration. 
+
+Step 2 is to then ask: Does $\mathbf{Z^{0}i} = \mathbf{u^{r}}$ and $\mathbf{iZ^{0}} = \mathbf{v^{r}}$? If the answer is yes to both, then $\mathbf{Z^{0}} = \mathbf{Z^{r}}$ and $\mathbf{A^{n}} = \mathbf{A^{r}}$. If the answer is no to either, then we update the direct requirements matrix. First by $\mathbf{A^{1}} = \mathbf{\hat{r}^{1}A^{n}}$, where $\mathbf{\hat{r}^{1}} = [\mathbf{\hat{u}^{r}}](\mathbf{\hat{Z}^{0}i})^{-1}$. And by definition, now $\mathbf{u^{r}} = \mathbf{Z^{1}i} = [\mathbf{\hat{r}^{1}A^{n}\hat{x}^{r}}]\mathbf{i}$. 
+
+Step 3 is to then ask: Does $\mathbf{iZ^{1}} = \mathbf{v^{r}}$? If the answer is yes, then $\mathbf{Z^{1}} = \mathbf{Z^{r}}$ and $\mathbf{Z^{1}\hat{x}^{r}} = \mathbf{A^{r}}$. If the answer is no, then iterate again, this time let $\mathbf{A^{2}} = \mathbf{A^{1}\hat{s}^{1}}$, where $\mathbf{\hat{s}^{1}} = [\mathbf{\hat{v}^{r}}](\mathbf{iZ^{1}})^{-1}$. And by definition, now $\mathbf{\hat{v}^{r}} = (\mathbf{Z^{2}})'\mathbf{i} = [\mathbf{A^{2}\hat{x}^{r}}]'\mathbf{i}$. 
+
+Note that $\mathbf{A^{2}} = \mathbf{\hat{r}^{1}A^{n}\hat{s}^{1}}$, and  similarly  for $t$ repetitions of this procedures $\mathbf{A^{2t}} = [\mathbf{\hat{r}^{t}\cdots\hat{r}^{1}}]\mathbf{A^{n}}[\mathbf{\hat{s}^{1}\cdots\hat{s}^{t}}]$. Let $\mathbf{\hat{r}} = [\mathbf{\hat{r}^{t}\cdots\hat{r}^{1}}]$ and $\mathbf{\hat{s}} =  [\mathbf{\hat{s}^{1}\cdots\hat{s}^{t}}]$, thus $\mathbf{\hat{r}A\hat{s}}$ and the name of the "RAS" procedure is reveled. 
+
+Lastly, one must specify a value $\epsilon$ such that $[|\mathbf{u^{r}} - \mathbf{u^{t}}|]$ and $[|\mathbf{v^{r}} - \mathbf{v^{t}}|]$ are no more than $\epsilon$ and the iterative balancing may cease.
+
+
 **Gravity Model Formulations**
 
 Many versions of gravity model formulations have been proposed and explored for  estimating commodity flows between regions. The basic idea is that the flow of good $i$ from region $r$ to region $s$ can be looked upon as a function of 
