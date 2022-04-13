@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from rurec import ers_codes, cbp, pop
+from rurec import ers_codes, pop, cbp, bds
 from rurec.reseng.nbd import Nbd
 nbd = Nbd('rurec')
 ```
@@ -137,7 +137,7 @@ for ry in [1993, 2003, 2013, 'chng']:
     d = d.rename(columns={False: 'nonrural', True: 'rural'})
     d['all'] = d.sum(1)
     agg[rc] = d
-agg = pd.concat(agg, axis=1, names=['rural_defn', 'rural'])
+cbp_agg = agg = pd.concat(agg, axis=1, names=['rural_defn', 'rural'])
 ```
 
 ```{code-cell} ipython3
@@ -193,6 +193,45 @@ for ry, c in zip([1993, 2003, 2013, 'chng'], colors):
     t.plot(ax=ax, subplots=True, ylim=(0, 25), color=c, grid=True)
     
 fig.suptitle('Share of population, employment, establishments and payroll in rural areas, %');
+```
+
+## BDS
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('met')[['year', 'metro', 'firms', 'estabs', 'emp']]\
+    .query('metro in ["M", "N"]')
+df['rural'] = df['metro'].map({'N': 'rural', 'M': 'nonrural'})
+del df['metro']
+df = df.set_index(['year', 'rural'])
+df.columns.name = 'measure'
+df = df.stack().unstack('rural')
+df['all'] = df.sum(1)
+bds_agg = df
+```
+
+There are no decennial jumps in BDS series. Likely BDS is using a single revision of OMB definition, probably the latest.
+
+```{code-cell} ipython3
+:tags: []
+
+bds_agg['rural'].unstack().plot(grid=True, subplots=True, layout=(1, 3), figsize=(18, 4), title='Rural businesses in BDS');
+```
+
+```{code-cell} ipython3
+:tags: []
+
+idx = pd.IndexSlice
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+d = bds_agg.loc[idx[:, ['estabs', 'emp']], :].stack().unstack(['measure', 'rural'])
+d.columns = d.columns.to_flat_index()
+ax = d.add_suffix(' BDS').plot(color=colors[0], grid=True, subplots=True, layout=(2, 3), figsize=(18, 8), title='BDS vs CBP')
+
+d = cbp_agg['rural_2013'].loc[idx[:, ['est', 'emp']], :].stack().unstack(['measure', 'rural'])
+d.columns = d.columns.to_flat_index()
+d.add_suffix(' CBP').plot(ax=ax, color=colors[1], subplots=True);
 ```
 
 ## Infogroup

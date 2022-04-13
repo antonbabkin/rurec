@@ -237,7 +237,7 @@ There is a notable discontinuity between 1999 and 2000, visible both at state an
 df = pop()
 s = ['00'] + list(df.query('cty == "000"')['st'].sample(4))
 d = df.query('cty == "000" and st.isin(@s)').set_index(['year', 'st'])['pop'].unstack().sort_index()
-d.apply(lambda row: row / d.loc[2000, :], 1).plot(title='Population in US and random states, normalized to 1 in 2000', grid=True);
+d.apply(lambda row: row / d.loc[2000, :], 1).plot(title='Population in US and random states, normalized to 1 in 2000', grid=True, figsize=(9, 6));
 ```
 
 One likely explanation of the jump is that 1999 estimates, built from the 1990 base in the 1990-1999 file, were below actual population numbers later revealed by census, as can be seen in [this](https://www2.census.gov/programs-surveys/popest/tables/1990-2000/estimates-2000-change-1990-2000/2000c4-00.txt) report:
@@ -255,7 +255,7 @@ Notably, on county level the 2000 jump is not always present.
 df = pop()
 s = list(df.query('st == "55"')['cty'].sample(5))
 d = df.query('st == "55" and cty.isin(@s)').set_index(['year', 'cty'])['pop'].unstack().sort_index()
-d.apply(lambda row: row / d.loc[2000, :], 1).plot(title='Population in random Wisconsin counties, normalized to 1 in 2000', grid=True);
+d.apply(lambda row: row / d.loc[2000, :], 1).plot(title='Population in random Wisconsin counties, normalized to 1 in 2000', grid=True, figsize=(9, 6));
 ```
 
 +++ {"tags": []}
