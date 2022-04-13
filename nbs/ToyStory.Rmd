@@ -431,10 +431,9 @@ Toy_Phi_mat <- bdiag(Toy_Phi_mat_G, Toy_Phi_mat_H, Toy_Phi_mat_I)
 
 Simply put, at the core of our analysis lies the question: How similar are the inputs of Chicago to the outputs of Madison?
 
-Given only national level Input-Output tables (Make/Use tables, industry-by-industry, industry-by-commodity, and commodity-by-commodity total requirements tables, and commodity-by-industry direct requirements tables) and regional level industry activity in the form of employment, payroll, and number of establishments, we are left with a handful of  possible methods to derive an answer.
+Given only national level Input-Output tables (consisting of Make/Use tables, industry-by-industry, industry-by-commodity, and commodity-by-commodity total requirements tables, and commodity-by-industry direct requirements tables) and regional level industry activity (in the form of employment, payroll, and number of establishments), we are left with a handful of possible methods to derive an answer.
 
-Note that given an industry-by-industry BEA total requirements matrix, $\mathbf{L}$, we can derive an industry based technology, industry-by-industry direct requirements matrix, $\mathbf{A}$ from the accounting identity $\mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1}$.
-And total industry output, $\mathbf{x}$, is also exogenously obtainable from the BEA Make/Use tables, allowing the further derivation of the transactions matrix, $\mathbf{Z}$, from the accounting identity $\mathbf{A} = \mathbf{Z\hat{x}^{-1}}$.
+Note that given an industry-by-industry BEA total requirements matrix, $\mathbf{L}$, we can derive an industry based technology, industry-by-industry direct requirements matrix, $\mathbf{A}$ from the accounting identity $\mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1}$. And total industry output, $\mathbf{x}$, is also exogenously obtainable from the BEA Make/Use tables, allowing the further derivation of the transactions matrix, $\mathbf{Z}$, from the accounting identity $\mathbf{A} = \mathbf{Z\hat{x}^{-1}}$.
 
 *Possible Methodologies*
 
@@ -463,6 +462,8 @@ If we assume regional production recipes are identical then $\alpha^{r}_{ij} = 1
 * Yet another possible approach is to implement parts or all of a *multiregional input–output model*. The regional tables of an MRIO employ a regional *technical* coefficients matrix, $\mathbf{A^{r}}$. Under this paradigm, information regarding the region of origin is ignored. These transactions are denoted $z^{\cdot r}_{ij}$, with the coefficients estimated as $a^{r}_{ij} = \frac{z^{\cdot r}_{ij}}{x^{r}_{j}}$ where $\mathbf{A^{r}} = \left[ a^{r}_{ij} \right]$. In practice, estimates are can be made using a *product-mix approach*. This technique essentially uses detailed level national technical coefficients and detailed level regional outputs to produce regional coefficients at a less detailed summary level (from weighted averages of the national detailed coefficients). This approach may be feasible given the available data, however, the necessary agglomeration of industry classes is not ideal. Furthermore, this approach may extend into the realm of interregional table, which requires data on dollar flow of goods between regions, $z^{rs}_{i}$, irrespective of the sector of destination in the receiving region. Again, however, this extension is beyond the scope of the available data. 
 
 * The final standard approach is to implement a *gravity model formulation* to estimate commodity flows between regions. The *Gravity Model* estimates the flow of goods between regions as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$, and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. The relatively simplified gravity model specification is given by: $z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$ where $x^{r \cdot}_{i}$ is the “supply pool” of good $i$ in region $r$, $x^{\cdot s}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. In practice the interregional flows per industry $i$ are given by $[\mathbf{{x'}}_{i}\mathbf{x}_{i}](\mathbf{x}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$, where $\mathbf{Q} = (\mathbf{d \odot d})^{-1}$ and $\mathbf{d}$ is the great-circle distance matrix derived from longitude and latitude vector pairs from region centroid. This approach may be feasible given the available data, too, (again with harsh simplifying assumptions). 
+
+*Assumptions and Caveats*
 
 Note that strictly speaking, the $x^{r}_{j}$ terms throughout are specified as gross outputs of each sector in the region. In practice, however, these outputs are approximated through the use of employment, payroll, or number of establishments data, and they are not technically equivalent substitutes. Furthermore, the "supply pool" and "demand pool" total outputs called for in in the simple Gravity specification are even greater abstractions. First we assume $\alpha^{r}_{ij} = 1$ such that $a^{r}_{ij} = a^{n}_{ij}$, then assuming regional industry activity is equivalent to regional gross output $x^{r}_{j}$ and regional final demand is approximated by a single region model (i.e., $\mathbf{f^{r}} = \mathbf{(I} - \mathbf{A^{rr})x^{r}}$), which restricts by definition regional supply for good $i$ to be equivalent to regional demand for good $i$ (i.e., $x^{r \cdot}_{i} = x^{\cdot r}_{i}$). Note in fact, no national accounting data are needed for this gravity approach, one only needs regional industry activity and the impedance function, $Q^{rs}_{i}$, which is given by $e^{-d^{rs}}$ (or $1/(d^{rs})^2$) where $d^{rs}$ is the great-circle distance between each region.
 
@@ -525,10 +526,12 @@ for (i in 1:Industry_Count){
 }
 rownames(Toy_LQ) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 colnames(Toy_LQ) <- c("AllElse", "Brown", "Cook", "Dane")
-kable(round(Toy_LQ, 4), caption = "Simple Location Quotients") 
 
 
-Toy_LQc <-  matrix(0, nrow=Industry_Count, ncol = Region_Count)
+print("Simple Location Quotients")
+round(Toy_LQ, 4)
+
+Toy_LQc <-  matrix(0, nrow = Industry_Count, ncol = Region_Count)
 for (i in 1:Industry_Count){
  for (j in 1:Region_Count){
   if (Toy_LQ[i,j] > 1){
@@ -539,11 +542,20 @@ for (i in 1:Industry_Count){
   }
  }
 }
+rownames(Toy_LQc) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_LQc) <- c("AllElse", "Brown", "Cook", "Dane")
+#round(Toy_LQc,  4)
 
 
-Toy_Dir_LQ <- diag(c(Toy_LQc)) %*% Toy_Direct_mat_r
-#kable(round(Toy_Dir_LQ[1:5,1:5], 4), caption = "Regional Direct Requirements (Simple LQ) - AllElse") 
-#Toy_Dir_LQ %>% round(4)
+Toy_Dir_LQ <-  c()
+for (i in 1:ncol(Toy_LQc)){
+  Toy_Dir_LQ[[i]] <- (diag(Toy_LQc[,i]) %*% Toy_Direct_mat) %>% round(4)
+  rownames(Toy_Dir_LQ[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+}
+names(Toy_Dir_LQ) <- c("AllElse", "Brown", "Cook", "Dane")
+print("Regionial Direct Requirement Coeffecients from Simple Location Quotients")
+Toy_Dir_LQ
+
 ```
 
 ```{r  toyCLQ}
@@ -552,67 +564,76 @@ Toy_Dir_LQ <- diag(c(Toy_LQc)) %*% Toy_Direct_mat_r
 
 #This allows for differing modifiers within a given row of the national matrix; that is, it allows for differing cell-by-cell adjustments within An rather than uniform adjustments along each row.
 
-#Toy_CILQ <- kronecker(diag(1, Industry_Count), Toy_LQ) %*% diag(1/c(t(Toy_LQ)), length(c(t(Toy_LQ))))
-#for (i in 1:ncol(Toy_LQ)){assign(paste0('Toy_CILQ_', colnames(Toy_LQ)[i]), Toy_LQ[,i] %*% t(1/Toy_LQ[,i]) )}
-
 Toy_CLQ <-  c()
  for (i in 1:Region_Count){
-  Toy_CLQ[[i]] <- Toy_LQ[,i] %*% t(1/Toy_LQ[,i])
+  Toy_CLQ[[i]] <- (Toy_LQ[,i] %*% t(1/Toy_LQ[,i])) %>% round(4)
   rownames(Toy_CLQ[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
  }
 names(Toy_CLQ) <- c("AllElse", "Brown", "Cook", "Dane")
-#kable(Toy_CLQ, digits = 4, caption = "Cross-Industry Location Quotients") 
  print("Cross-Industry Location Quotients")
-Toy_CLQ
-
-Toy_CLQc <- bdiag(Toy_CLQ)
-
-for (i in 1:nrow(Toy_CLQc)){
- for (j in 1:ncol(Toy_CLQc)){
-  if (Toy_CLQc[i,j] > 1){
-   Toy_CLQc[i,j] <- 1
+ Toy_CLQ
+ 
+Toy_CLQc <- Toy_CLQ
+for (r in 1:length(Toy_CLQc)){
+for (i in 1:nrow(Toy_CLQc[[r]])){
+ for (j in 1:ncol(Toy_CLQc[[r]])){
+  if (Toy_CLQc[[r]][i,j] > 1){
+   Toy_CLQc[[r]][i,j] <- 1
   }
   else{
-   Toy_CLQc[i,j] <- Toy_CLQc[i,j]
+   Toy_CLQc[[r]][i,j] <- Toy_CLQc[[r]][i,j]
   }
  }
 }
+}
 
-Toy_Dir_CLQ <- Toy_CLQc * Toy_Direct_mat_r
-#Toy_Dir_CLQ  %>% round(4)
+
+Toy_Dir_CLQ <-  c()
+for (i in 1:length(Toy_CLQc)){
+  Toy_Dir_CLQ[[i]] <- (Toy_CLQc[[i]] * Toy_Direct_mat) %>% round(4)
+}
+names(Toy_Dir_CLQ) <- c("AllElse", "Brown", "Cook", "Dane")
+print("Regionial Direct Requirement Coeffecients from Cross-Industry Location Quotients")
+Toy_Dir_CLQ
 
 ```
 
 ```{r  toySLQ}
 ############ Semilogarithmic Location Quotient
-#for (i in 1:ncol(Toy_LQ)){assign(paste0('Toy_SLQ_', colnames(Toy_LQ)[i]), Toy_LQ[,i] %*% t(1/(log2(1 + Toy_LQ[,i]))) )}
 
 Toy_SLQ <-  c()
  for (i in 1:Region_Count){
-  Toy_SLQ[[i]] <- Toy_LQ[,i] %*% t(1/(log2(1 + Toy_LQ[,i])))
+  Toy_SLQ[[i]] <- (Toy_LQ[,i] %*% t(1/(log2(1 + Toy_LQ[,i])))) %>% round(4)
   rownames(Toy_SLQ[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
  }
 names(Toy_SLQ) <- c("AllElse", "Brown", "Cook", "Dane")
-
-#kable(Toy_SLQ, digits =4, caption = "Semilogarithmic Location Quotients")
 print("Semilogarithmic Location Quotients")
 Toy_SLQ
 
-Toy_SLQc <- bdiag(Toy_SLQ)
 
-for (i in 1:nrow(Toy_SLQc)){
- for (j in 1:ncol(Toy_SLQc)){
-  if (Toy_SLQc[i,j] > 1){
-   Toy_SLQc[i,j] <- 1
+Toy_SLQc <- Toy_SLQ
+for (r in 1:length(Toy_SLQc)){
+for (i in 1:nrow(Toy_SLQc[[r]])){
+ for (j in 1:ncol(Toy_SLQc[[r]])){
+  if (Toy_SLQc[[r]][i,j] > 1){
+   Toy_SLQc[[r]][i,j] <- 1
   }
   else{
-   Toy_SLQc[i,j] <- Toy_SLQc[i,j]
+   Toy_SLQc[[r]][i,j] <- Toy_SLQc[[r]][i,j]
   }
  }
 }
+}
 
-Toy_Dir_SLQ <- Toy_SLQc * Toy_Direct_mat_r
-#Toy_Dir_SLQ  %>% round(4)
+
+Toy_Dir_SLQ <-  c()
+for (i in 1:length(Toy_SLQc)){
+  Toy_Dir_SLQ[[i]] <- (Toy_SLQc[[i]] * Toy_Direct_mat) %>% round(4)
+}
+names(Toy_Dir_SLQ) <- c("AllElse", "Brown", "Cook", "Dane")
+print("Regionial Direct Requirement Coeffecients from Semilogarithmic Location Quotients")
+Toy_Dir_SLQ
+
 ```
 
 ```{r  toyFLQ}
@@ -621,11 +642,9 @@ Toy_Dir_SLQ <- Toy_SLQc * Toy_Direct_mat_r
 Toy_FLQ_delta <- .3
 Toy_lambda <- (log2(1 + (colSums(Toy_Xemp_mat)/sum(Toy_Xemp_mat))))^(Toy_FLQ_delta)
 
-#for (i in 1:ncol(Toy_LQ)){assign(paste0('Toy_FLQ_', colnames(Toy_LQ)[i]), Toy_lambda[i] * (Toy_LQ[,i] %*% t(1/(log2(1 + Toy_LQ[,i])))) )}
-
 Toy_FLQ <-  c()
  for (i in 1:Region_Count){
-  Toy_FLQ[[i]] <- (Toy_LQ[,i] %*% t(1/Toy_LQ[,i])) * Toy_lambda[i]
+  Toy_FLQ[[i]] <- ((Toy_LQ[,i] %*% t(1/Toy_LQ[,i])) * Toy_lambda[i]) %>% round(4)
   rownames(Toy_FLQ[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
  }
 names(Toy_FLQ) <- c("AllElse", "Brown", "Cook", "Dane")
@@ -633,50 +652,64 @@ names(Toy_FLQ) <- c("AllElse", "Brown", "Cook", "Dane")
 print("Flegg Location Quotients")
 Toy_FLQ 
 
-Toy_FLQc <- bdiag(Toy_FLQ)
 
-for (i in 1:nrow(Toy_FLQc)){
- for (j in 1:ncol(Toy_FLQc)){
-  if (Toy_FLQc[i,j] > 1){
-   Toy_FLQc[i,j] <- 1
+Toy_FLQc <- Toy_FLQ
+for (r in 1:length(Toy_FLQc)){
+for (i in 1:nrow(Toy_FLQc[[r]])){
+ for (j in 1:ncol(Toy_FLQc[[r]])){
+  if (Toy_FLQc[[r]][i,j] > 1){
+   Toy_FLQc[[r]][i,j] <- 1
   }
   else{
-   Toy_FLQc[i,j] <- Toy_FLQc[i,j]
+   Toy_FLQc[[r]][i,j] <- Toy_FLQc[[r]][i,j]
   }
  }
 }
+}
 
-Toy_Dir_FLQ <- Toy_FLQc * Toy_Direct_mat_r
-#Toy_Dir_FLQ %>% round(4)
+
+Toy_Dir_FLQ <-  c()
+for (i in 1:length(Toy_FLQc)){
+  Toy_Dir_FLQ[[i]] <- (Toy_FLQc[[i]] * Toy_Direct_mat) %>% round(4)
+}
+names(Toy_Dir_FLQ) <- c("AllElse", "Brown", "Cook", "Dane")
+print("Regionial Direct Requirement Coeffecients from Flegg Location Quotients")
+Toy_Dir_FLQ
+
 ```
 
 ```{r  toyAFLQ}
 ############ Augmented Flegg Location Quotient
 
-Toy_LQa <- c()
-for (i in 1:length(Toy_LQ)){
- if (c(Toy_LQ)[i] > 1){
-  Toy_LQa[i] <- log2(1 + Toy_LQ[i])
+Toy_LQa <- Toy_LQ
+for (i in 1:nrow(Toy_LQa)){
+for (j in 1:ncol(Toy_LQa)){
+  if (Toy_LQ[i,j] > 1){
+  Toy_LQa[i,j] <- log2(1 + Toy_LQ[i,j])
  }
  else{
-  Toy_LQa[i] <- 1
+  Toy_LQa[i,j] <- 1
  }
 }
-
-Toy_AFLQ <- diag(Toy_LQa) %*% bdiag(Toy_FLQ)
+}
+   
+Toy_AFLQ <- Toy_FLQ
+for (r in 1:length(Toy_FLQ)){
+  Toy_AFLQ[[r]] <- (Toy_FLQ[[r]] %*% diag(Toy_LQa[,r])) %>% round(4)
+  colnames(Toy_AFLQ[[r]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+}
 
 print("Augmented Flegg Location Quotients")
-print("AllElse")
-Toy_AFLQ[1:5,1:5] %>% round(4)
-print("Brown")
-Toy_AFLQ[6:10,6:10] %>% round(4)
-print("Cook")
-Toy_AFLQ[11:15,11:15] %>% round(4)
-print("Dane")
-Toy_AFLQ[16:20,16:20] %>% round(4)
+Toy_AFLQ 
 
-Toy_Dir_AFLQ <- Toy_AFLQ * Toy_Direct_mat_r
-#Toy_Dir_AFLQ %>% round(4)
+
+Toy_Dir_AFLQ <-  c()
+for (i in 1:length(Toy_AFLQ)){
+  Toy_Dir_AFLQ[[i]] <- (Toy_AFLQ[[i]] * Toy_Direct_mat) %>% round(4)
+}
+names(Toy_Dir_FLQ) <- c("AllElse", "Brown", "Cook", "Dane")
+print("Regionial Direct Requirement Coeffecients from Augmented Flegg Location Quotients")
+Toy_Dir_AFLQ
 
 ```
 
@@ -739,8 +772,10 @@ Inf -> Exp >1 & Imp > 1
 
 ```{r  toyMAPE}
 #MAPE
+
+
 local({ 
-  MAT <- Toy_Dir_LQ
+  MAT <- bdiag(Toy_Dir_LQ)
   n <- 4
   Toy_MAPE_mat  <<- c()
  for (i in seq(from = 1, to = length(Toy_LQ), by = 5 )){
@@ -890,16 +925,57 @@ The Relative and Absolute "Regional Typology Coefficients", $\phi$, portray a re
 The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alternate procedure to estimate the volume and sensitivity of the coefficient proportions. In this example, Madison (and Green Bay for that matter) is dominated by the "pull" of Chicago. 
  
 
+*A nested and hierarchical approach*
+
+We have shown that it is feasible to construct regional-level technical coefficients matrix from a national-level Leontief matrix and regional industry employment. This then brings about some possible extensions. One is the possibility of performing a multistage regionalization, whereby first or second-level administrative divisions are used to establish a course regionalization. Then either place specific technical coefficients can be derived using the administrative division technical coefficients or the administrative division regionalization can be used as the basis for constructing interregional compatibility. 
+
+To derive an administrative technical coefficients matrix, we aggregate the place specific regional industry employment to the administrative level. Let $\mathbf{X^{r}}$ be the industry-by-region measures economic activity. If all $j$ regions make up the desired administrative division, then the aggregate administrative measure of economic activity is given by $\mathbf{x^{R}} = \mathbf{X^{r}i}$, i.e., the row sums of the industry-by-region economic activity matrix. The administrative division technical coefficients matrix can then be derived using a Location Quotient approach. The simple administrative division location quotient is given by: 
+
+$$LQ^{R}_{i} = \left( \frac{x^{R}_{i} / x^{R}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} {x^{n}_{i} / x^{n}} \right) $$
+And the administrative technical coefficients matrix is generated by:
+$$
+a^{RR}_{ij} = \left\{ 
+\begin{align*}
+(LQ^{R}_{i})a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} < 1 \\
+a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} \geq 1
+\end{align*}
+\right\}
+$$
+From here we may iterate and derive regional technical coefficients from the administrative technical coefficients matrix using a location quotient approach. 
+
+The second stage simple regional division location quotient is given by: 
+
+$$\widetilde{LQ}^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{R}_{i} / x^{R}} \right) = \left( \frac{x^{r}_{i} / x^{r}} {(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} \right)  $$
+
+And the administrative technical coefficients matrix is generated by:
+$$
+\widetilde{a}^{rr}_{ij} = \left\{ 
+\begin{align*}
+(\widetilde{LQ}^{r}_{i})a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} < 1 \\
+a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} \geq 1
+\end{align*}
+\right\}
+$$
+
+We can then examine what, if any, functional differences exist between a deriving regional coefficients directly from the national level or from a two stage, national  to administrative division to regional approach. Note, under the simple LQ approach, whenever $LQ \geq 1  \vdash a^{n}_{ij} = a^{rr}_{ij} = a^{RR}_{ij} = \widetilde{a}^{rr}_{ij}$. 
+
+
+In this example, $a^{n}_{ij}$ is given by: 
+
+`r print(round(Toy_Direct_mat, 4))`
+
+And $a^{rr}_{ij} \,\forall r $ is given by: 
+
+
+
+
+Suppose $R = \{\text{Brown, Cook, Dane}\}$, such that $a^{RR}_{ij}$ 
 
 
 
 
 
-
-
-
-
-
+$$LQ^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right) $$
 
 
 
