@@ -187,15 +187,11 @@ all(all(PM) & (diag(diag(nrow(Toy_A_mat)) - Toy_A_mat) > 0) & (det(diag(nrow(Toy
 
 
 
-
-
-
-### Project Trail
-
+### Toy TUC 
 
 **Retrospective** 
 
-What are absolute and relative "rural use coefficients" exactly?
+One objective of the project narative is to quantify and match the economic connectedness of Micropolitian and Urban clusters to large Metropolitan economies. This is done by analyzing how well the commodity output mix of Micropolitian and Urban clusters to the commodity uses of industries in large Metropolitan cores.
 
 In practice, for two *primary ECAs* $A$ and $B$, we construct the absolute rural use coefficients as:
 
@@ -211,36 +207,11 @@ $\displaystyle \rho^{r}_{A} = \frac{\alpha^{r}_{A}} {\sum^{n}_{j=1} s_{Aj}}$,
 $\displaystyle \rho^{r}_{B} = \frac{\alpha^{r}_{B}} {\sum^{n}_{j=1} s_{Bj}}$
 </p>
 
-But what do these coefficients mean? 
 
 In the absolute specification, the numerator is a uniform modification of the elements in a row of the national *Use* matrix. The national value of purchases of commodity $c$ by each industry $j$ weighted by the regional value of "sales" by each industry $j$ (CBP will offer values of county-level industry employment, Q1 payroll, and annual payroll). This is divided by the total intermediate value of commodity $c$ at the national level.
 
 The relative specification then takes the absolute coefficient divided by the sum of the regional "sales" by each industry $j$. 
 
-This procedure is somewhat akin to those of a single-region IO through the application of *regional supply percentages* $p^{r}_{i}$ to estimate a matrix showing inputs from firms in the region to production in that region i.e., a regional technical coefficients matrix. Where $\mathbf{A^{rr} = \hat{p}^{r}A}$.
-
-
-Here the gravity is defined as the relative proportions for each coefficient across the two regions.
-
-The basic idea of a *Gravity Model* is that the flow of good $i$ from region $r$ to region $s$ can be looked upon as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$ ,and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. Leontief and Strout (1963) suggested the relatively simplified gravity model specification:
-
-$$ z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$$
-where $x^{r \cdot}_{i}$ is the “supply pool” of good $i$ in region $r$, $x^{\cdot s}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated.
-
-The most optimistic scenario is that values of $x^{r \cdot}_{i}$, $x^{\cdot s}_{i}$, $x^{\cdot \cdot}_{i}$,  and $z^{rs}_{i}$ are known from some base period or for some subset of transportation data. In that case, one can evaluate the parameter $Q^{rs}_{i}$ from those data, as
-
-$$Q^{rs}_{i} = \frac{\bar{z}^{rs}_{i} \bar{x}^{\cdot \cdot}_{i}} {\bar{x}^{r \cdot}_{i} \bar{x}^{\cdot s}_{i}}$$
-
-where overbars indicate known values.
-
-
-**Total Use Objective** 
-
-One objective of the project is to use *Total Use Coefficients* to quantify and match the economic connectedness of Micropolitian and Urban clusters to large Metropolitan economies. This is done by analyzing how well the commodity output mix of Micropolitian and Urban clusters to the commodity uses of industries in large Metropolitan cores.
-
-
-
-### Toy TUC 
 
 **Toy Model**
 
@@ -429,11 +400,9 @@ Toy_Phi_mat <- bdiag(Toy_Phi_mat_G, Toy_Phi_mat_H, Toy_Phi_mat_I)
 
 "Quantify the economic connectedness of places through production supply chains."
 
-Simply put, at the core of our analysis lies the question: How similar are the inputs of Chicago to the outputs of Madison?
+Simply put at the core of our analysis lies the question: How similar are the inputs of Chicago to the outputs of Madison?
 
 Given only national level Input-Output tables (consisting of Make/Use tables, industry-by-industry, industry-by-commodity, and commodity-by-commodity total requirements tables, and commodity-by-industry direct requirements tables) and regional level industry activity (in the form of employment, payroll, and number of establishments), we are left with a handful of possible methods to derive an answer.
-
-Note that given an industry-by-industry BEA total requirements matrix, $\mathbf{L}$, we can derive an industry based technology, industry-by-industry direct requirements matrix, $\mathbf{A}$ from the accounting identity $\mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1}$. And total industry output, $\mathbf{x}$, is also exogenously obtainable from the BEA Make/Use tables, allowing the further derivation of the transactions matrix, $\mathbf{Z}$, from the accounting identity $\mathbf{A} = \mathbf{Z\hat{x}^{-1}}$.
 
 *Possible Methodologies*
 
@@ -441,9 +410,14 @@ Seemingly, our first task is to "regionalize" the national level I/O accounts do
 
 * The most comprehensive approach is to execute an *interregional input–output (IRIO)* model. However, this approach really only serves as a platonic abstraction given the vast and detailed necessary exogenous inputs. 
 
-* One possible alternative approach might be to estimate *regional supply percentages*, $p^{r}_{i}$. This approach requires knowledge of total regional output of each sector, $x^{r}_{i}$, and the exports of the product of each sector from the region, $e^{r}_{i}$, and the imports of all goods into the region, $m^{r}_{i}$. With knowledge of *regional supply percentages* one can scale the national level *direct/input requirements matrix* to estimate a regional *input requirements matrix*, $\mathbf{A^{rr}} = \mathbf{\hat{p}^{r}A}$. Clearly, this too is beyond the scope of the available data. 
+* One possible approach is to implement parts or all of a *multiregional input–output model*. The regional tables of an MRIO employ a regional *technical* coefficients matrix, $\mathbf{A^{r}}$. Under this paradigm, information regarding the region of origin is ignored. These transactions are denoted $z^{\cdot r}_{ij}$, with the coefficients estimated as $a^{r}_{ij} = \frac{z^{\cdot r}_{ij}}{x^{r}_{j}}$ where $\mathbf{A^{r}} = \left[ a^{r}_{ij} \right]$. In practice, estimates are can be made using a *product-mix approach*. This technique essentially uses detailed level national technical coefficients and detailed level regional outputs to produce regional coefficients at a less detailed summary level (from weighted averages of the national detailed coefficients). This approach may be feasible given the available data, however, the necessary agglomeration of industry classes is not ideal. Furthermore, extending this approach  into the realm of interregional tables,  requires data on dollar flow of goods between regions, $z^{rs}_{i}$, irrespective of the sector of destination in the receiving region. Again, however, this extension is beyond the scope of the available data. 
 
-* However in this manner, when trying to estimate $a^{rr}_{ij}$ from national data, one can generalize the problem as a two step process of: (1) estimate a regional technical coefficient, $a^{r}_{ij}$, from the corresponding national coefficient, $a^{n}_{ij}$, and then (2) estimate the regional input coefficient, $a^{rr}_{ij}$, as some proportion of the regional technical coefficient; that is, $a^{rr}_{ij} = p^{r}_{ij}a^{r}_{ij}$ (where  $0 \leq p^{r}_{ij} \leq 1$). 
+* Another possible approach is to employ the *RAS technique*, however, instead of the typical deployment for updating coefficients across time, we may update input coefficients across space. This approach requires $3n$ sets of information for the location of interest. These are, *total gross outputs*, $x^{r}_{j}$, *total interindustry sales*, by sector $u_{i} = \sum^{n}_{j=1} z^{r}_{ij}$, and *total interindustry purchases*, by sector $v_{i} = \sum^{n}_{i=1} z^{r}_{ij}$. But even this slimmed down approach is still beyond the scope of the data.
+
+* Yet another  possible alternative approach might be to estimate *regional supply percentages*, $p^{r}_{i}$. This approach requires knowledge of total regional output of each sector, $x^{r}_{i}$, and the exports of the product of each sector from the region, $e^{r}_{i}$, and the imports of all goods into the region, $m^{r}_{i}$. With knowledge of *regional supply percentages* one can scale the national level *direct/input requirements matrix* to estimate a regional *input requirements matrix*, $\mathbf{A^{rr}} = \mathbf{\hat{p}^{r}A}$. Clearly, this too is beyond the scope of the available data. 
+
+
+However in this manner, when trying to estimate $a^{rr}_{ij}$ from national data, one can generalize the problem as a two step process of: (1) estimate a regional technical coefficient, $a^{r}_{ij}$, from the corresponding national coefficient, $a^{n}_{ij}$, and then (2) estimate the regional input coefficient, $a^{rr}_{ij}$, as some proportion of the regional technical coefficient; that is, $a^{rr}_{ij} = p^{r}_{ij}a^{r}_{ij}$ (where  $0 \leq p^{r}_{ij} \leq 1$). 
 
 The procedure for estimating $a^{rr}_{ij}$ from $a^{n}_{ij}$ is therefore: 
 
@@ -453,15 +427,11 @@ The procedure for estimating $a^{rr}_{ij}$ from $a^{n}_{ij}$ is therefore:
 
 If we assume regional production recipes are identical then $\alpha^{r}_{ij} = 1$ and $a^{r}_{ij} = a^{n}_{ij}$ for all $i$ and $j$. Or if we assume each regional purchaser buys the same proportion of inputs from within the region, then $\beta^{r}_{ij} = p^{r}_{i}$ for all $i$. 
 
-+ Given this structure, and assuming $a^{r}_{ij} = a^{n}_{ij}$, we may propose various functional estimates of $\beta^{r}_{ij}$ (i.e., location quotients) to derive $a^{rr}_{ij}$ from $a^{n}_{ij}$. The simplest of which only requires knowledge of gross output of sector $i$ in region $r$ and total output of all sectors in the region, $x^{r}_{i}$ and $x^{r}$, along with these values at the national level: $LQ^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{x^{r}_{i} / x^{n}_{i}} {x^{r} / x^{n}} \right)$. Furthermore, many regional analysts will use employment rather than output as an alternative to the relevant measures of regional and national activity. This is a feasible option given the available data.
+* Given this structure, and assuming $a^{r}_{ij} = a^{n}_{ij}$, we may propose various functional estimates of $\beta^{r}_{ij}$ to derive $a^{rr}_{ij}$ from $a^{n}_{ij}$, i.e., *Location Quotients*. The $LQ$s only require knowledge of gross output of sector $i$ in region $r$ and total output of all sectors in the region, $x^{r}_{i}$ and $x^{r}$, along with these values at the national level: $LQ^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right)$. Furthermore, many regional analysts will use employment rather than output as an alternative to the relevant measures of regional and national activity. This is a feasible option given the available data.
 
-* Another possible approach is to employ *Regional Purchase Coefficients*. The $RPC$ is defined as the proportion of regional demand for that sector’s output that is fulfilled from regional production. Much in the same way that location quotients operate, we may designate $\beta^{r}_{ij} = p^{r}_{i} = RPC^{r}_{i}$, where $RPC^{r}_{i} = z^{rr}_{i} / (z^{rr}_{i} + z^{sr}_{i}) = 1/[1 + 1/(z^{rr}_{i}/z^{sr}_{i})]$. The *relative shipment* term $z^{rr}_{i}/z^{sr}_{i}$, may itself be estimated from published sources such as *Census of Transportation*, unfortunately these are beyond the current scope of available data. 
+* Another possible approach is to employ *Regional Purchase Coefficients*. The $RPC$ is defined as the proportion of regional demand for that sector’s output that is fulfilled from regional production. Much in the same way that location quotients operate, we may designate $\beta^{r}_{ij} = p^{r}_{i} = RPC^{r}_{i}$, where $RPC^{r}_{i} = z^{rr}_{i} / (z^{rr}_{i} + z^{sr}_{i}) = 1/[1 + 1/(z^{rr}_{i}/z^{sr}_{i})]$. The *relative shipment* term $z^{rr}_{i}/z^{sr}_{i}$, may itself be estimated from published sources such as *Census of Transportation*, unfortunately these are beyond the current scope and available data. 
 
-* Another possible approach is to employ the *RAS technique*, however, instead of the typical deployment for updating coefficients across time, we may update input coefficients across space. This approach requires $3n$ sets of information for the location of interest. These are, *total gross outputs*, $x^{r}_{j}$, *total interindustry sales*, by sector $u_{i} = \sum^{n}_{j=1} z^{r}_{ij}$, and *total interindustry purchases*, by sector $v_{i} = \sum^{n}_{i=1} z^{r}_{ij}$. But even this slimmed down approach is still beyond the scope of the data.
-
-* Yet another possible approach is to implement parts or all of a *multiregional input–output model*. The regional tables of an MRIO employ a regional *technical* coefficients matrix, $\mathbf{A^{r}}$. Under this paradigm, information regarding the region of origin is ignored. These transactions are denoted $z^{\cdot r}_{ij}$, with the coefficients estimated as $a^{r}_{ij} = \frac{z^{\cdot r}_{ij}}{x^{r}_{j}}$ where $\mathbf{A^{r}} = \left[ a^{r}_{ij} \right]$. In practice, estimates are can be made using a *product-mix approach*. This technique essentially uses detailed level national technical coefficients and detailed level regional outputs to produce regional coefficients at a less detailed summary level (from weighted averages of the national detailed coefficients). This approach may be feasible given the available data, however, the necessary agglomeration of industry classes is not ideal. Furthermore, this approach may extend into the realm of interregional table, which requires data on dollar flow of goods between regions, $z^{rs}_{i}$, irrespective of the sector of destination in the receiving region. Again, however, this extension is beyond the scope of the available data. 
-
-* The final standard approach is to implement a *gravity model formulation* to estimate commodity flows between regions. The *Gravity Model* estimates the flow of goods between regions as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$, and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. The relatively simplified gravity model specification is given by: $z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$ where $x^{r \cdot}_{i}$ is the “supply pool” of good $i$ in region $r$, $x^{\cdot s}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. In practice the interregional flows per industry $i$ are given by $[\mathbf{{x'}}_{i}\mathbf{x}_{i}](\mathbf{x}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$, where $\mathbf{Q} = (\mathbf{d \odot d})^{-1}$ and $\mathbf{d}$ is the great-circle distance matrix derived from longitude and latitude vector pairs from region centroid. This approach may be feasible given the available data, too, (again with harsh simplifying assumptions). 
+* The final standard approach is to implement a *Gravity Model* formulation to estimate commodity flows between regions. The *Gravity Model* estimates the flow of goods between regions as a function of (1) some measure of the total output of $i$ in $r$, $x^{r}_{i}$, (2) some measure of the total purchases of $i$ in $s$, $x^{s}_{i}$, and (3) the distance (as a measure of “impedance”) between the two regions, $d^{rs}$. The relatively simplified gravity model specification is given by: $z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$ where $x^{r \cdot}_{i}$ is the “supply pool” of good $i$ in region $r$, $x^{\cdot s}_{i}$ is the “demand pool” of good $i$ in region $s$, $x^{\cdot \cdot}_{i}$ is the total production of commodity $i$ in the system and $Q^{rs}_{i}$ is a parameter to be estimated. In practice the interregional flows per industry $i$ are given by $[\mathbf{{x'}}_{i}\mathbf{x}_{i}](\mathbf{x}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$, where $\mathbf{Q} = (\mathbf{d \odot d})^{-1}$ and $\mathbf{d}$ is the great-circle distance matrix derived from longitude and latitude vector pairs from region centroid. This approach may be feasible given the available data, too, (again with harsh simplifying assumptions). 
 
 *Assumptions and Caveats*
 
@@ -469,7 +439,9 @@ Note that strictly speaking, the $x^{r}_{j}$ terms throughout are specified as g
 
 ### Exposé
 
-*Location Quotients*
+Note that given an industry-by-industry BEA total requirements matrix, $\mathbf{L}$, we can derive an industry based technology, industry-by-industry direct requirements matrix, $\mathbf{A}$ from the accounting identity $\mathbf{L} = (\mathbf{I} - \mathbf{A})^{-1}$. And total industry output, $\mathbf{x}$, is also exogenously obtainable from the BEA Make/Use tables, allowing the further derivation of the transactions matrix, $\mathbf{Z}$, from the accounting identity $\mathbf{A} = \mathbf{Z\hat{x}^{-1}}$.
+
+*Data*
 
 ```{r  toyBaseData}
 
@@ -484,18 +456,26 @@ Toy_Total_mat <-  matrix(c(1.2523,	0.0143,	0.0055,	0.0276,	0.0892,
 rownames(Toy_Total_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 colnames(Toy_Total_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 
-kable(Toy_Total_mat, caption = "Total Requirements Table ( Leontief inverse )") 
+#kable(Toy_Total_mat, caption = "Total Requirements Table ( Leontief inverse )") 
+print("Total Requirements Table (Leontief inverse)")
+Toy_Total_mat
 
 Toy_Direct_mat <- diag(ncol(Toy_Total_mat)) - solve(Toy_Total_mat)
 rownames(Toy_Direct_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 colnames(Toy_Direct_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 
-kable(round(Toy_Direct_mat, 4), caption = "Direct Requirements Table (input coeffecients / structural matrix / national technical coeffecients)") 
+#kable(round(Toy_Direct_mat, 4), caption = "Direct Requirements Table (input coefficients / structural matrix / national technical coefficients)") 
+print("Direct Requirements Table (input coefficients / structural matrix / national technical coefficients)")
+Toy_Direct_mat %>% round(4)
 
 Toy_Total_Industry_Output <- c(263919, 171317, 244999, 708461, 3883386)
 
 Toy_Transactions_mat <- round(Toy_Direct_mat %*%  diag(Toy_Total_Industry_Output), 2)
 colnames(Toy_Transactions_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+
+print("Interindustry Transactions Table")
+Toy_Transactions_mat %>% round(4)
+
 
 Region_Count <- 4
 
@@ -507,12 +487,15 @@ Toy_Xemp_mat <-  matrix(c(500, 13, 100, 50,
 
 rownames(Toy_Xemp_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 colnames(Toy_Xemp_mat) <- c("AllElse", "Brown", "Cook", "Dane")
-kable(Toy_Xemp_mat, caption = "Regional Industry-Employment Table") 
-
+#kable(Toy_Xemp_mat, caption = "Regional Industry-Employment Table") 
+print("Regional Industry-Employment Table" )
+Toy_Xemp_mat
 
 Toy_Direct_mat_r <- kronecker(diag(1, Region_Count), Toy_Direct_mat)
 
 ```
+
+*Location Quotients*
 
 ```{r  toyLQ}
 
@@ -707,13 +690,13 @@ Toy_Dir_AFLQ <-  c()
 for (i in 1:length(Toy_AFLQ)){
   Toy_Dir_AFLQ[[i]] <- (Toy_AFLQ[[i]] * Toy_Direct_mat) %>% round(4)
 }
-names(Toy_Dir_FLQ) <- c("AllElse", "Brown", "Cook", "Dane")
+names(Toy_Dir_AFLQ) <- c("AllElse", "Brown", "Cook", "Dane")
 print("Regionial Direct Requirement Coeffecients from Augmented Flegg Location Quotients")
 Toy_Dir_AFLQ
 
 ```
 
-Note Each Location Quotient is a different estimate of the regional supply proportion of good $i$, which in conjunction with the national-level Direct Requirements matrix, one can estimate an *intra*regional Direct Requirements or input matrix. 
+Each Location Quotient is a different estimate of the regional supply proportion of good $i$. Using a Location Quotient in conjunction with the national-level Direct Requirements matrix, one can estimate an *intra*regional Direct Requirements (input/ technical coefficients) matrix. 
 
 
 
@@ -722,6 +705,8 @@ Note Each Location Quotient is a different estimate of the regional supply propo
 However, to get back to the central question: How similar are the inputs of Chicago to the outputs of Madison? we may only need to look as far as the Location Quotients themselves. We have established that if $LQ_{i}^{r} > 1$, then industry $i$ is concentrated in region $r$ relative to the nation. As such we can expect all demand of good $i$ to be satisfied regionally and regional surplus will be exported to other less concentrated regions. Similarly, if $LQ_{i}^{r} < 1$, then industry $i$ is less concentrated in region $r$ relative to the nation. Thus if we look for industries in Madison where $LQ_{i}^{r} > 1$, **and** in Chicago where $LQ_{i}^{r} < 1$, we may use this matching to address the central question.  
 
 For example, the Fiber and Grains simple LQ for Dane County (i.e., Madison) are both greater than 1. Similarly, only the Fiber simple LQ for Brown County (i.e., Green Bay), and only the Grain simple LQ for All Else is less than 1, making either only a partial partner. However, the Fiber and Grains simple LQ for Cook County (i.e., Chicago) are both less than 1, implying it is the strongest sink and best matched for using goods for which Madison is concentrated.  
+
+
 
 ```{r  toyOverlay}
 
@@ -750,14 +735,16 @@ for (i in 1:Industry_Count){
  }
 }
 
-print("Sub-industry SLQ Import/Export Compatibility")
-Toy_export/Toy_import
+print("Sub-industry CLQ Import/Export Compatibility - Madison as Exporter, Chicago as Importer")
+(Toy_export/Toy_import) %>% round(4)
 
 ```
 
-Similarly, for the other sub-industry quotients, if sector $i$ at the region-level is relatively smaller than sector $j$ at the region-level (i.e, $CIQ^{r}_{ij} <1$), then some of $j$'s need for $i$ will need to be imported. In this example, Chicago will need to import: Extract, Fiber, Grains, and Hog commodities for the Info sector, Fiber for Extract, Fiber and Grains for the Hogs sector, Nothing for the Grains sector, Grains for the Fiber sector, and finally Fiber, Grains, and Hogs for the Extract sector. While Madison will export its excess in the exact same categories! 
+Similarly, for the other sub-industry location quotients, if sector $i$ at the region-level is relatively smaller than sector $j$ at the region-level (i.e, $CLQ^{r}_{ij} <1$), then some of $j$'s need for $i$ in $r$ will need to be imported. 
 
-NaN -> Exp < 1 & Imp > 1
+One can divide two sub-industry location quotients, an export region by an import region, and derive the following  relationships:
+
+NaN -> Exp < 1 & Imp > 1 
 
 Inf -> Exp >1 & Imp > 1
 
@@ -765,14 +752,14 @@ Inf -> Exp >1 & Imp > 1
 
 '##' -> Exp > 1 & Imp < 1
 
+In this example, Chicago will need to import: Extract, Fiber, Grains, and Hog commodities for the Info sector, Fiber for the Extract  sector, Fiber and Grains for the Hogs sector, Nothing for the Grains sector, Grains for the Fiber sector, and finally Fiber, Grains, and Hogs for the Extract sector. While Madison will export its excess in the exact same categories! 
 
 
-
+*MAPE*
 
 
 ```{r  toyMAPE}
 #MAPE
-
 
 local({ 
   MAT <- bdiag(Toy_Dir_LQ)
@@ -791,7 +778,11 @@ Toy_MAPE_mat
 
 ```
 
-Alternatively, we can ask the question: Are the inter-industry flows of Chicago similar to the inter-industry flows of Madison? Or do they have congruent intraregional economic activity? To answer this we can compare the estimated regional level technical coefficients through the application of Mean Absolute Percent Error. Let $\text{MAPE} = \left(\sum_{i=1}^{n}\sum_{j=1}^{n}\frac{|a_{ij} - \tilde{a}_{ij}|}{a_{ij}}\right) \times 100$.  For example, using the regional direct requirements matrix derived from the simple location quotient procedure, we can see that among the possible matches, the inter-industry flows of Madison are most similar to Green Bay, with Chicago and Madison displaying the most incongruent intraregional economic activity. More incongruity points toward more gains from trade. 
+Alternatively, we can ask the question: Are the inter-industry flows of Chicago similar to the inter-industry flows of Madison? Or in other words do they have congruent intraregional economic activity? To answer this we can compare the estimated regional level Direct Requirements (technical coefficients) through the application of Mean Absolute Percent Error. Let $\text{MAPE} = \left(\sum_{i=1}^{n}\sum_{j=1}^{n}\frac{|a_{ij} - \tilde{a}_{ij}|}{a_{ij}}\right) \times 100$.  
+
+For example, using the regional Direct Requirements matrix derived from the simple location quotient procedure, we can see that among the possible matches, the inter-industry flows of Madison are most similar to Green Bay, with Chicago and Madison displaying the most incongruent intraregional economic activity. In  this case more incongruity points toward more gains from trade. 
+
+
 
 
 *Gravity*
@@ -821,11 +812,186 @@ Toy_Gravity_mat
 
 Similarly, the Gravity approach represents interregional interindustry transaction estimates. In this example, the "All Else" category dominates the analysis, and rightly so given that it is an aggregate residual category. Furthermore the “impedance” (distance) measure is undefinable for an aggregate "All Else" category. For illustration an arbitrary proxy location is used. 
 
-Ignoring "AllElse", we may employ the Gravity approach to answer the question: Does Madison have more interregional interindustry transaction with Chicago or Green Bay? In this example, Chicago is a stronger trading partner for Extraction and Info, whereas Green Bay is a stronger trading partner for Fiber, Grains, and Hogs. 
+Ignoring "AllElse", we may employ the Gravity approach to answer the question: Does Madison have more interregional interindustry transaction with Chicago or Green Bay? 
+
+In this example, Chicago is a stronger trading partner for Extraction and Info, whereas Green Bay is a stronger trading partner for Fiber, Grains, and Hogs. 
 
 Taking one step further and comparing the aggregate magnitudes of interregional interindustry transactions reveals that Green Bay has nearly twice as much trading value than Chicago does with Madison. Note, however, that when we employ an exponential distance decay impediance function, such that *intra*regional interindustry transactions are definable, then Madison will actually have more "pull" with itself than Greenbay for Fiber and Grains. In this case, we would estimate Madison to have interregional interindustry transactions with Chicago for Extraction and Info commodities, and only Hogs with Green Bay. And as for Grains and Fiber, interindustry transactions are mostly dominated by *intra*regional exchange. 
 
+### Extension
  
+*A nested and hierarchical approach*
+
+We have shown that it is feasible to construct regional-level technical coefficients matrix from a national-level Leontief matrix and regional industry employment. This then brings about some possible extensions. One is the possibility of performing a multistage regionalization, whereby first or second-level administrative divisions (e.g., states) are used to establish a coarse regionalization. Then either place specific technical coefficients can be derived using the administrative division technical coefficients or the administrative division regionalization can be used as the basis for constructing interregional compatibility. 
+
+To derive an administrative technical coefficients matrix, we aggregate the place specific regional industry employment to the administrative level. Let $\mathbf{X^{r}}$ be the industry-by-region measures economic activity. If all $j$ regions make up the desired administrative division, then the aggregate administrative measure of economic activity is given by $\mathbf{x^{R}} = \mathbf{X^{r}i}$, i.e., the row sums of the industry-by-region economic activity matrix. The administrative division Direct Requirements (technical coefficients) matrix can then be derived using a Location Quotient approach. 
+
+
+The simple administrative division location quotient is given by: 
+
+$$LQ^{R}_{i} = \left( \frac{x^{R}_{i} / x^{R}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} {x^{n}_{i} / x^{n}} \right) $$
+And the administrative Direct Requirements (technical coefficients) matrix is generated by:
+$$
+a^{R}_{ij} = \left\{ 
+\begin{align*}
+(LQ^{R}_{i})a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} < 1 \\
+a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} \geq 1
+\end{align*}
+\right\}
+$$
+From here we may iterate and derive regional technical coefficients from the administrative technical coefficients matrix using a location quotient approach. 
+
+The second stage simple regional division location quotient is given by: 
+
+$$\widetilde{LQ}^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{R}_{i} / x^{R}} \right) = \left( \frac{x^{r}_{i} / x^{r}} {(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} \right)  $$
+
+And the administrative Direct Requirements (technical coefficients) matrix is generated by:
+$$
+\widetilde{a}^{rr}_{ij} = \left\{ 
+\begin{align*}
+(\widetilde{LQ}^{r}_{i})a^{R}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} < 1 \\
+a^{R}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} \geq 1
+\end{align*}
+\right\}
+$$
+
+We can then examine what, if any, functional differences exist between a deriving regional coefficients directly from the national level or from a two stage, national  to administrative division to regional approach. Note, under the simple LQ approach, whenever $LQ \geq 1  \vdash a^{n}_{ij} = a^{rr}_{ij} = a^{R}_{ij} = \widetilde{a}^{rr}_{ij}$. 
+
+Combining steps, we can specify the Administrative Direct Requirements  directly from the  National Direct Requirements as:
+$$
+\widetilde{a}^{rr}_{ij} = \left\{ 
+\begin{align*}
+(LQ^{r}_{i})a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} < 1 \text{ } \& \text{ } LQ^{R}_{i} < 1 \\
+(\widetilde{LQ}^{r}_{i})a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} < 1 \text{ } \& \text{ } LQ^{R}_{i} \geq 1 \\
+(LQ^{R}_{i})a^{n}_{ij} \space\space  \text{if} \space\space \widetilde{LQ}^{r}_{i} \geq 1 \text{ } \& \text{ } LQ^{R}_{i} < 1 \\
+a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} \geq 1 \text{ } \& \text{ } LQ^{R}_{i} \geq 1 
+\end{align*}
+\right\}
+$$
+
+Note $$\widetilde{LQ}^{r}_{i} \cdot LQ^{R}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{R}_{i} / x^{R}} \right) \cdot \left( \frac{x^{R}_{i} / x^{R}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right) = LQ^{r}_{i}$$
+
+In this example, the national-level Direct Requirements matrix is, $a^{n}_{ij}$, is given by: 
+
+```{r}
+print("National Direct Requirement Coeffecients")
+Toy_Direct_mat %>% round(4)
+```
+
+And the intraregional Direct Requirements matrix is, $a^{rr}_{ij} \space \forall \space r$ using the simple LQ approach is is given by: 
+
+```{r}
+print("Regionial Direct Requirement Coeffecients from Simple Location Quotients")
+Toy_Dir_LQ
+```
+
+
+Suppose $R = \{\text{Brown, Cook, Dane}\}$, such that administrative-level Direct Requirements matrix, $a^{R}_{ij}$, using the simple LQ approach is is given by: 
+
+```{r}
+Toy_Xemp_mat_R <- Toy_Xemp_mat[,2:4] %*% rep(c(1), each = ncol(Toy_Xemp_mat[,2:4]))
+colnames(Toy_Xemp_mat_R) <- c("ADM1")
+
+Toy_LQ_R <-  matrix(0, nrow=nrow(Toy_Xemp_mat_R), ncol = ncol(Toy_Xemp_mat_R))
+for (i in 1:nrow(Toy_Xemp_mat_R)){
+ for (j in 1:ncol(Toy_Xemp_mat_R)){
+  Toy_LQ_R[i,j] <-((Toy_Xemp_mat_R[i,j])/sum(Toy_Xemp_mat_R[,j]))/(sum(Toy_Xemp_mat[i,])/sum(Toy_Xemp_mat))
+ }
+}
+rownames(Toy_LQ_R) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_LQ_R) <- c("ADM1")
+
+
+Toy_LQc_R <-  Toy_LQ_R
+for (i in 1:nrow(Toy_Xemp_mat_R)){
+ for (j in 1:ncol(Toy_Xemp_mat_R)){
+  if (Toy_LQ_R[i,j] > 1){
+   Toy_LQc_R[i,j] <- 1
+  }
+  else{
+   Toy_LQc_R[i,j] <- Toy_LQ_R[i,j]
+  }
+ }
+}
+rownames(Toy_LQc_R) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_LQc_R)  <- c("ADM1")
+
+
+
+Toy_Dir_LQ_R <-  c()
+for (i in 1:ncol(Toy_LQc_R)){
+  Toy_Dir_LQ_R[[i]] <- (diag(Toy_LQc_R[,i]) %*% Toy_Direct_mat) %>% round(4)
+  rownames(Toy_Dir_LQ_R[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+}
+names(Toy_Dir_LQ_R) <- c("ADM1")
+#print("Administrative Division Direct Requirement Coefficients from Simple Location Quotients")
+Toy_Dir_LQ_R
+
+```
+
+
+And administrative intraregional Direct Requirements matrix, $\widetilde{a}^{rr}_{ij}$ using the simple LQ approach is is given by: 
+
+```{r}
+
+Toy_Xemp_mat_Rt <- Toy_Xemp_mat[,2:4]
+
+Toy_LQ_Rt <-  matrix(0, nrow=nrow(Toy_Xemp_mat_Rt), ncol = ncol(Toy_Xemp_mat_Rt))
+for (i in 1:nrow(Toy_Xemp_mat_Rt)){
+ for (j in 1:ncol(Toy_Xemp_mat_Rt)){
+  Toy_LQ_Rt[i,j] <-((Toy_Xemp_mat_Rt[i,j])/sum(Toy_Xemp_mat_Rt[,j]))/(sum(Toy_Xemp_mat_R[i,])/sum(Toy_Xemp_mat_R))
+ }
+}
+
+rownames(Toy_LQ_Rt) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_LQ_Rt) <- c("Brown", "Cook", "Dane")
+
+
+Toy_LQc_Rt <-  Toy_LQ_Rt
+for (i in 1:nrow(Toy_Xemp_mat_Rt)){
+ for (j in 1:ncol(Toy_Xemp_mat_Rt)){
+  if (Toy_LQ_Rt[i,j] > 1){
+   Toy_LQc_Rt[i,j] <- 1
+  }
+  else{
+   Toy_LQc_Rt[i,j] <- Toy_LQ_Rt[i,j]
+  }
+ }
+}
+rownames(Toy_LQc_Rt) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_LQc_Rt)  <- c("Brown", "Cook", "Dane")
+
+
+
+Toy_Dir_LQ_Rt <-  c()
+for (i in 1:ncol(Toy_LQc_Rt)){
+  Toy_Dir_LQ_Rt[[i]] <- (diag(Toy_LQc_Rt[,i]) %*% Toy_Direct_mat) %>% round(4)
+  rownames(Toy_Dir_LQ_Rt[[i]]) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+}
+names(Toy_Dir_LQ_Rt) <- c("Brown", "Cook", "Dane")
+#print("Regional Direct Requirement Coefficients from Administrative Division Coefficients from Simple Location Quotients")
+Toy_Dir_LQ_Rt
+```
+
+
+
+*Reprise (Again)*
+
+``` {r}
+print("Simple Location Quotients")
+Toy_LQ %>% round(4)
+
+print("Administrative Division Simple Location Quotients")
+Toy_LQ_Rt %>% round(4)
+```
+
+Remember that under the original national paradigm Madison was an exporter (i.e., $LQ^{r}_{i} > 1$) for only Fiber and Grains and Chicago was the only region  that was an importer (i.e., $LQ^{r}_{i} < 1$) of **both** Fiber and Grains. However, under the nested hierarchical paradigm, Madison is an exporter of Fiber and Grains and Extraction (i.e., $\widetilde{LQ}^{r}_{i} \geq 1$). Within the administrative division cluster regime, there is now no longer a region that is an importer of all three of Madison's exports. Chicago is still an importer of Fiber and Grains, but not Extraction. Whereas Green Bay is an importer of Extract and Fiber, but not Grains. 
+
+
+
+
+
+
 
 
 
@@ -833,11 +999,27 @@ Taking one step further and comparing the aggregate magnitudes of interregional 
 
 *Project Narrative Models*
 
-In addition to the methods established in the literature deployed to answer the question: How similar are the inputs of Chicago to the outputs of Madison? we may also adapt the Project Narrative methods, too (consistent with the data restrictions). Let the "Absolute Total Use Coefficient" be given by $\mathbf{\alpha} = (\widehat{\mathbf{Zi}})^{-1}\mathbf{Z}\mathbf{X}^{r}$ and the "Relative Total Use Coefficient" be given by ${\mathbf{\rho}}  = (\widehat{\mathbf{Zi}})^{-1}\mathbf{Z}\mathbf{X}^{r}(\widehat{\mathbf{iX}^{r}})^{-1}$. 
+In addition to the methods established in the literature deployed to answer the question: How similar are the inputs of Chicago to the outputs of Madison? we may also adapt the Project Narrative methods, too (within the data restrictions). 
 
-We may also specify "Absolute Regional Typology Coefficients" and "Relative Regional Typology Coefficients" for each commodity $i$ as $\mathbf{\phi}_{i} =\hat{\alpha}_{i}\mathbf{i}\mathbf{i}'[\hat{\alpha}_{i}\mathbf{i}\mathbf{i}'+\hat{\alpha}'_{i}\mathbf{i}\mathbf{i}']^{-1}$ and $\mathbf{\phi}_{i} =\hat{\rho}_{i}\mathbf{i}\mathbf{i}'[\hat{\rho}_{i}\mathbf{i}\mathbf{i}'+\hat{\rho}'_{i}\mathbf{i}\mathbf{i}']^{-1}$. 
+Let the "Absolute Total Use Coefficient" be given by $\mathbf{\alpha} = (\widehat{\mathbf{Zi}})^{-1}\mathbf{Z}\mathbf{X}^{r}$ and the "Relative Total Use Coefficient" be given by ${\mathbf{\rho}}  = (\widehat{\mathbf{Zi}})^{-1}\mathbf{Z}\mathbf{X}^{r}(\widehat{\mathbf{iX}^{r}})^{-1}$. 
 
-In addition, we may also specify "Gravity of Absolute Total Use Coefficients" and "Gravity of Relative Total Use Coefficients" for each commodity $i$ as $[\mathbf{{\alpha'}}_{i}\mathbf{\alpha}_{i}](\mathbf{\alpha}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$ and $[\mathbf{{\rho'}}_{i}\mathbf{\rho}_{i}](\mathbf{\rho}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$,  where  $\mathbf{Q} = e^{-\mathbf{d}}$  the exponential distance decay function.
+We may also specify "Absolute Regional Typology Coefficients" and "Relative Regional Typology Coefficients" for each commodity $i$ as $\mathbf{\phi}_{i} =\hat{\alpha}_{i}\mathbf{i}\mathbf{i}'[\hat{\alpha}_{i}\mathbf{i}\mathbf{i}'+\hat{\alpha}'_{i}\mathbf{i}\mathbf{i}']^{-1}$ and $\mathbf{\varphi}_{i} =\hat{\rho}_{i}\mathbf{i}\mathbf{i}'[\hat{\rho}_{i}\mathbf{i}\mathbf{i}'+\hat{\rho}'_{i}\mathbf{i}\mathbf{i}']^{-1}$. 
+
+In addition, we may also specify "Gravity of Absolute Total Use Coefficients" and "Gravity of Relative Total Use Coefficients" for each commodity $i$ as $\theta_{i} = [\mathbf{{\alpha'}}_{i}\mathbf{\alpha}_{i}](\mathbf{\alpha}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$ and $\vartheta_{i} = [\mathbf{{\rho'}}_{i}\mathbf{\rho}_{i}](\mathbf{\rho}_{i}\mathbf{i})^{-1} \odot \mathbf{Q}$,  where  $\mathbf{Q} = e^{-\mathbf{d}}$  the exponential distance decay function.
+
+Alternatively, as 
+<p align="center">
+$\displaystyle \alpha^{r}_{i} = \frac{\sum^{n}_{j=1} z_{ij} x^{r}_{j}} {\sum^{n}_{j=1} z_{ij}}$,
+$\displaystyle \rho^{r}_{i} = \frac{\alpha^{r}_{i}} {\sum^{n}_{j=1} x^{r}_{j}}$
+</p>
+<p align="center">
+$\displaystyle \phi^{rs}_{i} = \frac{\alpha^{r}_{i}} {\alpha^{r}_{i} + \alpha^{s}_{i} }$,
+$\displaystyle \varphi^{rs}_{i} = \frac{\rho^{r}_{i}} {\rho^{r}_{i} + \rho^{s}_{i} }$
+</p>
+<p align="center">
+$\displaystyle \theta^{rs}_{i} = \frac{\alpha^{r}_{i} \alpha^{s}_{i} } {\sum^{g}_{r=1} \alpha^{r}_{i}} Q^{rs}$,
+$\displaystyle \vartheta^{rs}_{i} = \frac{\rho^{r}_{i} \rho^{s}_{i} } {\sum^{g}_{r=1} \rho^{r}_{i}} Q^{rs}$
+</p>
 
 
 ```{r toyPN}
@@ -915,72 +1097,15 @@ Toy_Gravity_mat_Rho
 
 The Absolute Use Coefficient portrays national-level intermediate transaction proportions scaled by regional-level economic activity in the form of industry employment. In this example the Info sector is by far the largest purchaser of intermediate goods for every industry including itself. And Cook County happens to have the largest Info workforce, making it dominate the Absolute Use Coefficient table. 
 
-This is only the case, however when we use the national-level Transactions matrix to capture the interconnectedness of industries. If instead  we employ the national-level technical coefficients matrix, which  specifies the amount of industry $i$’s commodity used to produce of one unit of industry $j$ ’s commodity, the Absolute Use Coefficient table is dominated by the AllElse category with the overall largest workforce. In this way we may take the national-level technical coefficients matrix, $\mathbf{A^{n}}$, as a first approximation to regional technical coefficients, $\mathbf{\tilde{A}^r}$, and thus the numerator of the project narrative Absolute and Relative Use Coefficients becomes $\mathbf{\tilde{A}^{r}X^{r}}$ or $\mathbf{\tilde{Z}^{r}}$ a first approximation of the regional Transactions matrix.
+This is only the case, however, when we use the national-level Transactions matrix to capture the interconnectedness of industries. If instead  we employ the national-level technical coefficients matrix, which  specifies the amount of industry $i$’s commodity used to produce of one unit of industry $j$ ’s commodity, the Absolute Use Coefficient table is dominated by the AllElse category with the overall largest workforce. In this way we may take the national-level technical coefficients matrix, $\mathbf{A^{n}}$, as a first approximation to regional technical coefficients, $\mathbf{\tilde{A}^r}$, and thus the numerator of the project narrative Absolute and Relative Use Coefficients becomes $\mathbf{\tilde{A}^{r}X^{r}}$ or $\mathbf{\tilde{Z}^{r}}$ a first approximation of the regional Transactions matrix.
 
 The Relative Use Coefficient portrays national-level intermediate transaction proportions scaled by regional-level industry employment proportions. 
 
-The Relative and Absolute "Regional Typology Coefficients", $\phi$, portray a region-by-region Use Coefficient proportion for each commodity type.  In other words, the row maximum assigns the best potential relationship for each commodity of that region. We can use the $\phi$ to answer the question: For which commodities is Madison a sink or a source? And which regions are complementary to those commodity balances? Looking across each row, whenever the coefficient is greater than 0.5 that region is a source relative to the column region and vice versa, if the coefficient is less than 0.5, the row region is a relative sink to the column region, for that commodity. In this example, the Relative $\phi$ shows only Green Bay as a potential relative source for Madison and only for the Extract, Fiber, and Hogs commodities.
+The Relative and Absolute "Regional Typology Coefficients", $\phi$, portray a region-by-region Use Coefficient proportion for each commodity type.  In other words, the row maximum assigns the best potential relationship for each commodity of that region. We can use the $\phi$ to answer the question: For which commodities is Madison a sink or a source? And which regions are complementary to those commodity balances? Looking across each row, whenever the coefficient is greater than 0.5 that region is a source *relative* to the column region and vice versa. If the coefficient is less than 0.5, the row region is a *relative* sink to the column region, for that commodity. In this example, the Relative $\phi$ shows only Green Bay as a potential relative source for Madison and only for the Extract, Fiber, and Hogs commodities.
 
 
 The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alternate procedure to estimate the volume and sensitivity of the coefficient proportions. In this example, Madison (and Green Bay for that matter) is dominated by the "pull" of Chicago. 
  
-
-*A nested and hierarchical approach*
-
-We have shown that it is feasible to construct regional-level technical coefficients matrix from a national-level Leontief matrix and regional industry employment. This then brings about some possible extensions. One is the possibility of performing a multistage regionalization, whereby first or second-level administrative divisions are used to establish a course regionalization. Then either place specific technical coefficients can be derived using the administrative division technical coefficients or the administrative division regionalization can be used as the basis for constructing interregional compatibility. 
-
-To derive an administrative technical coefficients matrix, we aggregate the place specific regional industry employment to the administrative level. Let $\mathbf{X^{r}}$ be the industry-by-region measures economic activity. If all $j$ regions make up the desired administrative division, then the aggregate administrative measure of economic activity is given by $\mathbf{x^{R}} = \mathbf{X^{r}i}$, i.e., the row sums of the industry-by-region economic activity matrix. The administrative division technical coefficients matrix can then be derived using a Location Quotient approach. The simple administrative division location quotient is given by: 
-
-$$LQ^{R}_{i} = \left( \frac{x^{R}_{i} / x^{R}} {x^{n}_{i} / x^{n}} \right) = \left( \frac{(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} {x^{n}_{i} / x^{n}} \right) $$
-And the administrative technical coefficients matrix is generated by:
-$$
-a^{RR}_{ij} = \left\{ 
-\begin{align*}
-(LQ^{R}_{i})a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} < 1 \\
-a^{n}_{ij} \space\space \text{if} \space\space LQ^{R}_{i} \geq 1
-\end{align*}
-\right\}
-$$
-From here we may iterate and derive regional technical coefficients from the administrative technical coefficients matrix using a location quotient approach. 
-
-The second stage simple regional division location quotient is given by: 
-
-$$\widetilde{LQ}^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{R}_{i} / x^{R}} \right) = \left( \frac{x^{r}_{i} / x^{r}} {(\mathbf{X^{r}i})_{i}  / \mathbf{iX^{r}i}} \right)  $$
-
-And the administrative technical coefficients matrix is generated by:
-$$
-\widetilde{a}^{rr}_{ij} = \left\{ 
-\begin{align*}
-(\widetilde{LQ}^{r}_{i})a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} < 1 \\
-a^{n}_{ij} \space\space \text{if} \space\space \widetilde{LQ}^{r}_{i} \geq 1
-\end{align*}
-\right\}
-$$
-
-We can then examine what, if any, functional differences exist between a deriving regional coefficients directly from the national level or from a two stage, national  to administrative division to regional approach. Note, under the simple LQ approach, whenever $LQ \geq 1  \vdash a^{n}_{ij} = a^{rr}_{ij} = a^{RR}_{ij} = \widetilde{a}^{rr}_{ij}$. 
-
-
-In this example, $a^{n}_{ij}$ is given by: 
-
-`r print(round(Toy_Direct_mat, 4))`
-
-And $a^{rr}_{ij} \,\forall r $ is given by: 
-
-
-
-
-Suppose $R = \{\text{Brown, Cook, Dane}\}$, such that $a^{RR}_{ij}$ 
-
-
-
-
-
-$$LQ^{r}_{i} = \left( \frac{x^{r}_{i} / x^{r}} {x^{n}_{i} / x^{n}} \right) $$
-
-
-
-
-
 
 
 
