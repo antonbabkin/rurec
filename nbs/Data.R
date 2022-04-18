@@ -1,7 +1,6 @@
 
 # List packages needed for this exercise
 packages <- c("dlm",
-              "dplyr",
               "fs",
               "gtools",
               "knitr",
@@ -9,7 +8,7 @@ packages <- c("dlm",
               "openxlsx",
               "readxl",
               "reticulate",
-              "tidyr",
+              "tidyverse",
               "tools")
 
 # Install packages not yet installed
@@ -114,7 +113,7 @@ CBP_table$naics %<>% substr(0,2) %>% as.numeric()
 
 CBP_table %<>% reshape(idvar = "naics", timevar = "place", direction = "wide")
 CBP_table[is.na(CBP_table)] <- 0
-CBP_table %<>%  as.data.frame() %>% arrange(naics)
+CBP_table %<>%  as.data.frame() %>% dplyr::arrange(naics)
 
 CBP_table %<>% t() %>%  as.data.frame()
 CBP_table %<>% mutate("11" = V1)
@@ -148,10 +147,10 @@ CBP_table$est <-  as.numeric(CBP_table$est)
 
 
 # Import CBP data using separate Python pre-processing
-use_condaenv('rurec')
-cbp <- import('rurec.cbp')
-regional_data_py <- cbp$get_df("state", 2019L)
-head(regional_data_py)
+# use_condaenv('rurec')
+# cbp <- import('rurec.cbp')
+# regional_data_py <- cbp$get_df("state", 2019L)
+# head(regional_data_py)
 
 
 

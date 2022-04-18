@@ -707,7 +707,6 @@ However, to get back to the central question: How similar are the inputs of Chic
 For example, the Fiber and Grains simple LQ for Dane County (i.e., Madison) are both greater than 1. Similarly, only the Fiber simple LQ for Brown County (i.e., Green Bay), and only the Grain simple LQ for All Else is less than 1, making either only a partial partner. However, the Fiber and Grains simple LQ for Cook County (i.e., Chicago) are both less than 1, implying it is the strongest sink and best matched for using goods for which Madison is concentrated.  
 
 
-
 ```{r  toyOverlay}
 
 Toy_export <- Toy_CLQ$Dane
@@ -990,11 +989,6 @@ Remember that under the original national paradigm Madison was an exporter (i.e.
 
 
 
-
-
-
-
-
 ### Remission
 
 *Project Narrative Models*
@@ -1024,34 +1018,34 @@ $\displaystyle \vartheta^{rs}_{i} = \frac{\rho^{r}_{i} \rho^{s}_{i} } {\sum^{g}_
 
 ```{r toyPN}
 
-Toy_Alpha_mat <- solve(diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))) %*% Toy_Transactions_mat %*% Toy_Xemp_mat
+Toy_Alpha_mat <- (solve(diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))) %*% Toy_Transactions_mat %*% Toy_Xemp_mat) %>% round(4)
 rownames(Toy_Alpha_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 print("Absolute Total Use Coefficients")
 Toy_Alpha_mat
 
 
-Toy_Rho_mat <- solve(diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))) %*% Toy_Transactions_mat %*% Toy_Xemp_mat %*% solve(diag(as.vector(rep(c(1), each=nrow(Toy_Xemp_mat)) %*% Toy_Xemp_mat )))
+Toy_Rho_mat <- (solve(diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))) %*% Toy_Transactions_mat %*% Toy_Xemp_mat %*% solve(diag(as.vector(rep(c(1), each=nrow(Toy_Xemp_mat)) %*% Toy_Xemp_mat ))) ) %>% round(4)
 rownames(Toy_Rho_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 colnames(Toy_Rho_mat) <- c("AllElse", "Brown", "Cook", "Dane")
 print("Relative Total Use Coefficients")
-Toy_Rho_mat
+Toy_Rho_mat 
 
 
 Toy_Phi_mat_A <-  c()
  for (i in 1:Industry_Count){
   Toy_Phi_tilde_mat  <- c(Toy_Alpha_mat[i,]) %*%  t(rep(c(1), each=ncol(Toy_Xemp_mat)))
-  Toy_Phi_mat_A[[i]] <- Toy_Phi_tilde_mat / (Toy_Phi_tilde_mat + t(Toy_Phi_tilde_mat))
+  Toy_Phi_mat_A[[i]] <- (Toy_Phi_tilde_mat / (Toy_Phi_tilde_mat + t(Toy_Phi_tilde_mat))) %>% round(4)
   rownames(Toy_Phi_mat_A[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
   colnames(Toy_Phi_mat_A[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
  }
 names(Toy_Phi_mat_A) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 print("Regional Typology Coefficients - Absolute")
-Toy_Phi_mat_A
+Toy_Phi_mat_A  
 
 Toy_Phi_mat_R <-  c()
  for (i in 1:Industry_Count){
   Toy_Phi_tilde_mat  <- c(Toy_Rho_mat[i,]) %*%  t(rep(c(1), each=ncol(Toy_Xemp_mat)))
-  Toy_Phi_mat_R[[i]] <- Toy_Phi_tilde_mat / (Toy_Phi_tilde_mat + t(Toy_Phi_tilde_mat))
+  Toy_Phi_mat_R[[i]] <- (Toy_Phi_tilde_mat / (Toy_Phi_tilde_mat + t(Toy_Phi_tilde_mat))) %>% round(4)
   rownames(Toy_Phi_mat_R[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
   colnames(Toy_Phi_mat_R[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
  }
@@ -1072,7 +1066,7 @@ Toy_Q <- exp(-Toy_Dist_mat)
 
 Toy_Gravity_mat_Alpha <- as.list(c())
 for (i in 1:nrow(Toy_Alpha_mat)){
-  Toy_Gravity_mat_Alpha[[i]] <- (Toy_Alpha_mat[i,] %*% t(Toy_Alpha_mat[i,])) / sum(Toy_Alpha_mat[i,]) * Toy_Q
+  Toy_Gravity_mat_Alpha[[i]] <- ((Toy_Alpha_mat[i,] %*% t(Toy_Alpha_mat[i,])) / sum(Toy_Alpha_mat[i,]) * Toy_Q ) %>% round(4)
   rownames(Toy_Gravity_mat_Alpha[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
 }
 names(Toy_Gravity_mat_Alpha) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
@@ -1083,7 +1077,7 @@ Toy_Gravity_mat_Alpha
 
 Toy_Gravity_mat_Rho <- as.list(c())
 for (i in 1:nrow(Toy_Rho_mat)){
-  Toy_Gravity_mat_Rho[[i]] <- (Toy_Rho_mat[i,] %*% t(Toy_Rho_mat[i,])) / sum(Toy_Rho_mat[i,]) * Toy_Q
+  Toy_Gravity_mat_Rho[[i]] <- ((Toy_Rho_mat[i,] %*% t(Toy_Rho_mat[i,])) / sum(Toy_Rho_mat[i,]) * Toy_Q ) %>% round(4)
   rownames(Toy_Gravity_mat_Rho[[i]]) <- c("AllElse", "Brown", "Cook", "Dane")
 }
 names(Toy_Gravity_mat_Rho) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
