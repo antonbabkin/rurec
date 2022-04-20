@@ -234,6 +234,75 @@ d.columns = d.columns.to_flat_index()
 d.add_suffix(' CBP').plot(ax=ax, color=colors[1], subplots=True);
 ```
 
+Why difference between CBP and BDS?  
+Short official [note](https://www.census.gov/programs-surveys/bds/documentation/comparability.html). Estabs may be lower in BDS because of de-duplication. 
+
+```{code-cell} ipython3
+:tags: []
+
+colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+df = cbp.get_parquet('us').query('industry == "-" and lfo == "-"')[['emp', 'est', 'year']].set_index('year')
+ax = df.add_suffix(' CBP').plot(color=colors[0], subplots=True, layout=(1,2), figsize=(18, 6))
+df = bds.get_df().set_index('year')[['emp', 'estabs']]
+df.add_suffix(' BDS').plot(color=colors[1], ax=ax, subplots=True);
+```
+
+Is difference correlated with county?
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('cty').query('year > 1985')
+df['stcty'] = df['st'] + df['cty']
+df = df[['year', 'stcty', 'emp', 'estabs']].rename(columns={'estabs': 'est'})
+d = load_cbp().drop(columns='ap')
+df = df.merge(d, 'outer', ['year', 'stcty'], suffixes=('_bds', '_cbp'), indicator=True)
+```
+
+```{code-cell} ipython3
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+d = df.groupby('year')[['est_bds', 'est_cbp']].sum()
+d['est_cbp'] - d['est_bds']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.head()
+```
+
+Before 2004 about 10% of the difference was non-merges on county code, but they cancel each other out, so are not the primary reason.
+
+```{code-cell} ipython3
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+d = df.groupby(['year', '_merge'])[['est_bds', 'est_cbp']].sum()
+d = d.sum(1).unstack()
+d
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = df.query('_merge == "both"').groupby('year')[['est_bds', 'est_cbp']].sum()
+d.plot()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = df.query('_merge == "both" and year == 2019').copy()
+d['bds/cbp'] = d['est_bds'] / d['est_cbp']
+d['bds/cbp'].describe()
+```
+
 ## Infogroup
 
 ```{code-cell} ipython3
