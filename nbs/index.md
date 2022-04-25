@@ -14,58 +14,35 @@ kernelspec:
 
 # Rural economy
 
-> Exploring economic dynamics in rural areas of the United States.
-
-+++
-
-## Research team
-
-- Anton Babkin (UConn)
-- Richard A. Dunn (UConn)
-- Brent Hueth (UW-Madison)
-- Thomas Flory (UW-Madison)
-
-+++
-
-## Installation
-
-1. Clone this git project.
-2. Create and activate conda environment from `environment.yml` file.
-3. Pull resources from shared repository.
+Exploring economic dynamics in rural areas of the United States.
 
 +++
 
 # Project structure
-
-- InfoGroup preparation: validate, clean, convert
-- ERS codes preparation: download, combine, format
-  - Other geo codes will be added as well
-- Rurality: merge ERS codes into InfoGroup
-- Dynamics: summary statistics by geography
-
-+++
-
-## Resource repository
+ 
+- Public datasets preparation: CBP, BDS, BEA IO tables, Census population estimates, NAICS classification.
+- Geographic data: working with shapefiles of administrative units.
+- Rurality definitions: Census, OMB, ERS.
+- Agricultural and food industries (AFI) definitions.
+- InfoGroup data preparation.
+- Dynamics: summary statistics by geography and sector.
 
 +++
 
-### List of registered resources
+# Control panel
 
 ```{code-cell} ipython3
-from rurec import resources
-
-for r in resources.get():
-    print(f'{r.key:30}{r.description}')
-```
-
-### Pull everything
-
-```{code-cell} ipython3
-resources.pull()
-```
-
-### Push everything
-
-```{code-cell} ipython3
-resources.push()
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Perform tasks within Rural Economy project.')
+    parser.add_argument('task', help='choose a task', choices=['build_parquet', 'add_rurality'])
+    args = parser.parse_args()
+    print(args.task, 'started')
+    if args.task == 'build_parquet':
+        from rurec import infogroup
+        infogroup.build_parquet_dataset(21)
+    elif args.task == 'add_rurality':
+        from rurec import rurality
+        rurality.build_parquet_dataset(11)
+    print(args.task, 'finished')
 ```

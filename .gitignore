@@ -6,10 +6,6 @@ cache/
 logs/
 census_api_key.txt
 
-# symlinks to package directories
-nbs/rurec
-rurec/reseng
-rurec/infogroup
 
 # Vim
 *.swp
