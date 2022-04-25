@@ -8,7 +8,6 @@ output:
     code_download: yes
     latex_engine: pdflatex
   pdf_document: default
-self_contained: no
 ---
 
 ```{r preamble, include = FALSE}

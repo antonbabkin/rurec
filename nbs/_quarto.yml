@@ -1,0 +1,27 @@
+project:
+  type: website
+  render:
+    - index.ipynb
+    - rurality.ipynb
+    - IOforDummies.Rmd
+  post-render: touch _site/.nojekyll
+
+website:
+  title: "Rural Economy"
+  navbar:
+    background: primary
+    left:
+      - href: index.ipynb
+        text: Home
+      - href: rurality.ipynb
+        text: Rurality
+      - IOforDummies.Rmd
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+
+
+

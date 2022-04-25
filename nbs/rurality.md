@@ -12,13 +12,9 @@ kernelspec:
   name: python3
 ---
 
-```{code-cell} ipython3
-#default_exp rurality
-```
-
 # Adding rurality measures to InfoGroup
 
-> Merge different definitions of rurality.
+Merge different definitions of rurality.
 
 +++
 

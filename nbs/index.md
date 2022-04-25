@@ -29,9 +29,12 @@ Exploring economic dynamics in rural areas of the United States.
 
 +++
 
+::: {.hidden}
 # Control panel
+:::
 
 ```{code-cell} ipython3
+#| echo: false
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Perform tasks within Rural Economy project.')
