@@ -12,9 +12,15 @@ kernelspec:
   name: python3
 ---
 
-# Adding rurality measures to InfoGroup
+```{raw-cell}
 
-Merge different definitions of rurality.
+---
+title: "Defining rurality"
+bibliography: ../references.bib
+---
+```
+
+There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. Here we try to identify and describe the most common ones.
 
 +++
 
