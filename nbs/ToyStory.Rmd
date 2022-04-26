@@ -1104,10 +1104,11 @@ The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alter
 
 
 
+### Resurrection
 
+If one is willing to assume that national and regional production recipes are identical, such that $a^{r}_{ij} \equiv a^{n}_{ij}$, and that the regional technical coefficient is equivalent to the regional input coefficient, such that $a^{r}_{ij} \equiv a^{rr}_{ij}$. In other words, each regional purchaser buys the same proportion of inputs from within the region, such that $\beta^{r}_{ij} = p^{r}_{i}$, and furthermore all the region's needs for all goods can be supplied internally, such that $p^{r}_{i} = 1$. Taken together these assumptions provide that that $\mathbf{A^{rr}} \equiv \mathbf{A^{n}}$. 
 
-
-
+One may specify the vector of regional input needs as the product of the regional input coefficient matrix and the regional total output vector, $\mathbf{A^{rr}x^{r}}$. Employing the direct requirements matrix identity, the vector of regional input needs is also equal to regional total output minus regional final demand, $\mathbf{A^{rr}x^{r}} = \mathbf{x^{r}} - \mathbf{f^{r}}$. Note, in a model with explicit interregional feedback, regional final demand can be found by $$\left(\mathbf{I} - \mathbf{A^{rr}}\right)\mathbf{x^{r}} - \mathbf{A^{rs}} \left(\mathbf{I} - \mathbf{A^{ss}}\right)^{-1} \mathbf{A^{sr}x^{r}} = \mathbf{f^{r}}$$ however, under the assumptions that allow one to use the national direct requirements matrix as a regional direct requirements matrix this identity collapses to the familiar. 
 
 
 

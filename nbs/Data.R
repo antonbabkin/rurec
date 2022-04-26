@@ -2,12 +2,14 @@
 # List packages needed for this exercise
 packages <- c("dlm",
               "fs",
+              "geosphere",
               "gtools",
               "knitr",
               "magrittr",
               "openxlsx",
               "readxl",
               "reticulate",
+              "sf",
               "tidyverse",
               "tools")
 
@@ -22,6 +24,9 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 # Establish working directory relative to location of this file
 script_path() %>% setwd() 
+
+# Push working directory up a level to establish parallel data files
+setwd("..")
 
 # Create "data" a file if not already done
 if (!file.exists("data")) {
@@ -58,6 +63,13 @@ data_getr(
   FileExt = "txt"
 )
 
+# Download and unzip Census county TIGER  data.
+data_getr(
+  ZipURL = "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip",
+  DestDir = getwd() %>% path("data")
+)
+
+
 # Function to import a file of excel data tables
 excel_importr <- function(TableName,
                           FileDir,
@@ -78,6 +90,37 @@ excel_importr <- function(TableName,
 }
 
 
+# Function(s) to clean non-finite values in lists of matrix 
+finiter <- function(x){
+  if (!is.finite(x)){
+    x <- 0
+  }
+  else {
+    x=x
+  }
+} 
+
+finiterer <- function(x){ 
+  lapply(1:length(x), function(i) apply(x[[i]], c(1,2), finiter))
+}
+
+
+# Function(s) to truncate values in lists of matrix  
+oner <- function(x, t=1, l=1){
+  if (x > l){
+    x <- t
+  }
+  else {
+    x=x
+  }
+}
+onerer <- function(x){ 
+  lapply(1:length(x), function(i) apply(x[[i]], c(1,2), oner))
+}
+
+
+
+
 # Import IO tables into R 
 excel_importr(
   TableName = "IO_tables",
@@ -91,7 +134,16 @@ if (!exists("RegionalData")){
   
   RegionalData$fipstate %<>% formatC(width = 2, format = "d", flag = "0")
   RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
+  RegionalData$place <- paste0(RegionalData$fipstate, RegionalData$fipscty)
 }
+
+# Import TIGER data into R 
+if (!exists("TIGERData")){
+  TIGERData <- path(getwd(), "data", "tl_2021_us_county.shp") %>% st_read(stringsAsFactors = FALSE)
+  TIGERData$place <- paste0(TIGERData$STATEFP, TIGERData$COUNTYFP)
+  TIGERData$center <- st_centroid(TIGERData$geometry)
+}
+
 
 
 # Process and parse hierarchical structure  of CBP data
@@ -99,10 +151,20 @@ RegionalData_C <- filter(RegionalData, naics == "------")
 Regions <- RegionalData_C[, 1:2]
 Regions$place <- paste0(Regions$fipstate, Regions$fipscty)
 RegionalData_Sector <- RegionalData %>% filter(grepl('*----', naics) & naics != '------' )
+####  Note:  Six counties (30069, 31007, 31117, 32009, 48033, 48301)  do not have Sector level naicscodes  only top level "------"
+Regions_Sector <- as.data.frame(unique(RegionalData_Sector$place)) 
+names(Regions_Sector) <- "place"
 RegionalData_Subsector <- RegionalData %>% filter(grepl('///', naics))
 RegionalData_IndustryGroup <- RegionalData %>% filter(grepl('//', naics) & !grepl('///', naics))
 RegionalData_NAICSIndustry <- RegionalData %>% filter(grepl('/', naics) & !grepl('///', naics)  & !grepl('//', naics))
 RegionalData_USNAICS <- RegionalData %>% filter(!grepl('/', naics) & !grepl('-', naics))
+
+
+# Produce Distance Matrix
+TIGER_CBP <- inner_join(TIGERData, Regions_Sector, by = "place")
+TIGER_CBP  <- TIGER_CBP[order(TIGER_CBP$place), ]
+Dist_mat <- TIGER_CBP$center %>% as_Spatial() %>% distm()
+rownames(Dist_mat) = colnames(Dist_mat) <- TIGER_CBP$place
 
 
 # Generate a cross walk to transform NAICS sectors used by CBP into BEA sectors 
