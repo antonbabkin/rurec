@@ -17,6 +17,12 @@ kernelspec:
 ---
 title: "Defining rurality"
 bibliography: ../references.bib
+format:
+  html:
+    code-fold: true
+execute:
+  echo: false
+jupyter: python3
 ---
 ```
 
@@ -24,7 +30,31 @@ There are many different defitions of rurality, both within research community a
 
 There are two major definitions which the Federal government uses to identify the rural status of an area: the Census Bureau's 'Urban Area' and the OMB's 'Core-Based Statistical Area'.
 
-+++
+```{code-cell} ipython3
+:tags: []
+
+import functools
+import typing
+
+import pandas as pd
+import geopandas
+import folium
+import folium.plugins
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import ipywidgets
+
+from rurec import geography, ers_codes
+from rurec.reseng.util import download_file
+from rurec.reseng.nbd import Nbd
+
+nbd = Nbd('rurec')
+PATH = {
+    'root': nbd.root,
+    'source': nbd.root/'data/source/rurality/',
+    'urban_area': nbd.root/'data/rurality/urban_area/'
+}
+```
 
 # Urban area
 
@@ -36,9 +66,103 @@ The U.S. Census Bureau identifies two types of urban areas: *Urbanized Areas* (U
 Urban Areas are not defined in terms of any other standard spatial unit.
 The borders of an urban area are defined by the density of commuting patterns in the orbit of urban cores of various population size.
 
-+++
+Data source page: [TIGER/Line® Shapefiles](https://www.census.gov/cgi-bin/geo/shapefiles/index.php). Boundaries are defined after decennial census. Using latest national data files for every revision: 2009 file for 2000 boundaries, 2021 file for 2010 boundaries.
+
+Processed geodataframe columns:
+
+- `UACE`: Urban area code.
+- `NAME`: Urban area name.
+- `UATYP`: Urban area type. `"U"` - Urbanized Area, `"C"` - Urban Cluster.
+- `ALAND`, `AWATER`: land and water area (square meters).
+- `INTPTLAT`, `INTPTLON`: Latitude and longitude of the internal point.
+- `geometry`: Geopandas (multi)polygons.
+
+Urban area names are typically `"city_name, state_postal_abbreviation"` (`"Madison, WI"`, `"Hartford, CT"`). But bigger aglomeration names might include multiple cities (`"Los Angeles--Long Beach--Anaheim, CA"`) and lie in multiple states (`"Kansas City, MO--KS"`, `"Minneapolis--St. Paul, MN--WI"`, `"New York--Newark, NY--NJ--CT"`).
+
+```{code-cell} ipython3
+:tags: []
+
+def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
+    """Download and return path to urban area boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        2000: f'{base}TIGER2009/tl_2009_us_uac.zip',
+        2010: f'{base}TIGER2021/UAC/tl_2021_us_uac10.zip'
+    }
+    
+    url = urls[year]
+    local = PATH['source'] / url.split('/')[-1]
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(url, local.parent, local.name)
+    return local
+
+
+def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
+              geometry: bool = True):
+    """Load geodataframe with urban areas from `year` census.
+    Download and process dataset if necessary, and cache as parquet for faster access.
+    Pass `geometry=False` to load DataFrame without geometry column instead of GeoDataFrame.
+    """
+    columns = ['UACE', 'NAME', 'UATYP', 'ALAND', 'AWATER', 'INTPTLAT', 'INTPTLON']
+    
+    path = PATH['urban_area']/f'{year}.pq'
+    if path.exists():
+        print('Loading from parquet file.')
+        return geopandas.read_parquet(path) if geometry else pd.read_parquet(path, 'pyarrow', columns)
+
+    print('Parquet file not found, creating dataframe from source...')
+    df = geopandas.read_file(get_source_ua(year))
+    
+    if year == 2010:
+        df = df.rename(columns={f'{c}10': c for c in columns})
+        
+    df = df[columns + ['geometry']]
+    df[['INTPTLAT','INTPTLON']] = df[['INTPTLAT','INTPTLON']].astype('float64')
+    assert not df['UACE'].duplicated().any(), 'Duplicate UA code(s) found.'
+    
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+    print('Dataframe saved to parquet.')
+    
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+        
+    return df
+```
+
+@fig-urban-areas-dane-cty shows how urban areas expand in Dane county, Wisconsin between 2000 and 2010 censuses. Small 2000 urban clusters of Cross Plains and DeForest by 2010 merged with bigger Madion urbanized area.
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-urban-areas-dane-cty
+#| fig-cap: "Urban areas in Dane county, WI from 2000 and 2010 censuses."
+
+dane_cty = [slice(-90,-89.05), slice(42.9,43.3)]
+with ipywidgets.Output(): # gobble stdout
+    d0 = get_ua_df(2000).cx[dane_cty]
+    d0['UATYP'] = d0['UATYP'].map({'U': '2000 Uranized Area', 'C': '2000 Urban Cluster'})
+    d1 = get_ua_df(2010).cx[dane_cty]
+    d1['UATYP'] = d1['UATYP'].map({'U': '2010 Uranized Area', 'C': '2010 Urban Cluster'})
+
+cats = ['2000 Uranized Area', '2000 Urban Cluster', '2010 Uranized Area', '2010 Urban Cluster']
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors[0:4]]
+m = d0.explore(name='Census 2000', column='UATYP', categories=cats, cmap=cm, tiles='CartoDB positron')
+d1.explore(m=m, name='Census 2010', column='UATYP', categories=cats, cmap=cm, legend=False)
+tile_layer = [x for x in m._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+tile_layer.control = False
+folium.LayerControl(collapsed=False).add_to(m)
+m
+```
+
++++ {"tags": [], "jp-MarkdownHeadingCollapsed": true}
 
 # Core based statistical area (CBSA)
+
+[Census page](https://www.census.gov/programs-surveys/metro-micro.html)
 
 The Office of Management and Budget (OMB) designates counties as Metropolitan, Micropolitan, or Neither.
 All counties that are not part of a Metropolitan Statistical Area (MSA) are considered rural. 
@@ -97,18 +221,6 @@ The ‘FAR Level’ variable captures the highest numbered positive FAR level fo
 +++
 
 # Map
-
-```{code-cell} ipython3
-:tags: []
-
-import functools
-
-import geopandas
-import folium
-import folium.plugins
-
-from rurec import geography, ers_codes
-```
 
 ```{code-cell} ipython3
 :tags: []
