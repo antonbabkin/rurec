@@ -51,8 +51,8 @@ from rurec.reseng.nbd import Nbd
 nbd = Nbd('rurec')
 PATH = {
     'root': nbd.root,
-    'source': nbd.root/'data/source/rurality/',
-    'urban_area': nbd.root/'data/rurality/urban_area/'
+    'data': nbd.root/'data',
+    'source': nbd.root/'data/source/'
 }
 ```
 
@@ -66,7 +66,7 @@ The U.S. Census Bureau identifies two types of urban areas: *Urbanized Areas* (U
 Urban Areas are not defined in terms of any other standard spatial unit.
 The borders of an urban area are defined by the density of commuting patterns in the orbit of urban cores of various population size.
 
-Data source page: [TIGER/Line® Shapefiles](https://www.census.gov/cgi-bin/geo/shapefiles/index.php). Boundaries are defined after decennial census. Using latest national data files for every revision: 2009 file for 2000 boundaries, 2021 file for 2010 boundaries.
+Data source page: [TIGER/Line® Shapefiles](https://www.census.gov/cgi-bin/geo/shapefiles/index.php). Boundaries are defined after decennial census. Using latest national data files for every revision: 2009 file for 2000 boundaries, 2021 file for 2010 boundaries. *This may be worth examining more closely. OMB metro delineations are updated after decennials AND annually from ACS. Maybe urban area shapes change between decennials too.*
 
 Processed geodataframe columns:
 
@@ -92,7 +92,7 @@ def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
     }
     
     url = urls[year]
-    local = PATH['source'] / url.split('/')[-1]
+    local = PATH['source'] / 'urban_area' / url.split('/')[-1]
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
@@ -108,7 +108,7 @@ def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
     """
     columns = ['UACE', 'NAME', 'UATYP', 'ALAND', 'AWATER', 'INTPTLAT', 'INTPTLON']
     
-    path = PATH['urban_area']/f'{year}.pq'
+    path = PATH['data']/f'urban_area/{year}.pq'
     if path.exists():
         print('Loading from parquet file.')
         return geopandas.read_parquet(path) if geometry else pd.read_parquet(path, 'pyarrow', columns)
@@ -131,6 +131,14 @@ def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
         df = pd.DataFrame(df).drop(columns='geometry')
         
     return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| echo: true
+#| tbl-cap: Sample from the urban area dataframe (no geometry).
+get_ua_df(year=2010, geometry=False).sample(3).style.hide_index()
 ```
 
 @fig-urban-areas-dane-cty shows how urban areas expand in Dane county, Wisconsin between 2000 and 2010 censuses. Small 2000 urban clusters of Cross Plains and DeForest by 2010 merged with bigger Madion urbanized area.
@@ -158,21 +166,292 @@ folium.LayerControl(collapsed=False).add_to(m)
 m
 ```
 
-+++ {"tags": [], "jp-MarkdownHeadingCollapsed": true}
++++ {"tags": []}
 
-# Core based statistical area (CBSA)
+# Metropolitan and micropolitan statistical areas
+
+One of the most widely used definitions of rural is everything outside of metropolitan areas. Counties outside of metro/micro areas are sometimes called "noncore".
+
+Metropolitan definition takes counties as base unit and classifies them using data on urban area residents and commuting flows.
 
 [Census page](https://www.census.gov/programs-surveys/metro-micro.html)
 
-The Office of Management and Budget (OMB) designates counties as Metropolitan, Micropolitan, or Neither.
-All counties that are not part of a Metropolitan Statistical Area (MSA) are considered rural. 
+> The 2010 standards provide that each CBSA must contain at least one urban area of 10,000 or more population. Each metropolitan statistical area must have at least one urbanized area of 50,000 or more inhabitants. Each micropolitan statistical area must have at least one urban cluster of at least 10,000 but less than 50,000 population.
+>
+> Under the standards, the county (or counties) in which at least 50 percent of the population resides within urban areas of 10,000 or more population, or that contain at least 5,000 people residing within a single urban area of 10,000 or more population, is identified as a "central county" (counties). Additional "outlying counties" are included in the CBSA if they meet specified requirements of commuting to or from the central counties.
 
-There are measurement challenges with both the U.S. Census Bureau and OMB definitions. 
-Some policy experts note that the U.S. Census Bureau definition classifies quite a bit of suburban area as rural.
-The OMB definition includes rural areas in Metropolitan bounties.
-Consequently, one could argue that the Census Bureau standard includes an overcount of rural population whereas the OMB standard represents an undercount of the rural population.
+[Delineation files](https://www.census.gov/programs-surveys/metro-micro/about/delineation-files.html)
 
-+++
+> A metropolitan or micropolitan statistical area's geographic composition, or list of geographic components at a particular point in time, is referred to as its "delineation."
+
+Multiple sets of delineation files exist:
+
+- metropolitan or micropolitan statistical areas;
+- New England city and town areas (NECTAs), which are conceptually similar to metropolitan and micropolitan statistical areas, but are delineated using cities and towns instead of counties;
+- combined statistical areas, which are aggregates of adjacent metropolitan or micropolitan statistical areas that are linked by commuting ties;
+- combined NECTAs;
+- metropolitan divisions, which are a county or group of counties (or equivalent entities) delineated within a larger metropolitan statistical area, provided that the larger metropolitan statistical area contains a single core with a population of at least 2.5 million and other criteria are met;
+- NECTA divisions.
+
+```{code-cell} ipython3
+:tags: []
+
+def get_cbsa_delin_src(year: int):
+    """Download and return path to CBSA delineation file.
+    When more than one revision exists in year (as in 2003 or 2018),
+    the most recent one in that year is used.
+    """
+
+    base = 'https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/'
+    urls = {
+        2020: f'{base}2020/delineation-files/list1_2020.xls',
+        2018: f'{base}2018/delineation-files/list1_Sep_2018.xls',
+        # 2018-april: f'{base}2018/delineation-files/list1.xls',
+        2017: f'{base}2017/delineation-files/list1.xls',
+        2015: f'{base}2015/delineation-files/list1.xls',
+        2013: f'{base}2013/delineation-files/list1.xls',
+        2009: f'{base}2009/historical-delineation-files/list3.xls',
+        2008: f'{base}2008/historical-delineation-files/list3.xls',
+        2007: f'{base}2007/historical-delineation-files/list3.xls',
+        2006: f'{base}2006/historical-delineation-files/list3.xls',
+        2005: f'{base}2005/historical-delineation-files/list3.xls',
+        2004: f'{base}2004/historical-delineation-files/list3.xls',
+        2003: f'{base}2003/historical-delineation-files/0312cbsas-csas.xls',
+        # 2003-june: f'{base}2003/historical-delineation-files/030606omb-cbsa-csa.xls',
+    }
+    
+    assert year in urls, f'CBSA delineation not available for {year}.'
+    
+    url = urls[year]
+    ext = url.split('.')[-1]
+    local = PATH['source'] / f'cbsa/delin/{year}.{ext}'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(url, local.parent, local.name)
+    return local
+
+def get_cbsa_delin_df(year: int):
+    f = get_cbsa_delin_src(year)
+    
+    # number of rows to skip at top and bottom varies by year
+    if year in [2003, 2013, 2015, 2017, 2018, 2020]:
+        skip_head = 2
+    elif year in [2005, 2006, 2007, 2008, 2009]:
+        skip_head = 3
+    elif year == 2004:
+        skip_head = 7
+
+    if year in [2003, 2004]:
+        skip_foot = 0
+    elif year == 2005:
+        skip_foot = 6
+    elif year in [2006, 2007, 2008, 2009, 2015, 2017, 2018, 2020]:
+        skip_foot = 4
+    elif year == 2013:
+        skip_foot = 3
+
+    df = pd.read_excel(f, dtype=str, skiprows=skip_head, skipfooter=skip_foot)
+
+    # standardize column names
+    if 2003 <= year <= 2009:
+        del df['Status, 1=metro 2=micro']
+        df['STATE_CODE'] = df['FIPS'].str[:2]
+        df['COUNTY_CODE'] = df['FIPS'].str[2:]
+        del df['FIPS']
+        rename = {
+            'CBSA Code': 'CBSA_CODE',
+            'Metro Division Code': 'DIVISION_CODE',
+            'CSA Code': 'CSA_CODE',
+            'CBSA Title': 'CBSA_TITLE',
+            'Level of CBSA': 'METRO_MICRO',
+            'Metropolitan Division Title': 'DIVISION_TITLE',
+            'CSA Title': 'CSA_TITLE',
+            'Component Name': 'COUNTY',
+            'State': 'STATE'
+        }
+        if year >= 2007:
+            rename.update({'County Status': 'CENTRAL_OUTLYING'})
+    elif 2013 <= year <= 2020:
+        rename = {
+            'CBSA Code': 'CBSA_CODE',
+            'CBSA Title': 'CBSA_TITLE',
+            'CSA Code': 'CSA_CODE',
+            'CSA Title': 'CSA_TITLE',
+            'Metropolitan Division Title': 'DIVISION_TITLE',
+            'Metropolitan/Micropolitan Statistical Area': 'METRO_MICRO',
+            'State Name': 'STATE',
+            'County/County Equivalent': 'COUNTY',
+            'FIPS State Code': 'STATE_CODE',
+            'FIPS County Code': 'COUNTY_CODE',
+            'Central/Outlying County': 'CENTRAL_OUTLYING'
+        }
+        if year == 2013:
+            rename.update({'Metro Division Code': 'DIVISION_CODE'})
+        else:
+            rename.update({'Metropolitan Division Code': 'DIVISION_CODE'})
+    
+    df = df.rename(columns=rename)
+    
+    assert df[['STATE_CODE', 'COUNTY_CODE']].notna().all().all()
+    assert not df.duplicated(['STATE_CODE', 'COUNTY_CODE']).any()
+    assert df['METRO_MICRO'].notna().all()
+    
+    df['METRO_MICRO'] = df['METRO_MICRO'].map({
+        'Metropolitan Statistical Area': 'metro',
+        'Micropolitan Statistical Area': 'micro'
+    })
+    if 'CENTRAL_OUTLYING' in df:
+        df['CENTRAL_OUTLYING'] = df['CENTRAL_OUTLYING'].str.lower()
+    
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: tbl-cbsa-counts
+#| tbl-cap: "Number of counties in CBSA tables"
+#| layout-nrow: 2
+t0 = {}
+t1 = {}
+for year in [2003, 2004, 2005, 2006, 2007, 2008, 2009, 2013, 2015, 2017, 2018, 2020]:
+    df = get_cbsa_delin_df(year)
+    t0[year] = df['METRO_MICRO'].value_counts(dropna=False)
+    if 'CENTRAL_OUTLYING' in df:
+        t1[year] = df[['METRO_MICRO', 'CENTRAL_OUTLYING']].value_counts(dropna=False)
+t0 = pd.concat(t0, axis=1)
+t0.loc['all'] = t0.sum()
+display(t0)
+t1 = pd.concat(t1, axis=1).sort_index()
+t1
+```
+
+Boundary shapefiles, both TIGER (high res) and catrographic (low res) are available from Census Bureau [geography program](https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html).
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_cbsa_shape_src(year=2021, scale='20m'):
+    """Download and return path to CBSA boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        (2010, '20m'):  f'{base}GENZ2010/gz_2010_us_310_m1_20m.zip',
+        (2010, '500k'): f'{base}GENZ2010/gz_2010_us_310_m1_500k.zip',
+        (2013, '20m'):  f'{base}GENZ2013/cb_2013_us_cbsa_20m.zip',
+        (2013, '5m'):   f'{base}GENZ2013/cb_2013_us_cbsa_5m.zip',
+        (2013, '500k'): f'{base}GENZ2013/cb_2013_us_cbsa_500k.zip',
+    }
+    urls.update({(y, s): f'{base}GENZ{y}/shp/cb_{y}_us_cbsa_{s}.zip'
+                 for y in range(2014, 2022) for s in ['20m', '5m', '500k']})
+    
+    assert (year, scale) in urls, f'No CBSA shapes in {year}, {scale}.'
+    
+    local = PATH['source']/f'cbsa/shp/{year}_{scale}.zip'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(urls[(year, scale)], local.parent, local.name)
+    return local
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Shapefile columns over time"
+df = {}
+for y in [2010] + list(range(2013, 2022)):
+    f = get_cbsa_shape_src(y)
+    d = geopandas.read_file(f, rows=0)
+    df[y] = pd.Series(True, index=d.columns)
+df = pd.concat(df, axis=1).fillna(False).replace({False: '', True: 'X'})
+df
+```
+
+Before 2010 there is a column `CENSUSAREA` - "Area of entity before generalization in square miles". After 2010 there are `ALAND` and `AWATER`. For most entries `CENSUSAREA` equals `ALAND` after conversion from square miles to square meters, but not always.
+
+```{code-cell} ipython3
+:tags: []
+
+def get_cbsa_shape_df(year=2021, 
+                    scale: typing.Literal['20m', '5m', '500k'] = '20m',
+                    geometry=True):
+    """Load CBSA shapefile as geodataframe."""
+    f = get_cbsa_shape_src(year, scale)
+    df = geopandas.read_file(f)
+
+    if year == 2010:
+        df = df.rename(columns={
+            'CBSA': 'CBSA_CODE',
+            'NAME': 'CBSA_TITLE',
+            'LSAD': 'METRO_MICRO',
+        })
+        df['METRO_MICRO'] = df['METRO_MICRO'].str.lower()
+        df = df[['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'CENSUSAREA', 'geometry']]
+    elif 2013 <= year <= 2021:
+        df = df.rename(columns={
+            'CBSAFP': 'CBSA_CODE',
+            'NAME': 'CBSA_TITLE',
+            'LSAD': 'METRO_MICRO',
+        })
+        df['METRO_MICRO'] = df['METRO_MICRO'].map({'M1': 'metro', 'M2': 'micro'})
+        df = df[['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'ALAND', 'AWATER', 'geometry']]
+    else:
+        raise NotImplementedError(f'Year {year}.')
+
+    assert df['CBSA_CODE'].notna().all()
+    assert not df['CBSA_CODE'].duplicated().any()
+
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Number of CBSAs in shapefiles"
+t = {}
+for year in [2010] + list(range(2013, 2022)):
+    df = get_cbsa_shape_df(year, geometry=False)
+    t[year] = df['METRO_MICRO'].value_counts(dropna=False)
+t = pd.concat(t, axis=1)
+t.loc['all'] = t.sum()
+t
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-cbsa-cty-wisc
+#| fig-cap: "CBSA counties in Wisconsin, 2020."
+year = 2020
+state = '55'
+
+df = geography.get_county_df(year).query('STATE_CODE == @state').drop(columns='CODE')
+d = get_cbsa_delin_df(year)[['STATE_CODE', 'COUNTY_CODE', 'CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'CENTRAL_OUTLYING']]
+df = df.merge(d, 'left', ['STATE_CODE', 'COUNTY_CODE'])
+df['CBSA'] = df['METRO_MICRO'] + ' ' + df['CENTRAL_OUTLYING']
+df['CBSA'] = df['CBSA'].fillna('noncore')
+
+cats = ['metro', 'micro', 'metro central', 'metro outlying', 'micro central', 'micro outlying', 'noncore']
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors]
+cm = cm[14:16] + cm[2:4] + cm[:2] + cm[5:6]
+
+d = get_cbsa_shape_df(year)
+d = d.loc[d['CBSA_CODE'].isin(df['CBSA_CODE']), ['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'geometry']]
+m = d.explore(name='CBSAs', column='METRO_MICRO', categories=cats, cmap=cm, 
+              tiles='CartoDB positron', legend_kwds={'caption': ''})
+
+df.explore(m=m, name='Counties', column='CBSA', categories=cats, cmap=cm, legend=False)
+
+tile_layer = [x for x in m._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+tile_layer.control = False
+folium.LayerControl(collapsed=False).add_to(m)
+
+m
+```
 
 # ERS measures of urban spatial effect
 

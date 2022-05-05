@@ -169,9 +169,6 @@ def get_source(src):
         else:
             raise Exception(f'No tract revisions in {y}.')
         local = PATH.source/f'tract/{y}/{s}.zip'
-    elif src == 'cbsa-boundary':
-        url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_cbsa_20m.zip'
-        local = PATH.source/'cb_2018_us_cbsa_20m.zip'
     else:
         raise Exception(f'Unknown source: {src}')
         
@@ -720,55 +717,6 @@ One very visible change in Kansas.
 # cbf18.query('GEOID == @tract').boundary.plot(ax=ax, label='CBF 2018', color='blue')
 
 # plt.legend()
-```
-
-# Core Based Statistical Area (CBSA)
-
-From CB [glossary](https://www.census.gov/programs-surveys/geography/about/glossary.html#par_textimage_7):
-> Core Based Statistical Areas (CBSAs) consist of the county or counties or equivalent entities associated with at least one core (urbanized area or urban cluster) of at least 10,000 population, plus adjacent counties having a high degree of social and economic integration with the core as measured through commuting ties with the counties associated with the core. The general concept of a CBSA is that of a core area containing a substantial population nucleus, together with adjacent communities having a high degree of economic and social integration with that core. The term "core based statistical area" became effective in 2003 and refers collectively to metropolitan statistical areas and micropolitan statistical areas. The U.S. Office of Management and Budget (OMB) defines CBSAs to provide a nationally consistent set of geographic entities for the United States and Puerto Rico for use in tabulating and presenting statistical data.
-
-An OMB Metropolitan area contains a core urban area of 50,000 or more population, and a Micropolitan area contains an urban core of at least 10,000 (but less than 50,000) population.
-
-[CB page with data and definitions](https://www.census.gov/programs-surveys/metro-micro.html)
-
-```{code-cell} ipython3
-:tags: [nbd-module]
-
-def get_cbsa_df():
-    if PATH.cbsa.exists():
-        return gpd.read_file(PATH.cbsa)
-    
-    p = get_source('cbsa-boundary')
-    df = gpd.read_file(f'zip://{p}')
-    df = df.rename(columns={'GEOID': 'CODE', 'LSAD': 'TYPE'})
-    df['TYPE'] = df['TYPE'].map({'M1': 'Metro', 'M2': 'Micro'})
-    df = df[['CODE', 'NAME', 'TYPE', 'ALAND', 'AWATER', 'geometry']]
-    df.to_file(PATH.cbsa, driver='GeoJSON')
-    return df
-```
-
-```{code-cell} ipython3
-:tags: []
-
-get_cbsa_df().sample(3)
-```
-
-```{code-cell} ipython3
-def show_cbsa_map():
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=(12, 12))
-    ax.set_aspect('equal')
-
-    df = get_state_df()
-    contig = ~df['ABBR'].isin(['AK', 'HI', 'PR'])
-    df[contig].boundary.plot(ax=ax, color='gray', zorder=1)
-
-    df = get_cbsa_df()
-    contig = ~df['NAME'].apply(lambda name: any(st in name for st in ['AK', 'HI', 'PR']))
-    df[contig].plot(ax=ax, column='TYPE', legend=True, zorder=2, alpha=0.9)
-    
-show_cbsa_map()
 ```
 
 # Postal Zip Code
