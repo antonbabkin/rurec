@@ -28,7 +28,7 @@ jupyter: python3
 
 There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. A selection of definitions is presented here. In many cases, non-rural is defined first, and everything outside of it is considered rural.
 
-There are two major definitions which the Federal government uses to identify the rural status of an area: the Census Bureau's 'Urban Area' and the OMB's 'Core-Based Statistical Area'.
+Two major definitions which the Federal government uses to identify the rural status of an area are the Census Bureau's "Urban Area" and the OMB's "Core-Based Statistical Area".
 
 ```{code-cell} ipython3
 :tags: []
@@ -136,7 +136,6 @@ def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
 ```{code-cell} ipython3
 :tags: []
 
-#| echo: true
 #| tbl-cap: Sample from the urban area dataframe (no geometry).
 get_ua_df(year=2010, geometry=False).sample(3).style.hide_index()
 ```
@@ -465,6 +464,52 @@ Preparation of ERS codes is done in a [separate notebook](ers_codes.ipynb).
 
 +++
 
+## Rural-Urban Commuting Area (RUCA)
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Primary RUCA codes, 2010 revision."
+d = pd.read_fwf(PATH['data'] / 'ers_codes/ruca_doc.txt', skiprows=144, header=None, widths=[4, 999]).head(11)
+d.columns = ['RUCA_CODE', 'RUCA_DESC']
+d = d.apply(lambda c: c.str.strip())
+d['RUCA_SHORT'] = ['metro core', 'metro high comm', 'metro low comm',
+                   'micro core', 'micro high comm', 'micro low comm',
+                   'UC core', 'UC high comm', 'UC low comm', 'rural', 'NA']
+ruca_code_desc = d = d[['RUCA_CODE', 'RUCA_SHORT', 'RUCA_DESC']]
+d.style.hide_index()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-ruca-wisc
+#| fig-cap: "Classification of tracts in central Wisconsin, 2010 RUCA revision."
+st = '55'
+cty = ['073', '097', '141', '019', '119', '099', '069', '085', '067']
+
+# load geographic area
+df = geography.get_tract_df([2010], [st])
+df = df.loc[(df['STATE_CODE'] == st) & df['COUNTY_CODE'].isin(cty), ['STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE', 'geometry']]
+
+# add RUCA codes with short descriptions
+d = ers_codes.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE', 'POPULATION', 'AREA']]
+d['STATE_CODE'] = d['FIPS'].str[:2]
+d['COUNTY_CODE'] = d['FIPS'].str[2:5]
+d['TRACT_CODE'] = d['FIPS'].str[5:]
+del d['FIPS']
+df = df.merge(d, 'left')
+df['RUCA_CODE'] = df['RUCA_CODE'].astype(float).astype(int).astype(str)
+df['RUCA_CODE'] = df['RUCA_CODE'].fillna('99')
+df = df.merge(ruca_code_desc[['RUCA_CODE', 'RUCA_SHORT']], 'left')
+
+# map
+cats = ruca_code_desc['RUCA_SHORT'].tolist()
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20c.colors]
+cm = cm[4:7] + cm[0:3] + cm[8:11] + cm[13:14] + cm[17:18]
+df.explore(column='RUCA_SHORT', categories=cats, cmap=cm, tiles='CartoDB positron', legend_kwds={'caption': ''})
+```
+
 # FORHP
 
 [HRSA](https://www.hrsa.gov/rural-health/about-us/definition/index.html)
@@ -496,10 +541,6 @@ It is not a code for any functional concept of rurality, but there is an obvious
 The ERS created four FAR levels based on proximity (conceived of as travel time) to “urban” places of different sizes.
 Levels 1 through 4 measure increasing remoteness.
 The ‘FAR Level’ variable captures the highest numbered positive FAR level for a location.
-
-+++
-
-# Map
 
 ```{code-cell} ipython3
 :tags: []
@@ -573,3 +614,5 @@ folium.LayerControl(collapsed=False).add_to(m)
 m.fit_bounds(state_bbox('55'))
 m
 ```
+
+# References
