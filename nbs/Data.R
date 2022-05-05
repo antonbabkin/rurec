@@ -271,7 +271,7 @@ UICData$place <- UICData$FIPS
 TIGER_CBP_RUCC <- inner_join(TIGER_CBP, RUCCData, by = "place")
 rownames(TIGER_CBP_RUCC) <- TIGER_CBP_RUCC$place
 # add augmented hierarchical classification 
-TIGER_CBP_RUCC <- transform(TIGER_CBP_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) ) table(TIGER_CBP_RUCC$H3)
+TIGER_CBP_RUCC <- transform(TIGER_CBP_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) ) 
 
 
 # Produce Distance Matrix
