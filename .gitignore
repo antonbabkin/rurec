@@ -19,5 +19,7 @@ census_api_key.txt
 
 # only track .md versions of notebooks
 *.ipynb
-nbs/.Rhistory
-nbs/.RData
+*.Rhistory
+*.RData
+*.html
+*_files/

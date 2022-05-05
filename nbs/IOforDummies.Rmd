@@ -2,14 +2,15 @@
 title: "IO for Dummies"
 author: "Austin Sandler"
 date: "3/22/2022"
-output:
-  html_document:
-    code_folding: hide
+format:
+  html:
+    page-layout: full
+    code-fold: true
+    code-tools: true
     code_download: yes
     latex_engine: pdflatex
-  pdf_document: default
-self_contained: no
 ---
+
 
 ```{r preamble, include = FALSE}
 # When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
@@ -18,7 +19,7 @@ options(scipen=999)
 
 ```
 
-##  {.tabset}
+::: {.panel-tabset}
 
 ### RStartup
 
@@ -914,3 +915,14 @@ The (industry-by-industry) *Direct Requirements* (technical coefficients) matrix
 The (industry-by-industry) *Total Requirements* matrix shows, on a per-dollar basis, the industry output the economy generates in order to provide an industry's commodities to final users: $\partial{x_{i}}/\partial{f_{j}} = l_{ij}$.
 
 Technically speaking, the *Direct Requirements* matrix constructed from the BEA *Total Requirements* matrix (from a *Make* and *Use* table framework) is an industry based technology, industry-by-industry class table $\underset{(i \times i)}{\mathbf{A}_{I}} = \mathbf{V}(\mathbf{\widehat{V'i}})^{-1}\mathbf{U}(\mathbf{\widehat{Vi}})^{-1}$
+
+
+
+
+
+::: 
+
+
+
+
+

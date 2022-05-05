@@ -12,17 +12,24 @@ Ind_Names <- IO_tables[["IxI_TR_1997-2020_PRO_SEC"]][["2020"]][5,3:17] %>% as.li
 rownames(Total_mat) = colnames(Total_mat) <- Ind_Names
 
 Direct_mat <- diag(ncol(Total_mat)) - solve(Total_mat)
+
+
 local({
-temp <- TIGER_CBP[, c("place")]
+temp <- TIGER_CBP_RUCC[, c("place")]
 st_geometry(temp) <- NULL 
-Xemp_mat <<- inner_join(temp, CBP_table, by = "place")
+X_mat <<- inner_join(temp, CBP_table, by = "place")
 })
-Xemp_mat <- Xemp_mat[, c("BEA_Sectors", "place", "emp")]
+
+Xemp_mat <- X_mat[, c("BEA_Sectors", "place", "emp")]
 Xemp_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "emp", varying = unique(Xemp_mat$place), timevar = "place", new.row.names = unique(Xemp_mat$BEA_Sectors),  direction = "wide")
 Xemp_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
 
 Industry_Count <- dim(Xemp_mat)[1]
 Region_Count <- dim(Xemp_mat)[2]
+
+Xpay_mat <- X_mat[, c("BEA_Sectors", "place", "ap")]
+Xpay_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "ap", varying = unique(Xpay_mat$place), timevar = "place", new.row.names = unique(Xpay_mat$BEA_Sectors),  direction = "wide")
+Xpay_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
 
 
 ############ Simple Location Quotient
@@ -161,6 +168,105 @@ for (i in 1:nrow(Xemp_mat)){
 names(Gravity_mat) <- rownames(Xemp_mat)
 
 
+
+
+
+############ Input Needs
+Input_mat <- (Direct_mat  %*%  Xpay_mat)
+
+############ Relative Input Needs
+Input_mat_rel <- (Input_mat) %*% solve(diag(c((rep(c(1), each=ncol(Direct_mat)) %*% Input_mat))))
+colnames(Input_mat_rel) <- colnames(Input_mat)
+
+############ Import Input Needs
+Input_mat_imp <- pmax(Input_mat - Xpay_mat, 0)
+
+############ Net Exports 
+Input_mat_exp <- abs(pmin(Input_mat - Xpay_mat, 0))
+
+############ Relative Import Input Needs
+Input_mat_imp_rel <- pmax(Input_mat_rel - Xpay_mat %*% solve(diag(c((rep(c(1), each=nrow(Xpay_mat)) %*% Xpay_mat)))), 0)
+colnames(Input_mat_imp_rel) <- colnames(Input_mat)
+
+
+
+############ Similarity Index
+Sim_mat  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat[i,j]  <- norm((Input_mat[,i] - (Xpay_mat[,j])), type = "2")
+  }
+}
+rownames(Sim_mat) = colnames(Sim_mat) <- colnames(Input_mat)
+
+
+############ Relative Similarity Index
+Sim_mat_rel  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat_rel[i,j]  <- norm((Input_mat_rel[,i] - (Xpay_mat[,j] %*% solve(c((rep(c(1), each=ncol(Direct_mat)) %*% Xpay_mat[,j] ))) )), type = "2")
+  }
+}
+rownames(Sim_mat_rel) = colnames(Sim_mat_rel) <- colnames(Input_mat)
+
+
+############ Import Similarity Index
+Sim_mat_imp  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat_imp[i,j]  <- norm((Input_mat_imp[,i] - (Xpay_mat[,j])), type = "2")
+  }
+}
+rownames(Sim_mat_imp) = colnames(Sim_mat_imp) <- colnames(Input_mat)
+
+############ *Import Similarity Index - Net Exports
+Sim_mat_exp  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat_exp[i,j]  <- norm((Input_mat_imp[,i] - (Input_mat_exp[,j])), type = "2")
+  }
+}
+rownames(Sim_mat_exp) = colnames(Sim_mat_exp) <- colnames(Input_mat)
+
+
+############ Relative Import Similarity Index
+Sim_mat_imp_rel  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat_imp_rel[i,j]  <- norm((Input_mat_imp_rel[,i] - (Xpay_mat[,j] %*% solve(c((rep(c(1), each=ncol(Direct_mat)) %*% Xpay_mat[,j] ))) )), type = "2")
+  }
+}
+rownames(Sim_mat_imp_rel) = colnames(Sim_mat_imp_rel) <- colnames(Input_mat)
+
+############ *Relative Import Similarity Index - Net Exports
+Sim_mat_exp_rel  <-  matrix(0, nrow = ncol(Xpay_mat), ncol = ncol(Xpay_mat))
+for (i in 1:ncol(Xpay_mat)){
+  for (j in 1:ncol(Xpay_mat)){
+    Sim_mat_exp_rel[i,j]  <- norm((Input_mat_imp_rel[,i] - (Input_mat_exp[,j] %*% solve(c((rep(c(1), each=ncol(Direct_mat)) %*% Input_mat_exp[,j] ))) )), type = "2")
+  }
+}
+rownames(Sim_mat_exp_rel) = colnames(Sim_mat_exp_rel) <- colnames(Input_mat)
+
+
+
+
+
+
+
+
+
+##### WI test
+#test <- Sim_mat_imp_rel*Prox_mat
+#test <- replace(test, test<=0, Inf)
+
+
+
+
+
+
+####### Saved Data for use in other renderable files
+save.image(file="nbs/AllData.RData")
+save(list = c("TIGER_CBP_RUCC", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Prox_mat", "Q_mat", "Dist_mat"), file="nbs/Data.RData")
 
 
 
