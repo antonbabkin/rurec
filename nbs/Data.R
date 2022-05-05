@@ -2,13 +2,20 @@
 # List packages needed for this exercise
 packages <- c("dlm",
               "fs",
+              "geosphere",
               "gtools",
               "knitr",
               "magrittr",
+              "Matrix",
               "openxlsx",
+              "RColorBrewer",
               "readxl",
               "reticulate",
+              "sf",
+              "spdep",
               "tidyverse",
+              "tmap",
+              "tmaptools",
               "tools")
 
 # Install packages not yet installed
@@ -23,13 +30,28 @@ invisible(lapply(packages, library, character.only = TRUE))
 # Establish working directory relative to location of this file
 script_path() %>% setwd() 
 
+# Push working directory up a level to establish parallel data files
+setwd("..")
+
 # Create "data" a file if not already done
 if (!file.exists("data")) {
   "data" %>% dir.create()
 }
 
+# Function to download  data
+data_getr <- function(FileURL,
+                      DestDir){
+  local({
+    destfile <- FileURL %>% basename() %>% path(DestDir, .)
+    if (!file.exists(destfile)) {
+      download.file(url=FileURL, destfile=destfile, quiet=TRUE, overwrite = TRUE)
+    }
+  }) 
+}
+
+
 # Function to download and unzip data
-data_getr <- function(ZipURL,
+data_zipr <- function(ZipURL,
                       DestDir,
                       FileExt = ""){
   local({
@@ -46,17 +68,47 @@ data_getr <- function(ZipURL,
 
 
 # Download and unzip BEA IO data.
-data_getr(
+data_zipr(
   ZipURL = "https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip",
   DestDir = getwd() %>% path("data")
 )
 
 # Download and unzip Census CBP data.
-data_getr(
+data_zipr(
   ZipURL = "https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip",
   DestDir =  getwd() %>% path("data"),
   FileExt = "txt"
 )
+
+# Download and unzip Census county TIGER  data.
+data_zipr(
+  ZipURL = "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip",
+  DestDir = getwd() %>% path("data")
+)
+data_zipr(
+  ZipURL = "https://www2.census.gov/geo/tiger/GENZ2021/shp/cb_2021_us_county_500k.zip",
+  DestDir = getwd() %>% path("data")
+)
+
+# Download RUCA codes.
+data_getr(
+  FileURL = "https://www.ers.usda.gov/webdocs/DataFiles/53241/ruca2010revised.xlsx",
+  DestDir = getwd() %>% path("data")
+)
+
+# Download RUCC codes.
+data_getr(
+  FileURL = "https://www.ers.usda.gov/webdocs/DataFiles/53251/ruralurbancodes2013.xls",
+  DestDir = getwd() %>% path("data")
+)
+
+# Download Urban Influence codes.
+data_getr(
+  FileURL = "https://www.ers.usda.gov/webdocs/DataFiles/53797/UrbanInfluenceCodes2013.xls",
+  DestDir = getwd() %>% path("data")
+)
+
+
 
 # Function to import a file of excel data tables
 excel_importr <- function(TableName,
@@ -78,6 +130,36 @@ excel_importr <- function(TableName,
 }
 
 
+# Function(s) to clean non-finite values in lists of matrix 
+finiter <- function(x){
+  if (!is.finite(x)){
+    x <- 0
+  }
+  else {
+    x=x
+  }
+} 
+
+finiterer <- function(x){ 
+  lapply(1:length(x), function(i) apply(x[[i]], c(1,2), finiter))
+}
+
+
+# Function(s) to truncate values in lists of matrix  
+oner <- function(x, t=1, l=1){
+  if (x > l){
+    x <- t
+  }
+  else {
+    x=x
+  }
+}
+onerer <- function(x){ 
+  lapply(1:length(x), function(i) apply(x[[i]], c(1,2), oner))
+}
+
+
+
 # Import IO tables into R 
 excel_importr(
   TableName = "IO_tables",
@@ -93,16 +175,34 @@ if (!exists("RegionalData")){
   RegionalData$fipscty  %<>% formatC(width = 3, format = "d", flag = "0")
 }
 
+# Import TIGER data into R 
+if (!exists("TIGERData")){
+  TIGERData <- path(getwd(), "data", "cb_2021_us_county_500k.shp") %>% st_read(stringsAsFactors = FALSE)
+  TIGERData$place <- paste0(TIGERData$STATEFP, TIGERData$COUNTYFP)
+  TIGERData$center <- st_centroid(TIGERData$geometry)
+}
+
+
 
 # Process and parse hierarchical structure  of CBP data
+RegionalData$place <- paste0(RegionalData$fipstate, RegionalData$fipscty)
+
 RegionalData_C <- filter(RegionalData, naics == "------")
 Regions <- RegionalData_C[, 1:2]
 Regions$place <- paste0(Regions$fipstate, Regions$fipscty)
 RegionalData_Sector <- RegionalData %>% filter(grepl('*----', naics) & naics != '------' )
+####  Note:  Six counties (30069, 31007, 31117, 32009, 48033, 48301)  do not have Sector level naicscodes  only top level "------"
+Regions_Sector <- as.data.frame(unique(RegionalData_Sector$place)) 
+names(Regions_Sector) <- "place"
 RegionalData_Subsector <- RegionalData %>% filter(grepl('///', naics))
 RegionalData_IndustryGroup <- RegionalData %>% filter(grepl('//', naics) & !grepl('///', naics))
 RegionalData_NAICSIndustry <- RegionalData %>% filter(grepl('/', naics) & !grepl('///', naics)  & !grepl('//', naics))
 RegionalData_USNAICS <- RegionalData %>% filter(!grepl('/', naics) & !grepl('-', naics))
+
+# Parse TIGER and CBP crosswalk
+TIGER_CBP <- inner_join(TIGERData, Regions_Sector, by = "place")
+TIGER_CBP  <- TIGER_CBP[order(TIGER_CBP$place), ]
+rownames(TIGER_CBP) <- TIGER_CBP$place
 
 
 # Generate a cross walk to transform NAICS sectors used by CBP into BEA sectors 
@@ -144,6 +244,44 @@ CBP_table$ap <-  as.numeric(CBP_table$ap)
 CBP_table$est <-  as.numeric(CBP_table$est)
 
 
+# Import RUCA tables into R 
+if (!exists("RUCAData")){
+  RUCAData <- path(getwd(), "data", "ruca2010revised.xlsx") %>% read.xlsx(startRow = 2)
+}
+
+# Import RUCC tables into R 
+if (!exists("RUCCData")){
+  RUCCData <- path(getwd(), "data", "ruralurbancodes2013.xls") %>% read_xls()
+}
+
+RUCCData$place <- RUCCData$FIPS
+####  Note:  2 counties (02158, 46102) are not common to TIGER_CBP in RUCCData
+
+
+# Import UIC tables into R 
+if (!exists("UICData")){
+  UICData <- path(getwd(), "data", "UrbanInfluenceCodes2013.xls") %>% read_xls()
+}
+UICData$place <- UICData$FIPS
+
+
+
+
+#Parse TIGER/CBP and RUCC crosswalk
+TIGER_CBP_RUCC <- inner_join(TIGER_CBP, RUCCData, by = "place")
+rownames(TIGER_CBP_RUCC) <- TIGER_CBP_RUCC$place
+# add augmented hierarchical classification 
+TIGER_CBP_RUCC <- transform(TIGER_CBP_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) ) table(TIGER_CBP_RUCC$H3)
+
+
+# Produce Distance Matrix
+Dist_mat <- TIGER_CBP_RUCC$center %>% as_Spatial() %>% distm()
+rownames(Dist_mat) = colnames(Dist_mat) <- TIGER_CBP_RUCC$place
+
+
+## Proximity Matrix
+Prox_mat <- poly2nb(TIGER_CBP_RUCC, queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
+colnames(Prox_mat) <- rownames(Prox_mat)
 
 
 # Import CBP data using separate Python pre-processing
