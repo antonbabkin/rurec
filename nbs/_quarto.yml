@@ -2,6 +2,7 @@ project:
   type: website
   render:
     - index.ipynb
+    - geography.ipynb
     - rurality.ipynb
     - IOforDummies.Rmd
   post-render: touch _site/.nojekyll
@@ -13,6 +14,8 @@ website:
     left:
       - href: index.ipynb
         text: Home
+      - href: geography.ipynb
+        text: Geography
       - href: rurality.ipynb
         text: Rurality
       - IOforDummies.Rmd

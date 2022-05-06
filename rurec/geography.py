@@ -6,19 +6,20 @@ import warnings
 import shutil
 
 import pandas as pd
-import geopandas as gpd
+import geopandas
 import pyarrow
+import pyarrow.dataset
 
-from .reseng.config import Paths
-from . import util
+from .reseng.util import download_file
+from .reseng.nbd import Nbd
+nbd = Nbd('rurec')
 
-PATH = Paths(
-    source='data/geo/source',
-    state='data/geo/state.pq',
-    county='data/geo/county.pq',
-    tract='data/geo/tract.pq',
-    cbsa='data/geo/cbsa.json'
-)
+PATH = {
+    'source': nbd.root / 'data/source/geo',
+    'state': nbd.root / 'data/geo/state.pq',
+    'county': nbd.root / 'data/geo/county.pq',
+    'tract': nbd.root / 'data/geo/tract.pq'
+}
 
 
 # in geopandas 0.8, parquet support is still experimental
@@ -31,7 +32,7 @@ def get_source(src):
     """Return path to file specified by `src` key, downloading if missing."""
     if src == 'state-boundary':
         url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip'
-        local = PATH.source/'cb_2018_us_state_20m.zip'
+        local = PATH['source']/'cb_2018_us_state_20m.zip'
     elif src.startswith('tract-boundary-'):
         # tract-boundary-YYYY-SS, YYYY = decennial census year, SS = state FIPS code
         y = int(src[15:19])
@@ -46,29 +47,26 @@ def get_source(src):
             url = f'https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_{s}_tract_500k.zip'
         else:
             raise Exception(f'No tract revisions in {y}.')
-        local = PATH.source/f'tract/{y}/{s}.zip'
-    elif src == 'cbsa-boundary':
-        url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_cbsa_20m.zip'
-        local = PATH.source/'cb_2018_us_cbsa_20m.zip'
+        local = PATH['source']/f'tract/{y}/{s}.zip'
     else:
         raise Exception(f'Unknown source: {src}')
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        util.download_file(url, local.parent, local.name)
+        download_file(url, local.parent, local.name)
     return local
 
 
 def get_state_df(geometry=True):
-    path = PATH.state
+    path = PATH['state']
     if path.exists():
         if geometry:
-            return gpd.read_parquet(path)
+            return geopandas.read_parquet(path)
         else:
             return pd.read_parquet(path, 'pyarrow', ['CODE', 'ABBR', 'NAME', 'ALAND', 'AWATER'])
 
     p = get_source('state-boundary')
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     df = df.rename(columns={'STATEFP': 'CODE', 'STUSPS': 'ABBR'})
     df = df[['CODE', 'ABBR', 'NAME', 'ALAND', 'AWATER', 'geometry']]
     assert not df.duplicated('CODE').any()
@@ -98,25 +96,25 @@ def get_source_county(year=2020, scale='20m'):
     
     assert (year, scale) in urls, f'No county shapes in {year}, {scale}.'
     
-    local = PATH.source/f'county/{year}_{scale}.zip'
+    local = PATH['source']/f'county/{year}_{scale}.zip'
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        util.download_file(urls[(year, scale)], local.parent, local.name)
+        download_file(urls[(year, scale)], local.parent, local.name)
     return local
 
 
 def get_county_df(year=2020, geometry=True, scale='20m'):
 
-    path = PATH.county/f'{year}/{scale}.pq'
+    path = PATH['county']/f'{year}/{scale}.pq'
     if path.exists():
         if geometry:
-            return gpd.read_parquet(path)
+            return geopandas.read_parquet(path)
         else:
             return pd.read_parquet(path, 'pyarrow', ['CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE'])
 
     p = get_source_county(year, scale)
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     if year == 1990:
         df = df.rename(columns={'ST': 'STATE_CODE', 'CO': 'COUNTY_CODE'})
     elif year in [2000, 2010]:
@@ -126,6 +124,8 @@ def get_county_df(year=2020, geometry=True, scale='20m'):
     df['CODE'] = df['STATE_CODE'] + df['COUNTY_CODE']
     df = df[['CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'geometry']]
     
+    assert df['CODE'].notna().all()
+
     # 1990 and 2000 shapefiles have multiple polygon records per non-contiguous county
     if year in [1990, 2000]:
         df = df.dissolve('CODE', as_index=False, sort=False)
@@ -154,19 +154,19 @@ def get_tract_df(years=None, state_codes=None, geometry=True):
     if state_codes:
         f.append(('STATE_CODE', 'in', state_codes))
     if geometry:
-        return gpd.read_parquet(PATH.tract, partitioning=p, filters=f)
+        return geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
     else:
         c = ['YEAR', 'CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE']
-        return pyarrow.parquet.read_table(PATH.tract, columns=c, partitioning=p, filters=f,
+        return pyarrow.parquet.read_table(PATH['tract'], columns=c, partitioning=p, filters=f,
                                           use_pandas_metadata=True).to_pandas()
 
 def _prep_tract_df(year, state_code):
     """Download shapefiles for one year and one state, normalize column names and save as parquet partition."""
-    path = PATH.tract/f'YEAR={year}/STATE_CODE={state_code}/part.pq'
+    path = PATH['tract']/f'YEAR={year}/STATE_CODE={state_code}/part.pq'
     if path.exists(): return
 
     p = get_source(f'tract-boundary-{year}-{state_code}')
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     if year == 1990:
         if state_code == '34':
             # 2 records have NA tracts, don't know what it means
@@ -186,6 +186,7 @@ def _prep_tract_df(year, state_code):
     df['NAME'] = df['NAME'].str[:-2] + '.' + df['NAME'].str[-2:]
     df = df[['CODE', 'NAME', 'geometry', 'COUNTY_CODE', 'TRACT_CODE']]
     
+    assert df['CODE'].notna().all()
     # 1990 and 2000 shapefiles have multiple polygon records per non-contiguous tract
     if year in [1990, 2000]:
         df = df.dissolve('CODE', as_index=False, sort=False)
@@ -194,17 +195,4 @@ def _prep_tract_df(year, state_code):
         
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path)
-
-
-def get_cbsa_df():
-    if PATH.cbsa.exists():
-        return gpd.read_file(PATH.cbsa)
-    
-    p = get_source('cbsa-boundary')
-    df = gpd.read_file(f'zip://{p}')
-    df = df.rename(columns={'GEOID': 'CODE', 'LSAD': 'TYPE'})
-    df['TYPE'] = df['TYPE'].map({'M1': 'Metro', 'M2': 'Micro'})
-    df = df[['CODE', 'NAME', 'TYPE', 'ALAND', 'AWATER', 'geometry']]
-    df.to_file(PATH.cbsa, driver='GeoJSON')
-    return df
 

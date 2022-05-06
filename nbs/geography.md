@@ -12,7 +12,18 @@ kernelspec:
   name: python3
 ---
 
-# Geographic gazetteer
+```{raw-cell}
+
+---
+title: "Geographic gazetteer"
+format:
+  html:
+    code-fold: true
+execute:
+  echo: false
+jupyter: python3
+---
+```
 
 The main purpose of this notebook is to retrieve and prepare dataframes with geographic boundaries of various geographic units of the USA.
 
@@ -24,19 +35,20 @@ import warnings
 import shutil
 
 import pandas as pd
-import geopandas as gpd
+import geopandas
 import pyarrow
+import pyarrow.dataset
 
-from rurec.reseng.config import Paths
-from rurec import util
+from rurec.reseng.util import download_file
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
 
-PATH = Paths(
-    source='data/geo/source',
-    state='data/geo/state.pq',
-    county='data/geo/county.pq',
-    tract='data/geo/tract.pq',
-    cbsa='data/geo/cbsa.json'
-)
+PATH = {
+    'source': nbd.root / 'data/source/geo',
+    'state': nbd.root / 'data/geo/state.pq',
+    'county': nbd.root / 'data/geo/county.pq',
+    'tract': nbd.root / 'data/geo/tract.pq'
+}
 ```
 
 ```{code-cell} ipython3
@@ -54,6 +66,7 @@ warnings.filterwarnings('ignore', message='.*initial implementation of Parquet.*
 import ipywidgets as widgets
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import folium
 ```
 
 +++ {"tags": []}
@@ -87,34 +100,34 @@ Shapefile revisions change from year to year. Between year differences are clear
 
 df = []
 
-f = util.download_file('https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_09_county10.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('COUNTYFP10 == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/TIGER2010/COUNTY/2010/tl_2010_09_county10.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('COUNTYFP10 == "013"')[['geometry']]
 d['scale'] = 'tiger 2010'
 df.append(d)
 
-f = util.download_file('https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('STATEFP == "09" and COUNTYFP == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/TIGER2020/COUNTY/tl_2020_us_county.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('STATEFP == "09" and COUNTYFP == "013"')[['geometry']]
 d['scale'] = 'tiger 2020' 
 df.append(d)
 
 
-f = util.download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_500k.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_500k.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
 d['scale'] = '500k 2010'
 df.append(d)
 
-f = util.download_file('https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_county_500k.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('STATEFP == "09" and COUNTYFP == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_us_county_500k.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('STATEFP == "09" and COUNTYFP == "013"')[['geometry']]
 d['scale'] = '500k 2020'
 df.append(d)
 
-f = util.download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_5m.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_5m.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
 d['scale'] = '5m 2010'
 df.append(d)
 
-f = util.download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_20m.zip', PATH.root/'tmp')
-d = gpd.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
+f = download_file('https://www2.census.gov/geo/tiger/GENZ2010/gz_2010_us_050_00_20m.zip', nbd.root/'tmp')
+d = geopandas.read_file(f).query('STATE == "09" and COUNTY == "013"')[['geometry']]
 d['scale'] = '20m 2010'
 df.append(d)
 
@@ -153,7 +166,7 @@ def get_source(src):
     """Return path to file specified by `src` key, downloading if missing."""
     if src == 'state-boundary':
         url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip'
-        local = PATH.source/'cb_2018_us_state_20m.zip'
+        local = PATH['source']/'cb_2018_us_state_20m.zip'
     elif src.startswith('tract-boundary-'):
         # tract-boundary-YYYY-SS, YYYY = decennial census year, SS = state FIPS code
         y = int(src[15:19])
@@ -168,33 +181,33 @@ def get_source(src):
             url = f'https://www2.census.gov/geo/tiger/GENZ2020/shp/cb_2020_{s}_tract_500k.zip'
         else:
             raise Exception(f'No tract revisions in {y}.')
-        local = PATH.source/f'tract/{y}/{s}.zip'
+        local = PATH['source']/f'tract/{y}/{s}.zip'
     else:
         raise Exception(f'Unknown source: {src}')
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        util.download_file(url, local.parent, local.name)
+        download_file(url, local.parent, local.name)
     return local
 ```
 
 +++ {"tags": []}
 
-# State
+# States
 
 ```{code-cell} ipython3
 :tags: [nbd-module]
 
 def get_state_df(geometry=True):
-    path = PATH.state
+    path = PATH['state']
     if path.exists():
         if geometry:
-            return gpd.read_parquet(path)
+            return geopandas.read_parquet(path)
         else:
             return pd.read_parquet(path, 'pyarrow', ['CODE', 'ABBR', 'NAME', 'ALAND', 'AWATER'])
 
     p = get_source('state-boundary')
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     df = df.rename(columns={'STATEFP': 'CODE', 'STUSPS': 'ABBR'})
     df = df[['CODE', 'ABBR', 'NAME', 'ALAND', 'AWATER', 'geometry']]
     assert not df.duplicated('CODE').any()
@@ -205,21 +218,23 @@ def get_state_df(geometry=True):
 ```
 
 ```{code-cell} ipython3
-def show_state_map():
-    import matplotlib.pyplot as plt
-
-    df = get_state_df()
-    df = df[~df['ABBR'].isin(['AK', 'HI', 'PR'])]
-    fig, ax = plt.subplots(figsize=(24, 8))
-    ax.set_aspect('equal')
-    df.boundary.plot(ax=ax)
-    for abbr, shape in df[['ABBR', 'geometry']].itertuples(False):
-        ax.annotate(abbr, shape.centroid.coords[0], horizontalalignment='center')
-
-show_state_map()
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+get_state_df(geometry=False).sort_values('NAME').style.hide_index()
 ```
 
-# County
+```{code-cell} ipython3
+:tags: []
+
+df = get_state_df()
+df = df[~df['ABBR'].isin(['AK', 'HI', 'PR'])]
+df.explore(tiles='CartoDB positron')
+```
+
+# Counties
 
 
 **Source data**
@@ -258,11 +273,11 @@ def get_source_county(year=2020, scale='20m'):
     
     assert (year, scale) in urls, f'No county shapes in {year}, {scale}.'
     
-    local = PATH.source/f'county/{year}_{scale}.zip'
+    local = PATH['source']/f'county/{year}_{scale}.zip'
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        util.download_file(urls[(year, scale)], local.parent, local.name)
+        download_file(urls[(year, scale)], local.parent, local.name)
     return local
 ```
 
@@ -273,15 +288,15 @@ CRS in 1990 and 2000 is unknown, created dataframes have "naive geometries".
 
 def get_county_df(year=2020, geometry=True, scale='20m'):
 
-    path = PATH.county/f'{year}/{scale}.pq'
+    path = PATH['county']/f'{year}/{scale}.pq'
     if path.exists():
         if geometry:
-            return gpd.read_parquet(path)
+            return geopandas.read_parquet(path)
         else:
             return pd.read_parquet(path, 'pyarrow', ['CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE'])
 
     p = get_source_county(year, scale)
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     if year == 1990:
         df = df.rename(columns={'ST': 'STATE_CODE', 'CO': 'COUNTY_CODE'})
     elif year in [2000, 2010]:
@@ -291,6 +306,8 @@ def get_county_df(year=2020, geometry=True, scale='20m'):
     df['CODE'] = df['STATE_CODE'] + df['COUNTY_CODE']
     df = df[['CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'geometry']]
     
+    assert df['CODE'].notna().all()
+
     # 1990 and 2000 shapefiles have multiple polygon records per non-contiguous county
     if year in [1990, 2000]:
         df = df.dissolve('CODE', as_index=False, sort=False)
@@ -307,33 +324,14 @@ def get_county_df(year=2020, geometry=True, scale='20m'):
 ```{code-cell} ipython3
 :tags: []
 
-def show_county_map():
-    county_years = [1990, 2000, 2010, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
-    w_year = widgets.Dropdown(description='Year', value=2020, options=county_years)
-    w_state = widgets.Dropdown(description='State', value='55',
-                               options=sorted(get_state_df(False)[['NAME', 'CODE']].values.tolist()))
-    w_out = widgets.Output()
-    w_show = widgets.Button(description='Show map')
-    def _show(_):
-        df = get_county_df(w_year.value)
-        df = df[df['STATE_CODE'] == w_state.value]
-        with w_out:
-            w_out.clear_output(True)
-            fig, ax = plt.subplots(figsize=(12, 12))
-            ax.set_aspect('equal')
-            df.boundary.plot(ax=ax)
-            for name, code, shape in df[['NAME', 'CODE', 'geometry']].itertuples(False):
-                ax.annotate(f'{name}\n{code}', shape.centroid.coords[0], horizontalalignment='center')
-            plt.close()
-            display(fig)    
-    w_show.on_click(_show)
+year = 2020
+state = '55'
 
-    display(widgets.VBox([widgets.HBox([w_year, w_state, w_show]), w_out]))
-    
-show_county_map()
+df = get_county_df(year).query('STATE_CODE == @state')
+df.explore(tiles='CartoDB positron')
 ```
 
-# Census Tract
+# Census Tracts
 
 Code is 11 digits: 2 state, 5 county, 4+2 tract.
 
@@ -357,19 +355,19 @@ def get_tract_df(years=None, state_codes=None, geometry=True):
     if state_codes:
         f.append(('STATE_CODE', 'in', state_codes))
     if geometry:
-        return gpd.read_parquet(PATH.tract, partitioning=p, filters=f)
+        return geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
     else:
         c = ['YEAR', 'CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE']
-        return pyarrow.parquet.read_table(PATH.tract, columns=c, partitioning=p, filters=f,
+        return pyarrow.parquet.read_table(PATH['tract'], columns=c, partitioning=p, filters=f,
                                           use_pandas_metadata=True).to_pandas()
 
 def _prep_tract_df(year, state_code):
     """Download shapefiles for one year and one state, normalize column names and save as parquet partition."""
-    path = PATH.tract/f'YEAR={year}/STATE_CODE={state_code}/part.pq'
+    path = PATH['tract']/f'YEAR={year}/STATE_CODE={state_code}/part.pq'
     if path.exists(): return
 
     p = get_source(f'tract-boundary-{year}-{state_code}')
-    df = gpd.read_file(p)
+    df = geopandas.read_file(p)
     if year == 1990:
         if state_code == '34':
             # 2 records have NA tracts, don't know what it means
@@ -389,6 +387,7 @@ def _prep_tract_df(year, state_code):
     df['NAME'] = df['NAME'].str[:-2] + '.' + df['NAME'].str[-2:]
     df = df[['CODE', 'NAME', 'geometry', 'COUNTY_CODE', 'TRACT_CODE']]
     
+    assert df['CODE'].notna().all()
     # 1990 and 2000 shapefiles have multiple polygon records per non-contiguous tract
     if year in [1990, 2000]:
         df = df.dissolve('CODE', as_index=False, sort=False)
@@ -400,42 +399,18 @@ def _prep_tract_df(year, state_code):
 ```
 
 ```{code-cell} ipython3
-def show_tract_map():
-    w_year = widgets.Dropdown(description='Year', value=2020, options=[1990, 2000, 2010, 2020])
-    w_state = widgets.Dropdown(description='State', value='55',
-                               options=sorted(get_state_df(False)[['NAME', 'CODE']].values.tolist()))
-    w_county = widgets.Dropdown(description='County')
-    def upd_county_list(*args):
-        df = get_county_df(w_year.value, False)
-        df = df.loc[df['STATE_CODE'] == w_state.value, ['NAME', 'COUNTY_CODE']]
-        w_county.options = sorted(df.values.tolist())
-    upd_county_list()
-    w_year.observe(upd_county_list, 'value')
-    w_state.observe(upd_county_list, 'value')
+:tags: []
 
-    w_out = widgets.Output()
-    w_show = widgets.Button(description='Show map')
-    def _show(_):
-        df = get_tract_df([w_year.value], [w_state.value])
-        
-        df = df[df['COUNTY_CODE'] == w_county.value]
-        with w_out:
-            w_out.clear_output()
-            fig, ax = plt.subplots(figsize=(12, 12))
-            ax.set_aspect('equal')
-            df.boundary.plot(ax=ax)
-            for name, shape in df[['NAME', 'geometry']].itertuples(False):
-                ax.annotate(name, shape.centroid.coords[0], horizontalalignment='center')
-            plt.close()
-            display(fig)
-    w_show.on_click(_show)
+state = '55'
+county = '025'
 
-    display(widgets.VBox([widgets.HBox([w_year, w_state, w_county, w_show]), w_out]))
-
-show_tract_map()
+df = get_tract_df([2020], [state]).query('COUNTY_CODE == @county')
+df.explore(tiles='CartoDB positron')
 ```
 
 ## Changes over time
+
+Major changes to tract codes and shapes change after decennial censuses, with smaller changes in between years.
 
 The first four digits of the tract code are "permanent." 
 When tracks get large (+8000 residents), tracts are split and 2 digit tag is used (same with the split of splits):
@@ -453,8 +428,8 @@ When changes (splits, merges, redefinitions) occur, the relationship of new trac
 
 There is a master file, as well as two files that provided the identifiers of tracts that were "substantially changed" between decennials. The two files of significantly changed census tracts consist only of a list of census tracts that exhibited a change of 2.5-percent or greater. Tract relationships may be one-to-one, many-to-one, one-to-many, or many-to-many.
 
-
 Relationship files are currently available for 2010 (relative to 2000) and 2000 (relative to 1990).
+
 - 2010: [data](https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2010.html), [metadata](https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2010-census-tract-record-layout.html).
 - 2000: [data](https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.2000.html), [metadata](https://www.census.gov/programs-surveys/geography/technical-documentation/records-layout/2000-tract-relationship-record-layout.html).
 
@@ -522,11 +497,14 @@ def plot_tract_change(y0, t0, y1, t1):
     return fig
 ```
 
+::: {.hidden}
 ### Split
 
 All tracts in $y_1$ are a partition of a single tract in $y_0$.
+:::
 
 ```{code-cell} ipython3
+#| output: false
 def show_random_tract_split():
     w_y1 = widgets.Dropdown(description='Years', value=2010,
                             options=[('1990-2000', 2000), ('2000-2010', 2010)])
@@ -561,11 +539,16 @@ def show_random_tract_split():
 show_random_tract_split()
 ```
 
+::: {.hidden}
 ### Join
 
 All tracts in $y_0$ are a partition of a single tract in $y_1$.
+:::
 
 ```{code-cell} ipython3
+:tags: []
+
+#| output: false
 def show_random_tract_join():
     w_y1 = widgets.Dropdown(description='Years', value=2010,
                             options=[('1990-2000', 2000), ('2000-2010', 2010)])
@@ -600,11 +583,19 @@ def show_random_tract_join():
 show_random_tract_join()
 ```
 
+::: {.hidden}
 ### Other reshape
 
 Arbitrary change in boundaries between two or more adjacent tracts. May include multiple splits, joins and boundary shifts.
+:::
 
 ```{code-cell} ipython3
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+#| output: false
 def show_random_tract_reshape():
     w_y1 = widgets.Dropdown(description='Years', value=2010,
                             options=[('1990-2000', 2000), ('2000-2010', 2010)])
@@ -651,87 +642,17 @@ def show_random_tract_reshape():
 show_random_tract_reshape()
 ```
 
-### Changes between decennial years
-
-Quick look at year to year changes. This section is work in progress.
-
-```{code-cell} ipython3
-# tracts = {}
-# for state in get_state_df(False)['CODE']:
-#     year_url = {
-#         2013: f'https://www2.census.gov/geo/tiger/GENZ2013/cb_2013_{state}_tract_500k.zip',
-#         2014: f'https://www2.census.gov/geo/tiger/GENZ2014/shp/cb_2014_{state}_tract_500k.zip',
-#         2015: f'https://www2.census.gov/geo/tiger/GENZ2015/shp/cb_2015_{state}_tract_500k.zip',
-#         2016: f'https://www2.census.gov/geo/tiger/GENZ2016/shp/cb_2016_{state}_tract_500k.zip',
-#         2017: f'https://www2.census.gov/geo/tiger/GENZ2017/shp/cb_2017_{state}_tract_500k.zip',
-#         2018: f'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_{state}_tract_500k.zip',
-#         2019: f'https://www2.census.gov/geo/tiger/GENZ2019/shp/cb_2019_{state}_tract_500k.zip'
-#     }
-#     tracts[state] = {}
-#     for y, u in year_url.items():
-#         try:
-#             tracts[state][y] = gpd.read_file(u)
-#         except:
-#             print('error', state, y, u)
-```
-
-```{code-cell} ipython3
-# tracts_us = {}
-# for y in year_url.keys():
-#     tracts_us[y] = []
-#     for state in tracts.keys():
-#         try:
-#             tracts_us[y].append(tracts[state][y])
-#         except:
-#             pass
-#     tracts_us[y] = pd.concat(tracts_us[y])
-```
-
-```{code-cell} ipython3
-# for y0 in list(tracts_us.keys())[:-1]:
-#     df0 = tracts_us[y0][['GEOID', 'ALAND']]
-#     y1 = y0 + 1
-#     df1 = tracts_us[y1][['GEOID', 'ALAND']]
-#     m = df0.merge(df1, on='GEOID', suffixes=(y0, y1))
-#     m['RATIO'] = m[f'ALAND{y1}'] / m[f'ALAND{y0}']
-# #     print(y, m['RATIO'].nlargest().tolist())
-#     d = m.query('RATIO > 1.15')
-#     for r in d[['GEOID', 'RATIO']].itertuples(False):
-#         print(y1, list(r))
-```
-
-One very visible change in Kansas.
-
-```{code-cell} ipython3
-# state = '02'
-# tig13 = gpd.read_file(f'https://www2.census.gov/geo/tiger/TIGER2013/TRACT/tl_2013_{state}_tract.zip')
-# tig18 = gpd.read_file(f'https://www2.census.gov/geo/tiger/TIGER2018/TRACT/tl_2018_{state}_tract.zip')
-# cbf13 = gpd.read_file(f'https://www2.census.gov/geo/tiger/GENZ2013/cb_2013_{state}_tract_500k.zip')
-# cbf18 = gpd.read_file(f'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_{state}_tract_500k.zip')
-
-# tract = '20055960508'
-# fig, ax = plt.subplots(figsize=(8, 8))
-# # tig13.query('GEOID == @tract').boundary.plot(ax=ax, label='TIGER 2013', color='red')
-# # tig18.query('GEOID == @tract').boundary.plot(ax=ax, label='TIGER 2018', color='cyan')
-# cbf13.query('GEOID == @tract').boundary.plot(ax=ax, label='CBF 2013', color='red', linewidth=3, alpha=0.4)
-# cbf18.query('GEOID == @tract').boundary.plot(ax=ax, label='CBF 2018', color='blue')
-
-# plt.legend()
-```
-
+::: {.hidden}
 # Postal Zip Code
-
-+++
 
 # Zip Code Tabulation Area (ZCTA)
 
-+++
-
 # Area phone code
+:::
 
 +++
 
-# Congressional District
+# Congressional Districts
 
 A geographical and political division in which voters elect representatives to the U.S. House of Representatives. Each state establishes its congressional districts based on population counts, with the goal of having districts as equal in population as possible. ([ESRI dictionary](https://support.esri.com/en/other-resources/gis-dictionary/term/ae341e9d-cc60-4f96-93ee-c95c739df5df))
 
@@ -761,19 +682,17 @@ The U.S. has more than 13,000 geographically defined public school districts. Th
 
 # Native American Reservations
 
-Link to download the data: https://catalog.data.gov/dataset/tiger-line-shapefile-2018-nation-u-s-current-american-indian-alaska-native-native-hawaiian-area
+[About](https://www.census.gov/programs-surveys/geography/about/partnerships/aian.html) |
+[Definitions](https://www.census.gov/programs-surveys/geography/about/glossary/aian-definitions.html) |
+[Data](https://catalog.data.gov/dataset/tiger-line-shapefile-2018-nation-u-s-current-american-indian-alaska-native-native-hawaiian-area)
 
-Link to info about American Indian and Alaska Native boundaries: https://www.census.gov/programs-surveys/geography/about/partnerships/aian.html
-
-Link to a definitions of the types of American Indian and Alaska Native geographic areas: https://www.census.gov/programs-surveys/geography/about/glossary/aian-definitions.html
-
-From the above link it is visable that there are many diffrent breakdowns avalible with the data avalable. These breakdowns go as small as tracts and block groups. They are updated each year by the federal government. 
-
-Link to better understand the breakdown: https://www.census.gov/newsroom/blogs/random-samplings/2014/08/understanding-geographic-relationships-american-indian-areas.html
+Diffrent breakdowns are avalible, going as small as tracts and block groups ([link](https://www.census.gov/newsroom/blogs/random-samplings/2014/08/understanding-geographic-relationships-american-indian-areas.html)).
 
 +++
 
-## Build this module
+::: {.hidden}
+# Build this module
+:::
 
 ```{code-cell} ipython3
 :tags: []
