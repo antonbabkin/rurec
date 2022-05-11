@@ -51,8 +51,9 @@ from rurec.reseng.nbd import Nbd
 nbd = Nbd('rurec')
 PATH = {
     'root': nbd.root,
-    'data': nbd.root/'data',
-    'source': nbd.root/'data/source/'
+    'data': nbd.root/'data/',
+    'source': nbd.root/'data/source/',
+    'ers_far': nbd.root/'data/ers_far/',
 }
 ```
 
@@ -531,16 +532,146 @@ RUCA codes represent the current version of the Goldsmith Modification.
 
 # ERS Frontier and Remote (FAR)
 
-[USDA](https://www.ers.usda.gov/data-products/frontier-and-remote-area-codes.aspx)
+There is an obvious family resemblance between "remote" and "rural" which might find some analytical use.
+
+[USDA ERS](https://www.ers.usda.gov/data-products/frontier-and-remote-area-codes.aspx)
 
 > To assist in providing policy-relevant information about conditions in sparsely-settled, remote areas of the U.S. to public officials, researchers, and the general public, ERS has developed ZIP-code-level frontier and remote area (FAR) codes.
+>
+> The term "frontier and remote" is used here to describe territory characterized by some combination of low population size and high geographic remoteness. FAR areas are defined in relation to the time it takes to travel by car to the edges of nearby Urban Areas (UAs). Four levels are necessary because rural areas experience degrees of remoteness at higher or lower population levels that affect access to different types of goods and services. A relatively large number of people live far from cities providing "high order" goods and services, such as advanced medical procedures, stores selling major household appliances, regional airport hubs, or professional sports franchises. Level one FAR codes are meant to approximate this degree of remoteness. A much smaller, but still significant, number of people find it hard to access "low order" goods and services, such as grocery stores, gas stations, and basic health-care services. Level four FAR codes more closely coincide with this much higher degree of remoteness. Other types of goods and services—clothing stores, car dealerships, movie theaters—fall somewhere in between. Users are able to choose the definition that bests suits their specific needs.
 
-FAR codes are applied to postal ZIP codes to identify different degrees and criteria of remoteness.
-It is not a code for any functional concept of rurality, but there is an obvious family resemblance between “remote” and “rural” which might find some analytical use.
+Two revisions of the codes currently exist, based on population data from 2000 and 2010 censuses. 2000 revision does not use road network travel time.
 
-The ERS created four FAR levels based on proximity (conceived of as travel time) to “urban” places of different sizes.
-Levels 1 through 4 measure increasing remoteness.
-The ‘FAR Level’ variable captures the highest numbered positive FAR level for a location.
+Although data is provided at ZIP code level, Census Bureau ZCTAs are not an exactly appropriate spatial unit. Explanation from 2010 data spreadsheet:
+
+> ZIP Code areas used here come from ESRI mapping data, based on 2014 information from the U.S. Postal Service. These codes may or may not match exactly with other ZIP Code data sources due to frequent changes in ZIP Code configurations. They do not fully match with the Census Bureau's ZIP Code Tabulation Areas (ZCTAs). For more information, see Methodology Statement: 2013/2018 ESRI US Demographic Updates, August 2013: [link](http://downloads.esri.com/esri_content_doc/dbl/us/demographic-update-methodology-2013.pdf).
+
+Dataframes contain all columns from the source spreadsheets and additional variable `FAR_LEVEL`.
+
+| Variable  | Description                                                  |
+|-----------|--------------------------------------------------------------|
+| ZIP       | 5-digit ZIP Code                                             |
+| STATE     | State postal abbreviation                                    |
+| NAME      | ZIP Code area name (2010 only)                               |
+| FAR1      | FAR classification, level one: 0=not FAR, 1=FAR              |
+| FAR2      | FAR classification, level two: 0=not FAR, 1=FAR              |
+| FAR3      | FAR classification, level three: 0=not FAR, 1=FAR            |
+| FAR4      | FAR classification, level four: 0=not FAR, 1=FAR             |
+| GRIDPOP   | ZIP code population estimate                                 |
+| SQMI      | ZIP code land area in square miles                           |
+| DENSITY   | ZIP code population per square mile                          |
+| FR1POP    | ZIP code population classified as FAR level one              |
+| FR2POP    | ZIP code population classified as FAR level two              |
+| FR3POP    | ZIP code population classified as FAR level three            |
+| FR4POP    | ZIP code population classified as FAR level four             |
+| FR1PCT    | Percent of ZIP code population classified as FAR level one   |
+| FR2PCT    | Percent of ZIP code population classified as FAR level two   |
+| FR3PCT    | Percent of ZIP code population classified as FAR level three |
+| FR4PCT    | Percent of ZIP code population classified as FAR level four  |
+| FAR_LEVEL | Highest FAR level, between 0 and 4                           |
+
+2010 tables are de-duplicated. There are five `ZIP` duplicates still remain that cross state boundaries: 57724 (MT, SD), 73949 (OK, TX), 63673 (MO, IL), 42223 (TN, KY), 72395 (AR, TN). These records are equal in every column except for `STATE`.
+
+No ZIP duplicates exist in 2000 table.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_far_src(year: typing.Literal[2000, 2010] = 2010):
+    assert year in [2000, 2010]
+    
+    url = 'https://www.ers.usda.gov/webdocs/DataFiles/51020/'
+    if year == 2000:
+        url += 'FARCodesZIPCodeData.xls?v=7835.9'
+        local = PATH['source'] / 'ers_far/2000.xls'
+    elif year == 2010:
+        url += 'FARcodesZIPdata2010WithAKandHI.xlsx?v=7835.9'
+        local = PATH['source'] / 'ers_far/2010.xlsx'
+        
+    if local.exists():
+        return local
+    return download_file(url, local.parent, local.name)
+
+def get_far_df(year: typing.Literal[2000, 2010] = 2010):
+    assert year in [2000, 2010]
+    
+    far_level_dt = pd.CategoricalDtype([0, 1, 2, 3, 4], True)
+    
+    path = PATH['ers_far'] / f'{year}.pq'
+    if path.exists():
+        df = pd.read_parquet(path, 'pyarrow')
+        df['FAR_LEVEL'] = df['FAR_LEVEL'].astype(far_level_dt)
+        return df
+    
+    f = get_far_src(year)
+    df = pd.read_excel(f, 'FAR ZIP Code Data', dtype={'ZIP': str})
+    df = df.rename(columns=str.upper)
+    if year == 2000:
+        df = df.rename(columns={f'PCTFR{x}': f'FR{x}PCT' for x in range(1, 5)})
+
+    assert df.notna().all().all()
+    assert (df['ZIP'].str.len() == 5).all()
+
+    # We can add up binary FARX indicators to obtain single FAR level,
+    # because classification is nested, e.g. far2 implies far1, and not-far1 implies not-far2.
+    df['FAR_LEVEL'] = df[['FAR1', 'FAR2', 'FAR3', 'FAR4']].sum(1).astype(far_level_dt)
+
+    # de-duplicate 2010
+    if year == 2000:
+        assert not df.duplicated('ZIP').any()
+    elif year == 2010:
+        df = df.drop_duplicates()
+
+        # duplicate ZIPs that cross states:
+        # 
+
+        # drop duplicate ZIP in New Mexico with abnormally small area
+        mask = (df['ZIP'] == '87320') & (df['SQMI'] == 0.34)
+        df = df[~mask]
+
+        # no duplicates at ZIP-STATE
+        assert not df.duplicated(['ZIP', 'STATE']).any()
+        # all duplicated ZIP only differ by STATE
+        assert not df[[c for c in df.columns if c != 'STATE']].drop_duplicates()['ZIP'].duplicated().any()
+
+    df = df.reset_index(drop=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, 'pyarrow', index=False)
+    
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Sample from 2010 dataframe with 5 different FAR levels."
+get_far_df(2010).sample(1000).drop_duplicates('FAR_LEVEL').sort_values('FAR_LEVEL')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| fig-cap: "FAR ZIP areas in Wisconsin part of Duluth metro area, WI. Note: Census Bureau ZCTAs are used as shapes instead of ESRI."
+
+# Dane county
+# map_shape = geography.get_county_df().query('CODE == "55025"').geometry.iloc[0]
+# Wisconsin
+# map_shape = geography.get_state_df().query('CODE == "55"').geometry.iloc[0]
+# Duluth metro area in WI: Douglas and Bayfield
+map_shape = geography.get_county_df().query('CODE.isin(["55007", "55031"])').dissolve().geometry.iloc[0]
+
+df = geography.get_zcta_df(2013)
+df = df[df.intersects(map_shape)]
+
+d = get_far_df(2010).drop(columns=['STATE', 'FAR1', 'FAR2', 'FAR3', 'FAR4'])
+df = df.merge(d, 'left', left_on='ZCTA', right_on='ZIP')
+
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20c.colors]
+cm = cm[5:6] + cm[0:5]
+df.explore(column='FAR_LEVEL', cmap=cm, tiles='CartoDB positron')
+```
+
+# Comparison of rural definitions
 
 ```{code-cell} ipython3
 :tags: []
