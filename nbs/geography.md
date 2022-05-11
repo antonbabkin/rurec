@@ -25,7 +25,7 @@ jupyter: python3
 ---
 ```
 
-The main purpose of this notebook is to retrieve and prepare dataframes with geographic boundaries of various geographic units of the USA.
+Describe, retrieve and prepare dataframes with geographic boundaries of various geographic units of the USA.
 
 ```{code-cell} ipython3
 :tags: [nbd-module]
@@ -33,6 +33,9 @@ The main purpose of this notebook is to retrieve and prepare dataframes with geo
 import functools
 import warnings
 import shutil
+import typing
+import zipfile
+import xml
 
 import pandas as pd
 import geopandas
@@ -47,7 +50,8 @@ PATH = {
     'source': nbd.root / 'data/source/geo',
     'state': nbd.root / 'data/geo/state.pq',
     'county': nbd.root / 'data/geo/county.pq',
-    'tract': nbd.root / 'data/geo/tract.pq'
+    'tract': nbd.root / 'data/geo/tract.pq',
+    'zcta': nbd.root / 'data/geo/zcta/'
 }
 ```
 
@@ -85,9 +89,72 @@ Census Bureau:
 - [Gazeteer reference files](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html)
 - [Character encoding](https://www.census.gov/programs-surveys/geography/technical-documentation/user-note/special-characters.html). Files from 2014 and earlier use "ISO-8859-1", 2015 and after use "UTF-8".
 
-Shapefiles contain area columns, but we do not include them in our dataframes because in their raw form these columns are not consistent across years. 1990 and 2000 have `AREA`, 2010 has `CENSUSAREA`, 2013+ have `ALAND` and `AWATER`.
+## Shapefile format
 
-+++
+[Wikipedia](https://en.wikipedia.org/wiki/Shapefile)
+
+Census Bureau shapefiles come as zipped folders and can be read directly with geopandas.
+
+### XML metadata
+
+Most zipped shapefile folders contain XML documents with metadata. Helper functions here parse these files for inspection. In later years files ending with `.iso.xml` adhere to ISO standards and can be more easily parsed for feature descriptions.
+
+```{code-cell} ipython3
+:tags: []
+
+xml.etree.ElementTree.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
+xml.etree.ElementTree.register_namespace('gmd', 'http://www.isotc211.org/2005/gmd')
+xml.etree.ElementTree.register_namespace('gco', 'http://www.isotc211.org/2005/gco')
+xml.etree.ElementTree.register_namespace('gml', 'http://www.opengis.net/gml/3.2')
+xml.etree.ElementTree.register_namespace('xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+xml.etree.ElementTree.register_namespace('gmi', 'http://www.isotc211.org/2005/gmi')
+xml.etree.ElementTree.register_namespace('gmx', 'http://www.isotc211.org/2005/gmx')
+xml.etree.ElementTree.register_namespace('gfc', 'http://www.isotc211.org/2005/gfc')
+
+def _xml_tag(element):
+    """Return tag with namespace URI replaced with it's shorthand."""
+    tag = element.tag
+    for uri, key in xml.etree.ElementTree._namespace_map.items():
+        if key in tag:
+            tag = tag.replace('{'+uri+'}', f'{key}:')
+            break
+    return tag
+
+def _traverse(element, depth):
+    """Recursively traverse XML tree and print element tags and text."""
+    text = element.text
+    text = text.strip() if text else ''
+    text = f': {text}' if text else ''
+    print('-' * depth, _xml_tag(element), text, sep='')
+    for child in element.findall('*'):
+        _traverse(child, depth + 1)
+        
+
+def print_shp_xml(shp_zip):
+    """Print compact contents of all XML files within zipped shapefile."""
+    with zipfile.ZipFile(shp_zip) as zip_file:
+        for file in zip_file.infolist():
+            if file.filename.endswith('.xml'):
+                print('=' * 16, file.filename, '=' * 16)
+                with zip_file.open(file) as file_obj:
+                    parsed_xml = xml.etree.ElementTree.parse(file_obj)
+                    _traverse(parsed_xml.getroot(), 0)
+
+def extract_definitions_from_xml(shp_zip):
+    """Return feature definitions from XML files within zipped shapefile."""
+    definitions = {}
+    with zipfile.ZipFile(shp_zip) as zip_file:
+        for file in zip_file.infolist():
+            if file.filename.endswith('.iso.xml'):
+                with zip_file.open(file) as file_obj:
+                    parsed_xml = xml.etree.ElementTree.parse(file_obj)
+                    ns = {v:k for k, v in xml.etree.ElementTree._namespace_map.items()}
+                    for attr in parsed_xml.iterfind('.//gfc:FC_FeatureAttribute', ns):
+                        name = attr.find('gfc:memberName/*', ns).text
+                        defn = attr.find('gfc:definition/*', ns).text
+                        definitions[name] = defn
+    return definitions
+```
 
 ## Scale
 
@@ -218,11 +285,8 @@ def get_state_df(geometry=True):
 ```
 
 ```{code-cell} ipython3
----
-jupyter:
-  outputs_hidden: true
-tags: []
----
+:tags: []
+
 get_state_df(geometry=False).sort_values('NAME').style.hide_index()
 ```
 
@@ -326,7 +390,6 @@ def get_county_df(year=2020, geometry=True, scale='20m'):
 
 year = 2020
 state = '55'
-
 df = get_county_df(year).query('STATE_CODE == @state')
 df.explore(tiles='CartoDB positron')
 ```
@@ -355,7 +418,11 @@ def get_tract_df(years=None, state_codes=None, geometry=True):
     if state_codes:
         f.append(('STATE_CODE', 'in', state_codes))
     if geometry:
-        return geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
+        df = geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
+        # todo: CRS information is not loaded from the dataset, 
+        # maybe because frames with missing CRS (1990) are in the mix.
+        df = df.set_crs('EPSG:4269')
+        return df
     else:
         c = ['YEAR', 'CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE']
         return pyarrow.parquet.read_table(PATH['tract'], columns=c, partitioning=p, filters=f,
@@ -403,8 +470,8 @@ def _prep_tract_df(year, state_code):
 
 state = '55'
 county = '025'
-
 df = get_tract_df([2020], [state]).query('COUNTY_CODE == @county')
+# df = df.set_crs('EPSG:4269')
 df.explore(tiles='CartoDB positron')
 ```
 
@@ -501,6 +568,7 @@ def plot_tract_change(y0, t0, y1, t1):
 ### Split
 
 All tracts in $y_1$ are a partition of a single tract in $y_0$.
+
 :::
 
 ```{code-cell} ipython3
@@ -543,6 +611,7 @@ show_random_tract_split()
 ### Join
 
 All tracts in $y_0$ are a partition of a single tract in $y_1$.
+
 :::
 
 ```{code-cell} ipython3
@@ -587,6 +656,7 @@ show_random_tract_join()
 ### Other reshape
 
 Arbitrary change in boundaries between two or more adjacent tracts. May include multiple splits, joins and boundary shifts.
+
 :::
 
 ```{code-cell} ipython3
@@ -642,15 +712,114 @@ def show_random_tract_reshape():
 show_random_tract_reshape()
 ```
 
-::: {.hidden}
-# Postal Zip Code
+# ZIP Code Tabulation Area (ZCTA)
 
-# Zip Code Tabulation Area (ZCTA)
+[Homepage](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/zctas.html)
 
-# Area phone code
-:::
+> ZIP Code Tabulation Areas (ZCTAs) are generalized areal representations of United States Postal Service (USPS) ZIP Code service areas. The USPS ZIP Codes identify the individual post office or metropolitan area delivery station associated with mailing addresses. USPS ZIP Codes are not areal features but a collection of mail delivery routes.
 
-+++
+ZCTAs are build from census block, thus blocks can be used as cross-walk to other geographics that partition into blocks. [Relationship files](https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.html) are available for blocks, counties, county subdivisions, places, tracts, and for ZCTA changes over time.
+
+[Cartographic boundary](https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html) and [TIGER](https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html) shapefiles. 2000 files are only 3-digit codes. For some reason, the 2010 CB file is almost x10 bigger than other years - 527mb.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_zcta_src(year: int):
+    """Download and return path to ZCTA boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        2020: f'{base}GENZ2020/shp/cb_2020_us_zcta520_500k.zip',
+        2013: f'{base}GENZ2013/cb_2013_us_zcta510_500k.zip',
+        2010: f'{base}GENZ2010/gz_2010_us_860_00_500k.zip',
+        2000: f'{base}PREVGENZ/zt/z300shp/z399_d00_shp.zip'
+    }
+    for y in range(2014, 2020):
+        urls[y] = f'{base}GENZ{y}/shp/cb_{y}_us_zcta510_500k.zip'
+    
+    assert year in urls, f'No ZCTA shapes in {year}.'
+    
+    local = PATH['source']/f'zcta/{year}.zip'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(urls[year], local.parent, local.name)
+    return local
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "ZCTA shapefile columns over time"
+df = {}
+for y in [2000, 2010, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]:
+    f = get_zcta_src(y)
+    d = geopandas.read_file(f, rows=0)
+    df[y] = pd.Series(True, index=d.columns)
+df = pd.concat(df, axis=1).fillna(False).replace({False: '', True: 'X'})
+df
+```
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_zcta_df(year=2020, geometry=True):
+
+    path = PATH['zcta'] / f'{year}.pq'
+    if path.exists():
+        if geometry:
+            return geopandas.read_parquet(path)
+        else:
+            return pd.read_parquet(path, 'pyarrow').drop(columns=['geometry'])
+    
+    # add other years later as needed
+    if not (2013 <= year <= 2020):
+        raise NotImplementedError(f'Year {year}.')
+        
+    f = get_zcta_src(year)
+    df = geopandas.read_file(f)
+    if 2013 <= year <= 2019:
+        df = df.rename(columns={'ZCTA5CE10': 'ZCTA', 'ALAND10': 'ALAND', 'AWATER10': 'AWATER'})
+    elif year == 2020:
+        df = df.rename(columns={'ZCTA5CE20': 'ZCTA', 'ALAND20': 'ALAND', 'AWATER20': 'AWATER'})
+        
+    df = df[['ZCTA', 'ALAND', 'AWATER', 'geometry']]
+    
+    assert df['ZCTA'].notna().all()
+    assert not df.duplicated('ZCTA').any()
+    
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-zcta-dane
+#| fig-cap: "ZCTAs in Dane county, WI from 2013 and 2020 revisions."
+
+dane_cty = get_county_df().query('CODE == "55025"').geometry.iloc[0]
+
+y0, y1 = 2013, 2020
+
+d = get_zcta_df(y0)
+d = d[d.intersects(dane_cty)]
+m = d.explore(name=y0, color='red', tiles='CartoDB positron')
+
+d = get_zcta_df(y1)
+d = d[d.intersects(dane_cty)]
+d.explore(m=m, name=y1, color='blue')
+
+tile_layer = [x for x in m._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+tile_layer.control = False
+folium.LayerControl(collapsed=False).add_to(m)
+
+m
+```
 
 # Congressional Districts
 
@@ -690,9 +859,7 @@ Diffrent breakdowns are avalible, going as small as tracts and block groups ([li
 
 +++
 
-::: {.hidden}
-# Build this module
-:::
+**Build this module**
 
 ```{code-cell} ipython3
 :tags: []

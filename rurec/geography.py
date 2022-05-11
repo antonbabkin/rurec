@@ -4,6 +4,9 @@
 import functools
 import warnings
 import shutil
+import typing
+import zipfile
+import xml
 
 import pandas as pd
 import geopandas
@@ -18,7 +21,8 @@ PATH = {
     'source': nbd.root / 'data/source/geo',
     'state': nbd.root / 'data/geo/state.pq',
     'county': nbd.root / 'data/geo/county.pq',
-    'tract': nbd.root / 'data/geo/tract.pq'
+    'tract': nbd.root / 'data/geo/tract.pq',
+    'zcta': nbd.root / 'data/geo/zcta/'
 }
 
 
@@ -154,7 +158,11 @@ def get_tract_df(years=None, state_codes=None, geometry=True):
     if state_codes:
         f.append(('STATE_CODE', 'in', state_codes))
     if geometry:
-        return geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
+        df = geopandas.read_parquet(PATH['tract'], partitioning=p, filters=f)
+        # todo: CRS information is not loaded from the dataset, 
+        # maybe because frames with missing CRS (1990) are in the mix.
+        df = df.set_crs('EPSG:4269')
+        return df
     else:
         c = ['YEAR', 'CODE', 'NAME', 'STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE']
         return pyarrow.parquet.read_table(PATH['tract'], columns=c, partitioning=p, filters=f,
@@ -195,4 +203,59 @@ def _prep_tract_df(year, state_code):
         
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path)
+
+
+def get_zcta_src(year: int):
+    """Download and return path to ZCTA boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        2020: f'{base}GENZ2020/shp/cb_2020_us_zcta520_500k.zip',
+        2013: f'{base}GENZ2013/cb_2013_us_zcta510_500k.zip',
+        2010: f'{base}GENZ2010/gz_2010_us_860_00_500k.zip',
+        2000: f'{base}PREVGENZ/zt/z300shp/z399_d00_shp.zip'
+    }
+    for y in range(2014, 2020):
+        urls[y] = f'{base}GENZ{y}/shp/cb_{y}_us_zcta510_500k.zip'
+    
+    assert year in urls, f'No ZCTA shapes in {year}.'
+    
+    local = PATH['source']/f'zcta/{year}.zip'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(urls[year], local.parent, local.name)
+    return local
+
+
+def get_zcta_df(year=2020, geometry=True):
+
+    path = PATH['zcta'] / f'{year}.pq'
+    if path.exists():
+        if geometry:
+            return geopandas.read_parquet(path)
+        else:
+            return pd.read_parquet(path, 'pyarrow').drop(columns=['geometry'])
+    
+    # add other years later as needed
+    if not (2013 <= year <= 2020):
+        raise NotImplementedError(f'Year {year}.')
+        
+    f = get_zcta_src(year)
+    df = geopandas.read_file(f)
+    if 2013 <= year <= 2019:
+        df = df.rename(columns={'ZCTA5CE10': 'ZCTA', 'ALAND10': 'ALAND', 'AWATER10': 'AWATER'})
+    elif year == 2020:
+        df = df.rename(columns={'ZCTA5CE20': 'ZCTA', 'ALAND20': 'ALAND', 'AWATER20': 'AWATER'})
+        
+    df = df[['ZCTA', 'ALAND', 'AWATER', 'geometry']]
+    
+    assert df['ZCTA'].notna().all()
+    assert not df.duplicated('ZCTA').any()
+    
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+    return df
 
