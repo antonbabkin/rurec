@@ -7,29 +7,78 @@ source("Data.R")
 
 
 options(scipen = 999)
-Total_mat <- IO_tables[["IxI_TR_1997-2020_PRO_SEC"]][["2020"]][6:20,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
-Ind_Names <- IO_tables[["IxI_TR_1997-2020_PRO_SEC"]][["2020"]][5,3:17] %>% as.list()
+### Sector level 15-by-15
+# Total_mat <- IO_tables[["IxI_TR_1997-2020_PRO_SEC"]][["2020"]][6:20,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
+# Ind_Names <- IO_tables[["IxI_TR_1997-2020_PRO_SEC"]][["2020"]][5,3:17] %>% as.list()
+
+
+### Detail level 405-by-405
+# Total_mat <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][4:408,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
+# Ind_Names <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][2,3:407] %>% as.list()
+
+# local({
+#   temp <- TIGER_CBP_RUCC[, c("place")]
+#   st_geometry(temp) <- NULL 
+#   X_mat <<- inner_join(temp, CBP_sector, by = "place")
+# })
+# 
+# Xemp_mat <- X_mat[, c("BEA_Sectors", "place", "emp")]
+# Xemp_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "emp", varying = unique(Xemp_mat$place), timevar = "place", new.row.names = unique(Xemp_mat$BEA_Sectors),  direction = "wide")
+# Xemp_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
+# 
+# Industry_Count <- dim(Xemp_mat)[1]
+# Region_Count <- dim(Xemp_mat)[2]
+# 
+# Xpay_mat <- X_mat[, c("BEA_Sectors", "place", "ap")]
+# Xpay_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "ap", varying = unique(Xpay_mat$place), timevar = "place", new.row.names = unique(Xpay_mat$BEA_Sectors),  direction = "wide")
+# Xpay_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
+# 
+
+
+### Summary level 405-by-405
+Total_mat <- IO_tables[["IxI_TR_1997-2020_PRO_SUM"]][["2020"]][6:71,3:68] %>% unlist() %>% as.numeric() %>% matrix(ncol = 66)
+Ind_Names <- IO_tables[["IxI_TR_1997-2020_PRO_SUM"]][["2020"]][5,3:68] %>% as.list()
 rownames(Total_mat) = colnames(Total_mat) <- Ind_Names
+
+
+## Collapse three industries at summary level for functional matching of county specific summary industries
+Total_mat[,51] <- Total_mat[,51] + Total_mat[,52] + Total_mat[,53]
+Total_mat <- Total_mat[,-53]
+Total_mat <- Total_mat[,-52]
+Total_mat[,48] <- Total_mat[,48] + Total_mat[,49]
+Total_mat <- Total_mat[,-49]
+Total_mat[,15] <- Total_mat[,15] + Total_mat[,16]
+Total_mat <- Total_mat[,-16]
+
+Total_mat[51,] <- Total_mat[51,] + Total_mat[52,] + Total_mat[53,]
+Total_mat <- Total_mat[-53,]
+Total_mat <- Total_mat[-52,]
+Total_mat[48,] <- Total_mat[48,] + Total_mat[49,]
+Total_mat <- Total_mat[-49,]
+Total_mat[15,] <- Total_mat[15,] + Total_mat[16,]
+Total_mat <- Total_mat[-16,]
+
 
 Direct_mat <- diag(ncol(Total_mat)) - solve(Total_mat)
 
 
 local({
-temp <- TIGER_CBP_RUCC[, c("place")]
-st_geometry(temp) <- NULL 
-X_mat <<- inner_join(temp, CBP_table, by = "place")
+  temp <- TIGER_QCEW_RUCC[, c("place")]
+  st_geometry(temp) <- NULL 
+  X_mat <<- inner_join(temp, QCEW_2020_Sum, by = "place")
 })
 
-Xemp_mat <- X_mat[, c("BEA_Sectors", "place", "emp")]
-Xemp_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "emp", varying = unique(Xemp_mat$place), timevar = "place", new.row.names = unique(Xemp_mat$BEA_Sectors),  direction = "wide")
-Xemp_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
+Xemp_mat <- X_mat[, c("BEA_Summary", "place", "annual_avg_emplvl")]
+Xemp_mat %<>% reshape(idvar = "BEA_Summary", v.names = "annual_avg_emplvl", varying = unique(Xemp_mat$place), timevar = "place", new.row.names = unique(Xemp_mat$BEA_Summary),  direction = "wide")
+Xemp_mat %<>% subset(select = -c(BEA_Summary)) %>% as.matrix()
 
 Industry_Count <- dim(Xemp_mat)[1]
 Region_Count <- dim(Xemp_mat)[2]
 
-Xpay_mat <- X_mat[, c("BEA_Sectors", "place", "ap")]
-Xpay_mat %<>% reshape(idvar = "BEA_Sectors", v.names = "ap", varying = unique(Xpay_mat$place), timevar = "place", new.row.names = unique(Xpay_mat$BEA_Sectors),  direction = "wide")
-Xpay_mat %<>% subset(select = -c(BEA_Sectors)) %>% as.matrix()
+Xpay_mat <- X_mat[, c("BEA_Summary", "place", "total_annual_wages")]
+Xpay_mat %<>% reshape(idvar = "BEA_Summary", v.names = "total_annual_wages", varying = unique(Xpay_mat$place), timevar = "place", new.row.names = unique(Xpay_mat$BEA_Summary),  direction = "wide")
+Xpay_mat %<>% subset(select = -c(BEA_Summary)) %>% as.matrix()
+
 
 
 ############ Simple Location Quotient
