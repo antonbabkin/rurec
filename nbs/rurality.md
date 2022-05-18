@@ -59,6 +59,37 @@ PATH = {
 }
 ```
 
+```{code-cell} ipython3
+:tags: []
+
+class RuralityMap:
+    def __init__(self, categories, colors, tiles='CartoDB positron'):
+        self.categories = categories
+        self.colors = colors
+        self.tiles = tiles
+        self.map = None
+    
+    def add_layer(self, gdf, name, column, **kw):
+        if self.map is None:
+            self.map = gdf.explore(name=name, column=column, 
+                                   categories=self.categories,
+                                   cmap=self.colors,
+                                   tiles=self.tiles,
+                                   **kw)
+        else:
+            gdf.explore(m=self.map, name=name, column=column, 
+                        categories=self.categories,
+                        cmap=self.colors,
+                        legend=False,
+                        **kw)
+            
+    def show(self):
+        tile_layer = [x for x in self.map._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+        tile_layer.control = False
+        folium.LayerControl(collapsed=False).add_to(self.map)
+        return self.map
+```
+
 # Urban area
 
 [Census Bureau](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html)
@@ -150,22 +181,17 @@ get_ua_df(year=2010, geometry=False).sample(3).style.hide_index()
 
 #| label: fig-urban-areas-dane-cty
 #| fig-cap: "Urban areas in Dane county, WI from 2000 and 2010 censuses."
+cty_shp = geography.get_county_df(2010).query('CODE == "55025"').geometry.iloc[0]
+m = RuralityMap(['2000 Uranized Area', '2000 Urban Cluster', '2010 Uranized Area', '2010 Urban Cluster'],
+                [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors[0:4]])
 
-dane_cty = [slice(-90,-89.05), slice(42.9,43.3)]
-with ipywidgets.Output(): # gobble stdout
-    d0 = get_ua_df(2000).cx[dane_cty]
-    d0['UATYP'] = d0['UATYP'].map({'U': '2000 Uranized Area', 'C': '2000 Urban Cluster'})
-    d1 = get_ua_df(2010).cx[dane_cty]
-    d1['UATYP'] = d1['UATYP'].map({'U': '2010 Uranized Area', 'C': '2010 Urban Cluster'})
+for year in [2000, 2010]:
+    df = get_ua_df(year)
+    df = df[df.intersects(cty_shp)]
+    df['UATYP'] = df['UATYP'].map({'U': f'{year} Uranized Area', 'C': f'{year} Urban Cluster'})
+    m.add_layer(df, f'Census {year}', 'UATYP')
 
-cats = ['2000 Uranized Area', '2000 Urban Cluster', '2010 Uranized Area', '2010 Urban Cluster']
-cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors[0:4]]
-m = d0.explore(name='Census 2000', column='UATYP', categories=cats, cmap=cm, tiles='CartoDB positron')
-d1.explore(m=m, name='Census 2010', column='UATYP', categories=cats, cmap=cm, legend=False)
-tile_layer = [x for x in m._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
-tile_layer.control = False
-folium.LayerControl(collapsed=False).add_to(m)
-m
+m.show()
 ```
 
 +++ {"tags": []}
@@ -431,28 +457,22 @@ t
 year = 2020
 state = '55'
 
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors]
+cm = cm[14:16] + cm[2:4] + cm[:2] + cm[5:6]
+m = RuralityMap(['metro', 'micro', 'metro central', 'metro outlying', 'micro central', 'micro outlying', 'noncore'], cm)
+
 df = geography.get_county_df(year).query('STATE_CODE == @state').drop(columns='CODE')
 d = get_cbsa_delin_df(year)[['STATE_CODE', 'COUNTY_CODE', 'CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'CENTRAL_OUTLYING']]
 df = df.merge(d, 'left', ['STATE_CODE', 'COUNTY_CODE'])
 df['CBSA'] = df['METRO_MICRO'] + ' ' + df['CENTRAL_OUTLYING']
 df['CBSA'] = df['CBSA'].fillna('noncore')
 
-cats = ['metro', 'micro', 'metro central', 'metro outlying', 'micro central', 'micro outlying', 'noncore']
-cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors]
-cm = cm[14:16] + cm[2:4] + cm[:2] + cm[5:6]
-
 d = get_cbsa_shape_df(year)
 d = d.loc[d['CBSA_CODE'].isin(df['CBSA_CODE']), ['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'geometry']]
-m = d.explore(name='CBSAs', column='METRO_MICRO', categories=cats, cmap=cm, 
-              tiles='CartoDB positron', legend_kwds={'caption': ''})
 
-df.explore(m=m, name='Counties', column='CBSA', categories=cats, cmap=cm, legend=False)
-
-tile_layer = [x for x in m._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
-tile_layer.control = False
-folium.LayerControl(collapsed=False).add_to(m)
-
-m
+m.add_layer(d, 'CBSAs', 'METRO_MICRO', legend_kwds={'caption': ''})
+m.add_layer(df, 'Counties', 'CBSA')
+m.show()
 ```
 
 # ERS measures of urban spatial effect
@@ -468,6 +488,10 @@ Preparation of ERS codes is done in a [separate notebook](ers_codes.ipynb).
 +++
 
 ## Rural-Urban Commuting Area (RUCA)
+
+Sub-county division used by RUCA classification allows to identify parts of metro counties that are not strongly connected to respective urban areas. Likewise, there are parts of non-metro counties that are highly connected to an adjacent metro county, but are not big enough to make the entire county qualify for metro criteria.
+
+Rural areas, derived from RUCA codes, often cross CBSA-based rural boundaries, as can be visually seen in @fig-compare-defns-wisc.
 
 ```{code-cell} ipython3
 :tags: []
@@ -517,18 +541,21 @@ df.explore(column='RUCA_SHORT', categories=cats, cmap=cm, tiles='CartoDB positro
 
 [HRSA](https://www.hrsa.gov/rural-health/about-us/definition/index.html)
 
-This definition of rurality is based on tracts and can be though of as a special case of RUCA codes.
+This definition of rurality is based on tracts and uses OMB and RUCA definitions with additional refinements in large metro tracts.
 
 HRSA refers to the Health Resources and Services Administration.
 It is particularly its sub-unit, the Federal Office of Rural Health Policy (FORHP), that is responsible for this definition of rurality.
 For its own administrative purposes it considers a census tract to be rural if it is contained within a county that is not part of a CBSA.
-To these, they add 2,302 census tracts from CBSA counties that they have specially defined as rural by applying the RUCA criteria, of which the FORHP was actually a developer in its early phase.
-Tracts inside Metropolitan counties with the codes 4-10 are considered rural.
-While use of the RUCA codes has allowed identification of rural census tracts in Metropolitan counties, among the more than 60,000 tracts in the U.S. there are some that are extremely large and where use of RUCA codes alone fails to account for distance to services and sparse population.
-In response to these concerns, FORHP has designated 132 large area census tracts with RUCA codes 2 or 3 as rural.
-These tracts are at least 400 square miles in area with a population density of no more than 35 people.
-The FORHP definition includes about 18% of the population and 85% of the area of the USA.
-RUCA codes represent the current version of the Goldsmith Modification.
+
+Quote from HRSA page.
+
+> We define the following areas as rural:
+> - All non-metro counties
+> - All metro census tracts with RUCA codes 4-10 and
+> - Large area Metro census tracts of at least 400 sq. miles in area with population density of 35 or less per sq. mile with RUCA codes 2-3. In larger tracts, you cannot use RUCA codes alone. The codes do not factor in distance to services and low numbers of people.
+> - Beginning with Fiscal Year 2022 Rural Health Grants, we consider all outlying metro counties without a UA to be rural.
+
+Lists of rural areas by county, census tract, and ZIP code are available on [HRSA Data Files page](https://www.hrsa.gov/rural-health/about-us/what-is-rural/data-files).
 
 +++
 
@@ -675,35 +702,6 @@ df.explore(column='FAR_LEVEL', cmap=cm, tiles='CartoDB positron')
 
 # Comparison of rural definitions
 
-```{code-cell} ipython3
-:tags: []
-
-class RuralityMap:
-    def __init__(self, categories, colors, tiles='CartoDB positron'):
-        self.categories = categories
-        self.colors = colors
-        self.tiles = tiles
-        self.map = None
-    
-    def add_layer(self, gdf, name, column):
-        if self.map is None:
-            self.map = gdf.explore(name=name, column=column, 
-                                   categories=self.categories,
-                                   cmap=self.colors,
-                                   tiles=self.tiles)
-        else:
-            gdf.explore(m=self.map, name=name, column=column, 
-                        categories=self.categories,
-                        cmap=self.colors,
-                        legend=False)
-            
-    def show(self):
-        tile_layer = [x for x in self.map._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
-        tile_layer.control = False
-        folium.LayerControl(collapsed=False).add_to(self.map)
-        return self.map
-```
-
 **UA**
 
 Rural is everyting outside of urbanized areas and urban clusters. High resolution source shapes are simplified to reduce HTML size for online publication.
@@ -809,6 +807,8 @@ def rural_map_all(state_code):
 ```{code-cell} ipython3
 :tags: []
 
+#| label: fig-compare-defns-wisc
+#| fig-cap: "Rural areas of Wisconsin by different definitions, based on 2010 data."
 rural_map_all('55')
 ```
 
@@ -833,9 +833,5 @@ ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
 +++ {"tags": []}
 
 TODO:
-
-- (refactor) use RuralityMap for all maps
-
-- clarify FORHP writeup
 
 - add FAR to comparison map
