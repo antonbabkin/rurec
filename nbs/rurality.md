@@ -35,9 +35,11 @@ Two major definitions which the Federal government uses to identify the rural st
 
 import functools
 import typing
+import warnings
 
 import pandas as pd
 import geopandas
+import shapely
 import folium
 import folium.plugins
 import matplotlib as mpl
@@ -676,74 +678,164 @@ df.explore(column='FAR_LEVEL', cmap=cm, tiles='CartoDB positron')
 ```{code-cell} ipython3
 :tags: []
 
-@functools.cache
-def ui_df():
-    df = geography.get_county_df()\
-        .query('STATE_CODE == "55"')\
-        [['CODE', 'NAME', 'geometry']]\
-        .rename(columns={'CODE': 'FIPS'})
-
-    d = ers_codes.get_ui_df()\
-        .query('UI_YEAR == 2013 and STATE == "WI"')\
-        [['FIPS', 'UI_CODE']]
-    assert set(df['FIPS']) == set(d['FIPS'])
-    df = df.merge(d)
-
-    df['RURAL'] = (df['UI_CODE'].astype(int) > 9)
-    return df
+class RuralityMap:
+    def __init__(self, categories, colors, tiles='CartoDB positron'):
+        self.categories = categories
+        self.colors = colors
+        self.tiles = tiles
+        self.map = None
+    
+    def add_layer(self, gdf, name, column):
+        if self.map is None:
+            self.map = gdf.explore(name=name, column=column, 
+                                   categories=self.categories,
+                                   cmap=self.colors,
+                                   tiles=self.tiles)
+        else:
+            gdf.explore(m=self.map, name=name, column=column, 
+                        categories=self.categories,
+                        cmap=self.colors,
+                        legend=False)
+            
+    def show(self):
+        tile_layer = [x for x in self.map._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+        tile_layer.control = False
+        folium.LayerControl(collapsed=False).add_to(self.map)
+        return self.map
 ```
+
+**UA**
+
+Rural is everyting outside of urbanized areas and urban clusters. High resolution source shapes are simplified to reduce HTML size for online publication.
 
 ```{code-cell} ipython3
 :tags: []
 
-@functools.cache
-def ruca_df():
-    df = geography.get_tract_df([2010], ['55'])\
-        [['CODE', 'geometry']]\
-        .rename(columns={'CODE': 'FIPS'})
+def rural_map_ua(state_code, simplify=True):
+    state_shp = geography.get_state_df().query('CODE == @state_code').geometry.iloc[0]
+    df = get_ua_df(2010)
+    df = df[df.intersects(state_shp)]
+    not_rural = df.geometry.unary_union
+    if simplify: not_rural = not_rural.simplify(0.01)
+    rural = state_shp - not_rural.buffer(0)
+    if rural.is_empty: 
+        warnings.warn(f'UA rural area is empty in state_code "{state_code}".')
+    d = geopandas.GeoDataFrame({'definition': ['UA']}, geometry=[rural], crs=df.crs)
+    return d
+```
 
-    d = ers_codes.get_ruca_df()\
-        .query('YEAR == 2010 and STATE == "WI"')\
-        [['FIPS', 'RUCA_CODE']]
+**CBSA**
 
-    # some tracts are in RUCA only, maybe mismatch of years
+Rural = everything outside of metropolitan counties. Micropolitan areas are by this definition also rural.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_cbsa(state_code):
+    year = 2013
+    df = geography.get_county_df(year).query('STATE_CODE == @state_code')
+    d = get_cbsa_delin_df(year)
+    df = df.merge(d, 'left', indicator=True)
+    rural = df[(df['_merge'] == 'left_only') | (df['METRO_MICRO'] == 'micro')]
+
+    if len(rural) == 0:
+        warnings.warn(f'CBSA rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+
+    d = geopandas.GeoDataFrame({'definition': ['CBSA']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
+**RUCA**
+
+Rural = micro and non-core codes (4, 5, 6, 7, 8, 9, 10, 99). Tract shapes are simplified.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_ruca(state_code, simplify=True):
+    df = geography.get_tract_df([2010], [state_code])
+
+    # add RUCA codes with short descriptions
+    d = ers_codes.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE']]
+    d['STATE_CODE'] = d['FIPS'].str[:2]
+    d['COUNTY_CODE'] = d['FIPS'].str[2:5]
+    d['TRACT_CODE'] = d['FIPS'].str[5:]
     df = df.merge(d, 'left')
+    df['RUCA_CODE'] = df['RUCA_CODE'].astype(float).astype(int).astype(str)
+    df['RUCA_CODE'] = df['RUCA_CODE'].fillna('99')
 
-    df['RURAL'] = (df['RUCA_CODE'].astype(float).astype(int) > 9)
-    return df
+    # select subset of codes as rural
+    rural = df[df['RUCA_CODE'].isin(['4', '5', '6', '7', '8', '9', '10', '99'])]
+    if len(rural) == 0:
+        warnings.warn(f'RUCA rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+        if simplify: rural = rural.simplify(0.01)
+        
+    d = geopandas.GeoDataFrame({'definition': ['RUCA']}, geometry=[rural], crs=df.crs)
+    return d
 ```
 
 ```{code-cell} ipython3
 :tags: []
 
-def state_bbox(state_code):
-    df = geography.get_state_df()
-    shape = df.loc[df['CODE'] == state_code, 'geometry'].values[0]
-    x = shape.bounds
-    return [(x[1], x[0]), (x[3], x[2])]
+# test all definitions in all states
+for sc in geography.get_state_df(False)['CODE']:
+    print(sc)
+    try:
+        d = rural_map_ua(sc)
+        d = rural_map_cbsa(sc)
+        d = rural_map_ruca(sc)
+    except Exception as e:
+        print('******************** ACHTUNG! ACHTUNG! ACHTUNG! ********************')
+        print(e)
 ```
 
 ```{code-cell} ipython3
 :tags: []
 
-m = folium.Map()
-tile_layer = next(iter(m._children.values()))
-tile_layer.control = False
-
-def style_fn_factory(color):
-    def style_fn(feature):
-        style = dict(stroke=False, color=color)
-        if feature['properties']['RURAL']:
-            style['fillPattern'] = folium.plugins.StripePattern(color=color, angle=-45)
-        return style
-    return style_fn
-
-folium.GeoJson(ui_df().to_json(), name='UI', style_function=style_fn_factory('blue')).add_to(m)
-folium.GeoJson(ruca_df().to_json(), name='RUCA', style_function=style_fn_factory('red')).add_to(m)
-folium.plugins.MousePosition().add_to(m)
-folium.LayerControl(collapsed=False).add_to(m)
-m.fit_bounds(state_bbox('55'))
-m
+def rural_map_all(state_code):
+    m = RuralityMap(['UA', 'CBSA', 'RUCA'], [mpl.colors.to_hex(c) for c in plt.cm.Dark2.colors])
+    m.add_layer(rural_map_ua(state_code), 'UA', 'definition')
+    m.add_layer(rural_map_cbsa(state_code), 'CBSA', 'definition')
+    m.add_layer(rural_map_ruca(state_code), 'RUCA', 'definition')
+    return m.show()
 ```
 
-# References
+```{code-cell} ipython3
+:tags: []
+
+rural_map_all('55')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+states = geography.get_state_df(False)[['NAME', 'CODE']].sort_values('NAME')
+w_state = ipywidgets.Dropdown(options=states.values.tolist(), value='55')
+w_out = ipywidgets.Output()
+w_show = ipywidgets.Button(description='Show')
+def show_selected_state(_):
+    with w_out:
+        w_out.clear_output(False)
+        print('Working...')
+        m = rural_map_all(w_state.value)
+        w_out.clear_output(True)
+        display(m)
+w_show.on_click(show_selected_state)
+ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
+```
+
++++ {"tags": []}
+
+TODO:
+
+- (refactor) use RuralityMap for all maps
+
+- clarify FORHP writeup
+
+- add FAR to comparison map
