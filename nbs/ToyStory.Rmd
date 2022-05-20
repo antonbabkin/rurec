@@ -2,13 +2,14 @@
 title: "Toy Story"
 author: "Austin Sandler"
 date: "3/22/2022"
-output:
-  html_document:
-    code_folding: hide
+format:
+  html:
+    self-contained: false
+    page-layout: full
+    code-fold: true
+    code-tools: true
     code_download: yes
     latex_engine: pdflatex
-  pdf_document: default
-self_contained: no
 ---
 
 ```{r preamble, include = FALSE}
@@ -17,7 +18,7 @@ self_contained: no
 options(scipen=999)
 
 ```
-##  {.tabset}
+::: {.panel-tabset}
 
 This R Markdown document is a testing ground for Toy model specifications with numerical examples. 
 
@@ -33,7 +34,10 @@ packages <- c("dlm",
               "DT",
               "geosphere",
               "knitr",
-              "tidyr")
+              "spdep",
+              "tidyr",
+              "tmap",
+              "tmaptools")
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -1104,6 +1108,322 @@ The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alter
 
 
 
+### Resurrection
+
+**Location specific metrics of industry input needs**
+
+We specify a vector of *location input needs* as the product of the national input coefficient matrix and the location specific total output vector, $\mathbf{Ax^{r}}$.  
+
+Similarly, let the *share* or *relative input needs* vector be given as $\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
+
+In addition, we define the *actual* or *import input needs* vector as, $\max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
+
+(Similarly, let the *actual* exports vector $\mathbf{\tilde{x}^{r}}$ be defined as $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$)
+
+And let the *relative import input needs* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$.
+
+Note: one may concatenate the input needs vectors across each location to construct an industry-by-location matrix of input needs for each specification above. Specifically denoted by: 
+
+ $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
+ 
+
+**Cross location industry compatibility**
+
+To elucidate the industrial compatibility across locations, we construct a *similarity index*. In general, it is defined on the metric space $(\mathbf{X}, D)$ where $\mathbf{X}$ is a set of vectors $\{\mathbf{x}_{i} \in \mathbb{R} : i \in \{1, \dots, n \}\}$ and $D:\mathbf{X} \times \mathbf{X}	\rightarrow \mathbb{R}$ is a distance function.  
+
+Specifying $D$ as a *Euclidean* or *2-norm distance*, we define the industrial compatibility distance or *simple similarity index* between two locations $r$ and $s$ as:
+
+$$D^{rs} = \Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}$$
+
+In addition, let the *relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+The  *import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2}$$
+
+Let the *relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+(I would argue that when a similarity index employs an import specification the "exporting" location should be specified instead as $\mathbf{\tilde{x}^{s}} = \vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ )
+
+One may further weight a *similarity index* by a geographical impedance function, $\mathbf{Q}$. In general terms, let this metric be defined by $\mathfrak{D}\left(\mathbf{Ax^{r}}, \mathbf{x^{s}}, \mathbf{Q}\right)$. In practice, the geographical impedance between locations $r$ and $s$ is given by, $Q^{rs} = e^{-d^{rs}}$ or $Q^{rs} = 1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
+
+$$d^{rs}  = R \cdot \arccos(\sin(\phi_{r})\sin(\phi_{s}) + \cos(\phi_{r})\cos(\phi_{s})\cos(\vert \lambda_{r} - \lambda_{s} \vert)) $$
+Where $\lambda_{r}, \phi_{r}$ and $\lambda_{s}, \phi_{r}$ are the longitude and latitude of locations $r$ and $s$, and $R$ is the radius of the reference sphere, which in this case is the *mean earth radius* from the WGS84 ellipsoid. 
+
+As such the *spatial simple similarity index* is given by 
+
+$$\mathfrak{D}^{rs} = D^{rs}/Q^{rs} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}/Q^{rs}$$
+
+
+Let the *spatial relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})}  / Q^{rs}$$
+Let the  *spatial import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})^{'}([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})}/Q^{rs}$$
+
+Let the *spatial relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}]  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}] - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})} / Q^{rs}$$
+For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
+
+Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
+
+
+
+
+
+**Empirical Example**
+
+Suppose we still only have national level Input-Output tables (consisting of Make/Use tables, industry-by-industry, industry-by-commodity, and commodity-by-commodity total requirements tables, and commodity-by-industry direct requirements tables) and location specific industry activity (in the form of employment, payroll, and number of establishments). How might we implement the above methods?
+
+As before, we can derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A^{n}}$, from the national-level, industry-by-industry total requirements matrix, $\mathbf{L^{n}}$, using $\mathbf{A^{n}} = \mathbf{I} - (\mathbf{L^{n}})^{-1}$. Furthermore, we can construct the location specific total output vector, $\mathbf{x^{r}}$ from a payroll and labor share quotient. As  a first pass assume unit labor share, such that location specific industry payroll is equivalent to location specific total output. 
+
+Suppose these tables are given by:
+
+"National Total Requirements Table": $\mathbf{L}$
+
+```{r}
+Industry_Count <- 5
+
+Toy_Total_mat <-  matrix(c(1.2523,  0.0143, 0.0055, 0.0276, 0.0892,
+                           0.0251,  1.1230, 0.1450, 0.0331, 0.0709,
+                           0.0203,  0.0236, 1.0420, 0.0128, 0.0237,
+                           0.0092,  0.0171, 0.0088, 1.0048, 0.0105,
+                           0.4020,  0.2675, 0.1055, 0.5102, 1.7703), nrow = Industry_Count, byrow = TRUE)
+rownames(Toy_Total_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_Total_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+
+Toy_Total_mat
+```
+
+
+"National Direct Requirements Table": $\mathbf{A} = \mathbf{I} - (\mathbf{L})^{-1}$
+
+```{r}
+Toy_Direct_mat <- diag(ncol(Toy_Total_mat)) - solve(Toy_Total_mat)
+rownames(Toy_Direct_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_Direct_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+
+Toy_Direct_mat %>% round(4)
+```
+
+
+"Industry-by-Location Payroll Table":  $$\mathbf{X} = 
+  \begin{bmatrix} 
+   \mathbf{x^{r}} & \mathbf{x^{s}} & \cdots & \mathbf{x^{l}}
+  \end{bmatrix}$$
+  
+```{r}
+Region_Count <- 4
+
+Toy_X_mat <-  matrix(c(4979, 487, 5498, 1517, 
+                       4512, 1395,  4287, 0,
+                       19912, 20003,  11322, 1305,
+                       23685, 201144,  2670, 58896,
+                       81009, 224686,  98075, 27797), nrow = Industry_Count, byrow = TRUE)
+
+rownames(Toy_X_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
+colnames(Toy_X_mat) <- c("AllElse", "Brown", "Cook", "Dane")
+
+Toy_X_mat
+```
+
+"Industry-by-Location Input Needs Table": $\mathbf{AX}$
+
+```{r}
+Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
+Toy_Input_mat  %>% round(2)
+```
+
+"Relative Industry-by-Location Input Needs Table":  $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$
+
+```{r}
+Toy_Input_mat_rel <- (Toy_Input_mat) %*% solve(diag(c((rep(c(1), each=ncol(Toy_Direct_mat)) %*% Toy_Input_mat))))
+colnames(Toy_Input_mat_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_Input_mat_rel  %>% round(4)
+```
+
+"Import Industry-by-Location Input Needs Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
+
+```{r}
+Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
+Toy_Input_mat_imp  %>% round(2)
+```
+
+"Net Exports Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ $\mathbf{\tilde{X}} = \vert \min \{\mathbf{AX}  - \mathbf{X}, 0\} \vert$ 
+
+```{r}
+Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
+Toy_Input_mat_exp  %>% round(2)
+```
+
+"Relative Import Industry-by-Location Input Needs Table":  $\max \{\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0\}$ 
+
+```{r}
+Toy_Input_mat_imp_rel <- pmax(Toy_Input_mat_rel - Toy_X_mat %*% solve(diag(c((rep(c(1), each=nrow(Toy_X_mat)) %*% Toy_X_mat)))), 0)
+colnames(Toy_Input_mat_imp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_Input_mat_imp_rel  %>% round(4)
+
+```
+
+Assuming a Euclidean distance function, the similarity index is given by 
+
+"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+In this example denoted 
+
+$$ \begin{bmatrix} 
+    \Vert\mathbf{Ax^{a}} - \mathbf{x^{a}}\Vert_{2} & \Vert\mathbf{Ax^{a}} - \mathbf{x^{b}}\Vert_{2} & \Vert\mathbf{Ax^{a}} - \mathbf{x^{c}}\Vert_{2} & \Vert\mathbf{Ax^{a}} - \mathbf{x^{d}}\Vert_{2}\\ 
+    \Vert\mathbf{Ax^{b}} - \mathbf{x^{a}}\Vert_{2} & \Vert\mathbf{Ax^{b}} - \mathbf{x^{b}}\Vert_{2} & \Vert\mathbf{Ax^{b}} - \mathbf{x^{c}}\Vert_{2} & \Vert\mathbf{Ax^{b}} - \mathbf{x^{d}}\Vert_{2}\\ 
+    \Vert\mathbf{Ax^{c}} - \mathbf{x^{a}}\Vert_{2} & \Vert\mathbf{Ax^{c}} - \mathbf{x^{b}}\Vert_{2} & \Vert\mathbf{Ax^{c}} - \mathbf{x^{c}}\Vert_{2} & \Vert\mathbf{Ax^{c}} - \mathbf{x^{d}}\Vert_{2}\\ 
+    \Vert\mathbf{Ax^{d}} - \mathbf{x^{a}}\Vert_{2} & \Vert\mathbf{Ax^{d}} - \mathbf{x^{b}}\Vert_{2} & \Vert\mathbf{Ax^{d}} - \mathbf{x^{c}}\Vert_{2} & \Vert\mathbf{Ax^{d}} - \mathbf{x^{d}}\Vert_{2}\\ 
+  \end{bmatrix}$$
+
+```{r}
+Toy_sim <-  c()
+Toy_sim  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim[i,j]  <- norm((Toy_Input_mat[,i] - (Toy_X_mat[,j])), type = "2")
+   }
+ }
+colnames(Toy_sim) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim %>% round(2) %>% cbind(., RowMin = c(colnames(Toy_sim)[apply(Toy_sim, 1, which.min)]))
+table(colnames(Toy_sim)[apply(Toy_sim, 1, which.min)])
+
+```
+
+
+"Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_sim_rel <-  c()
+Toy_sim_rel  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim_rel[i,j]  <- norm((Toy_Input_mat_rel[,i] - (Toy_X_mat[,j] %*% solve(c((rep(c(1), each=ncol(Toy_Direct_mat)) %*% Toy_X_mat[,j] ))) )), type = "2")
+   }
+ }
+colnames(Toy_sim_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim_rel  %>% round(4) %>% cbind(., RowMin = c(colnames(Toy_sim_rel)[apply(Toy_sim_rel, 1, which.min)]))
+table(colnames(Toy_sim_rel)[apply(Toy_sim_rel, 1, which.min)])
+```
+
+
+"Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_sim_imp <-  c()
+Toy_sim_imp  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim_imp[i,j]  <- norm((Toy_Input_mat_imp[,i] - (Toy_X_mat[,j])), type = "2")
+   }
+ }
+colnames(Toy_sim_imp) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim_imp) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim_imp  %>% round(2) %>% cbind(., RowMin = c(colnames(Toy_sim_imp)[apply(Toy_sim_imp, 1, which.min)]))
+table(colnames(Toy_sim_imp)[apply(Toy_sim_imp, 1, which.min)])
+```
+
+"*Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_sim_exp <-  c()
+Toy_sim_exp  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim_exp[i,j]  <- norm((Toy_Input_mat_imp[,i] - (Toy_Input_mat_exp[,j])), type = "2")
+   }
+ }
+colnames(Toy_sim_exp) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim_exp) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim_exp  %>% round(2)  %>% cbind(., RowMin = c(colnames(Toy_sim_exp)[apply(Toy_sim_exp, 1, which.min)]))
+table(colnames(Toy_sim_exp)[apply(Toy_sim_exp, 1, which.min)])
+```
+
+
+"Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_sim_imp_rel <-  c()
+Toy_sim_imp_rel  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim_imp_rel[i,j]  <- norm((Toy_Input_mat_imp_rel[,i] - (Toy_X_mat[,j] %*% solve(c((rep(c(1), each=ncol(Toy_Direct_mat)) %*% Toy_X_mat[,j] ))) )), type = "2")
+   }
+ }
+colnames(Toy_sim_imp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim_imp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim_imp_rel  %>% round(4) %>% cbind(., RowMin = c(colnames(Toy_sim_imp_rel)[apply(Toy_sim_imp_rel, 1, which.min)]))
+table(colnames(Toy_sim_imp_rel)[apply(Toy_sim_imp_rel, 1, which.min)])
+```
+
+"*Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_sim_exp_rel <-  c()
+Toy_sim_exp_rel  <-  matrix(0, nrow = Region_Count, ncol = Region_Count)
+ for (i in 1:Region_Count){
+   for (j in 1:Region_Count){
+  Toy_sim_exp_rel[i,j]  <- norm((Toy_Input_mat_imp_rel[,i] - (Toy_Input_mat_exp[,j] %*% solve(c((rep(c(1), each=ncol(Toy_Direct_mat)) %*% Toy_Input_mat_exp[,j] ))) )), type = "2")
+   }
+ }
+colnames(Toy_sim_exp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_sim_exp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_sim_exp_rel  %>% round(4) %>% cbind(., RowMin = c(colnames(Toy_sim_exp_rel)[apply(Toy_sim_exp_rel, 1, which.min)]))
+table(colnames(Toy_sim_exp_rel)[apply(Toy_sim_exp_rel, 1, which.min)])
+```
+
+
+
+Adding the spatial elements:
+
+"Geographical Impedance": $Q^{rs} = e^{-d^{rs}} ~ \forall ~ r,s \in l$
+
+```{r}
+Toy_Lat <- c(42.3, 44.49, 41.84, 43.07)
+Toy_Lon <- c(-89.04, -88.03, -87.77, -89.39)
+Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))/1000000
+colnames(Toy_Dist_mat) <- c("AllElse", "Brown", "Cook", "Dane")
+rownames(Toy_Dist_mat) <- c("AllElse", "Brown", "Cook", "Dane")
+
+#Toy_Q <- (1/(Toy_Dist_mat)^2)
+Toy_Q <- exp(-Toy_Dist_mat)
+Toy_Q  %>% round(4)
+```
+
+
+"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+(Toy_sim  / Toy_Q) %>% round(2)
+```
+
+"Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+(Toy_sim_rel  / Toy_Q) %>% round(4)
+```
+
+"Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+(Toy_sim_imp  / Toy_Q) %>% round(2)
+```
+
+"Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+(Toy_sim_imp_rel  / Toy_Q) %>% round(4)
+```
+
+For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
 
 
 
@@ -1111,7 +1431,8 @@ The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alter
 
 
 
-
+FIN
+::: 
 
 
 
