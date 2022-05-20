@@ -26,7 +26,7 @@ jupyter: python3
 ---
 ```
 
-There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. A selection of definitions is presented here. In many cases, non-rural is defined first, and everything outside of it is considered rural.
+There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. A selection of definitions is presented here. In many cases, non-rural is defined first, and everything outside of it is considered rural. @fig-compare-defns-wisc visually compares what apprears to be rural in Wisconsin under different definitions.
 
 Two major definitions which the Federal government uses to identify the rural status of an area are the Census Bureau's "Urban Area" and the OMB's "Core-Based Statistical Area".
 
@@ -778,6 +778,34 @@ def rural_map_ruca(state_code, simplify=True):
     return d
 ```
 
+**FAR**
+
+Compared to other definition, Frontier and Remote is rather conservative. Many areas that are not FAR (level 0) are classified as rural by other definitions. So we apply the most aggressive criterion and classify areas with any level of FAR (1, 2, 3 or 4) as rural.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_far(state_code, simplify=True):
+
+    df = geography.get_zcta_df(2013)
+
+    state_abbr = dict(geography.get_state_df(False)[['CODE', 'ABBR']].values)[state_code]
+    d = get_far_df(2010).query('STATE == @state_abbr')
+    # innere merge: non-matches dropped
+    df = df.merge(d, 'inner', left_on='ZCTA', right_on='ZIP')
+    rural = df.query('FAR_LEVEL > 0')
+
+    if len(rural) == 0:
+        warnings.warn(f'FAR rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+        if simplify: rural = rural.simplify(0.01)
+
+    d = geopandas.GeoDataFrame({'definition': ['FAR']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
 ```{code-cell} ipython3
 :tags: []
 
@@ -788,6 +816,7 @@ for sc in geography.get_state_df(False)['CODE']:
         d = rural_map_ua(sc)
         d = rural_map_cbsa(sc)
         d = rural_map_ruca(sc)
+        d = rural_map_far(sc)
     except Exception as e:
         print('******************** ACHTUNG! ACHTUNG! ACHTUNG! ********************')
         print(e)
@@ -797,10 +826,11 @@ for sc in geography.get_state_df(False)['CODE']:
 :tags: []
 
 def rural_map_all(state_code):
-    m = RuralityMap(['UA', 'CBSA', 'RUCA'], [mpl.colors.to_hex(c) for c in plt.cm.Dark2.colors])
+    m = RuralityMap(['UA', 'CBSA', 'RUCA', 'FAR'], [mpl.colors.to_hex(c) for c in plt.cm.Dark2.colors])
     m.add_layer(rural_map_ua(state_code), 'UA', 'definition')
     m.add_layer(rural_map_cbsa(state_code), 'CBSA', 'definition')
     m.add_layer(rural_map_ruca(state_code), 'RUCA', 'definition')
+    m.add_layer(rural_map_far(state_code), 'FAR', 'definition')
     return m.show()
 ```
 
@@ -829,9 +859,3 @@ def show_selected_state(_):
 w_show.on_click(show_selected_state)
 ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
 ```
-
-+++ {"tags": []}
-
-TODO:
-
-- add FAR to comparison map
