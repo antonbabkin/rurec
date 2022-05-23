@@ -1426,9 +1426,29 @@ Toy_Q  %>% round(4)
 For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
 
 
+**Proximity Example**
+
+```{r}
+
+Toy_prox <- matrix(rbind(
+  c(1,1,0,1,0,0,0,0,0),
+  c(1,1,1,0,1,0,0,0,0),
+  c(0,1,1,0,0,1,0,0,0),
+  c(1,0,0,1,1,0,1,0,0),
+  c(0,1,0,1,1,1,0,1,0),
+  c(0,0,1,0,1,1,0,0,1),
+  c(0,0,0,1,0,0,1,1,0),
+  c(0,0,0,0,1,0,1,1,1),
+  c(0,0,0,0,0,1,0,1,1)), nrow = 9)
+
+Toy_RUCC <- c(0,0,0,0,0,9,9,0,9)
+
+Toy_RUCC_prox <- sqrt(t(Toy_RUCC * Toy_prox ) * Toy_RUCC)
+
+diag(Toy_RUCC_prox) <- 0
 
 
-
+```
 
 
 FIN
