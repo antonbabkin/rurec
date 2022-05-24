@@ -59,7 +59,7 @@ invisible(lapply(packages, library, character.only = TRUE))
 `r paste0("Project directory: ",  getwd())`
 
 ```{r}
-## Load previously generated datafiles
+## Load previously generated files
 
 load(file = "Data.RData")
 
@@ -74,13 +74,19 @@ rural <- filter(TIGER_QCEW_RUCC, H3==3) %>% transmute(place = place)
 st_geometry(rural) <- NULL
 rural <- rownames(rural)
 
-primary <- filter(TIGER_QCEW_RUCC, H3==2) %>% transmute(place = place) %>% as.vector()
+non_rural <- filter(TIGER_QCEW_RUCC, H3!=3) %>% transmute(place = place)  
+st_geometry(non_rural) <- NULL
+non_rural <- rownames(non_rural)
+
+primary <- filter(TIGER_QCEW_RUCC, H3!=0) %>% transmute(place = place) %>% as.vector()
 st_geometry(primary) <- NULL
 primary <- rownames(primary)
 
-Sim <- Sim_mat[rural, primary]
+Sim <- Sim_mat_exp_rel[[2]][rural, primary] / Q_mat[rural, primary] 
 
-RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[apply(Sim, 1, which.min)])
+RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[unlist(apply(Sim, 1, which.min))])
+
+RowMin <-  rbind(RowMin, cbind(non_rural, non_rural))
 
 table(RowMin[,"match"])
 
@@ -95,15 +101,15 @@ ggplot(  filter(TIGER_QCEW_RUCC_h1m, STATEFP=="55")) +
        fill = "Regional Cluster") +
        scale_fill_discrete(labels = (TIGER_QCEW_RUCC_h1m  %>% filter(place %in% unique(TIGER_QCEW_RUCC_h1m$match) ) %>% pull(County_Name)) )
 
-
-H_match <- sparseMatrix(
-  i = match(rownames(Sim), rural), 
-  j = match(c(colnames(Sim)[apply(Sim, 1, which.min)]), primary),  
-  x = 1L,
-  dims = c(nrow(Sim), ncol(Sim)),
-  dimnames = list(rural, primary)
-) %>% as.matrix()
-
+# 
+# H_match <- sparseMatrix(
+#   i = match(rownames(Sim), rural), 
+#   j = match(c(colnames(Sim)[unlist(apply(Sim, 1, which.min))]), primary),  
+#   x = 1L,
+#   dims = c(nrow(Sim), ncol(Sim)),
+#   dimnames = list(rural, primary)
+# ) %>% as.matrix()
+# 
 
   
 TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
@@ -151,18 +157,17 @@ primary <- filter(TIGER_QCEW_RUCC, STATEFP!="15" & STATEFP!="02") %>% transmute(
 st_geometry(primary) <- NULL
 primary <- rownames(primary)
 
-Sim <- Sim_mat[[1]][rural, primary] 
-#Sim <- Sim_mat_exp_rel[rural, primary] / Q_mat[rural, primary] 
-
+#Sim <- Sim_mat[[2]][rural, primary] 
+Sim <- Sim_mat_exp_rel[[2]][rural, primary] / Q_mat[rural, primary] 
 
 
 
 
 RowMin <-  cbind(place = rownames(Sim), match = colnames(Sim)[unlist(apply(Sim, 1, which.min))])
 
-RowMin <-  rbind(RowMin, cbind(non_rural, non_rural))
+#RowMin <-  rbind(RowMin, cbind(non_rural, non_rural))
 
-#table(RowMin[,"match"])
+table(RowMin[,"match"])
 
 
 TIGER_QCEW_RUCC_h1m <- inner_join(TIGER_QCEW_RUCC, RowMin, by = "place", copy = TRUE) 
