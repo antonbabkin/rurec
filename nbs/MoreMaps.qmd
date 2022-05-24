@@ -1,0 +1,207 @@
+---
+title: "MoreMaps"
+author: "Austin Sandler"
+date: "5/20/2022"
+format:
+  html:
+    self-contained: false
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+editor: visual
+---
+
+::: panel-tabset
+### RStartup
+
+<details>
+
+<summary>
+
+Possible Warnings
+
+</summary>
+
+```{r packages and libraries}
+# Download, Install, and Add R packages as necessary.
+
+# List packages needed for this exercise
+packages <- c("dlm",
+              "DT",
+              "geosphere",
+              "knitr",
+              "magrittr",
+              "Matrix",
+              "spdep",
+              "tidyverse",
+              "tmap",
+              "tmaptools")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages], dependencies = TRUE)
+}
+
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+```
+
+</details>
+
+`r paste0("Date: ",  Sys.Date())`
+
+`r kable((.packages()), col.names = "R Packages")`
+
+`r paste0("Project directory: ",  getwd())`
+
+```{r}
+## Load previously generated files
+
+load(file = "Data.RData")
+
+```
+
+### Maps
+
+```{r}
+##Match rural to mid
+
+rural <- filter(TIGER_QCEW_RUCC, H3==3) %>% transmute(place = place)  
+st_geometry(rural) <- NULL
+rural <- rownames(rural)
+
+non_rural <- filter(TIGER_QCEW_RUCC, H3!=3) %>% transmute(place = place)  
+st_geometry(non_rural) <- NULL
+non_rural <- rownames(non_rural)
+
+primary <- filter(TIGER_QCEW_RUCC, H3!=0) %>% transmute(place = place) %>% as.vector()
+st_geometry(primary) <- NULL
+primary <- rownames(primary)
+
+Sim <- Sim_mat_exp_rel[[2]][rural, primary] / Q_mat[rural, primary] 
+
+RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[unlist(apply(Sim, 1, which.min))])
+
+RowMin <-  rbind(RowMin, cbind(non_rural, non_rural))
+
+table(RowMin[,"match"])
+
+TIGER_QCEW_RUCC_h1m <- inner_join(TIGER_QCEW_RUCC, RowMin, by = "place", copy = TRUE)
+
+ggplot(  filter(TIGER_QCEW_RUCC_h1m, STATEFP=="55")) +
+  geom_sf(aes(fill = match), color = NA) +
+  coord_sf() +
+  theme_void() +
+  labs(title = "              First Order Similarity Matching",
+       subtitle = "              Simple Similarity Index",
+       fill = "Regional Cluster") +
+       scale_fill_discrete(labels = (TIGER_QCEW_RUCC_h1m  %>% filter(place %in% unique(TIGER_QCEW_RUCC_h1m$match) ) %>% pull(County_Name)) )
+
+# 
+# H_match <- sparseMatrix(
+#   i = match(rownames(Sim), rural), 
+#   j = match(c(colnames(Sim)[unlist(apply(Sim, 1, which.min))]), primary),  
+#   x = 1L,
+#   dims = c(nrow(Sim), ncol(Sim)),
+#   dimnames = list(rural, primary)
+# ) %>% as.matrix()
+# 
+
+  
+TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
+  tm_shape() +
+  tm_fill(col = "H3",  
+          title = "RUCC", 
+          id = "NAMELSAD", 
+          palette = "inferno", 
+          n = 4, 
+          contrast = c(.35, 1), 
+          style = "fixed", 
+          breaks = c(1, 2, 3, 4), 
+          labels = c("1", "2", "3")
+          )
+
+```
+
+### New
+
+```{r}
+    tmap_mode("view")
+TIGER_CBP_RUCC %>% filter(STATEFP!="15" & STATEFP!="02" & RUCC_2013==9) %>% 
+  tm_shape() +
+  tm_fill(col = "RUCC_2013",  
+          title = "RUCC", 
+          id = "NAMELSAD", 
+          palette = "inferno", 
+          )
+
+
+
+```
+
+```{r}
+
+rural <- filter(TIGER_QCEW_RUCC, H3==3 & STATEFP!="15" & STATEFP!="02") %>% transmute(place = place)  
+st_geometry(rural) <- NULL
+rural <- rownames(rural)
+
+non_rural <- filter(TIGER_QCEW_RUCC, H3!=3 & STATEFP!="15" & STATEFP!="02") %>% transmute(place = place)  
+st_geometry(non_rural) <- NULL
+non_rural <- rownames(non_rural)
+
+primary <- filter(TIGER_QCEW_RUCC, STATEFP!="15" & STATEFP!="02") %>% transmute(place = place) %>% as.vector()
+st_geometry(primary) <- NULL
+primary <- rownames(primary)
+
+#Sim <- Sim_mat[[2]][rural, primary] 
+Sim <- Sim_mat_exp_rel[[2]][rural, primary] / Q_mat[rural, primary] 
+
+
+
+
+RowMin <-  cbind(place = rownames(Sim), match = colnames(Sim)[unlist(apply(Sim, 1, which.min))])
+
+#RowMin <-  rbind(RowMin, cbind(non_rural, non_rural))
+
+table(RowMin[,"match"])
+
+
+TIGER_QCEW_RUCC_h1m <- inner_join(TIGER_QCEW_RUCC, RowMin, by = "place", copy = TRUE) 
+TIGER_QCEW_RUCC_h1m %<>% mutate(match_name = with(TIGER_QCEW_RUCC_h1m, County_Name[match(match, place)]), .after = match)
+clust_name <- unique(TIGER_QCEW_RUCC_h1m$match_name)
+
+
+  tmap_mode("view")
+tmap_options(max.categories = length(unique(TIGER_QCEW_RUCC_h1m$match))) 
+TIGER_QCEW_RUCC_h1m %>% 
+  tm_shape() +
+  tm_fill(col = "match",
+          title = "Regional Cluster", 
+          id = "NAMELSAD", 
+          palette = "Dark2"
+          ) +
+  tm_borders(lwd = .5)        
+  
+
+
+```
+
+```{r}
+# WI_match <- sparseMatrix(
+#   i = match(rownames(WISim), WItest_rural), 
+#   j = match(c(colnames(WISim)[apply(WISim, 1, which.min)]), WItest_primary),  
+#   x = 1L,
+#   dims = c(nrow(WISim), ncol(WISim)),
+#   dimnames = list(WItest_rural, WItest_primary)
+# ) %>% as.matrix()
+# 
+# Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+# Xpay_mat_H1
+
+
+```
+:::
