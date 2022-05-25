@@ -245,3 +245,19 @@ unmatched_detail = di.query('naics.notna() and match != True')['detail']
 with pd.option_context('display.max_colwidth', 300):
     display(di[di['detail'].isin(unmatched_detail)].fillna(False).reset_index(drop=True))
 ```
+
+# 3-digit crosswalk
+
+BEA "summary" can be compared to NAICS "subsector". BEA->NAICS crosswalk is often one-to-many, which is not a problem when we convert NAICS-based data to match BEA. But BEA->NAICS is also many-to-one for three NAICS subsectors (336, 531, 541).
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_naics_df()
+df = df[['summary', 'detail', 'naics']].dropna()
+df['naics3'] = df['naics'].str[:3]
+df = df[['summary', 'naics3']].drop_duplicates()
+df['dup_io'] = df['summary'].duplicated(False)
+df['dup_n3'] = df['naics3'].duplicated(False)
+df[df['dup_n3']]
+```
