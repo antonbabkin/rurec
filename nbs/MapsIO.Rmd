@@ -64,12 +64,15 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 load(file = "Data.RData")
 
+## Choose Sector level (1) or Summary level (2) 
+lvl = 1
+
 ```
 
 ### WI Test
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat), value=TRUE) %>%
+WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
@@ -86,7 +89,7 @@ WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
 
 ```{r}
 ##  Simple Similarity Index
-WISim <- Sim_mat[WItest_rural, WItest_primary]
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -116,7 +119,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -124,7 +127,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Relative Similarity Index
-WISim <- Sim_mat_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -154,7 +157,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -162,7 +165,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Import Similarity Index
-WISim <- Sim_mat_imp[WItest_rural, WItest_primary]
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -192,7 +195,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -201,7 +204,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[WItest_rural, WItest_primary]
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -231,7 +234,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -240,7 +243,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -270,7 +273,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -279,7 +282,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  *Relative Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -309,7 +312,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -321,7 +324,7 @@ Xpay_mat_H1
 
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat), value=TRUE) %>%
+WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
@@ -338,7 +341,7 @@ WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
 
 ```{r}
 ##  Spatial Simple Similarity Index
-WISim <- Sim_mat[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -368,7 +371,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -376,7 +379,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Relative Similarity Index
-WISim <- Sim_mat_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -406,7 +409,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -414,7 +417,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Import Similarity Index
-WISim <- Sim_mat_imp[WItest_rural, WItest_primary]  / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary]  / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -444,7 +447,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -452,7 +455,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -482,7 +485,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -490,7 +493,7 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -520,7 +523,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -528,7 +531,8 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial  *Relative Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
@@ -550,6 +554,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 "New Regional-level Total Output Table":  $\mathbf{X}$
 
 ```{r}
+
 WI_match <- sparseMatrix(
   i = match(rownames(WISim), WItest_rural), 
   j = match(c(colnames(WISim)[apply(WISim, 1, which.min)]), WItest_primary),  
@@ -558,7 +563,7 @@ WI_match <- sparseMatrix(
   dimnames = list(WItest_rural, WItest_primary)
 ) %>% as.matrix()
 
-Xpay_mat_H1 <- (Xpay_mat[, WItest_rural] %*% WI_match) + Xpay_mat[, colnames(WI_match)]
+Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
 ```
 
@@ -569,12 +574,12 @@ Xpay_mat_H1
 ### WI Test - Natural
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat), value=TRUE) %>%
+WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c(grep("^55", colnames(Xpay_mat), value=TRUE) , "17031", "27053")
+WItest_primary <- c(grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) , "17031", "27053")
 names(WItest_primary) <- WItest_primary
 
 WItest_all <- c(WItest_primary) %>% as.vector()
@@ -586,7 +591,7 @@ WItest_all <- c(WItest_primary) %>% as.vector()
 
 ```{r}
 ##  Simple Similarity Index
-WISim <- Sim_mat[WItest_rural, WItest_primary]
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -611,7 +616,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  Relative Similarity Index
-WISim <- Sim_mat_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary]
 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
@@ -637,7 +642,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  Import Similarity Index
-WISim <- Sim_mat_imp[WItest_rural, WItest_primary]
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -660,7 +665,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[WItest_rural, WItest_primary]
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -683,7 +688,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -706,7 +711,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  *Relative Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp_rel[WItest_rural, WItest_primary]
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary]
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -738,12 +743,12 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 ### WI Test - Natural and Spatial 
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat), value=TRUE) %>%
+WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c(grep("^55", colnames(Xpay_mat), value=TRUE) , "17031", "27053")
+WItest_primary <- c(grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) , "17031", "27053")
 names(WItest_primary) <- WItest_primary
 
 WItest_all <- c(WItest_primary) %>% as.vector()
@@ -755,7 +760,7 @@ WItest_all <- c(WItest_primary) %>% as.vector()
 
 ```{r}
 ## Spatial Simple Similarity Index
-WISim <- Sim_mat[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -780,7 +785,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial Relative Similarity Index
-WISim <- Sim_mat_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
@@ -806,7 +811,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial Import Similarity Index
-WISim <- Sim_mat_imp[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -829,7 +834,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -852,7 +857,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -875,7 +880,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ##  Spatial *Relative Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp_rel[WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
@@ -946,7 +951,7 @@ primary <- filter(TIGER_CBP_RUCC, H3==2) %>% transmute(place = place) %>% as.vec
 st_geometry(primary) <- NULL
 primary <- rownames(primary)
 
-Sim <- Sim_mat[rural, primary]
+Sim <- Sim_mat[[lvl]][rural, primary]
 
 RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[apply(Sim, 1, which.min)])
 
