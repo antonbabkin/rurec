@@ -55,9 +55,6 @@ Total_mat[[2]][15,] <- Total_mat[[2]][15,] + Total_mat[[2]][16,]
 Total_mat[[2]] <- Total_mat[[2]][-16,]
 
 
-
-
-
 local({
   temp <- TIGER_QCEW_RUCC[, c("place")]
   st_geometry(temp) <- NULL 
@@ -74,9 +71,62 @@ Xpay_mat[[2]] %<>% reshape(idvar = "BEA_Summary", v.names = "total_annual_wages"
 Xpay_mat[[2]] %<>% subset(select = -c(BEA_Summary)) %>% as.matrix()
 
 
+
+
+
+
 ### Detail level 405-by-405
-# Total_mat <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][4:408,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
-# Ind_Names <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][2,3:407] %>% as.list()
+Total_mat[[3]] <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][4:408,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
+rownames(Total_mat[[3]]) = colnames(Total_mat[[3]]) <- IO_tables[["IxI_TR_2007_2012_PRO_DET"]][["2012"]][3,3:407] %>% as.list()
+Total_mat[[3]] <- Total_mat[[3]][! rownames(Total_mat[[3]]) %in% Detail_drop_list, ]
+Total_mat[[3]] <- Total_mat[[3]][ , ! colnames(Total_mat[[3]]) %in% Detail_drop_list]
+
+## Collapse  industries at detail level for functional matching of county specific detail industries 360-by-360
+Total_mat[[3]][,304] <- Total_mat[[3]][,304] + Total_mat[[3]][,305] + Total_mat[[3]][,306]
+Total_mat[[3]] <- Total_mat[[3]][,-306]
+Total_mat[[3]] <- Total_mat[[3]][,-305]
+Total_mat[[3]][,15] <- Total_mat[[3]][,15] + Total_mat[[3]][,16] + Total_mat[[3]][,17] + Total_mat[[3]][,18] + Total_mat[[3]][,19] + Total_mat[[3]][,20] + Total_mat[[3]][,21] + Total_mat[[3]][,22] + Total_mat[[3]][,23]+ Total_mat[[3]][,24] + Total_mat[[3]][,25] + Total_mat[[3]][,26]
+Total_mat[[3]] <- Total_mat[[3]][,-26]
+Total_mat[[3]] <- Total_mat[[3]][,-25]
+Total_mat[[3]] <- Total_mat[[3]][,-24]
+Total_mat[[3]] <- Total_mat[[3]][,-23]
+Total_mat[[3]] <- Total_mat[[3]][,-22]
+Total_mat[[3]] <- Total_mat[[3]][,-21]
+Total_mat[[3]] <- Total_mat[[3]][,-20]
+Total_mat[[3]] <- Total_mat[[3]][,-19]
+Total_mat[[3]] <- Total_mat[[3]][,-18]
+Total_mat[[3]] <- Total_mat[[3]][,-17]
+Total_mat[[3]] <- Total_mat[[3]][,-16]
+
+Total_mat[[3]][304,] <- Total_mat[[3]][304,] + Total_mat[[3]][305,] + Total_mat[[3]][306,]
+Total_mat[[3]] <- Total_mat[[3]][-306,]
+Total_mat[[3]] <- Total_mat[[3]][-305,]
+Total_mat[[3]][15,] <- Total_mat[[3]][15,] + Total_mat[[3]][16,] + Total_mat[[3]][17,] + Total_mat[[3]][18,] + Total_mat[[3]][19,] + Total_mat[[3]][20,] + Total_mat[[3]][21,] + Total_mat[[3]][22,] + Total_mat[[3]][23,]+ Total_mat[[3]][24,] + Total_mat[[3]][25,] + Total_mat[[3]][26,]
+Total_mat[[3]] <- Total_mat[[3]][-26,]
+Total_mat[[3]] <- Total_mat[[3]][-25,]
+Total_mat[[3]] <- Total_mat[[3]][-24,]
+Total_mat[[3]] <- Total_mat[[3]][-23,]
+Total_mat[[3]] <- Total_mat[[3]][-22,]
+Total_mat[[3]] <- Total_mat[[3]][-21,]
+Total_mat[[3]] <- Total_mat[[3]][-20,]
+Total_mat[[3]] <- Total_mat[[3]][-19,]
+Total_mat[[3]] <- Total_mat[[3]][-18,]
+Total_mat[[3]] <- Total_mat[[3]][-17,]
+Total_mat[[3]] <- Total_mat[[3]][-16,]
+
+rownames(Total_mat[[3]])[15] <- "23XX"
+rownames(Total_mat[[3]])[293] <- "531XX"
+colnames(Total_mat[[3]])[15] <- "23XX"
+colnames(Total_mat[[3]])[293] <- "531XX"
+
+
+
+
+
+
+
+
+
 
 
 
