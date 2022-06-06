@@ -29,12 +29,16 @@ options(scipen=999)
 # Download, Install, and Add R packages as necessary.
 
 # List packages needed for this exercise
-packages <- c("dlm",
+packages <- c("dash",
+              "dlm",
               "DT",
               "geosphere",
+              "ggiraph",
               "knitr",
               "Matrix",
+              "reshape2",
               "spdep",
+              "scales",
               "tidyverse",
               "tmap",
               "tmaptools")
@@ -64,7 +68,7 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 load(file = "Data.RData")
 
-## Choose Sector level (1) or Summary level (2) 
+## Choose Sector level (1) or Summary level (2) or Detail level  (3)
 lvl = 1
 
 ```
@@ -72,7 +76,7 @@ lvl = 1
 ### WI Test
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
@@ -95,17 +99,18 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
-  geom_sf(aes(fill = match), color = NA) +
+ggplot( TIGER_RUCC_h1m ) +
+  geom_sf_interactive(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Simple Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
+
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -121,7 +126,51 @@ WI_match <- sparseMatrix(
 
 Xpay_mat_H1 <- (Xpay_mat[[lvl]][, WItest_rural] %*% WI_match) + Xpay_mat[[lvl]][, colnames(WI_match)]
 Xpay_mat_H1
+
+
 ```
+
+
+```{r}
+# 
+# 
+# primary_c <- Xpay_mat[[lvl]][, colnames(WI_match)] %>% as.data.frame()  %>% select(order(colnames(.)))
+# primary_c <- cbind(industry = seq_along(primary_c[,1]), primary_c) 
+# primary_c <- melt(primary_c, id = "industry")
+# 
+# x=1
+# Xpay_mat[[lvl]][, WItest_rural][, x]
+# test <- Xpay_mat[[lvl]][, WItest_rural][, x] %>% as.data.frame()
+# colnames(test) <- colnames(Xpay_mat[[lvl]])[x]
+# test <- cbind(industry = seq_along(test[,1]), test) 
+# 
+# 
+# ggbase <- ggplot(test) +
+#       geom_col(aes(x = industry, 
+#                  y = log10(`01001`))) +
+#   geom_point(data = primary_c, 
+#              aes(x = industry,
+#                  y = log10(value),
+#                  color = variable)) +   
+#   geom_line(data = primary_c, 
+#             aes(x = industry,
+#                 y = log10(value),
+#                 color = variable)) +
+#   labs(x = "Industry", y = "log(Payroll)") +
+#   scale_x_discrete(limits=factor(1:dim(Xpay_mat[[lvl]])[1]), labels = c(rownames(Xpay_mat[[lvl]]))) +
+#   #scale_y_continuous(labels = label_number(suffix = " M", scale = 1e-6)) +
+#   scale_y_continuous(trans='log10') +
+#    labs(title = "Payroll Distribution by Industry",
+#        color = "Counties") +
+#   scale_color_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) ) 
+# ggbase 
+# 
+# ggplotly(ggbase)
+
+```
+
+
+
 
 "Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
@@ -133,9 +182,9 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -143,7 +192,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Relative Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -171,9 +220,9 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -181,7 +230,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Import Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -210,9 +259,9 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -220,7 +269,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              *Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name))  )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name))  )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -249,9 +298,9 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -259,7 +308,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Relative Import Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -288,9 +337,9 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -298,7 +347,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              *Relative Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -324,7 +373,8 @@ Xpay_mat_H1
 
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
+
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
@@ -341,15 +391,15 @@ WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
 
 ```{r}
 ##  Spatial Simple Similarity Index
-WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -357,7 +407,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial Simple Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -379,15 +429,15 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Relative Similarity Index
-WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -395,7 +445,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial Relative Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -417,15 +467,15 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Import Similarity Index
-WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary]  / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary]  / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -433,7 +483,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial Import Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -455,15 +505,15 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -471,7 +521,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial *Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name))  )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name))  )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -493,15 +543,15 @@ Xpay_mat_H1
 
 ```{r}
 ##  Spatial Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -509,7 +559,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial Relative Import Similarity Index",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -532,15 +582,15 @@ Xpay_mat_H1
 ```{r}
 ##  Spatial  *Relative Import Similarity Index - Net Exports
 
-WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), cbind(WItest_primary, WItest_primary))
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
@@ -548,7 +598,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
        subtitle = "              Spatial *Relative Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
   scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+                    labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -574,12 +624,12 @@ Xpay_mat_H1
 ### WI Test - Natural
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c(grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) , "17031", "27053")
+WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 names(WItest_primary) <- WItest_primary
 
 WItest_all <- c(WItest_primary) %>% as.vector()
@@ -598,16 +648,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Simple Similarity Index",
        fill = "Regional Cluster")  +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 
 ```
 
@@ -624,16 +674,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Relative Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 
@@ -649,16 +699,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Import Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "*Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
@@ -672,16 +722,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              *Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
@@ -695,16 +745,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Relative Import Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "*Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
@@ -718,16 +768,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              *Relative Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 
@@ -743,12 +793,12 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 ### WI Test - Natural and Spatial 
 
 ```{r}
-WItest_rural <- grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) %>%
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c(grep("^55", colnames(Xpay_mat[[lvl]]), value=TRUE) , "17031", "27053")
+WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 names(WItest_primary) <- WItest_primary
 
 WItest_all <- c(WItest_primary) %>% as.vector()
@@ -760,23 +810,23 @@ WItest_all <- c(WItest_primary) %>% as.vector()
 
 ```{r}
 ## Spatial Simple Similarity Index
-WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial Simple Similarity Index",
        fill = "Regional Cluster")  +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 
 ```
 
@@ -785,7 +835,7 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial Relative Similarity Index
-WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
@@ -793,16 +843,16 @@ RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WI
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial Relative Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 
@@ -811,94 +861,94 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
 ## Spatial Import Similarity Index
-WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial Import Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "Spatial *Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
 ## Spatial *Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial *Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
 ## Spatial Relative Import Similarity Index
-WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_imp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial Relative Import Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 "Spatial *Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
 ##  Spatial *Relative Import Similarity Index - Net Exports
-WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[WItest_rural, WItest_primary] 
+WISim <- Sim_mat_exp_rel[[lvl]][WItest_rural, WItest_primary] / Q_mat[[lvl]][WItest_rural, WItest_primary] 
 
 RowMin <- rbind( cbind(place = rownames(WISim), match = colnames(WISim)[apply(WISim, 1, which.min)]), 
                  cbind( c("55009", "55025", "55079", "17031", "27053"),  c("55009", "55025", "55079", "17031", "27053") ) )
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE) %>% mutate(match_name = with(TIGER_CBP_RUCC_h1m, County_Name[match(match, place)]), .after = match)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE) %>% mutate(match_name = with(TIGER_RUCC_h1m, County_Name[match(match, place)]), .after = match)
 
-test <- TIGER_CBP_RUCC_h1m
+test <- TIGER_RUCC_h1m
 
-ggplot( TIGER_CBP_RUCC_h1m ) +
+ggplot( TIGER_RUCC_h1m ) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "             Spatial *Relative Import Similarity Index - Net Exports",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 ```
 
 
@@ -907,17 +957,15 @@ ggplot( TIGER_CBP_RUCC_h1m ) +
 
 ```{r}
   tmap_mode("view")
-clust_name <- unique(TIGER_CBP_RUCC_h1m$match_name)
-TIGER_CBP_RUCC_h1m %>% 
+clust_name <- unique(TIGER_RUCC_h1m$match_name)
+TIGER_RUCC_h1m %>% 
   tm_shape() +
   tm_fill(col = "match",
           title = "Regional Cluster", 
           id = "NAMELSAD", 
-          palette = "Dark2",
-          labels = c("Cook County", "Hennepin County",  "Brown County",     "Dane County",      "Milwaukee County", "Kenosha County"  ) ) +
+          palette = "Dark2" ) +
   tm_borders(lwd = .5)        
   
-
 
 ```
 
@@ -943,13 +991,8 @@ TIGER_CBP_RUCC_h1m %>%
 ```{r}
 ##Match rural to mid
 
-rural <- filter(TIGER_CBP_RUCC, H3==3) %>% transmute(place = place)  
-st_geometry(rural) <- NULL
-rural <- rownames(rural)
-
-primary <- filter(TIGER_CBP_RUCC, H3==2) %>% transmute(place = place) %>% as.vector()
-st_geometry(primary) <- NULL
-primary <- rownames(primary)
+rural <- rownames(Q_mat[[lvl]])[rownames(Q_mat[[lvl]]) %in% filter(TIGER_RUCC, H3==3)$place ]
+primary <- rownames(Q_mat[[lvl]])[rownames(Q_mat[[lvl]]) %in% filter(TIGER_RUCC, H3==2)$place ]
 
 Sim <- Sim_mat[[lvl]][rural, primary]
 
@@ -957,16 +1000,16 @@ RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[apply(Sim, 1, which
 
 table(RowMin[,"match"])
 
-TIGER_CBP_RUCC_h1m <- inner_join(TIGER_CBP_RUCC, RowMin, by = "place", copy = TRUE)
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
 
-ggplot(  filter(TIGER_CBP_RUCC_h1m, STATEFP=="55")) +
+ggplot(  filter(TIGER_RUCC_h1m, STATEFP=="55")) +
   geom_sf(aes(fill = match), color = NA) +
   coord_sf() +
   theme_void() +
   labs(title = "              First Order Similarity Matching",
        subtitle = "              Simple Similarity Index",
        fill = "Regional Cluster") +
-       scale_fill_discrete(labels = (TIGER_CBP_RUCC_h1m  %>% filter(place %in% unique(TIGER_CBP_RUCC_h1m$match) ) %>% pull(County_Name)) )
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
 
 
 H_match <- sparseMatrix(
@@ -979,7 +1022,7 @@ H_match <- sparseMatrix(
 
 
   
-TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
+TIGER_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
   tm_shape() +
   tm_fill(col = "H3",  
           title = "RUCC", 
@@ -1006,7 +1049,7 @@ TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>%
 #palette_explorer()
 
   
-TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
+TIGER_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>% 
   tm_shape() +
   tm_fill(col = "RUCC_2013",  
           title = "RUCC", 
@@ -1020,14 +1063,14 @@ TIGER_CBP_RUCC %>% dplyr::filter(STATEFP!="15" & STATEFP!="02" ) %>%
           )
   
   
-tmap_mode("view")
+
 tmap_last()
 
 ```
 
 
 ```{r}
-ggplot(filter(TIGER_CBP_RUCC, STATEFP=="55")) +
+ggplot(filter(TIGER_RUCC, STATEFP=="55")) +
   geom_sf(aes(fill = RUCC_2013), color = NA) +
   scale_fill_viridis_c(option = "C",
                        limits = c(0, 10),
