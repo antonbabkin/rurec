@@ -34,8 +34,6 @@ data_zipr(
 )
 
 
-
-
 # Download and unzip 2020 BLS Quarterly Census of Employment and Wages (QCEW).
 data_zipr(
   ZipURL = "https://data.bls.gov/cew/data/files/2020/csv/2020_annual_singlefile.zip",

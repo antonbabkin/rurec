@@ -44,6 +44,7 @@ if (!exists("TIGERData")){
   TIGERData <- path(getwd(), "data", "cb_2021_us_county_500k.shp") %>% st_read(stringsAsFactors = FALSE)
   TIGERData$place <- paste0(TIGERData$STATEFP, TIGERData$COUNTYFP)
   TIGERData$center <- st_centroid(TIGERData$geometry)
+  TIGERData %<>% arrange(place)
 }
 
 
@@ -65,7 +66,6 @@ if (!exists("UICData")){
   UICData <- path(getwd(), "data", "UrbanInfluenceCodes2013.xls") %>% read_xls()
 }
 UICData$place <- UICData$FIPS
-
 
 
 
