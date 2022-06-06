@@ -1,31 +1,33 @@
 
 
-# Establish,  working,  directory,  relative,  to,  location,  of,  this,  file
+# Establish  working  directory  relative  to  location  of  this  file
 script_path() %>% setwd() 
 
-# Connect,  and,  parse,  code,  from,  another,  file 
+# Connect  and  parse  code  from  another  file 
 source("Data_import.R")
 
 
 
-# QCEW,  2020,  subseted,  and,  cleaned,  into,  private, county,  level,  observations,  and,  pertinent,  variables
+# QCEW  2020  subseted  and  cleaned  into  private county  level  observations  and  pertinent  variables
 QCEW_2020_Sum <- filter(QCEW_2020, agglvl_code == 75)
 QCEW_2020_Sum %<>% filter(own_code == 5)
 QCEW_2020_Sum %<>% filter(industry_code != 999)
 QCEW_2020_Sum %<>% filter(disclosure_code != "N")
+QCEW_2020_Sum %<>% filter(!grepl("^72" , area_fips))
+QCEW_2020_Sum %<>% filter(!grepl("^78" , area_fips))
 QCEW_2020_Sum %<>% subset(select = c(area_fips, industry_code, annual_avg_estabs, annual_avg_emplvl, total_annual_wages, avg_annual_pay))
 QCEW_2020_Sum %<>% rename(place = area_fips, 
                           naics = industry_code)
 
-# Add,  empty,  missing,  counties,  to,  maintain,  consistent,  dimensionality,  across,  hierarchical,  specifications
-QCEW_2020_miss <- c("13265", "17151", "31005", "31009", "31091", "31113", "31115", "31171", "35021", "38065", "38085", "41069", "46017", "46095", "46137")
-for (i in  1:length(QCEW_2020_miss)){
-  QCEW_2020_Sum %<>% add_row(place = QCEW_2020_miss[i], naics = "111" )
-}
+# # Add  empty  missing  counties  to  maintain  consistent  dimensionality  across  hierarchical  specifications
+# QCEW_2020_miss <- c("13265", "17151", "31005", "31009", "31091", "31113", "31115", "31171", "35021", "38065", "38085", "41069", "46017", "46095", "46137")
+# for (i in  1:length(QCEW_2020_miss)){
+#   QCEW_2020_Sum %<>% add_row(place = QCEW_2020_miss[i], naics = "111" )
+# }
 
 
 
-# Generate,  a,  cross,  walk,  to,  transform,  3-level,  NAICS,  used,  by,  CBP,  into,  BEA,  Summary,  level,  industries 
+# Generate  a  cross  walk  to  transform  3-level  NAICS  used  by  CBP  into  BEA  Summary  level  industries 
 QCEW_2020_Sum_XBEA <- QCEW_2020_Sum
 QCEW_2020_Sum_XBEA %<>% reshape(idvar = "naics", timevar = "place", direction = "wide")
 QCEW_2020_Sum_XBEA %<>% arrange(naics)
@@ -112,13 +114,13 @@ QCEW_2020_Sum_XBEA$avg_annual_pay <-  as.numeric(QCEW_2020_Sum_XBEA$avg_annual_p
 
 
 
-# Process,  and,  parse,  hierarchical,  structure,  of,  CBP,  data
+# Process  and  parse  hierarchical  structure  of  CBP  data
 CBP_2019 %<>% subset(select = c(fipstate, fipscty, place, naics, emp, qp1, ap, est))
 CBP_2019_C <- filter(CBP_2019, naics == "------")
 CBP_2019_places <- CBP_2019_C[, 1:2]
 CBP_2019_places$place <- paste0(CBP_2019_places$fipstate, CBP_2019_places$fipscty)
 CBP_2019_Sector <- CBP_2019 %>% filter(grepl('*----', naics) & naics != '------' )
-####  Note:  Six,  counties (30069, 31007, 31117, 32009, 48033, 48301)  do,  not,  have,  Sector,  level,  naicscodes,  only,  top,  level "------" in,  2019
+####  Note:  Six  counties (30069, 31007, 31117, 32009, 48033, 48301)  do,  not,  have,  Sector,  level,  naicscodes,  only,  top,  level "------" in,  2019
 CBP_2019_places_Sector <- as.data.frame(unique(CBP_2019_Sector$place)) 
 names(CBP_2019_places_Sector) <- "place"
 CBP_2019_Subsector <- CBP_2019 %>% filter(grepl('///', naics))
@@ -128,7 +130,7 @@ CBP_2019_USNAICS <- CBP_2019 %>% filter(!grepl('/', naics) & !grepl('-', naics))
 
 
 
-# Generate,  a,  cross,  walk,  to,  transform,  NAICS,  sectors,  used,  by,  CBP,  into,  BEA,  sectors 
+# Generate  a  cross  walk  to  transform  NAICS  sectors  used  by  CBP  into  BEA  sectors 
 CBP_2019_Sector_XBEA <- CBP_2019_Sector
 CBP_2019_Sector_XBEA$place <- paste0(CBP_2019_Sector_XBEA$fipstate, CBP_2019_Sector_XBEA$fipscty)
 CBP_2019_Sector_XBEA %<>% subset(select = c(place, naics, emp, qp1, ap, est))
@@ -171,66 +173,6 @@ CBP_2019_Sector_XBEA$est <-  as.numeric(CBP_2019_Sector_XBEA$est)
 
 
 
-# Parse,  TIGER,  and,  CBP,  2019,  county,  overlap
-TIGER_CBP <- inner_join(TIGERData, CBP_2019_places_Sector, by = "place")
-TIGER_CBP  <- TIGER_CBP[order(TIGER_CBP$place), ]
-rownames(TIGER_CBP) <- TIGER_CBP$place
-
-
-
-#Parse,  TIGER/CBP,  and,  RUCC,  crosswalk
-TIGER_CBP_RUCC <- inner_join(TIGER_CBP, RUCCData, by = "place")
-rownames(TIGER_CBP_RUCC) <- TIGER_CBP_RUCC$place
-# add,  augmented,  hierarchical,  classification 
-TIGER_CBP_RUCC <- transform(TIGER_CBP_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
-
-
-# Produce,  Distance,  Matrix
-Dist_mat <- TIGER_CBP_RUCC$center %>% as_Spatial() %>% distm()
-rownames(Dist_mat) = colnames(Dist_mat) <- TIGER_CBP_RUCC$place
-
-
-## Produce,  Proximity,  Matrix
-Prox_mat <- poly2nb(TIGER_CBP_RUCC, queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
-colnames(Prox_mat) <- rownames(Prox_mat)
-
-
-
-
-# Parse,  TIGER,  and,  QCED,  crosswalk
-QCEW_2020_places_Summary <- as.data.frame(unique(QCEW_2020_Sum_XBEA$place)) 
-names(QCEW_2020_places_Summary) <- "place"
-TIGER_QCEW <- inner_join(TIGERData, QCEW_2020_places_Summary, by = "place")
-TIGER_QCEW  <- TIGER_CBP[order(TIGER_CBP$place), ]
-rownames(TIGER_QCEW) <- TIGER_CBP$place
-
-
-#Parse,  TIGER/CBP,  and,  RUCC,  crosswalk
-TIGER_QCEW_RUCC <- inner_join(TIGER_QCEW, RUCCData, by = "place")
-rownames(TIGER_QCEW_RUCC) <- TIGER_QCEW_RUCC$place
-# add,  augmented,  hierarchical,  classification 
-TIGER_QCEW_RUCC <- transform(TIGER_QCEW_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
-
-
-
-
-
-
-
-# Import,  CBP,  data,  using,  separate,  Python,  pre-processing (If,  trouble,  restart,  R, load,  reticulate, load,  conda,  env "rurec")
-# library(reticulate)
-# use_condaenv('rurec')
-# cbp <- import('rurec.cbp')
-# regional_data_py <- cbp$get_df("state", 2019L)
-# head(regional_data_py)
-# 
-# CBP <- cbp$get_df("county", 2019L)
-# CBP %<>% filter(industry != "-")
-
-
-
-
-
 ### All unique "related NAICS codes" from BEA industry code detail level economic accounts
 Naics_Det = c(11111,  11112,  11113,  11114,  11115,  11116,  11119,   1112,   1113,   1114,   1119,  11212,  11211,  11213,   1123,   1122,   1124,   1125,   1129, 113, 114, 115,
               211,   2121,  21223,  21221,  21222,  21229,  21231,  21232,  21239, 213111, 213112, 213113, 213114, 213115, 2211,   2212,   2213, 23,
@@ -260,7 +202,6 @@ Naics_Det = c(11111,  11112,  11113,  11114,  11115,  11116,  11119,   1112,   1
               8111,  8112,  8113,  8114,  8121,  8122, 8123,  8129,  8131,  8132,  8133,  8134,  8139,  814)
 
 
-
 ## Structure code values to match CBP syntax
 Naics_Det[nchar(Naics_Det) == 2] %<>% paste0("----")
 Naics_Det %<>% paste0("////") %>% substr(1,6)
@@ -269,10 +210,9 @@ Naics_Det %<>% paste0("////") %>% substr(1,6)
 CBP_2019_Detail <- filter(CBP_2019, naics %in% Naics_Det)
 
 ### Data loss ratio test example 
-#sum(CBP_2019_Detail$emp) / sum(filter(CBP_2019_Detail, naics == '------')$emp)
+#sum(CBP_2019_Detail$emp) / sum(filter(CBP_2019, naics == '------')$emp)
 
 CBP_2019_Detail_XBEA <- CBP_2019_Detail
-#CBP_2019_Detail_XBEA$naics <- gsub("[^0-9]", "", CBP_2019_Detail_XBEA$naics) %>% as.numeric()
 CBP_2019_Detail_XBEA %<>% subset(select = c(place, naics, emp, qp1, ap, est))
 CBP_2019_Detail_XBEA %<>% reshape(idvar = "naics", timevar = "place", direction = "wide")
 CBP_2019_Detail_XBEA %<>%  as.data.frame() %>% dplyr::arrange(naics)
@@ -665,4 +605,71 @@ Detail_drop_list <- c("1111A0", "1111B0", "111200", "111300", "111400", "111900"
 
 
 
-mutate(CBP_2019_Detail_XBEA, "325620" =  ) 
+# Produce  Distance  Matrix
+Dist_mat <- TIGERData$center %>% as_Spatial() %>% distm()
+rownames(Dist_mat) = colnames(Dist_mat) <- TIGERData$place
+
+
+# Produce  Decay/Impedance  Matrix
+#QI_mat <- (1/(Dist_mat/1)^2)
+#QI_mat <- exp(-(Dist_mat/10000))
+### hyperbolic secant function
+QI_mat <- 2/(exp(-(Dist_mat/1000000)) + exp(Dist_mat/1000000))
+
+
+
+## Produce  Proximity  Matrix
+Prox_mat <- poly2nb(TIGERData, queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
+colnames(Prox_mat) <- rownames(Prox_mat)
+
+
+# TIGER  and RUCC
+TIGER_RUCC <- inner_join(TIGERData, RUCCData, by = "place")
+### Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515")
+TIGER_RUCC <- TIGER_RUCC[order(TIGER_RUCC$place), ]
+rownames(TIGER_RUCC) <- TIGER_RUCC$place
+TIGER_RUCC <- transform(TIGER_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
+
+
+
+# Parse  TIGER  and  CBP  2019  county  overlap
+TIGER_CBP <- inner_join(TIGERData, CBP_2019_places_Sector, by = "place")
+TIGER_CBP  <- TIGER_CBP[order(TIGER_CBP$place), ]
+rownames(TIGER_CBP) <- TIGER_CBP$place
+
+#Parse  TIGER/CBP  and  RUCC  crosswalk
+TIGER_CBP_RUCC <- inner_join(TIGER_CBP, RUCCData, by = "place")
+rownames(TIGER_CBP_RUCC) <- TIGER_CBP_RUCC$place
+# add,  augmented,  hierarchical,  classification 
+TIGER_CBP_RUCC <- transform(TIGER_CBP_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
+
+# Parse  TIGER  and  QCED  crosswalk
+QCEW_2020_places_Summary <- as.data.frame(unique(QCEW_2020_Sum_XBEA$place)) 
+names(QCEW_2020_places_Summary) <- "place"
+TIGER_QCEW <- inner_join(TIGERData, QCEW_2020_places_Summary, by = "place")
+TIGER_QCEW  <- TIGER_CBP[order(TIGER_CBP$place), ]
+rownames(TIGER_QCEW) <- TIGER_CBP$place
+
+
+#Parse  TIGER/CBP  and  RUCC  crosswalk
+TIGER_QCEW_RUCC <- inner_join(TIGER_QCEW, RUCCData, by = "place")
+rownames(TIGER_QCEW_RUCC) <- TIGER_QCEW_RUCC$place
+# add  augmented  hierarchical  classification 
+TIGER_QCEW_RUCC <- transform(TIGER_QCEW_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
+
+
+
+
+
+# Import  CBP  data  using  separate  Python  pre-processing (If  trouble  restart  R load  reticulate load  conda  env "rurec")
+# library(reticulate)
+# use_condaenv('rurec')
+# cbp <- import('rurec.cbp')
+# regional_data_py <- cbp$get_df("state", 2019L)
+# head(regional_data_py)
+# 
+# CBP <- cbp$get_df("county", 2019L)
+# CBP %<>% filter(industry != "-")
+
+
+

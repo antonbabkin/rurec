@@ -37,7 +37,6 @@ Possible Warnings
 # List packages needed for this exercise
 packages <- c("knitr")
 
-
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
