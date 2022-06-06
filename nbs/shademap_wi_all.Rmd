@@ -1,0 +1,482 @@
+---
+title: "shademap_wi_all"
+author: "Austin Sandler"
+date: "2022-06-02"
+format:
+  html:
+    self-contained: false
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+
+```{r preamble, include = FALSE}
+# When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+options(scipen=999)
+
+```
+::: {.panel-tabset}
+
+
+### RStartup
+
+<details><summary>Possible Warnings</summary>
+```{r packages and libraries}
+# Download, Install, and Add R packages as necessary.
+
+# List packages needed for this exercise
+packages <- c("cowplot", 
+              "dash",
+              "dlm",
+              "DT",
+              "geosphere",
+              "ggiraph",
+              "glue",
+              "knitr",
+              "magrittr",
+              "Matrix",
+              "plotly",
+              "reshape2",
+              "shinydashboard",
+              "spdep",
+              "scales",
+              "tidyverse",
+              "tmap",
+              "tmaptools")
+
+# Install packages not yet installed
+installed_packages <- packages %in% rownames(installed.packages())
+if (any(installed_packages == FALSE)) {
+  install.packages(packages[!installed_packages], dependencies = TRUE)
+}
+
+# Load packages
+invisible(lapply(packages, library, character.only = TRUE))
+
+```
+</details>
+
+
+
+`r paste0("Date: ",  Sys.Date())`
+
+`r kable((.packages()), col.names = "R Packages")`
+
+`r paste0("Project directory: ",  getwd())`
+
+```{r}
+## Load previously generated datafiles
+
+load(file = "Data.RData")
+
+```
+
+### WI Test
+
+```{r}
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
+WItest_primary <- c("55009", "55025", "55079", "17031", "27053")
+names(WItest_primary) <- WItest_primary
+
+WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
+
+available_indicators_lab <- c("Simple Similarity Index", 
+                              "Relative Similarity Index",  
+                              "Import Similarity Index", 
+                              "Import Similarity Index - Net Exports", 
+                              "Relative Import Similarity Index", 
+                              "Relative Import Similarity Index - Net Exports")
+
+industry_levels  <-  c("Sector", "Summary", "Detail")
+
+sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+
+```
+
+
+
+```{r}
+
+g <- vector(mode='list', length=length(Sim_list))
+names(g) <- sim_levels
+title <- g
+
+for (i in 1:length(Sim_list)){
+  
+WISim <- vector(mode='list', length=length(Total_mat))
+names(WISim) <- industry_levels
+RowMin <- WISim
+TIGER_RUCC_h1m <- WISim
+p <- WISim
+subtitle <- WISim
+
+
+for (l in 1:length(WISim)){
+WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary]
+
+
+
+RowMin[[l]] <- cbind(place = rownames(WISim[[l]]), match = colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)], min_value = apply(WISim[[l]], 1, min)) %>% as.data.frame()
+RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[i]][[l]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
+RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
+
+
+
+TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
+TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
+
+p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
+  geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
+  guides(alpha = "none") +
+  coord_sf() +
+  theme_void() +
+  labs(fill = "Regional Cluster") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+
+
+}
+
+title[[i]] <- ggdraw() + 
+  draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
+  theme(plot.margin = margin(0, 0, 0, 7))
+
+
+g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]], 
+                        labels = c("Sector", "Summary", "Detail")),
+   options = list(
+    opts_hover(css = "stroke:gray;r:20pt;"),
+    opts_hover_inv(css = "opacity:0.9;"),
+    opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") ))
+ 
+}
+ 
+
+ 
+```
+
+
+"New Regional-level Total Output Table":  $\mathbf{X}$
+
+```{r}
+
+
+WI_match <- vector(mode='list', length=length(Total_mat))
+names(WI_match) <- industry_levels
+Xpay_mat_H1 <- vector(mode='list', length=length(Sim_list))
+names(Xpay_mat_H1) <- sim_levels
+for (l in 1:length(Sim_list)){
+  Xpay_mat_H1[[l]] <- vector(mode='list', length=length(Total_mat))
+  names(Xpay_mat_H1[[l]] ) <- industry_levels
+}
+
+for (i in 1:length(Sim_list)){
+  
+  for (l in 1:length(WISim)){
+    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary]
+    
+    
+    WI_match[[l]] <- sparseMatrix(
+      i = match(rownames(WISim[[l]]), WItest_rural), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), WItest_primary),  
+      x = 1L,
+      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
+      dimnames = list(WItest_rural, WItest_primary)
+    ) %>% as.matrix()
+    
+  
+  Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, WItest_rural] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+
+}
+}
+
+```
+
+
+```{r}
+
+primary_c <- vector(mode='list', length=length(Total_mat))
+names(primary_c) <- industry_levels
+
+test_industry <- vector(mode='list', length=length(Total_mat))
+names(test_industry) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+    primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]]) 
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(WItest_rural)){
+    test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
+    colnames( test_industry[[l]][[p]]) <- c("value")
+    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]]) 
+  }
+  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
+}
+
+
+ggbase <- test_industry
+
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(WItest_rural)){
+     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+      geom_col(aes(x = industry, 
+                  y = log10(value))) +
+      geom_point(data = primary_c[[l]], 
+                 aes(x = industry,
+                     y = log10(value),
+                     color = variable)) +   
+      geom_line(data = primary_c[[l]], 
+                aes(x = industry,
+                    y = log10(value),
+                    color = variable)) +
+      labs(x = "Industry", y = "log(Payroll)") +
+      scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
+      scale_y_continuous(trans='log10') +
+       labs(title = "Payroll Distribution by Industry",
+           color = "Counties")   +
+      scale_color_discrete( labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) )
+    }
+}
+
+
+
+```
+
+
+
+```{r}
+#ggplotly(ggbase[[1]][[5]])
+ #girafe(ggobj = ggbase[[1]][[5]])
+ print(ggbase[[1]][[5]])
+```
+
+
+
+
+
+"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[1]]
+```
+
+
+"Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[2]]
+```
+
+"Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[3]]
+```
+
+"Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[4]]
+```
+
+"Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[5]]
+```
+
+"Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+g[[6]]
+```
+
+### WI Test - Spatial
+
+"Geographical Impedance": $Q^{rs} = e^{-d^{rs}} ~ \forall ~ r,s \in l$
+
+
+
+```{r}
+
+sg <- vector(mode='list', length=length(Sim_list))
+names(sg) <- sim_levels
+title <- sg
+
+
+for (i in 1:length(Sim_list)){
+  
+WISim <- vector(mode='list', length=length(Total_mat))
+names(WISim) <- industry_levels
+RowMin <- WISim
+TIGER_RUCC_h1m <- WISim
+p <- WISim
+subtitle <- WISim
+
+
+for (l in 1:length(WISim)){
+WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Q_mat[[l]][WItest_rural, WItest_primary] 
+
+RowMin[[l]] <- cbind(place = rownames(WISim[[l]]), match = colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)], min_value = apply(WISim[[l]], 1, min)) %>% as.data.frame()
+RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[i]][[l]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
+RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
+
+
+TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
+TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
+
+p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
+  geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
+  guides(alpha = "none") +
+  coord_sf() +
+  theme_void() +
+  labs(fill = "Regional Cluster") +
+  scale_fill_brewer(palette = "Set1",
+                    labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+
+
+}
+
+title[[i]] <- ggdraw() + 
+  draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
+  theme(plot.margin = margin(0, 0, 0, 7))
+
+
+sg[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]], 
+                        labels = c("Sector", "Summary", "Detail")),
+   options = list(
+    opts_hover(css = "stroke:gray;r:20pt;"),
+    opts_hover_inv(css = "opacity:0.9;"),
+    opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") ))
+ 
+}
+ 
+ 
+```
+
+
+"New Regional-level Total Output Table":  $\mathbf{X}$
+
+```{r}
+
+
+WI_match <- vector(mode='list', length=length(Total_mat))
+names(WI_match) <- industry_levels
+Xpay_mat_H1_space <- vector(mode='list', length=length(Sim_list))
+names(Xpay_mat_H1_space) <- sim_levels
+for (l in 1:length(Sim_list)){
+  Xpay_mat_H1_space[[l]] <- vector(mode='list', length=length(Total_mat))
+  names(Xpay_mat_H1_space[[l]] ) <- industry_levels
+}
+
+for (i in 1:length(Sim_list)){
+  
+  for (l in 1:length(WISim)){
+    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Q_mat[[l]][WItest_rural, WItest_primary] 
+    
+    
+    WI_match[[l]] <- sparseMatrix(
+      i = match(rownames(WISim[[l]]), WItest_rural), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), WItest_primary),  
+      x = 1L,
+      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
+      dimnames = list(WItest_rural, WItest_primary)
+    ) %>% as.matrix()
+    
+  
+  Xpay_mat_H1_space[[i]][[l]] <- (Xpay_mat[[l]][, WItest_rural] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+
+}
+}
+
+```
+
+
+"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[1]]
+```
+
+"Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[2]]
+```
+
+"Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[3]]
+```
+
+"Spatial Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2}  / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[4]]
+```
+
+"Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[5]]
+```
+
+"Spatial Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+sg[[6]]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FIN
+::: 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
