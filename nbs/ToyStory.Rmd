@@ -808,7 +808,6 @@ for (i in 1:nrow(Toy_Xemp_mat)){
 }
 names(Toy_Gravity_mat) <- c("Extract", "Fiber", "Grains", "Hogs", "Info")
 
-
 print("Gravity Model Formulations - Interreginal Flows by Industry")
 Toy_Gravity_mat 
 ```
