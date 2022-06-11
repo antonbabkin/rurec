@@ -21,6 +21,9 @@ options(scipen=999)
 
 ::: {.panel-tabset}
 
+This R Markdown document is a reference page for all things Input-Output related. 
+
+
 ### RStartup
 
 <details>

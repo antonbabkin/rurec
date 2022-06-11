@@ -1,5 +1,5 @@
 ---
-title: "shademap_wi_all"
+title: "Maps and IO Similarity Index: II"
 author: "Austin Sandler"
 date: "2022-06-02"
 format:
@@ -21,6 +21,8 @@ options(scipen=999)
 
 ```
 ::: {.panel-tabset}
+
+This R Markdown document is the second attempt at mapping the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
 
 
 ### RStartup

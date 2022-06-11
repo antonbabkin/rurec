@@ -21,6 +21,8 @@ options(scipen=999)
 ```
 ::: {.panel-tabset}
 
+This R Markdown document is a first attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
+
 
 ### RStartup
 
