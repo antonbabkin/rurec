@@ -60,7 +60,7 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 ```{r}
 ## Load previously generated files
-load(file = "Data.RData")
+load(file = "../data/Data.RData")
 
 ## Choose Sector level (1) or Summary level (2) or Detail level (3) 
 lvl = 3

@@ -27,25 +27,12 @@ This R Markdown document is a testing ground for Toy model specifications with n
 
 <details><summary>Possible Warnings</summary>
 ```{r packages and libraries}
-# Download, Install, and Add R packages as necessary.
-
 # List packages needed for this exercise
 packages <- c("dlm",
-              "DT",
               "geosphere",
-              "gtools",
               "knitr",
               "readxl",
-              "spdep",
-              "tidyr",
-              "tmap",
-              "tmaptools")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
+              "tidyr")
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
@@ -60,8 +47,6 @@ invisible(lapply(packages, library, character.only = TRUE))
 `r kable((.packages()), col.names = "R Packages")`
 
 `r paste0("Project directory: ",  getwd())`
-
-
 
 
 
