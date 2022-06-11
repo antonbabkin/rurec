@@ -138,8 +138,6 @@ TIGER_RUCC %>% filter(STATEFP!="15" & STATEFP!="02" & RUCC_2013==9) %>%
 
 ```
 
-
-
 ```{r}
 
 rural <- rownames(Q_mat[[lvl]])[rownames(Q_mat[[lvl]]) %in% filter(TIGER_RUCC, H3==3 & STATEFP!="15" & STATEFP!="02")$place ]
@@ -176,12 +174,6 @@ TIGER_RUCC_h1m %>%
 
 
 ```
-
-
-
-
-
-
 
 ```{r}
 
@@ -220,10 +212,6 @@ TIGER_RUCC_h1m %>%
 
 
 ```
-
-
-
-
 
 ```{r}
 
@@ -271,12 +259,9 @@ for (l in 1:length(Total_mat)){
 
 ```
 
-
-
-
 ### Rural and Non
 
-Map and match allelse into Metro - Counties in metro areas of 1 million population or more (RUCC 1) 
+Map and match allelse into Metro - Counties in metro areas of 1 million population or more (RUCC 1)
 
 ```{r}
 
@@ -314,9 +299,8 @@ TIGER_RUCC_h1m %>%
 
 ```
 
-
 "Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
- 
+
 ```{r}
 Sim <- Sim_mat_rel[[lvl]][rural, primary] / Q_mat[[lvl]][rural, primary]
 
@@ -343,10 +327,8 @@ TIGER_RUCC_h1m %>%
   
 ```
 
-
 "Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
- 
 ```{r}
 Sim <- Sim_mat_imp[[lvl]][rural, primary] / Q_mat[[lvl]][rural, primary]
 
@@ -373,9 +355,7 @@ TIGER_RUCC_h1m %>%
   
 ```
 
-
-"Spatial *Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
-
+"Spatial \*Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
 Sim <- Sim_mat_exp[[lvl]][rural, primary] / Q_mat[[lvl]][rural, primary]
@@ -430,7 +410,7 @@ TIGER_RUCC_h1m %>%
   
 ```
 
-"Spatial *Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+"Spatial \*Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
 Sim <- Sim_mat_exp_rel[[lvl]][rural, primary] / Q_mat[[lvl]][rural, primary]
@@ -456,10 +436,4 @@ TIGER_RUCC_h1m %>%
   tm_borders(lwd = .5)        
   
 ```
-
-
-
-
-
-
 :::
