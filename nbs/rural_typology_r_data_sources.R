@@ -3,7 +3,7 @@
 script_path() %>% setwd() 
 
 # Connect and parse code from another file 
-source("Functions.R")
+source("rural_typology_r_functions.R")
 
 # Push working directory up a level to establish parallel data files
 setwd("..")

@@ -4,7 +4,7 @@
 script_path() %>% setwd() 
 
 # Connect and parse code from another file 
-source("Data_sources.R")
+source("rural_typology_r_data_sources.R")
 
 
 # Import IO tables 
