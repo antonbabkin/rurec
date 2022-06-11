@@ -2,7 +2,7 @@
 # Establish working directory relative to location of this file
 script_path() %>% setwd() 
 
-source("Data.R")
+source("rural_typology_r_data_clean.R")
 
 options(scipen = 999)
 

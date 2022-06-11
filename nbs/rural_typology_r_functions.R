@@ -1,5 +1,5 @@
 
-source("r_packages_all.R")
+source("rural_typology_r_packages_all.R")
 
 # List packages needed for this exercise
 packages <- c("dlm",
