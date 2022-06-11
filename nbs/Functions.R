@@ -1,4 +1,6 @@
 
+source("r_packages_all.R")
+
 # List packages needed for this exercise
 packages <- c("dlm",
               "fs",
@@ -17,12 +19,6 @@ packages <- c("dlm",
               "tmap",
               "tmaptools",
               "tools")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
 
 # Load packages as necessary
 invisible(lapply(packages, library, character.only = TRUE))

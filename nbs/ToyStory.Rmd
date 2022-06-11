@@ -27,23 +27,12 @@ This R Markdown document is a testing ground for Toy model specifications with n
 
 <details><summary>Possible Warnings</summary>
 ```{r packages and libraries}
-# Download, Install, and Add R packages as necessary.
-
 # List packages needed for this exercise
 packages <- c("dlm",
-              "DT",
               "geosphere",
               "knitr",
-              "spdep",
-              "tidyr",
-              "tmap",
-              "tmaptools")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
+              "readxl",
+              "tidyr")
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
@@ -58,6 +47,125 @@ invisible(lapply(packages, library, character.only = TRUE))
 `r kable((.packages()), col.names = "R Packages")`
 
 `r paste0("Project directory: ",  getwd())`
+
+
+
+### Project Narrative
+
+```{r Richard Trial, error=FALSE}
+# Exercise to replicate table and analysis from project narrative
+Use_SUT_Framework_2007_2012_DET <- read_excel("../data/AllTablesSUP/Use_SUT_Framework_2007_2012_DET.xlsx", sheet = "2012", col_names = FALSE, skip = 2) %>% suppressMessages()
+
+ProjNarrIO <- c(Use_SUT_Framework_2007_2012_DET[[6,4]],
+                Use_SUT_Framework_2007_2012_DET[[6,196]],
+                Use_SUT_Framework_2007_2012_DET[[6,211]],
+                Use_SUT_Framework_2007_2012_DET[[6,286]],
+                Use_SUT_Framework_2007_2012_DET[[6,291]],
+                Use_SUT_Framework_2007_2012_DET[[197,4]],
+                Use_SUT_Framework_2007_2012_DET[[197,196]],
+                Use_SUT_Framework_2007_2012_DET[[197,211]],
+                Use_SUT_Framework_2007_2012_DET[[197,286]],
+                Use_SUT_Framework_2007_2012_DET[[197,291]],
+                Use_SUT_Framework_2007_2012_DET[[212,4]],
+                Use_SUT_Framework_2007_2012_DET[[212,196]],
+                Use_SUT_Framework_2007_2012_DET[[212,211]],
+                Use_SUT_Framework_2007_2012_DET[[212,286]],
+                Use_SUT_Framework_2007_2012_DET[[212,291]],
+                Use_SUT_Framework_2007_2012_DET[[287,4]],
+                Use_SUT_Framework_2007_2012_DET[[287,196]],
+                Use_SUT_Framework_2007_2012_DET[[287,211]],
+                Use_SUT_Framework_2007_2012_DET[[287,286]],
+                Use_SUT_Framework_2007_2012_DET[[287,291]],
+                Use_SUT_Framework_2007_2012_DET[[292,4]],
+                Use_SUT_Framework_2007_2012_DET[[292,196]],
+                Use_SUT_Framework_2007_2012_DET[[292,211]],
+                Use_SUT_Framework_2007_2012_DET[[292,286]],
+                Use_SUT_Framework_2007_2012_DET[[292,291]]) 
+
+ProjNarrIO[is.na(ProjNarrIO)] <- 0 
+
+codenames <- c(Use_SUT_Framework_2007_2012_DET[[6,1]],
+               Use_SUT_Framework_2007_2012_DET[[197,1]],
+               Use_SUT_Framework_2007_2012_DET[[212,1]],
+               Use_SUT_Framework_2007_2012_DET[[287,1]],
+               Use_SUT_Framework_2007_2012_DET[[292,1]])
+
+descriptionnames <- c(Use_SUT_Framework_2007_2012_DET[[6,2]],
+               Use_SUT_Framework_2007_2012_DET[[197,2]],
+               Use_SUT_Framework_2007_2012_DET[[212,2]],
+               Use_SUT_Framework_2007_2012_DET[[287,2]],
+               Use_SUT_Framework_2007_2012_DET[[292,2]])
+
+
+ProjNarrIO %<>%  as.numeric() %>% matrix(nrow = 5, ncol = 5, byrow = TRUE,  dimnames = list(descriptionnames, codenames))
+
+ProjNarrRegSales <- data.frame(A  = c(0, 500,	0,  1000,	500),  B = c(0, 100,	200,	500,	200) ) %>% t() %>% as.matrix()
+
+i_mat <- rep(c(1), each=ncol(ProjNarrIO)) %>% as.matrix()
+
+alpha <- sweep(ProjNarrIO[1, ] %*% t(ProjNarrRegSales), 1, ProjNarrIO[1, ] %*% i_mat, "/")
+rho <- sweep(alpha, 2, ProjNarrRegSales %*% i_mat, "/")
+
+
+colnames(ProjNarrRegSales) <- codenames
+sample_RUC<-cbind(ProjNarrRegSales, t(alpha), t(rho))
+colnames(sample_RUC)[6] <- "alpha"
+colnames(sample_RUC)[7] <- "rho"
+
+```
+
+
+**Generate Economic Catchment Area (ECA) codes** 
+
+Since 1880, the Census Bureau has applied formal rules to categorize geographic areas as urban for the purposes of statistical reporting. The most recent version of this taxonomic schema classifies areas as urban areas (UA, densely settled with a population greater than 50,000) and urban clusters (UC, densely settled with populations greater than 2,500 and less than 50,000). <u> For as long as the Census Bureau has been defining urbanicity, rural has **ALWAYS** been the residual category</u>: from the 2010 Census Urban-Rural Classification Criterion, “‘rural’ encompasses all population, housing, and territory not included within an urban area.”
+
+The construction of urban places follows a complex set of rules accounting for the attributes of urban land use and residential development patterns, but the intuition is fairly straight-forward. First, identify contiguous Census blocks (sometimes, tracts) above a minimum population density thereby defining a potential urban core. Then, continue to agglomerate adjacent-*ish* (again, there are complex rules allowing for hops, jumps, exclaves, enclaves, indentations, etc.) blocks/tracts meeting other density and population thresholds until the boundaries of the place are established. The population of this agglomeration then determines whether it is a UA, UC, or rural. The RUCA codes are a further refinement constructed by ERS to account for 1) the size of urban agglomerations and 2) resident commuting patterns, while applying the urban-rural typology employed by OMB. Thus, every UA is termed a Metropolitan Area Core. UCs are delimited by population into Micropolitan Area Core (10,000 to 49,999) and Small Town Core (2,500 to 9,999). Remaining blocks/tracts are then classified according to whether a high (more than 30%) or low (10% to 30%) percentage of residents commute to an urban core, as well as the type of core of the primary flow. Secondary codes are also assigned based upon the destination type of the secondary commuter flow.
+
+We propose to use core units as the basis for building Rural-Urban Economic Catchment Areas codes from InfoGroup and the Census of Agriculture in very much the same vein as ERS constructs the RUCA codes, but with a notable design distinction: we will classify tracts from low density to high density, rather than defining rural as a catch-all, non-urban residual. Specifically:
+
+1) We will define a *primary economic catchment area* (ECA) centered on each small UC core (RUCA 7) that includes associated commuting Census tracts (RUCA 8 and 9) and nearby rural tracts that include large employers in InfoGroup. The latter condition accommodates economic activities that may employ relatively large numbers of residents but are purposefully located far from residential areas, e.g., paper milling and government military installations. We will explore the sensitivity of our coding to various definitions of nearby, e.g. 5, 10, and 20 mile radii.
+
+2) We will use the Census of Agriculture to identify the *primary* crop and livestock production activities and the County Business Patterns to identify the presence of forestry and mining activity in rural Zip codes surrounding the primary ECA (the smallest published unit for both programs is the Zip code). We anticipate that for the overwhelming majority of the country, using the county as the basic unit will suffice for identifying agricultural, forestry, and extraction, but western counties are sufficiently large to benefit from a more disaggregated reporting unit.
+
+3) We will then use the most recent Use Tables published by BEA as part of its Input-Output Accounts program (2018 for 71 two- and three-digit NAICS industries and 2012 for 415 fourdigit NAICS industries) to calculate absolute and relative *rural use coefficients* for each *primary* ECA with respect to the agricultural, forestry, and extraction (AFE) activity in its vicinity.
+
+<p align="center">
+$\alpha^{r}_{i}  = \sum^{k} s^{k}_{i} \sum^{m} s^{m}_{i} \rho^{k}_{m}$ and $\rho^{r}_{i} = \sum^{k} s^{k}_{i} \left( \frac{\sum^{m} s^{m}_{i} \rho^{k}_{m}} {\sum^{m} \rho^{k}_{m} } \right)$ 
+</p>
+
+  where $s^{m}_{i}$ is the share of employment/sales for industry $m$ in business catchment area $i$ calculated from InfoGroup; $\rho^{k}_{m}$ is the use parameter for AFE activity $k$ in industry $m$ from the BEA Use Tables; $s^{k}_{i}$ is the share of agricultural or forestry activity $k$ of total AFE activities; and $M$ and $K$ are the set of non-AFE and AFE industries, respectively. 
+
+  To illustrate, a simplified five-sector economy based on the BEA 2012 Use Table might be:
+
+`r kable(ProjNarrIO, caption = "Use Factor")`
+
+4) We will then assign remaining rural tracts to *primary* ECAs using a gravity model based on the use coefficients defined above. Gravity models have been applied as far back as the 1850s (Carey, 1858) to describe social phenomena and continue to be used across disciplines (Erlander, 1980; Haynes and Fotheringham, 1984; Sen and Smith, 1995; Wilson 2000), including contemporary analyses of international trade (USITC, 2020). To illustrate, suppose that there were two *primary* ECAs with the following industry sales (in $1000s) and calculated rural use coefficients:
+
+`r kable(sample_RUC, caption = "Industry Sales", digits = c(0, 0, 0, 0, 0, 1, 3))`
+
+  To simplify, suppose Area A were at 0 on the unit interval and Area B at 1 with all intervening  space representing rural tracts. A gravity approach based on the use coefficient would assign the intervening rural tracts on (0,`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`) to Area A and tracts (`r round(alpha[1]/(alpha[1]+alpha[2]), 3)`,1) to Area B. In contrast, a gravity approach using the adjusted use coefficient would assign the intervening rural tracts on (0,`r round(rho[1]/(rho[1]+rho[2]), 3)`) to Area A and tracts (`r round(rho[1]/(rho[1]+rho[2]), 3)`,1) to Area B. More generally, for either use coefficient, we will treat the United States as a plane over the unit simplex and apply a gravity approach to assign rural tracts to any *primary* ECA. 
+
+  A notable feature of this approach is that *primary* ECAs may exhibit sufficiently low gravity that they are effectively economic islands. For example, a small-town anchored by car manufacturing plant surrounded by cropland. Of course, that small-town may be associated with larger, discontiguous economic areas through the manufacturing supply chain, which will reveal itself at higher economic geographies described subsequently, but <u>**creating measures to make meaningful economic distinctions between population centers currently lumped as “small towns” is a valuable project output that will benefit policy-makers**</u>.
+
+5) We will then move to assigning the remaining tracts, beginning with Micropolitan low commuting (RUCA 6) tracts. For each tract, we will calculate the following *total use coefficients*:
+
+<p align="center">
+$\rho_{ij} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{j} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
+$\rho_{ji} = \sum^{M} s^{m}_{j} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{j}} {\rho^{n}_{j} } \right)$,
+$\rho_{ik} = \sum^{M} s^{m}_{i} \left( \frac{\sum^{m} s^{n}_{k} \rho^{n}_{i}} {\rho^{n}_{i} } \right)$,
+$\rho_{ki} = \sum^{M} s^{m}_{k} \left( \frac{\sum^{m} s^{n}_{i} \rho^{n}_{k}} {\rho^{n}_{k} } \right)$
+</p>
+
+  where $i$ denotes the tract, $j$ denotes the adjacent primary ECA, and $k$ denotes the Micropolitan core (RUCA 4) [NB: There may be multiple adjacent *primary* ECA, so that for the general case of Z adjacent *primary* ECA, 2Z+2 total use coefficients are calculated]. These coefficients summarize the economic flow to and from the tract. Thus, we will assign the tract to either the Micropolitan Core or the adjacent *primary* ECA according to the magnitude of the largest total use coefficients, or leave the tract as an economic island if flows are insufficiently strong, i.e., gravity is sufficiently weak.
+
+6) After assigning all Micropolitan and Metropolitan commuting tracts (RUCA 2, 3, and 5) following a similar approach to the one above, we will define *secondary* ECAs. To do so, we will again treat the United States as a plane with nodes defined by Micropolitan cores and *primary* ECAs attracted to those nodes by *total use coefficients*. *Primary* ECAs are assigned to *secondary* ECAs centered on Micropolitan cores when gravity is sufficiently strong. Next, contiguous groups of yet-unassigned *primary* ECAs with sufficiently strong gravity will be aggregated into *secondary* ECAs independent of a Micropolitan core; those without are classified as isolated.
+
+7) Step 6 is repeated with Metropolitan cores to define *tertiary* ECAs.  
+
+The approach described above is based on the three categories of urbanized places from the RUCA system, but it generalizes broadly to an N-level hierarchy of nodes where the nth ECA is defined by the parameter pair ($\rho_{n}$, $\theta_{n}$), the upper limit on the population of the core and the gravity threshold that defines economic islands, respectively. Refinements based on the former would permit the definition of small and large metropolitan cores, or even Megapolitan cores. The latter parameter can be varied according to moments of the use coefficient distribution (the lowest quintile or decile) or absolute values with a priori relevance, e.g., a parameter from a specified decay function in a formal model. We will implement the gravity model in Python, as it is open-source and with spatial modeling packages, e.g., [SpInt](https://github.com/pysal/spint) [(Oshan 2016)](https://doi.org/10.18335/region.v3i2.175) and [GME](https://github.com/USITC-Gravity-Group/GME) [(USITC 2019)](http://dx.doi.org/10.2139/ssrn.3832208), that are already being used to model international trade, migration flows, and transportation networks.
+
+
+
 
 ### Toy IO 
 
@@ -1448,6 +1556,13 @@ diag(Toy_RUCC_prox) <- 0
 
 
 ```
+
+### Notes
+
+"The Assumption of Spatially Invariant Production Functions: The Problem of Heterogeneity
+All classic nonsurvey methods assume that national total use coefficients - the production functions in full - hold at every conceivable regional dimension. Various suggestions have been made as to why this is unlikely to be observed in practice. Smith and Morrison (1974 p.22) identify anything from differences in productive efficiency to climatic variation as contributing to the phenomenon. However, it is argued here that, apart from variation due to stochastic observation error, differences in total use can be attributed to the violation of one fundamental assumption of the Leontief model, and that is that each defined sector is homogeneous. Homogeneity implies that the set of coefficients which describes each defined commodity's production is wholly unique. Hence there can be no variation in the means of production for any defined commodity, and if there is, for whatever reason, the commodity would require separate definition in order for the homogeneity assumption to hold. The reason for the assumption is quite straightforward. If each production function describes a diverse set of commodities, the pattem of linkage is hidden within average relationships (see Table 5.1 below), and hence the precision with which one can calculate, for example, multipliers is eroded.
+It is argued here that differences in regional and national total use derive from the fact that the production functions of the national model are heterogeneously defined. The argument is as follows. At the broadest levels of commodity definition i.e. agriculture, manufacture, regional production functions are merged together, and as such cannot be identified in the national model. As the definitions of the national model are increased, the production functions of regionally specialised commodities emerge i.e. dair>' farming, sea fishing, fish farming. At some much higher level of disaggregation - where homogeneity is approached - the definitions o f the national model are so fine that it is possible to identify the individual factories and firms operating within the nation. At this point, the national model becomes one of infinite-regions because it is possible to extract the input-output table for any conceivable spatial subset of the nation. Not only the problem of estimating regional production functions evaporated, the trade estimation problem has ceased to exist." - (Brand, 1998)
+
 
 
 FIN

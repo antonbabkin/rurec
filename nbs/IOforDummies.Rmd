@@ -32,16 +32,8 @@ Possible Warnings
 </summary>
 
 ```{r packages and libraries}
-# Download, Install, and Add R packages as necessary.
-
 # List packages needed for this exercise
 packages <- c("knitr")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))

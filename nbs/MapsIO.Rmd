@@ -37,17 +37,11 @@ packages <- c("dash",
               "knitr",
               "Matrix",
               "reshape2",
-              "spdep",
               "scales",
+              "spdep",
               "tidyverse",
               "tmap",
               "tmaptools")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
@@ -65,8 +59,7 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 ```{r}
 ## Load previously generated datafiles
-
-load(file = "Data.RData")
+load(file = "../data/Data.RData")
 
 ## Choose Sector level (1) or Summary level (2) or Detail level  (3)
 lvl = 1
