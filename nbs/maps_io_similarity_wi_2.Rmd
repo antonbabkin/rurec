@@ -67,7 +67,7 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 ```{r}
 ## Load previously generated datafiles
-load(file = "../data/Data.RData")
+load(file = "../data/sub_data.RData")
 
 ```
 
