@@ -14,6 +14,10 @@ editor: visual
 ---
 
 ::: panel-tabset
+
+This R Quarto document is the first attempt at mapping the various topological similarity index relationships at the national level. 
+
+
 ### RStartup
 
 <details>
