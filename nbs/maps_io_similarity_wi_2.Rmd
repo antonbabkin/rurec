@@ -17,18 +17,13 @@ format:
 # When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 
+#For nonscientific notation
 options(scipen=999)
 
 ```
-::: {.panel-tabset}
-
-This R Markdown document is the second attempt at mapping the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
 
 
-### RStartup
-
-<details><summary>Possible Warnings</summary>
-```{r packages and libraries}
+```{r packages and libraries, include = FALSE}
 # Download, Install, and Add R packages as necessary.
 
 # List packages needed for this exercise
@@ -39,6 +34,7 @@ packages <- c("cowplot",
               "geosphere",
               "ggiraph",
               "glue",
+              "gtools",
               "knitr",
               "magrittr",
               "Matrix",
@@ -49,27 +45,32 @@ packages <- c("cowplot",
               "spdep",
               "tidyverse",
               "tmap",
-              "tmaptools")
+              "tmaptools",
+              "tools")
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
 
 ```
-</details>
 
-
-
-`r paste0("Date: ",  Sys.Date())`
-
-`r kable((.packages()), col.names = "R Packages")`
-
-`r paste0("Project directory: ",  getwd())`
-
-```{r}
+```{r load data, include=FALSE}
 ## Load previously generated datafiles
-load(file = "../data/Data.RData")
+load(file = "../data/sub_data.RData")
 
 ```
+
+```{r version control, include = FALSE}
+# Save snapshot of session versions (must be run outside of render)
+writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
+
+```
+
+
+This R Markdown document is the second attempt at mapping the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
+
+::: {.panel-tabset}
+
+
 
 ### WI Test
 

@@ -632,7 +632,7 @@ names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "S
 
 
 ####### Saved Data for use in other renderable files
-save.image(file="../data/AllData.RData")
-save(list = c("Sim_list", "TIGER_RUCC", "Direct_mat", "Total_mat", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Q_mat", "Dist_mat"), file="../data/Data.RData")
+save.image(file="../data/all_data.RData")
+save(list = c("Sim_list", "TIGER_RUCC", "Direct_mat", "Total_mat", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Q_mat", "Dist_mat"), file="../data/sub_data.RData")
 
 

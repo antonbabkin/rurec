@@ -13,43 +13,35 @@ format:
 
 
 ```{r preamble, include = FALSE}
-# When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+# When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 
+#For nonscientific notation
 options(scipen=999)
 
 ```
 
-::: {.panel-tabset}
-
-This R Markdown document is a reference page for all things Input-Output related. 
-
-
-### RStartup
-
-<details>
-
-<summary>
-
-Possible Warnings
-
-</summary>
-
-```{r packages and libraries}
+```{r packages and libraries, include = FALSE}
 # List packages needed for this exercise
-packages <- c("knitr")
+packages <- c("gtools",
+              "knitr",
+              "tools")
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
 
 ```
 
-</details>
+```{r version control, include = FALSE}
+# Save snapshot of session versions (must be run outside of render)
+writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
 
-`r paste0("Date: ",  Sys.Date())`
+```
 
-`r kable((.packages()), col.names = "R Packages")`
 
-`r paste0("Project directory: ",  getwd())`
+This R Markdown document is a reference page for all things Input-Output related. 
+
+::: {.panel-tabset}
+
 
 ### IO Fundamentals
 
