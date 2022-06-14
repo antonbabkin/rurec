@@ -1,5 +1,5 @@
 ---
-title: "MoreMaps"
+title: "More Maps: National"
 author: "Austin Sandler"
 date: "5/20/2022"
 format:
@@ -13,35 +13,31 @@ format:
 editor: visual
 ---
 
-::: panel-tabset
+```{r preamble, include = FALSE}
+# When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 
-This R Quarto document is the first attempt at mapping the various topological similarity index relationships at the national level. 
+#For nonscientific notation
+options(scipen=999)
+
+```
 
 
-### RStartup
-
-<details>
-
-<summary>
-
-Possible Warnings
-
-</summary>
-
-```{r packages and libraries}
+```{r packages and libraries, include=FALSE}
 # Download, Install, and Add R packages as necessary.
 
 # List packages needed for this exercise
 packages <- c("dlm",
               "DT",
               "geosphere",
+              "gtools",
               "knitr",
               "magrittr",
               "Matrix",
               "spdep",
               "tidyverse",
               "tmap",
-              "tmaptools")
+              "tmaptools",
+              "tools")
 
 # Install packages not yet installed
 installed_packages <- packages %in% rownames(installed.packages())
@@ -54,24 +50,32 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 ```
 
-</details>
 
-`r paste0("Date: ",  Sys.Date())`
 
-`r kable((.packages()), col.names = "R Packages")`
-
-`r paste0("Project directory: ",  getwd())`
-
-```{r}
+```{r load data, include=FALSE}
 ## Load previously generated files
 load(file = "../data/sub_data.RData")
 
 ## Choose Sector level (1) or Summary level (2) or Detail level (3) 
 lvl = 3
 
+# Specify interactive maps
 tmap_mode("view")
 
 ```
+
+
+```{r version control, include = FALSE}
+# Save snapshot of session versions (must be run outside of render)
+writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
+
+```
+
+
+This R Quarto document is the first attempt at mapping the various topological similarity index relationships at the national level. 
+
+::: panel-tabset
+
 
 ### Maps
 

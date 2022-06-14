@@ -16,18 +16,13 @@ format:
 ```{r preamble, include = FALSE}
 # When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 
+#For nonscientific notation
 options(scipen=999)
 
 ```
-::: {.panel-tabset}
-
-This R Markdown document is a first attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
 
 
-### RStartup
-
-<details><summary>Possible Warnings</summary>
-```{r packages and libraries}
+```{r packages and libraries, include = FALSE}
 # Download, Install, and Add R packages as necessary.
 
 # List packages needed for this exercise
@@ -36,6 +31,7 @@ packages <- c("dash",
               "DT",
               "geosphere",
               "ggiraph",
+              "gtools",
               "knitr",
               "Matrix",
               "reshape2",
@@ -43,23 +39,16 @@ packages <- c("dash",
               "spdep",
               "tidyverse",
               "tmap",
-              "tmaptools")
+              "tmaptools",
+              "tools")
 
 # Load packages
 invisible(lapply(packages, library, character.only = TRUE))
 
 ```
-</details>
 
 
-
-`r paste0("Date: ",  Sys.Date())`
-
-`r kable((.packages()), col.names = "R Packages")`
-
-`r paste0("Project directory: ",  getwd())`
-
-```{r}
+```{r load data, include=FALSE}
 ## Load previously generated datafiles
 load(file = "../data/sub_data.RData")
 
@@ -67,6 +56,19 @@ load(file = "../data/sub_data.RData")
 lvl = 1
 
 ```
+
+
+```{r version control, include = FALSE}
+# Save snapshot of session versions (must be run outside of render)
+writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
+
+```
+
+
+This R Markdown document is a first attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
+
+::: {.panel-tabset}
+
 
 ### WI Test
 
