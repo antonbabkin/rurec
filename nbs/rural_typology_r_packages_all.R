@@ -13,6 +13,7 @@ packages <- c("cowplot",
               "gtools",
               "knitr",
               "magrittr",
+              "manipulateWidget",
               "Matrix",
               "openxlsx",
               "plotly",
@@ -40,7 +41,7 @@ if (any(installed_packages == FALSE)) {
 
 invisible(lapply(packages, library, character.only = TRUE))
 
-writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
+writeLines(capture.output(sessionInfo()), paste0("session_info_", basename(file_path_sans_ext(script_file())), ".txt"))
 
 ## invisible(lapply(paste0('package:', names(sessionInfo()$otherPkgs)), detach, character.only=TRUE, unload=TRUE))
 

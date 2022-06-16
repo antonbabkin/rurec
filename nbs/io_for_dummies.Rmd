@@ -31,13 +31,6 @@ invisible(lapply(packages, library, character.only = TRUE))
 
 ```
 
-```{r version control, include = FALSE}
-# Save snapshot of session versions (must be run outside of render)
-writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
-
-```
-
-
 This R Markdown document is a reference page for all things Input-Output related. 
 
 ::: {.panel-tabset}
