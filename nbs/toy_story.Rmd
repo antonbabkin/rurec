@@ -20,6 +20,7 @@ format:
 #For nonscientific notation
 options(scipen=999)
 
+root_dir <- rprojroot::find_rstudio_root_file()
 ```
 
 
@@ -30,7 +31,6 @@ packages <- c("dlm",
               "gtools",
               "knitr",
               "readxl",
-              "scriptName",
               "tidyr",
               "tools")
 
@@ -50,13 +50,11 @@ This R Markdown document is a testing ground for Toy model specifications with n
 
 ::: {.panel-tabset}
 
-
-
 ### Project Narrative
 
 ```{r Richard Trial, error=FALSE}
 # Exercise to replicate table and analysis from project narrative
-Use_SUT_Framework_2007_2012_DET <- read_excel("../data/AllTablesSUP/Use_SUT_Framework_2007_2012_DET.xlsx", sheet = "2012", col_names = FALSE, skip = 2) %>% suppressMessages()
+Use_SUT_Framework_2007_2012_DET <- read_excel(file.path(root_dir, "data/AllTablesSUP/Use_SUT_Framework_2007_2012_DET.xlsx"), sheet = "2012", col_names = FALSE, skip = 2) %>% suppressMessages()
 
 ProjNarrIO <- c(Use_SUT_Framework_2007_2012_DET[[6,4]],
                 Use_SUT_Framework_2007_2012_DET[[6,196]],

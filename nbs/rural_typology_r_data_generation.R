@@ -1,8 +1,8 @@
+root_dir <- rprojroot::find_rstudio_root_file()
 
-# Establish working directory relative to location of this file
-script_path() %>% setwd() 
 
-source("rural_typology_r_data_clean.R")
+# Connect  and  parse  code  from  another  file 
+source(file.path(root_dir, "nbs", "rural_typology_r_data_clean.R"))
 
 options(scipen = 999)
 
@@ -250,6 +250,7 @@ for (l in 1:length(Xemp_mat)){
 
 Dir_CLQ <- vector(mode='list', length=length(Xemp_mat))
 for (l in 1:length(Xemp_mat)){
+  # PROBLEM! the line below throws an error "invalid 'length' argument"
   Dir_CLQ[[l]] <- vector(mode='list', length=ncol(CLQc[[l]]))
 }
 for (l in 1:length(Xemp_mat)){
@@ -632,7 +633,8 @@ names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "S
 
 
 ####### Saved Data for use in other renderable files
-save.image(file="../data/all_data.RData")
-save(list = c("Sim_list", "TIGER_RUCC", "Direct_mat", "Total_mat", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Q_mat", "Dist_mat"), file="../data/sub_data.RData")
+save.image(file=file.path(root_dir, "data", "all_data.RData"))
+save(list = c("Sim_list", "TIGER_RUCC", "Direct_mat", "Total_mat", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Q_mat", "Dist_mat"),
+     file=file.path(root_dir, "data", "sub_data.RData"))
 
 

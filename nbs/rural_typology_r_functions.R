@@ -1,9 +1,5 @@
-
-source("rural_typology_r_packages_all.R")
-
 # List packages needed for this exercise
 packages <- c("dlm",
-              "fs",
               "geosphere",
               "gtools",
               "knitr",
@@ -24,8 +20,10 @@ packages <- c("dlm",
 invisible(lapply(packages, library, character.only = TRUE))
 
 
-# Establish working directory relative to location of this file
-script_path() %>% setwd() 
+root_dir <- rprojroot::find_rstudio_root_file()
+
+# Connect and parse code from another file 
+source(file.path(root_dir, "nbs", "rural_typology_r_packages_all.R"))
 
 
 # Function to download  data
