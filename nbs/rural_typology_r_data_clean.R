@@ -1,10 +1,8 @@
+root_dir <- rprojroot::find_rstudio_root_file()
 
-
-# Establish  working  directory  relative  to  location  of  this  file
-script_path() %>% setwd() 
 
 # Connect  and  parse  code  from  another  file 
-source("rural_typology_r_data_import.R")
+source(file.path(root_dir, "nbs", "rural_typology_r_data_import.R"))
 
 
 

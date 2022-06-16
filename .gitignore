@@ -23,3 +23,4 @@ census_api_key.txt
 *.RData
 *.html
 *_files/
+.Rproj.user

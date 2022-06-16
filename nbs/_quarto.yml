@@ -4,7 +4,8 @@ project:
     - index.ipynb
     - geography.ipynb
     - rurality.ipynb
-    - IOforDummies.Rmd
+    - io_for_dummies.Rmd
+    - toy_story.Rmd
   post-render: touch _site/.nojekyll
 
 website:
@@ -18,7 +19,8 @@ website:
         text: Geography
       - href: rurality.ipynb
         text: Rurality
-      - IOforDummies.Rmd
+      - io_for_dummies.Rmd
+      - toy_story.Rmd
 
 format:
   html:
