@@ -1,18 +1,23 @@
-root_dir <- rprojroot::find_rstudio_root_file()
+# Download all used outside data
 
-# Connect and parse code from another file 
-source(file.path(root_dir, "nbs", "rural_typology_r_functions.R"))
+# Load and attach necessary packages
+library(fs)
+library(rprojroot)
+library(tidyr)
+library(tools)
+
+# Connect and parse code from another file
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
 # Create "data" folder if not already done
-data_dir = file.path(root_dir, "data")
-if (!file.exists(data_dir)) {
-   dir.create(data_dir)
-}
+  data_dir = file.path(find_rstudio_root_file(), "data")
+  if (!file.exists(data_dir)) {
+     dir.create(data_dir)
+  }
 
 # Increase download timeout for slower connections
 download_timeout_old <- getOption("timeout")
 options(timeout = 300)
-
 
 # Download and unzip BEA IO data.
 data_zipr(
@@ -20,7 +25,7 @@ data_zipr(
   DestDir = data_dir
 )
 
-# Download and unzip Census CBP data.
+# Download and unzip Census CBP data 2019.
 data_zipr(
   ZipURL = "https://www2.census.gov/programs-surveys/cbp/datasets/2019/cbp19co.zip",
   DestDir = data_dir,
@@ -34,13 +39,13 @@ data_zipr(
   FileExt = "txt"
 )
 
-
+##Note: More robustness and  refinement is needed. Zip name has underscored but unzipped name which it is checked against changes to dot 
 # Download and unzip 2020 BLS Quarterly Census of Employment and Wages (QCEW).
 data_zipr(
   ZipURL = "https://data.bls.gov/cew/data/files/2020/csv/2020_annual_singlefile.zip",
-  DestDir = data_dir,
-  FileExt = "txt"
+  DestDir = data_dir
 )
+
 
 
 # Download and unzip Census county TIGER  data.
@@ -71,11 +76,11 @@ data_getr(
   DestDir = data_dir
 )
 
-
-
-# Revert to previusly set timeout
+# Revert to previously set timeout
 options(timeout = download_timeout_old)
-rm(download_timeout_old)
+
+# Remove clutter
+rm(data_dir, zip_dir, download_timeout_old)
 
 
 
