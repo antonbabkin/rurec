@@ -20,22 +20,21 @@ format:
 #For nonscientific notation
 options(scipen=999)
 
+# Specify explicit directory root
 root_dir <- rprojroot::find_rstudio_root_file()
 ```
 
 
 ```{r packages and libraries, include = FALSE}
-# List packages needed for this exercise
-packages <- c("dlm",
-              "geosphere",
-              "gtools",
-              "knitr",
-              "readxl",
-              "tidyr",
-              "tools")
 
 # Load packages
-invisible(lapply(packages, library, character.only = TRUE))
+library(dlm)
+library(geosphere)
+library(gtools)
+library(knitr)
+library(readxl)
+library(tidyr)
+library(tools)
 
 ```
 
