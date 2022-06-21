@@ -24,38 +24,53 @@ options(scipen=999)
 
 
 ```{r packages and libraries, include = FALSE}
-# Download, Install, and Add R packages as necessary.
+# Load and attach necessary packages
+library(rprojroot)
+library(cowplot)
+library(dash)
+library(dlm)
+library(DT)
+library(geosphere)
+library(ggiraph)
+library(glue)
+library(gtools)
+library(knitr)
+library(magrittr)
+library(manipulateWidget)
+library(Matrix)
+library(plotly)
+library(reshape2)
+library(scales)
+library(spdep)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+library(tools)
 
-# List packages needed for this exercise
-packages <- c("cowplot", 
-              "dash",
-              "dlm",
-              "DT",
-              "geosphere",
-              "ggiraph",
-              "glue",
-              "gtools",
-              "knitr",
-              "magrittr",
-              "manipulateWidget",
-              "Matrix",
-              "plotly",
-              "reshape2",
-              "scales",
-              "spdep",
-              "tidyverse",
-              "tmap",
-              "tmaptools",
-              "tools")
+#Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
-# Load packages
-invisible(lapply(packages, library, character.only = TRUE))
 
 ```
 
 ```{r load data, include=FALSE}
 ## Load previously generated datafiles
-load(file = "../data/sub_data.RData")
+
+importr(TIGER_RUCC)
+importr(Total_mat)
+importr(Xpay_mat)
+importr(Sim_mat)
+importr(Sim_mat_rel)
+importr(Sim_mat_imp)
+importr(Sim_mat_imp_rel)
+importr(Sim_mat_exp)
+importr(Sim_mat_exp_rel)
+importr(Q_mat)
+
+
+Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+
 
 ```
 
