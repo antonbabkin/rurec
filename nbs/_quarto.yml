@@ -2,7 +2,6 @@ project:
   type: website
   render:
     - index.ipynb
-    - geography.ipynb
     - rurality.ipynb
     - io_for_dummies.Rmd
     - toy_story.Rmd
@@ -15,8 +14,6 @@ website:
     left:
       - href: index.ipynb
         text: Home
-      - href: geography.ipynb
-        text: Geography
       - href: rurality.ipynb
         text: Rurality
       - io_for_dummies.Rmd
