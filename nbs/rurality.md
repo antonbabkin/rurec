@@ -31,7 +31,7 @@ There are many different defitions of rurality, both within research community a
 Two major definitions which the Federal government uses to identify the rural status of an area are the Census Bureau's "Urban Area" and the OMB's "Core-Based Statistical Area".
 
 ```{code-cell} ipython3
-:tags: []
+:tags: [nbd-module]
 
 import functools
 import typing
@@ -39,24 +39,28 @@ import warnings
 
 import pandas as pd
 import geopandas
-import shapely
-import folium
-import folium.plugins
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import ipywidgets
 
-from rurec import geography, ers_codes
+from rurec.pubdata import geography, ers_rurality
 from rurec.reseng.util import download_file
 from rurec.reseng.nbd import Nbd
 
 nbd = Nbd('rurec')
 PATH = {
     'root': nbd.root,
-    'data': nbd.root/'data/',
-    'source': nbd.root/'data/source/',
-    'ers_far': nbd.root/'data/ers_far/',
+    'data': nbd.root / 'data/',
+    'source': nbd.root / 'data/source/',
+    'ers_far': nbd.root / 'data/ers_far/',
 }
+```
+
+```{code-cell} ipython3
+# notebook-only imports
+import shapely
+import folium
+import folium.plugins
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import ipywidgets
 ```
 
 ```{code-cell} ipython3
@@ -114,7 +118,7 @@ Processed geodataframe columns:
 Urban area names are typically `"city_name, state_postal_abbreviation"` (`"Madison, WI"`, `"Hartford, CT"`). But bigger aglomeration names might include multiple cities (`"Los Angeles--Long Beach--Anaheim, CA"`) and lie in multiple states (`"Kansas City, MO--KS"`, `"Minneapolis--St. Paul, MN--WI"`, `"New York--Newark, NY--NJ--CT"`).
 
 ```{code-cell} ipython3
-:tags: []
+:tags: [nbd-module]
 
 def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
     """Download and return path to urban area boundary shapefile."""
@@ -171,7 +175,7 @@ def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
 :tags: []
 
 #| tbl-cap: Sample from the urban area dataframe (no geometry).
-get_ua_df(year=2010, geometry=False).sample(3).style.hide_index()
+get_ua_df(year=2010, geometry=False).sample(3)
 ```
 
 @fig-urban-areas-dane-cty shows how urban areas expand in Dane county, Wisconsin between 2000 and 2010 censuses. Small 2000 urban clusters of Cross Plains and DeForest by 2010 merged with bigger Madion urbanized area.
@@ -222,7 +226,7 @@ Multiple sets of delineation files exist:
 - NECTA divisions.
 
 ```{code-cell} ipython3
-:tags: []
+:tags: [nbd-module]
 
 def get_cbsa_delin_src(year: int):
     """Download and return path to CBSA delineation file.
@@ -400,7 +404,7 @@ df
 Before 2010 there is a column `CENSUSAREA` - "Area of entity before generalization in square miles". After 2010 there are `ALAND` and `AWATER`. For most entries `CENSUSAREA` equals `ALAND` after conversion from square miles to square meters, but not always.
 
 ```{code-cell} ipython3
-:tags: []
+:tags: [nbd-module]
 
 def get_cbsa_shape_df(year=2021, 
                     scale: typing.Literal['20m', '5m', '500k'] = '20m',
@@ -497,14 +501,14 @@ Rural areas, derived from RUCA codes, often cross CBSA-based rural boundaries, a
 :tags: []
 
 #| tbl-cap: "Primary RUCA codes, 2010 revision."
-d = pd.read_fwf(PATH['data'] / 'ers_codes/ruca_doc.txt', skiprows=144, header=None, widths=[4, 999]).head(11)
+d = pd.read_fwf(ers_rurality.PATH['ruca_doc'], skiprows=144, header=None, widths=[4, 999]).head(11)
 d.columns = ['RUCA_CODE', 'RUCA_DESC']
 d = d.apply(lambda c: c.str.strip())
 d['RUCA_SHORT'] = ['metro core', 'metro high comm', 'metro low comm',
                    'micro core', 'micro high comm', 'micro low comm',
                    'UC core', 'UC high comm', 'UC low comm', 'rural', 'NA']
 ruca_code_desc = d = d[['RUCA_CODE', 'RUCA_SHORT', 'RUCA_DESC']]
-d.style.hide_index()
+d
 ```
 
 ```{code-cell} ipython3
@@ -520,7 +524,7 @@ df = geography.get_tract_df([2010], [st])
 df = df.loc[(df['STATE_CODE'] == st) & df['COUNTY_CODE'].isin(cty), ['STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE', 'geometry']]
 
 # add RUCA codes with short descriptions
-d = ers_codes.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE', 'POPULATION', 'AREA']]
+d = ers_rurality.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE', 'POPULATION', 'AREA']]
 d['STATE_CODE'] = d['FIPS'].str[:2]
 d['COUNTY_CODE'] = d['FIPS'].str[2:5]
 d['TRACT_CODE'] = d['FIPS'].str[5:]
@@ -757,7 +761,7 @@ def rural_map_ruca(state_code, simplify=True):
     df = geography.get_tract_df([2010], [state_code])
 
     # add RUCA codes with short descriptions
-    d = ers_codes.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE']]
+    d = ers_rurality.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE']]
     d['STATE_CODE'] = d['FIPS'].str[:2]
     d['COUNTY_CODE'] = d['FIPS'].str[2:5]
     d['TRACT_CODE'] = d['FIPS'].str[5:]
@@ -858,4 +862,12 @@ def show_selected_state(_):
         display(m)
 w_show.on_click(show_selected_state)
 ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
+```
+
+# Build this module
+
+```{code-cell} ipython3
+:tags: []
+
+nbd.nb2mod('rurality.ipynb')
 ```
