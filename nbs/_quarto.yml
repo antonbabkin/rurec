@@ -3,7 +3,8 @@ project:
   render:
     - index.ipynb
     - rurality.ipynb
-    - IOforDummies.Rmd
+    - io_for_dummies.Rmd
+    - toy_story.Rmd
   post-render: touch _site/.nojekyll
 
 website:
@@ -15,7 +16,8 @@ website:
         text: Home
       - href: rurality.ipynb
         text: Rurality
-      - IOforDummies.Rmd
+      - io_for_dummies.Rmd
+      - toy_story.Rmd
 
 format:
   html:

@@ -17,559 +17,857 @@ kernelspec:
 ---
 title: "Defining rurality"
 bibliography: ../references.bib
+format:
+  html:
+    code-fold: true
+execute:
+  echo: false
+jupyter: python3
 ---
 ```
 
-There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. Here we try to identify and describe the most common ones.
+There are many different defitions of rurality, both within research community and in public policy. A recent systematic literature review [@nelson_definitions_2021] identified 65 research articles with different rurality definitions. A selection of definitions is presented here. In many cases, non-rural is defined first, and everything outside of it is considered rural. @fig-compare-defns-wisc visually compares what apprears to be rural in Wisconsin under different definitions.
 
-+++
-
-# Rurality classifications
-
-1. Non-urban counties (OMB)
-2. Inverse of Census urbanity (Census Bureau)
-3. Outside urban activity (ERS)
-    - Urban Influence Codes
-    - Rural-Urban Continuum
-    - Rural-Urban Commuting Areas
-4. Non-urban census tracts
-    - HRSA/FORHP
-    - Inverse of spatial overlap with urban areas
-5. Zip codes
-    - data challenges
-    - FAR and Remote
-
-## HRSA/FORHP
-
-HRSA's Federal Office of Rural Health Policy (FORHP) accepts all non-metro counties as rural 
-and uses an additional method of determining rural status called the Rural-Urban Commuting 
-Area (RUCA) codes. Like the MSAs, these are based on Census data which is used to assign a 
-code to each Census Tract. Tracts inside Metropolitan counties with the codes 4-10 are 
-considered rural. While use of the RUCA codes has allowed identification of rural census 
-tracts in Metropolitan counties, among the more than 60,000 tracts in the U.S. there are 
-some that are extremely large and where use of RUCA codes alone fails to account for distance 
-to services and sparse population. In response to these concerns, FORHP has designated 
-132 large area census tracts with RUCA codes 2 or 3 as rural. These tracts are at least 
-400 square miles in area with a population density of no more than 35 people. The FORHP 
-definition includes about 1866 of the population and 8566 of the area of the USA. RUCA codes 
-represent the current version of the Goldsmith Modification.
-
-
-There are two major definitions which the Federal government uses to identify the rural 
-status of an area: the Census Bureau's 'Urban Area' and the OMB's 'Core-Based Statistical 
-Area'.
-
-## Urban Area
-The first is from the U.S. Census Bureau which identifies two types of 
-urban areas, Urbanized Areas (UAs) of 50,000 or more people and Urban Clusters (UCs) of at 
-Ieast2,S00 and less than 50,000 people. Since the U.S. Census Bureau does not explicitly 
-classify areas as rural, rural is defined as “encompassing all population, housing, and 
-territory not included within an urban area (those areas not identified as UC or UA)". 
-In the 2010 Census, 19.366 of the population was rural while over 9596 of the land area 
-is still classified as rural. 
-
-## CBSA
-The second is from the Office of Management and Budget (OMB) 
-which designates counties as Metropolitan, Micropolitan, or Neither. All counties 
-that are not part of a Metropolitan Statistical Area (MSA) are considered rural. 
-
-There are measurement challenges with both the U.S. Census Bureau and OMB definitions. 
-Some policy experts note that the U.S. Census Bureau definition classifies quite a bit of  
-suburban area as rural. The OMB definition includes rural areas in Metropolitan bounties.
-Consequently, one could argue that the Census Bureau standard includes an overcount of rural 
-population whereas the OMB standard represents an undercount of the rural population.
-
-## Frontier and Remote
+Two major definitions which the Federal government uses to identify the rural status of an area are the Census Bureau's "Urban Area" and the OMB's "Core-Based Statistical Area".
 
 ```{code-cell} ipython3
-#export
+:tags: [nbd-module]
 
-import os
-import sys
-import logging
-import time
-import shutil
-import multiprocessing as mp
+import functools
+import typing
+import warnings
 
-import numpy as np
 import pandas as pd
-import geopandas as gpd
-from joblib import Memory
-import fastparquet
+import geopandas
 
-from rurec import infogroup, ers_codes, resources
-from rurec.resources import Resource
+from rurec.pubdata import geography, ers_rurality
+from rurec.reseng.util import download_file
+from rurec.reseng.nbd import Nbd
 
-memory = Memory(resources.paths.cache)
+nbd = Nbd('rurec')
+PATH = {
+    'root': nbd.root,
+    'data': nbd.root / 'data/',
+    'source': nbd.root / 'data/source/',
+    'ers_far': nbd.root / 'data/ers_far/',
+}
 ```
 
 ```{code-cell} ipython3
-#export
-# for batch runs: log to a file
-logging.basicConfig(filename=resources.paths.root / 'logs/build_rural.log', 
-                    force=True, filemode='w', level=logging.INFO,
-                    format='%(asctime)s %(levelname)s:\n%(message)s')
+# notebook-only imports
+import shapely
+import folium
+import folium.plugins
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import ipywidgets
 ```
 
 ```{code-cell} ipython3
-# for interactive use: log to stdout
-logging.basicConfig(stream=sys.stdout, level=logging.INFO, format='%(asctime)s %(levelname)s:\n%(message)s', force=True)
-```
+:tags: []
 
-```{code-cell} ipython3
-resources.add(Resource('infogroup/rural', '/InfoGroup/data/processed/rural.pq', 'InfoGroup with rural columns', False))
-```
-
-## Outside of Urban Area
-
-+++
-
-The Census Bureau's concept of Urban Area includes two urban categories: the more densely
-populated Urbanized Area and the Urban Cluster. See the gazetteer for the details of 
-definition. Urban Areas are not defined in terms of any other standard spatial unit. The
-borders of an urban area are defined by the density of commuting patterns in the orbit of
-urban cores of various population size.
-
-InfoGroup does not include the code for the Urbanized Area or Urban Cluster in which an
-establishment may be located. The Bureau does distribute a shapefile for Urban Areas. It
-would therefore be possible in theory to locate each establishment's locational coordinates
-in an Urban Area or to determine that it is not included in any Urban Area. However, this 
-would be 1) an incredibly CPU-intensive process; and 2) probably irrelevant since we are
-concerned mostly with InfoGroup establishments in rural areas.
-
-However, because we do have an establishment's census tract code on the InfoGroup record, 
-we can determine with just barely imperfect accuracy whether an establishment is
-located in a census tract that is itself centered in an Urban Area or non-urban territory.
-
-We have created a geo-reference file starting with shapefiles for Urban Areas and census 
-tracts. The centroid location of each census tract was computed and from that data point 
-and the coordinate dimensions of each urban area, the 'parental' urban area, if any,
-of each census tract was determined. This was an extrememly machine-intensive process itself.
-
-### rural_outside_UA, UA Code, UA Type
-
-The 'rural_outside_UA' variable identifies tracts that are not located within a Census Bureau 
-Urban Area. More precisely, if the spatial centroid of the InfoGroup establishment's census 
-tract is not located within the polygon of coordinates that defines an Urban Area, the 
-establishment is considered 'rural' and coded '1'. In the 2017 file, 3,596,102 establishments,
-24.5% of the total, were flagged 'rural' by this measure.
-
-For the 'urban' establishments (coded '0' on 'rural_outside_UA') we also take the Census code 
-for its 'parental' Urban Area ('UA Code') and the code for the parental urban area's type 
-('UA Type'): 'U' = Urbanized Area, 'C' = Urban Cluster.
-
-The accuracy of these three variables is 'just barely imperfect' because a census
-tract can overlap multiple urban (or non-urban) areas. It is therefore not necessarily 
-true that the urban area pinpointed by the centroid of the census tract is the one in which 
-the InfoGroup establishment itself is actually located, although in nearly every case it 
-would be.
-
-Our locally processed geo-reference file 
-('/InfoGroup/data/rurality/reference/geographical/points-in-polygons/data/all_tracts.csv')
-consists of one record per 2010 census tract, with the following variables:
-    'STATEFP', 'COUNTYFP', 'TRACTCE', 'GEOID', 'NAME', 'NAMELSAD', 'MTFCC',
-    'FUNCSTAT', 'ALAND', 'AWATER', 'INTPTLAT', 'INTPTLON', 'geometry',
-    'UA_GEOID10', 'UATYP10', 'rural_tract'
-'STATEFP' through 'geometry' are simply taken from the Census Bureau's shapefile. 
-'GEOID' is the file's 11-digit census tract identifier. 'UA-GEOID10' and 'UATYP10' are the 
-Urban Area identifier and the Urban Area type code taken from the Urban Area shapefile, and 
-'rural_tract' is the laboriously computed rurality flag for each census tract renamed to
-'rural_outside_UA' in the InfoGroup record to distinguish it from other such indicator
-variables to be created in step 3.
-
-Having created this file at an earlier time, adding the last three variables to the InfoGroup
-record was simply a matter of a pandas dataframe merge, where 'df' is the InfoGroup dataframe
-and 'tract_df' is the dataframe created from 'all_tracts.csv'.
-
-'all_tracts.csv' is a locally processed file starting with shapefiles for Urban Areas 
-and census tracts. The centroid location of each census tract was computed and from that 
-data point and the coordinate dimensions of each urban area, the 'parental' urban area, if 
-any, of each census tract was determined. This was an extrememly machine-intensive process.
-
-Urban Areas and census tracts are defined by entirely different criteria. Even though
-census tracts are on average much smaller than urban areas, each can overlap several of the 
-other. The purpose here is to identify 'rural' census tracts, defined as those whose centroid point does not fall within any urban area. A census tract has a 'parental' urban
-area if its centroid point does fall within an urban area, either an urbanized area or a
-smaller urban cluster.
-
-The all_tracts.csv file contains one record per census tract and the identifying information 
-for the single 'parental' urban area, if there is one. The records for rural tracts are 
-coded '1' in the 'rural_tract' variable, which indicates a missing value for the Urban
-Area identifier, 'UA_GEOID10'. 'UATYP10' identifies the type of the parental urban area: 
-'U' = urbanized area, 'C'= urban cluster.
-
-This file is the source data for the 'rural_outside_UA' variable added in this step to the
-basic InfoGroup extract created in step 1. It is also the source for the 'UA Code' and
-'UA Type' variables, understood to apply to the 'parental' urban area. Since a census
-tract can overlap multiple urban areas, it is not necessarily true that the urban area
-identified by the 'UA Code' and 'UA Type' variables is the one in which the InfoGroup
-establishment itself is actually located, though in nearly every case it would be.
-
-It would be possible to locate each InfoGroup record in an urban area by computing whether
-the establishment's spatial coordinates lie within the polygon of coordinates specified in
-the urban area shapefile. However, our focus is on the rural economy and that computation,
-for all establishments over two decades, would consume an extraordinary amount of calendar 
-time and computational resources.
-
-```{code-cell} ipython3
-#export
-
-@memory.cache
-def prepare_outside_ua_df():
-    df = pd.read_csv('/InfoGroup/data/rurality/reference/geographical/points-in-polygons/data/all_tracts.csv',
-                     usecols=['GEOID', 'UA_GEOID10', 'UATYP10', 'rural_tract'], dtype=object)
-    df.rename(columns={'GEOID': 'CENSUS_TRACT_FULL', 'UA_GEOID10': 'UA_CODE', 
-                       'UATYP10': 'UA_TYPE', 'rural_tract': 'RURAL_OUTSIDE_UA'}, inplace=True)
-    return df
-```
-
-## ERS Measures of Urban Spatial Effect
-
-The ERS's three measures of urban influence and spatial effect are the Urban Influence codes,
-the Urban-Rural Continuum codes, and the Urban-Rural Commuting Area codes. These measures
-are applied to the InfoGroup record by simple pandas merges as described below. The source
-files are downloaded as Excel spreadsheets and processed into csv text files and finally
-read into pandas dataframes.
-
-The ERS has created files of all three codes for a variety of years. The unit of analysis
-for the Urban Influence codes and the Rural-Urban Continuum codes is the county. For the
-Rural-Urban Commuting Area codes the unit of analysis is the census tract.
-
-+++
-
-ERS classifications are created for a number of years. We choose the nearest classification
-year when merging to a particular year of InfoGroup.
-
-```{code-cell} ipython3
-#export
-
-def nearest_gridpoint(x, grid):
-    """Return value from `grid` that is nearest to `x`."""
-    grid = np.sort(grid)
-    ids = np.arange(len(grid))
-    i = np.interp(x, grid, ids)
-    i = round(i)
-    return grid[i]
-```
-
-```{code-cell} ipython3
-# TEST
-assert nearest_gridpoint(1999, [2000, 2003]) == 2000
-assert nearest_gridpoint(2000, [2000, 2003]) == 2000
-assert nearest_gridpoint(2001, [2000, 2003]) == 2000
-assert nearest_gridpoint(2002, [2000, 2003]) == 2003
-assert nearest_gridpoint(2010, [2000, 2003]) == 2003
-# unsorted grid
-assert nearest_gridpoint(2000, [2005, 1995, 2001]) == 2001
-```
-
-### UI_CODE
-
-https://www.ers.usda.gov/data-products/:
-"The 2013 Urban Influence Codes form a classification scheme that distinguishes metropolitan 
-counties by population size of their metro area, and nonmetropolitan counties by size of the 
-largest city or town and proximity to metro and micropolitan areas. The standard Office of 
-Management and Budget (OMB) metro and nonmetro categories have been subdivided into two 
-metro and 10 nonmetro categories, resulting in a 12-part county classification."
-
-See https://www.ers.usda.gov/data-products/urban-influence-codes/.
-Urban Influence codes "form a classification scheme that distinguishes metropolitan counties
-by population size of their metro area, and nonmetropolitan counties by size of the largest 
-city or town and proximity to metro and micropolitan areas. The standard Office of Management 
-and Budget (OMB) metro and nonmetro categories have been subdivided into two metro and 10 
-nonmetro categories, resulting in a 12-part county classification."
-
-There are separate ERS collections of Urban Influence codes for 1974, 1983, 1993, 2001, 
-and 2013. Having chosen a single year of data as appropriate for the particular year or 
-years of InfoGroup data, the command to apply UI_CODE to the InfoGroup record, where
-'df' is the dataframe of InfoGroup data and 'ui_df' is the dataframe of Urban Influence data,
-is:
-    merged = df.merge(ui_df,how='inner',left_on='FIPS Code',right_on='FIPS')
-
-```{code-cell} ipython3
-#export
-
-@memory.cache
-def prepare_ui_df(year):
-    df = ers_codes.get_ui_df()[['FIPS', 'UI_YEAR', 'UI_CODE']]
-    df.rename(columns={'FIPS': 'FIPS_CODE'}, inplace=True)
-    ui_year = nearest_gridpoint(year, df['UI_YEAR'].unique())
-    df = df[df['UI_YEAR'] == ui_year]
-    return df[['FIPS_CODE', 'UI_CODE']]
-```
-
-### RUC_CODE
-
-https://www.ers.usda.gov/data-products/:
-"The 2013 Rural-Urban Continuum Codes form a classification scheme that distinguishes 
-metropolitan counties by the population size of their metro area, and nonmetropolitan 
-counties by degree of urbanization and adjacency to metro areas. The official Office of 
-Management and Budget (OMB) metro and nonmetro categories have been subdivided into three
-metro and six nonmetro categories. Each county in the U.S. and Puerto Rico is assigned one 
-of the 9 codes."
-
-See https://www.ers.usda.gov/data-products/rural-urban-continuum codes/. 
-Rural-Urban Continuum codes "form a classification scheme that distinguishes metropolitan 
-counties by the population size of their metro area, and nonmetropolitan counties by degree 
-of urbanization and adjacency to a metro area. The official Office of Management and Budget 
-(OMB) metro and nonmetro categories have been subdivided into three metro and six nonmetro 
-categories. Each county in the U.S. is assigned one of the 9 codes."
-
-There are separate ERS collections of Rural-Urban Continuum codes for 1993, 2003, and 2013.
-Having first chosen a single year of RUC data, the command to apply RUC_CODE to the InfoGroup 
-record, where is:
-    merged = df.merge(ruc_df,how='inner',left_on='FIPS Code',right_on='FIPS')
-
-```{code-cell} ipython3
-#export
-
-@memory.cache
-def prepare_ruc_df(year):
-    df = ers_codes.get_ruc_df()[['FIPS', 'RUC_YEAR', 'RUC_CODE']]
-    df.rename(columns={'FIPS': 'FIPS_CODE'}, inplace=True)
-    ruc_year = nearest_gridpoint(year, df['RUC_YEAR'].unique())
-    df = df[df['RUC_YEAR'] == ruc_year]
-    return df[['FIPS_CODE', 'RUC_CODE']]
-```
-
-### RUCA_CODE
-
-See https://www.ers.usda.gov/data-products/rural-urban-commuting-area-codes/.
-Rural-Urban Commuting Area codes "classify U.S. census tracts using measures of population 
-density, urbanization, and daily commuting....The classification contains two levels. Whole 
-numbers (1-10) delineate metropolitan, micropolitan, small town, and rural commuting areas 
-based on the size and direction of the primary (largest) commuting flows. These 10 codes are 
-further subdivided based on secondary commuting flows, providing flexibility in combining 
-levels to meet varying definitional needs and preferences."
-
-There are separate ERS collections of Rural-Urban Commuting Area codes for 1990, 2000, 
-and 2010. The three years of RUCA codes "are not directly comparable because many census 
-tracts are reconfigured during each decade. Also, changes to census methodologies 
-significantly affected the RUCA classifications."
-
-```{code-cell} ipython3
-#export
-
-@memory.cache
-def prepare_ruca_df(year):
-    df = ers_codes.get_ruca_df()[['FIPS', 'YEAR', 'RUCA_CODE']]
-    df.rename(columns={'FIPS': 'CENSUS_TRACT_FULL'}, inplace=True)
-    ruca_year = nearest_gridpoint(year, df['YEAR'].unique())
-    df = df[df['YEAR'] == ruca_year]
-    return df[['CENSUS_TRACT_FULL', 'RUCA_CODE']]
-```
-
-First choose the appropriate year, then match as below:
+class RuralityMap:
+    def __init__(self, categories, colors, tiles='CartoDB positron'):
+        self.categories = categories
+        self.colors = colors
+        self.tiles = tiles
+        self.map = None
     
-1. Match 'FIPS' in /ers/ui/ui.csv to 'FIPS Code' (county level) in InfoGroup. 
-'UI_YEAR' in ui.csv has the values [1974,1983,1993,2001,2013].
-
-2. Match 'FIPS' in /ers/ruc/ruc.csv to 'FIPS Code' in InfoGroup.
-'RUC_YEAR' in ruc.csv has the values [1993,2003,2013].
-
-3. Match 'FIPS' in /ers/ruca/ruca.csv to 'Full Census Tract' in InfoGroup.
-'YEAR' in ruca.csv has the values [1990,2000,2010].
-
-For example:
-
-+++
-
-## rural_HRSA
-
-Like the 'rural_outside_UA' variable created in step 2, this variable is an 1/0 flag 
-indicating rurality at the census tract level.
-
-HRSA refers to the Health Resources and Services Administration. It is particularly its
-sub-unit, the Federal Office of Rural Health Policy (FORHP), that is responsible for this
-definition of rurality. For its own administrative purposes it considers a census tract to
-be rural if it is contained within a county that is not part of a CBSA. To these, they add
-2,302 census tracts from CBSA counties that they have specially defined as rural by applying
-the RUCA criteria, of which the FORHP was actually a developer in its early phase.
-
-In the 2017 file, 1,277,342 establishments, 8.7% of the total, were flagged 'rural' by this 
-measure, about 1/3 the incidence of rurality measured by the 'rural_outside_UA' variable.
-
-```{code-cell} ipython3
-#export
-
-def gen_rural_hrsa(df):
-    """Return bool column of rurality by HRSA definition for all establishments in `df`."""
-    df_hrsa = pd.DataFrame(get_hrsa_rural_in_cbsa(), columns=['CENSUS_TRACT_FULL'])
-    df = df[['CENSUS_TRACT_FULL', 'CBSA_LEVEL']].copy()
-    df = df.merge(df_hrsa, 'left', 'CENSUS_TRACT_FULL', indicator=True)
-    rural_in_cbsa = (df['_merge'] == 'both')
-    rural_out_cbsa = df['CBSA_LEVEL'].isna()
-    return rural_in_cbsa | rural_out_cbsa
-
-def get_hrsa_rural_in_cbsa():
-    """Return list of tracts that are in CBSA, but rural by HRSA definition."""
-    tracts = []
-    # FORHP list of 2300+ rural census tracts
-    # This is a pre-processed text version of a former PDF file.
-    with open('/InfoGroup/data/rurality/tract_data.txt', 'r') as fin:
-        for line in fin:
-            if line[0] != chr(32):
-                continue
-            else:
-                line = line.strip()
-                try:
-                    if line[0].isnumeric(): 
-                        tracts.append(line)
-                except IndexError:
-                    pass
-    return tracts
+    def add_layer(self, gdf, name, column, **kw):
+        if self.map is None:
+            self.map = gdf.explore(name=name, column=column, 
+                                   categories=self.categories,
+                                   cmap=self.colors,
+                                   tiles=self.tiles,
+                                   **kw)
+        else:
+            gdf.explore(m=self.map, name=name, column=column, 
+                        categories=self.categories,
+                        cmap=self.colors,
+                        legend=False,
+                        **kw)
+            
+    def show(self):
+        tile_layer = [x for x in self.map._children.values() if isinstance(x, folium.raster_layers.TileLayer)][0]
+        tile_layer.control = False
+        folium.LayerControl(collapsed=False).add_to(self.map)
+        return self.map
 ```
 
-## FAR Level
+# Urban area
 
-The USDA writes: “To assist in providing policy-relevant information about conditions in 
-sparsely-settled, remote areas of the U.S. to public officials, researchers, and the general 
-public, ERS has developed ZIP-code-level frontier and remote area (FAR) codes”.
+[Census Bureau](https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html)
 
-FAR codes are applied to postal zip codes to identify different degrees and criteria of 
-remoteness. It is not a code for any functional concept of rurality, but there is an obvious 
-family resemblance between “remote” and “rural” which might find some analytical use.
+> The Census Bureau’s urban-rural classification is a delineation of geographic areas, identifying both individual urban areas and the rural areas of the nation. The Census Bureau’s urban areas represent densely developed territory, and encompass residential, commercial, and other non-residential urban land uses. The Census Bureau delineates urban areas after each decennial census by applying specified criteria to decennial census and other data. “Rural” encompasses all population, housing, and territory not included within an urban area.
 
-The ERS created four FAR levels based on proximity (conceived of as travel time) to 
-“urban” places of different sizes. Levels 1 through 4 measure increasing remoteness.
-The ‘FAR Level’ variable captures the highest numbered positive FAR level for a location.
+The U.S. Census Bureau identifies two types of urban areas: *Urbanized Areas* (UAs) of 50,000 or more people and *Urban Clusters* (UCs) of at least 2,S00 and less than 50,000 people.
+Urban Areas are not defined in terms of any other standard spatial unit.
+The borders of an urban area are defined by the density of commuting patterns in the orbit of urban cores of various population size.
 
-In 2017, 659,070 InfoGroup establishments, 4.56% of the total, were located in zip codes
-designated far or remote.
+Data source page: [TIGER/Line® Shapefiles](https://www.census.gov/cgi-bin/geo/shapefiles/index.php). Boundaries are defined after decennial census. Using latest national data files for every revision: 2009 file for 2000 boundaries, 2021 file for 2010 boundaries. *This may be worth examining more closely. OMB metro delineations are updated after decennials AND annually from ACS. Maybe urban area shapes change between decennials too.*
 
-```{code-cell} ipython3
-#export
+Processed geodataframe columns:
 
-@memory.cache
-def get_far_df():
-    """Return dataframe with ERS FAR levels by Zip code."""
-    far_file = '/InfoGroup/data/rurality/reference/FARcodesZIPdata2010WithAKandHI.xlsx'
-    dtypes = {'ZIP': str, 'far1': int, 'far2': int, 'far3': int, 'far4': int}
-    df = pd.read_excel(far_file, 'FAR ZIP Code Data', usecols=dtypes.keys(), dtype=dtypes)
-    assert (df['ZIP'].str.len() == 5).all()
-    assert df.isna().sum().sum() == 0
-    # We can add up binary farX indicators to obtain single FAR level,
-    # because classification is nested, e.g. far2 implies far1, and not-far1 implies not-far2.
-    x = df['far1'] + df['far2'] + df['far3'] + df['far4']
-    df['FAR_LEVEL'] = pd.Categorical(x, [0, 1, 2, 3, 4], True)
-    df = df[['ZIP', 'FAR_LEVEL']].drop_duplicates()
-    assert not df['ZIP'].duplicated().any()
-    return df
-```
+- `UACE`: Urban area code.
+- `NAME`: Urban area name.
+- `UATYP`: Urban area type. `"U"` - Urbanized Area, `"C"` - Urban Cluster.
+- `ALAND`, `AWATER`: land and water area (square meters).
+- `INTPTLAT`, `INTPTLON`: Latitude and longitude of the internal point.
+- `geometry`: Geopandas (multi)polygons.
 
-## Merge and save new dataframe
+Urban area names are typically `"city_name, state_postal_abbreviation"` (`"Madison, WI"`, `"Hartford, CT"`). But bigger aglomeration names might include multiple cities (`"Los Angeles--Long Beach--Anaheim, CA"`) and lie in multiple states (`"Kansas City, MO--KS"`, `"Minneapolis--St. Paul, MN--WI"`, `"New York--Newark, NY--NJ--CT"`).
 
 ```{code-cell} ipython3
-#export
+:tags: [nbd-module]
 
-def add_rural_cols(year):
-    """Load InfoGroup data for one `year`, add rurality columns and
-    save as parquet partition.
-    """
+def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
+    """Download and return path to urban area boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        2000: f'{base}TIGER2009/tl_2009_us_uac.zip',
+        2010: f'{base}TIGER2021/UAC/tl_2021_us_uac10.zip'
+    }
     
-    logging.info(f'Start add_rural_cols({year})')
-
-    df_outside_ua = prepare_outside_ua_df()
-    df_ui = prepare_ui_df(year)
-    df_ruc = prepare_ruc_df(year)
-    df_ruca = prepare_ruca_df(year)
-    df_far = get_far_df()
-
-    cols = ['COMPANY', 'CITY', 'STATE', 'ZIP', 'COUNTY_CODE', 'SIC', 'NAICS', 
-            'YEAR', 'EMPLOYEES', 'SALES', 'ABI', 'PARENT_NUMBER',
-            'CENSUS_TRACT', 'LATITUDE', 'LONGITUDE', 'CBSA_CODE', 'CBSA_LEVEL', 'CSA_CODE', 'FIPS_CODE']
-
-    df = infogroup.get_df([year], cols)
-    df.drop(columns=['YEAR'], inplace=True)
-    df['CENSUS_TRACT_FULL'] = df['FIPS_CODE'] + df['CENSUS_TRACT']
-
-    df = df.merge(df_outside_ua, 'left', 'CENSUS_TRACT_FULL', indicator=True)
-    counts = df['_merge'].value_counts()
-    logging.debug(f'Merge result of "RURAL_OUTSIDE_UA" in {year}\n{counts}\n')
-    df.drop(columns=['_merge'], inplace=True)
-
-    df = df.merge(df_ui, 'left', 'FIPS_CODE', indicator=True)
-    counts = df['_merge'].value_counts()
-    logging.debug(f'Merge result of "UI_CODE" in {year}\n{counts}\n')
-    df.drop(columns=['_merge'], inplace=True)
-
-    df = df.merge(df_ruc, 'left', 'FIPS_CODE', indicator=True)
-    counts = df['_merge'].value_counts()
-    logging.debug(f'Merge result of "RUC_CODE" in {year}\n{counts}\n')
-    df.drop(columns=['_merge'], inplace=True)
-
-    df = df.merge(df_ruca, 'left', 'CENSUS_TRACT_FULL', indicator=True)
-    counts = df['_merge'].value_counts()
-    logging.debug(f'Merge result of "RUCA_CODE" in {year}\n{counts}\n')
-    df.drop(columns=['_merge'], inplace=True)
-
-    df['RURAL_HRSA'] = gen_rural_hrsa(df)
-    counts = df['RURAL_HRSA'].value_counts()
-    logging.debug(f'Rural by HRSA in {year}\n{counts}\n')
-
-    df = df.merge(df_far, 'left', 'ZIP', indicator=True)
-    counts = df['_merge'].value_counts()
-    logging.debug(f'Merge result of "FAR_LEVEL" in {year}\n{counts}\n')
-    df.drop(columns=['_merge'], inplace=True)
-    
-    partition_path = str(resources.get('infogroup/rural').path / f'YEAR={year}')
-    fastparquet.write(partition_path, df, file_scheme='hive', write_index=False, partition_on=['STATE'])
-    
-    logging.info(f'Finish add_rural_cols({year})')
-    return partition_path
-
-
-def build_parquet_dataset(n_cpus=1):
-    """Merge rural columns to all years, save and merge parquet partitions."""
-    
-    logging.info(f'Start build_parquet_dataset({n_cpus})')
-    
-    p = resources.get('infogroup/rural').path
-    # Remove dataset files if they exist from before
-    if p.exists():
-        shutil.rmtree(p)
-    p.mkdir()
-
-    data_years = range(1997, 2018)
-    with mp.Pool(n_cpus) as pool:
-        partition_paths = pool.map(add_rural_cols, data_years)
-    _ = fastparquet.writer.merge(partition_paths)
-    
-    logging.info(f'Finish build_parquet_dataset({n_cpus})')
-```
-
-## Interface for opening dataframe
-
-```{code-cell} ipython3
-#export
-
-def get_df(years=None, cols=None, states=None, onlymeta=False):
-    """Return InfoGroup with rurality columns as dataframe.
-    If `onlymeta` is True, return ParquetFile instead, which can be used 
-    to quickly inspect dataset schema without loading it ("dtypes" attribute).
-    """
-    path = resources.get('infogroup/rural').path
-    if onlymeta:
-        return fastparquet.ParquetFile(str(path))
-    
-    filters = []
-    if years is not None:
-        filters.append(('YEAR', 'in', years))
-    if states is not None:
-        filters.append(('STATE', 'in', states))
-
-    df = pd.read_parquet(path, 'fastparquet', columns=cols, filters=filters)
-
-    if cols is None or 'YEAR' in cols:
-        df['YEAR'] = df['YEAR'].astype(int)
-    else:
-        df.drop(columns=['YEAR'], inplace=True)
-
-    if not (cols is None or 'STATE' in cols):
-        df.drop(columns=['STATE'], inplace=True)
+    url = urls[year]
+    local = PATH['source'] / 'urban_area' / url.split('/')[-1]
         
-    if cols is None or 'FAR_LEVEL' in cols:
-        df['FAR_LEVEL'].cat.as_ordered(inplace=True)
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(url, local.parent, local.name)
+    return local
 
+
+def get_ua_df(year: typing.Literal[2000, 2010] = 2010,
+              geometry: bool = True):
+    """Load geodataframe with urban areas from `year` census.
+    Download and process dataset if necessary, and cache as parquet for faster access.
+    Pass `geometry=False` to load DataFrame without geometry column instead of GeoDataFrame.
+    """
+    columns = ['UACE', 'NAME', 'UATYP', 'ALAND', 'AWATER', 'INTPTLAT', 'INTPTLON']
+    
+    path = PATH['data']/f'urban_area/{year}.pq'
+    if path.exists():
+        print('Loading from parquet file.')
+        return geopandas.read_parquet(path) if geometry else pd.read_parquet(path, 'pyarrow', columns)
+
+    print('Parquet file not found, creating dataframe from source...')
+    df = geopandas.read_file(get_source_ua(year))
+    
+    if year == 2010:
+        df = df.rename(columns={f'{c}10': c for c in columns})
+        
+    df = df[columns + ['geometry']]
+    df[['INTPTLAT','INTPTLON']] = df[['INTPTLAT','INTPTLON']].astype('float64')
+    assert not df['UACE'].duplicated().any(), 'Duplicate UA code(s) found.'
+    
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+    print('Dataframe saved to parquet.')
+    
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+        
     return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: Sample from the urban area dataframe (no geometry).
+get_ua_df(year=2010, geometry=False).sample(3)
+```
+
+@fig-urban-areas-dane-cty shows how urban areas expand in Dane county, Wisconsin between 2000 and 2010 censuses. Small 2000 urban clusters of Cross Plains and DeForest by 2010 merged with bigger Madion urbanized area.
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-urban-areas-dane-cty
+#| fig-cap: "Urban areas in Dane county, WI from 2000 and 2010 censuses."
+cty_shp = geography.get_county_df(2010).query('CODE == "55025"').geometry.iloc[0]
+m = RuralityMap(['2000 Uranized Area', '2000 Urban Cluster', '2010 Uranized Area', '2010 Urban Cluster'],
+                [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors[0:4]])
+
+for year in [2000, 2010]:
+    df = get_ua_df(year)
+    df = df[df.intersects(cty_shp)]
+    df['UATYP'] = df['UATYP'].map({'U': f'{year} Uranized Area', 'C': f'{year} Urban Cluster'})
+    m.add_layer(df, f'Census {year}', 'UATYP')
+
+m.show()
+```
+
++++ {"tags": []}
+
+# Metropolitan and micropolitan statistical areas
+
+One of the most widely used definitions of rural is everything outside of metropolitan areas. Counties outside of metro/micro areas are sometimes called "noncore".
+
+Metropolitan definition takes counties as base unit and classifies them using data on urban area residents and commuting flows.
+
+[Census page](https://www.census.gov/programs-surveys/metro-micro.html)
+
+> The 2010 standards provide that each CBSA must contain at least one urban area of 10,000 or more population. Each metropolitan statistical area must have at least one urbanized area of 50,000 or more inhabitants. Each micropolitan statistical area must have at least one urban cluster of at least 10,000 but less than 50,000 population.
+>
+> Under the standards, the county (or counties) in which at least 50 percent of the population resides within urban areas of 10,000 or more population, or that contain at least 5,000 people residing within a single urban area of 10,000 or more population, is identified as a "central county" (counties). Additional "outlying counties" are included in the CBSA if they meet specified requirements of commuting to or from the central counties.
+
+[Delineation files](https://www.census.gov/programs-surveys/metro-micro/about/delineation-files.html)
+
+> A metropolitan or micropolitan statistical area's geographic composition, or list of geographic components at a particular point in time, is referred to as its "delineation."
+
+Multiple sets of delineation files exist:
+
+- metropolitan or micropolitan statistical areas;
+- New England city and town areas (NECTAs), which are conceptually similar to metropolitan and micropolitan statistical areas, but are delineated using cities and towns instead of counties;
+- combined statistical areas, which are aggregates of adjacent metropolitan or micropolitan statistical areas that are linked by commuting ties;
+- combined NECTAs;
+- metropolitan divisions, which are a county or group of counties (or equivalent entities) delineated within a larger metropolitan statistical area, provided that the larger metropolitan statistical area contains a single core with a population of at least 2.5 million and other criteria are met;
+- NECTA divisions.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_cbsa_delin_src(year: int):
+    """Download and return path to CBSA delineation file.
+    When more than one revision exists in year (as in 2003 or 2018),
+    the most recent one in that year is used.
+    """
+
+    base = 'https://www2.census.gov/programs-surveys/metro-micro/geographies/reference-files/'
+    urls = {
+        2020: f'{base}2020/delineation-files/list1_2020.xls',
+        2018: f'{base}2018/delineation-files/list1_Sep_2018.xls',
+        # 2018-april: f'{base}2018/delineation-files/list1.xls',
+        2017: f'{base}2017/delineation-files/list1.xls',
+        2015: f'{base}2015/delineation-files/list1.xls',
+        2013: f'{base}2013/delineation-files/list1.xls',
+        2009: f'{base}2009/historical-delineation-files/list3.xls',
+        2008: f'{base}2008/historical-delineation-files/list3.xls',
+        2007: f'{base}2007/historical-delineation-files/list3.xls',
+        2006: f'{base}2006/historical-delineation-files/list3.xls',
+        2005: f'{base}2005/historical-delineation-files/list3.xls',
+        2004: f'{base}2004/historical-delineation-files/list3.xls',
+        2003: f'{base}2003/historical-delineation-files/0312cbsas-csas.xls',
+        # 2003-june: f'{base}2003/historical-delineation-files/030606omb-cbsa-csa.xls',
+    }
+    
+    assert year in urls, f'CBSA delineation not available for {year}.'
+    
+    url = urls[year]
+    ext = url.split('.')[-1]
+    local = PATH['source'] / f'cbsa/delin/{year}.{ext}'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(url, local.parent, local.name)
+    return local
+
+def get_cbsa_delin_df(year: int):
+    f = get_cbsa_delin_src(year)
+    
+    # number of rows to skip at top and bottom varies by year
+    if year in [2003, 2013, 2015, 2017, 2018, 2020]:
+        skip_head = 2
+    elif year in [2005, 2006, 2007, 2008, 2009]:
+        skip_head = 3
+    elif year == 2004:
+        skip_head = 7
+
+    if year in [2003, 2004]:
+        skip_foot = 0
+    elif year == 2005:
+        skip_foot = 6
+    elif year in [2006, 2007, 2008, 2009, 2015, 2017, 2018, 2020]:
+        skip_foot = 4
+    elif year == 2013:
+        skip_foot = 3
+
+    df = pd.read_excel(f, dtype=str, skiprows=skip_head, skipfooter=skip_foot)
+
+    # standardize column names
+    if 2003 <= year <= 2009:
+        del df['Status, 1=metro 2=micro']
+        df['STATE_CODE'] = df['FIPS'].str[:2]
+        df['COUNTY_CODE'] = df['FIPS'].str[2:]
+        del df['FIPS']
+        rename = {
+            'CBSA Code': 'CBSA_CODE',
+            'Metro Division Code': 'DIVISION_CODE',
+            'CSA Code': 'CSA_CODE',
+            'CBSA Title': 'CBSA_TITLE',
+            'Level of CBSA': 'METRO_MICRO',
+            'Metropolitan Division Title': 'DIVISION_TITLE',
+            'CSA Title': 'CSA_TITLE',
+            'Component Name': 'COUNTY',
+            'State': 'STATE'
+        }
+        if year >= 2007:
+            rename.update({'County Status': 'CENTRAL_OUTLYING'})
+    elif 2013 <= year <= 2020:
+        rename = {
+            'CBSA Code': 'CBSA_CODE',
+            'CBSA Title': 'CBSA_TITLE',
+            'CSA Code': 'CSA_CODE',
+            'CSA Title': 'CSA_TITLE',
+            'Metropolitan Division Title': 'DIVISION_TITLE',
+            'Metropolitan/Micropolitan Statistical Area': 'METRO_MICRO',
+            'State Name': 'STATE',
+            'County/County Equivalent': 'COUNTY',
+            'FIPS State Code': 'STATE_CODE',
+            'FIPS County Code': 'COUNTY_CODE',
+            'Central/Outlying County': 'CENTRAL_OUTLYING'
+        }
+        if year == 2013:
+            rename.update({'Metro Division Code': 'DIVISION_CODE'})
+        else:
+            rename.update({'Metropolitan Division Code': 'DIVISION_CODE'})
+    
+    df = df.rename(columns=rename)
+    
+    assert df[['STATE_CODE', 'COUNTY_CODE']].notna().all().all()
+    assert not df.duplicated(['STATE_CODE', 'COUNTY_CODE']).any()
+    assert df['METRO_MICRO'].notna().all()
+    
+    df['METRO_MICRO'] = df['METRO_MICRO'].map({
+        'Metropolitan Statistical Area': 'metro',
+        'Micropolitan Statistical Area': 'micro'
+    })
+    if 'CENTRAL_OUTLYING' in df:
+        df['CENTRAL_OUTLYING'] = df['CENTRAL_OUTLYING'].str.lower()
+    
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: tbl-cbsa-counts
+#| tbl-cap: "Number of counties in CBSA tables"
+#| layout-nrow: 2
+t0 = {}
+t1 = {}
+for year in [2003, 2004, 2005, 2006, 2007, 2008, 2009, 2013, 2015, 2017, 2018, 2020]:
+    df = get_cbsa_delin_df(year)
+    t0[year] = df['METRO_MICRO'].value_counts(dropna=False)
+    if 'CENTRAL_OUTLYING' in df:
+        t1[year] = df[['METRO_MICRO', 'CENTRAL_OUTLYING']].value_counts(dropna=False)
+t0 = pd.concat(t0, axis=1)
+t0.loc['all'] = t0.sum()
+display(t0)
+t1 = pd.concat(t1, axis=1).sort_index()
+t1
+```
+
+Boundary shapefiles, both TIGER (high res) and catrographic (low res) are available from Census Bureau [geography program](https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html).
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_cbsa_shape_src(year=2021, scale='20m'):
+    """Download and return path to CBSA boundary shapefile."""
+
+    base = 'https://www2.census.gov/geo/tiger/'
+    urls = {
+        (2010, '20m'):  f'{base}GENZ2010/gz_2010_us_310_m1_20m.zip',
+        (2010, '500k'): f'{base}GENZ2010/gz_2010_us_310_m1_500k.zip',
+        (2013, '20m'):  f'{base}GENZ2013/cb_2013_us_cbsa_20m.zip',
+        (2013, '5m'):   f'{base}GENZ2013/cb_2013_us_cbsa_5m.zip',
+        (2013, '500k'): f'{base}GENZ2013/cb_2013_us_cbsa_500k.zip',
+    }
+    urls.update({(y, s): f'{base}GENZ{y}/shp/cb_{y}_us_cbsa_{s}.zip'
+                 for y in range(2014, 2022) for s in ['20m', '5m', '500k']})
+    
+    assert (year, scale) in urls, f'No CBSA shapes in {year}, {scale}.'
+    
+    local = PATH['source']/f'cbsa/shp/{year}_{scale}.zip'
+        
+    if not local.exists():
+        print(f'File "{local}" not found, attempting download.')
+        download_file(urls[(year, scale)], local.parent, local.name)
+    return local
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Shapefile columns over time"
+df = {}
+for y in [2010] + list(range(2013, 2022)):
+    f = get_cbsa_shape_src(y)
+    d = geopandas.read_file(f, rows=0)
+    df[y] = pd.Series(True, index=d.columns)
+df = pd.concat(df, axis=1).fillna(False).replace({False: '', True: 'X'})
+df
+```
+
+Before 2010 there is a column `CENSUSAREA` - "Area of entity before generalization in square miles". After 2010 there are `ALAND` and `AWATER`. For most entries `CENSUSAREA` equals `ALAND` after conversion from square miles to square meters, but not always.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_cbsa_shape_df(year=2021, 
+                    scale: typing.Literal['20m', '5m', '500k'] = '20m',
+                    geometry=True):
+    """Load CBSA shapefile as geodataframe."""
+    f = get_cbsa_shape_src(year, scale)
+    df = geopandas.read_file(f)
+
+    if year == 2010:
+        df = df.rename(columns={
+            'CBSA': 'CBSA_CODE',
+            'NAME': 'CBSA_TITLE',
+            'LSAD': 'METRO_MICRO',
+        })
+        df['METRO_MICRO'] = df['METRO_MICRO'].str.lower()
+        df = df[['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'CENSUSAREA', 'geometry']]
+    elif 2013 <= year <= 2021:
+        df = df.rename(columns={
+            'CBSAFP': 'CBSA_CODE',
+            'NAME': 'CBSA_TITLE',
+            'LSAD': 'METRO_MICRO',
+        })
+        df['METRO_MICRO'] = df['METRO_MICRO'].map({'M1': 'metro', 'M2': 'micro'})
+        df = df[['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'ALAND', 'AWATER', 'geometry']]
+    else:
+        raise NotImplementedError(f'Year {year}.')
+
+    assert df['CBSA_CODE'].notna().all()
+    assert not df['CBSA_CODE'].duplicated().any()
+
+    if not geometry:
+        df = pd.DataFrame(df).drop(columns='geometry')
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Number of CBSAs in shapefiles"
+t = {}
+for year in [2010] + list(range(2013, 2022)):
+    df = get_cbsa_shape_df(year, geometry=False)
+    t[year] = df['METRO_MICRO'].value_counts(dropna=False)
+t = pd.concat(t, axis=1)
+t.loc['all'] = t.sum()
+t
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-cbsa-cty-wisc
+#| fig-cap: "CBSA counties in Wisconsin, 2020."
+year = 2020
+state = '55'
+
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20.colors]
+cm = cm[14:16] + cm[2:4] + cm[:2] + cm[5:6]
+m = RuralityMap(['metro', 'micro', 'metro central', 'metro outlying', 'micro central', 'micro outlying', 'noncore'], cm)
+
+df = geography.get_county_df(year).query('STATE_CODE == @state').drop(columns='CODE')
+d = get_cbsa_delin_df(year)[['STATE_CODE', 'COUNTY_CODE', 'CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'CENTRAL_OUTLYING']]
+df = df.merge(d, 'left', ['STATE_CODE', 'COUNTY_CODE'])
+df['CBSA'] = df['METRO_MICRO'] + ' ' + df['CENTRAL_OUTLYING']
+df['CBSA'] = df['CBSA'].fillna('noncore')
+
+d = get_cbsa_shape_df(year)
+d = d.loc[d['CBSA_CODE'].isin(df['CBSA_CODE']), ['CBSA_CODE', 'CBSA_TITLE', 'METRO_MICRO', 'geometry']]
+
+m.add_layer(d, 'CBSAs', 'METRO_MICRO', legend_kwds={'caption': ''})
+m.add_layer(df, 'Counties', 'CBSA')
+m.show()
+```
+
+# ERS measures of urban spatial effect
+
+The ERS's three measures of urban influence and spatial effect are the Urban Influence codes, the Urban-Rural Continuum codes, and the Urban-Rural Commuting Area codes.
+
+Each set of codes classifies corresponding spatial units into multiple groups, leaving decision to draw the line between rural and non-rural to the researcher.
+The unit of analysis for the Urban Influence codes and the Rural-Urban Continuum codes is the county.
+For the Rural-Urban Commuting Area codes the unit of analysis is the census tract.
+
+Preparation of ERS codes is done in a [separate notebook](ers_codes.ipynb).
+
++++
+
+## Rural-Urban Commuting Area (RUCA)
+
+Sub-county division used by RUCA classification allows to identify parts of metro counties that are not strongly connected to respective urban areas. Likewise, there are parts of non-metro counties that are highly connected to an adjacent metro county, but are not big enough to make the entire county qualify for metro criteria.
+
+Rural areas, derived from RUCA codes, often cross CBSA-based rural boundaries, as can be visually seen in @fig-compare-defns-wisc.
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Primary RUCA codes, 2010 revision."
+d = pd.read_fwf(ers_rurality.PATH['ruca_doc'], skiprows=144, header=None, widths=[4, 999]).head(11)
+d.columns = ['RUCA_CODE', 'RUCA_DESC']
+d = d.apply(lambda c: c.str.strip())
+d['RUCA_SHORT'] = ['metro core', 'metro high comm', 'metro low comm',
+                   'micro core', 'micro high comm', 'micro low comm',
+                   'UC core', 'UC high comm', 'UC low comm', 'rural', 'NA']
+ruca_code_desc = d = d[['RUCA_CODE', 'RUCA_SHORT', 'RUCA_DESC']]
+d
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-ruca-wisc
+#| fig-cap: "Classification of tracts in central Wisconsin, 2010 RUCA revision."
+st = '55'
+cty = ['073', '097', '141', '019', '119', '099', '069', '085', '067']
+
+# load geographic area
+df = geography.get_tract_df([2010], [st])
+df = df.loc[(df['STATE_CODE'] == st) & df['COUNTY_CODE'].isin(cty), ['STATE_CODE', 'COUNTY_CODE', 'TRACT_CODE', 'geometry']]
+
+# add RUCA codes with short descriptions
+d = ers_rurality.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE', 'POPULATION', 'AREA']]
+d['STATE_CODE'] = d['FIPS'].str[:2]
+d['COUNTY_CODE'] = d['FIPS'].str[2:5]
+d['TRACT_CODE'] = d['FIPS'].str[5:]
+del d['FIPS']
+df = df.merge(d, 'left')
+df['RUCA_CODE'] = df['RUCA_CODE'].astype(float).astype(int).astype(str)
+df['RUCA_CODE'] = df['RUCA_CODE'].fillna('99')
+df = df.merge(ruca_code_desc[['RUCA_CODE', 'RUCA_SHORT']], 'left')
+
+# map
+cats = ruca_code_desc['RUCA_SHORT'].tolist()
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20c.colors]
+cm = cm[4:7] + cm[0:3] + cm[8:11] + cm[13:14] + cm[17:18]
+df.explore(column='RUCA_SHORT', categories=cats, cmap=cm, tiles='CartoDB positron', legend_kwds={'caption': ''})
+```
+
+# FORHP
+
+[HRSA](https://www.hrsa.gov/rural-health/about-us/definition/index.html)
+
+This definition of rurality is based on tracts and uses OMB and RUCA definitions with additional refinements in large metro tracts.
+
+HRSA refers to the Health Resources and Services Administration.
+It is particularly its sub-unit, the Federal Office of Rural Health Policy (FORHP), that is responsible for this definition of rurality.
+For its own administrative purposes it considers a census tract to be rural if it is contained within a county that is not part of a CBSA.
+
+Quote from HRSA page.
+
+> We define the following areas as rural:
+> - All non-metro counties
+> - All metro census tracts with RUCA codes 4-10 and
+> - Large area Metro census tracts of at least 400 sq. miles in area with population density of 35 or less per sq. mile with RUCA codes 2-3. In larger tracts, you cannot use RUCA codes alone. The codes do not factor in distance to services and low numbers of people.
+> - Beginning with Fiscal Year 2022 Rural Health Grants, we consider all outlying metro counties without a UA to be rural.
+
+Lists of rural areas by county, census tract, and ZIP code are available on [HRSA Data Files page](https://www.hrsa.gov/rural-health/about-us/what-is-rural/data-files).
+
++++
+
+# ERS Frontier and Remote (FAR)
+
+There is an obvious family resemblance between "remote" and "rural" which might find some analytical use.
+
+[USDA ERS](https://www.ers.usda.gov/data-products/frontier-and-remote-area-codes.aspx)
+
+> To assist in providing policy-relevant information about conditions in sparsely-settled, remote areas of the U.S. to public officials, researchers, and the general public, ERS has developed ZIP-code-level frontier and remote area (FAR) codes.
+>
+> The term "frontier and remote" is used here to describe territory characterized by some combination of low population size and high geographic remoteness. FAR areas are defined in relation to the time it takes to travel by car to the edges of nearby Urban Areas (UAs). Four levels are necessary because rural areas experience degrees of remoteness at higher or lower population levels that affect access to different types of goods and services. A relatively large number of people live far from cities providing "high order" goods and services, such as advanced medical procedures, stores selling major household appliances, regional airport hubs, or professional sports franchises. Level one FAR codes are meant to approximate this degree of remoteness. A much smaller, but still significant, number of people find it hard to access "low order" goods and services, such as grocery stores, gas stations, and basic health-care services. Level four FAR codes more closely coincide with this much higher degree of remoteness. Other types of goods and services—clothing stores, car dealerships, movie theaters—fall somewhere in between. Users are able to choose the definition that bests suits their specific needs.
+
+Two revisions of the codes currently exist, based on population data from 2000 and 2010 censuses. 2000 revision does not use road network travel time.
+
+Although data is provided at ZIP code level, Census Bureau ZCTAs are not an exactly appropriate spatial unit. Explanation from 2010 data spreadsheet:
+
+> ZIP Code areas used here come from ESRI mapping data, based on 2014 information from the U.S. Postal Service. These codes may or may not match exactly with other ZIP Code data sources due to frequent changes in ZIP Code configurations. They do not fully match with the Census Bureau's ZIP Code Tabulation Areas (ZCTAs). For more information, see Methodology Statement: 2013/2018 ESRI US Demographic Updates, August 2013: [link](http://downloads.esri.com/esri_content_doc/dbl/us/demographic-update-methodology-2013.pdf).
+
+Dataframes contain all columns from the source spreadsheets and additional variable `FAR_LEVEL`.
+
+| Variable  | Description                                                  |
+|-----------|--------------------------------------------------------------|
+| ZIP       | 5-digit ZIP Code                                             |
+| STATE     | State postal abbreviation                                    |
+| NAME      | ZIP Code area name (2010 only)                               |
+| FAR1      | FAR classification, level one: 0=not FAR, 1=FAR              |
+| FAR2      | FAR classification, level two: 0=not FAR, 1=FAR              |
+| FAR3      | FAR classification, level three: 0=not FAR, 1=FAR            |
+| FAR4      | FAR classification, level four: 0=not FAR, 1=FAR             |
+| GRIDPOP   | ZIP code population estimate                                 |
+| SQMI      | ZIP code land area in square miles                           |
+| DENSITY   | ZIP code population per square mile                          |
+| FR1POP    | ZIP code population classified as FAR level one              |
+| FR2POP    | ZIP code population classified as FAR level two              |
+| FR3POP    | ZIP code population classified as FAR level three            |
+| FR4POP    | ZIP code population classified as FAR level four             |
+| FR1PCT    | Percent of ZIP code population classified as FAR level one   |
+| FR2PCT    | Percent of ZIP code population classified as FAR level two   |
+| FR3PCT    | Percent of ZIP code population classified as FAR level three |
+| FR4PCT    | Percent of ZIP code population classified as FAR level four  |
+| FAR_LEVEL | Highest FAR level, between 0 and 4                           |
+
+2010 tables are de-duplicated. There are five `ZIP` duplicates still remain that cross state boundaries: 57724 (MT, SD), 73949 (OK, TX), 63673 (MO, IL), 42223 (TN, KY), 72395 (AR, TN). These records are equal in every column except for `STATE`.
+
+No ZIP duplicates exist in 2000 table.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_far_src(year: typing.Literal[2000, 2010] = 2010):
+    assert year in [2000, 2010]
+    
+    url = 'https://www.ers.usda.gov/webdocs/DataFiles/51020/'
+    if year == 2000:
+        url += 'FARCodesZIPCodeData.xls?v=7835.9'
+        local = PATH['source'] / 'ers_far/2000.xls'
+    elif year == 2010:
+        url += 'FARcodesZIPdata2010WithAKandHI.xlsx?v=7835.9'
+        local = PATH['source'] / 'ers_far/2010.xlsx'
+        
+    if local.exists():
+        return local
+    return download_file(url, local.parent, local.name)
+
+def get_far_df(year: typing.Literal[2000, 2010] = 2010):
+    assert year in [2000, 2010]
+    
+    far_level_dt = pd.CategoricalDtype([0, 1, 2, 3, 4], True)
+    
+    path = PATH['ers_far'] / f'{year}.pq'
+    if path.exists():
+        df = pd.read_parquet(path, 'pyarrow')
+        df['FAR_LEVEL'] = df['FAR_LEVEL'].astype(far_level_dt)
+        return df
+    
+    f = get_far_src(year)
+    df = pd.read_excel(f, 'FAR ZIP Code Data', dtype={'ZIP': str})
+    df = df.rename(columns=str.upper)
+    if year == 2000:
+        df = df.rename(columns={f'PCTFR{x}': f'FR{x}PCT' for x in range(1, 5)})
+
+    assert df.notna().all().all()
+    assert (df['ZIP'].str.len() == 5).all()
+
+    # We can add up binary FARX indicators to obtain single FAR level,
+    # because classification is nested, e.g. far2 implies far1, and not-far1 implies not-far2.
+    df['FAR_LEVEL'] = df[['FAR1', 'FAR2', 'FAR3', 'FAR4']].sum(1).astype(far_level_dt)
+
+    # de-duplicate 2010
+    if year == 2000:
+        assert not df.duplicated('ZIP').any()
+    elif year == 2010:
+        df = df.drop_duplicates()
+
+        # duplicate ZIPs that cross states:
+        # 
+
+        # drop duplicate ZIP in New Mexico with abnormally small area
+        mask = (df['ZIP'] == '87320') & (df['SQMI'] == 0.34)
+        df = df[~mask]
+
+        # no duplicates at ZIP-STATE
+        assert not df.duplicated(['ZIP', 'STATE']).any()
+        # all duplicated ZIP only differ by STATE
+        assert not df[[c for c in df.columns if c != 'STATE']].drop_duplicates()['ZIP'].duplicated().any()
+
+    df = df.reset_index(drop=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, 'pyarrow', index=False)
+    
+    return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| tbl-cap: "Sample from 2010 dataframe with 5 different FAR levels."
+get_far_df(2010).sample(1000).drop_duplicates('FAR_LEVEL').sort_values('FAR_LEVEL')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| fig-cap: "FAR ZIP areas in Wisconsin part of Duluth metro area, WI. Note: Census Bureau ZCTAs are used as shapes instead of ESRI."
+
+# Dane county
+# map_shape = geography.get_county_df().query('CODE == "55025"').geometry.iloc[0]
+# Wisconsin
+# map_shape = geography.get_state_df().query('CODE == "55"').geometry.iloc[0]
+# Duluth metro area in WI: Douglas and Bayfield
+map_shape = geography.get_county_df().query('CODE.isin(["55007", "55031"])').dissolve().geometry.iloc[0]
+
+df = geography.get_zcta_df(2013)
+df = df[df.intersects(map_shape)]
+
+d = get_far_df(2010).drop(columns=['STATE', 'FAR1', 'FAR2', 'FAR3', 'FAR4'])
+df = df.merge(d, 'left', left_on='ZCTA', right_on='ZIP')
+
+cm = [mpl.colors.to_hex(c) for c in plt.cm.tab20c.colors]
+cm = cm[5:6] + cm[0:5]
+df.explore(column='FAR_LEVEL', cmap=cm, tiles='CartoDB positron')
+```
+
+# Comparison of rural definitions
+
+**UA**
+
+Rural is everyting outside of urbanized areas and urban clusters. High resolution source shapes are simplified to reduce HTML size for online publication.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_ua(state_code, simplify=True):
+    state_shp = geography.get_state_df().query('CODE == @state_code').geometry.iloc[0]
+    df = get_ua_df(2010)
+    df = df[df.intersects(state_shp)]
+    not_rural = df.geometry.unary_union
+    if simplify: not_rural = not_rural.simplify(0.01)
+    rural = state_shp - not_rural.buffer(0)
+    if rural.is_empty: 
+        warnings.warn(f'UA rural area is empty in state_code "{state_code}".')
+    d = geopandas.GeoDataFrame({'definition': ['UA']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
+**CBSA**
+
+Rural = everything outside of metropolitan counties. Micropolitan areas are by this definition also rural.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_cbsa(state_code):
+    year = 2013
+    df = geography.get_county_df(year).query('STATE_CODE == @state_code')
+    d = get_cbsa_delin_df(year)
+    df = df.merge(d, 'left', indicator=True)
+    rural = df[(df['_merge'] == 'left_only') | (df['METRO_MICRO'] == 'micro')]
+
+    if len(rural) == 0:
+        warnings.warn(f'CBSA rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+
+    d = geopandas.GeoDataFrame({'definition': ['CBSA']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
+**RUCA**
+
+Rural = micro and non-core codes (4, 5, 6, 7, 8, 9, 10, 99). Tract shapes are simplified.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_ruca(state_code, simplify=True):
+    df = geography.get_tract_df([2010], [state_code])
+
+    # add RUCA codes with short descriptions
+    d = ers_rurality.get_ruca_df().query('YEAR == 2010')[['FIPS', 'RUCA_CODE']]
+    d['STATE_CODE'] = d['FIPS'].str[:2]
+    d['COUNTY_CODE'] = d['FIPS'].str[2:5]
+    d['TRACT_CODE'] = d['FIPS'].str[5:]
+    df = df.merge(d, 'left')
+    df['RUCA_CODE'] = df['RUCA_CODE'].astype(float).astype(int).astype(str)
+    df['RUCA_CODE'] = df['RUCA_CODE'].fillna('99')
+
+    # select subset of codes as rural
+    rural = df[df['RUCA_CODE'].isin(['4', '5', '6', '7', '8', '9', '10', '99'])]
+    if len(rural) == 0:
+        warnings.warn(f'RUCA rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+        if simplify: rural = rural.simplify(0.01)
+        
+    d = geopandas.GeoDataFrame({'definition': ['RUCA']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
+**FAR**
+
+Compared to other definition, Frontier and Remote is rather conservative. Many areas that are not FAR (level 0) are classified as rural by other definitions. So we apply the most aggressive criterion and classify areas with any level of FAR (1, 2, 3 or 4) as rural.
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_far(state_code, simplify=True):
+
+    df = geography.get_zcta_df(2013)
+
+    state_abbr = dict(geography.get_state_df(False)[['CODE', 'ABBR']].values)[state_code]
+    d = get_far_df(2010).query('STATE == @state_abbr')
+    # innere merge: non-matches dropped
+    df = df.merge(d, 'inner', left_on='ZCTA', right_on='ZIP')
+    rural = df.query('FAR_LEVEL > 0')
+
+    if len(rural) == 0:
+        warnings.warn(f'FAR rural area is empty in state_code "{state_code}".')
+        rural = shapely.geometry.Point()
+    else:
+        rural = rural.geometry.unary_union
+        if simplify: rural = rural.simplify(0.01)
+
+    d = geopandas.GeoDataFrame({'definition': ['FAR']}, geometry=[rural], crs=df.crs)
+    return d
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# test all definitions in all states
+for sc in geography.get_state_df(False)['CODE']:
+    print(sc)
+    try:
+        d = rural_map_ua(sc)
+        d = rural_map_cbsa(sc)
+        d = rural_map_ruca(sc)
+        d = rural_map_far(sc)
+    except Exception as e:
+        print('******************** ACHTUNG! ACHTUNG! ACHTUNG! ********************')
+        print(e)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+def rural_map_all(state_code):
+    m = RuralityMap(['UA', 'CBSA', 'RUCA', 'FAR'], [mpl.colors.to_hex(c) for c in plt.cm.Dark2.colors])
+    m.add_layer(rural_map_ua(state_code), 'UA', 'definition')
+    m.add_layer(rural_map_cbsa(state_code), 'CBSA', 'definition')
+    m.add_layer(rural_map_ruca(state_code), 'RUCA', 'definition')
+    m.add_layer(rural_map_far(state_code), 'FAR', 'definition')
+    return m.show()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+#| label: fig-compare-defns-wisc
+#| fig-cap: "Rural areas of Wisconsin by different definitions, based on 2010 data."
+rural_map_all('55')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+states = geography.get_state_df(False)[['NAME', 'CODE']].sort_values('NAME')
+w_state = ipywidgets.Dropdown(options=states.values.tolist(), value='55')
+w_out = ipywidgets.Output()
+w_show = ipywidgets.Button(description='Show')
+def show_selected_state(_):
+    with w_out:
+        w_out.clear_output(False)
+        print('Working...')
+        m = rural_map_all(w_state.value)
+        w_out.clear_output(True)
+        display(m)
+w_show.on_click(show_selected_state)
+ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
+```
+
+# Build this module
+
+```{code-cell} ipython3
+:tags: []
+
+nbd.nb2mod('rurality.ipynb')
 ```

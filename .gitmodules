@@ -4,3 +4,6 @@
 [submodule "submodules/infogroup"]
 	path = submodules/infogroup
 	url = git@github.com:antonbabkin/infogroup.git
+[submodule "submodules/pubdata"]
+	path = submodules/pubdata
+	url = git@github.com:antonbabkin/pubdata.git

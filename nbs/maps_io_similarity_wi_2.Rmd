@@ -24,44 +24,53 @@ options(scipen=999)
 
 
 ```{r packages and libraries, include = FALSE}
-# Download, Install, and Add R packages as necessary.
+# Load and attach necessary packages
+library(rprojroot)
+library(cowplot)
+library(dash)
+library(dlm)
+library(DT)
+library(geosphere)
+library(ggiraph)
+library(glue)
+library(gtools)
+library(knitr)
+library(magrittr)
+library(manipulateWidget)
+library(Matrix)
+library(plotly)
+library(reshape2)
+library(scales)
+library(spdep)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+library(tools)
 
-# List packages needed for this exercise
-packages <- c("cowplot", 
-              "dash",
-              "dlm",
-              "DT",
-              "geosphere",
-              "ggiraph",
-              "glue",
-              "gtools",
-              "knitr",
-              "magrittr",
-              "Matrix",
-              "plotly",
-              "reshape2",
-              "scales",
-              "shinydashboard",
-              "spdep",
-              "tidyverse",
-              "tmap",
-              "tmaptools",
-              "tools")
+#Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
-# Load packages
-invisible(lapply(packages, library, character.only = TRUE))
 
 ```
 
 ```{r load data, include=FALSE}
 ## Load previously generated datafiles
-load(file = "../data/sub_data.RData")
 
-```
+importr(TIGER_RUCC)
+importr(Total_mat)
+importr(Xpay_mat)
+importr(Sim_mat)
+importr(Sim_mat_rel)
+importr(Sim_mat_imp)
+importr(Sim_mat_imp_rel)
+importr(Sim_mat_exp)
+importr(Sim_mat_exp_rel)
+importr(Q_mat)
 
-```{r version control, include = FALSE}
-# Save snapshot of session versions (must be run outside of render)
-writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
+
+Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+
 
 ```
 
@@ -128,9 +137,9 @@ RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, 
 RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
 
 
-
 TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
 TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
+
 
 p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
   geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
@@ -160,6 +169,73 @@ g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]],
  
 
  
+```
+
+
+
+```{r}
+mapsim <- function(similarity, industry){ 
+  
+  dataset <- Sim_list[[similarity]][[industry]][WItest_rural, WItest_primary]
+
+  mincom <- cbind(place = rownames(dataset), match = colnames(dataset)[apply(dataset, 1, which.min)], min_value = apply(dataset, 1, min)) %>% as.data.frame()
+  mincom$min_value <- as.numeric(mincom$min_value)
+  mincom %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+  mincom <- rbind(  mincom, as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[similarity]][[industry]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
+  mincom$Nor <- as.numeric(mincom$Nor)
+  
+  
+  fdataset <- inner_join(TIGER_RUCC, mincom, by = "place", copy = TRUE)
+  fdataset %<>% mutate(match_name = fdataset$NAME[match(match, fdataset$place)])
+  
+  
+ggplot( fdataset ) +
+    geom_sf(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
+    guides(alpha = "none") +
+    coord_sf() +
+    theme_void() +
+    labs(fill = "Regional Cluster") +
+    scale_fill_brewer(palette = "Set1",
+                      labels = (fdataset  %>% filter(place %in% unique(fdataset$match) ) %>% pull(County_Name)) ) 
+  
+  
+    
+}
+
+```
+
+
+```{r}
+
+df <- function(similarity, industry){ 
+  
+  dataset <- Sim_list[[similarity]][[industry]][WItest_rural, WItest_primary]
+
+  mincom <- cbind(place = rownames(dataset), match = colnames(dataset)[apply(dataset, 1, which.min)], min_value = apply(dataset, 1, min)) %>% as.data.frame()
+  mincom$min_value <- as.numeric(mincom$min_value)
+  mincom %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+  mincom <- rbind(  mincom, as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[similarity]][[industry]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
+  mincom$Nor <- as.numeric(mincom$Nor)
+  
+  
+  fdataset <- inner_join(TIGER_RUCC, mincom, by = "place", copy = TRUE)
+  fdataset %<>% mutate(match_name = fdataset$NAME[match(match, fdataset$place)])
+
+  }
+
+```
+
+```{r}
+
+#mapsim("Sim_mat", "Sector") 
+
+
+manipulateWidget(
+  mapsim(similarity, industry),
+  similarity = mwSelect(c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")),
+  industry = mwSelect(c("Sector", "Summary", "Detail"))
+)
+
 ```
 
 
