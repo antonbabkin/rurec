@@ -21,40 +21,47 @@ options(scipen=999)
 
 ```
 
-
 ```{r packages and libraries, include=FALSE}
-# Download, Install, and Add R packages as necessary.
+# Load and attach necessary packages
+library(rprojroot)
+library(dlm)
+library(DT)
+library(geosphere)
+library(gtools)
+library(knitr)
+library(magrittr)
+library(Matrix)
+library(spdep)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+library(tools)
 
-# List packages needed for this exercise
-packages <- c("dlm",
-              "DT",
-              "geosphere",
-              "gtools",
-              "knitr",
-              "magrittr",
-              "Matrix",
-              "spdep",
-              "tidyverse",
-              "tmap",
-              "tmaptools",
-              "tools")
-
-# Install packages not yet installed
-installed_packages <- packages %in% rownames(installed.packages())
-if (any(installed_packages == FALSE)) {
-  install.packages(packages[!installed_packages], dependencies = TRUE)
-}
-
-# Load packages
-invisible(lapply(packages, library, character.only = TRUE))
+#Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
 ```
 
-
-
 ```{r load data, include=FALSE}
-## Load previously generated files
-load(file = "../data/sub_data.RData")
+## Load previously generated datafiles
+
+importr(TIGER_RUCC)
+importr(Q_mat)
+importr(Direct_mat)
+importr(Total_mat)
+importr(Xpay_mat)
+importr(Sim_mat)
+importr(Sim_mat_rel)
+importr(Sim_mat_imp)
+importr(Sim_mat_imp_rel)
+importr(Sim_mat_exp)
+importr(Sim_mat_exp_rel)
+importr(TIGERData)
+importr(RUCCData)
+
+
+Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
 
 ## Choose Sector level (1) or Summary level (2) or Detail level (3) 
 lvl = 3
@@ -65,18 +72,9 @@ tmap_mode("view")
 ```
 
 
-```{r version control, include = FALSE}
-# Save snapshot of session versions (must be run outside of render)
-writeLines(capture.output(sessionInfo()), paste0("sessionInfo_", basename(file_path_sans_ext(script_file())), ".txt"))
-
-```
-
-
-This R Quarto document is the first attempt at mapping the various topological similarity index relationships at the national level. 
+This R Quarto document is the first attempt at mapping the various topological similarity index relationships at the national level.
 
 ::: panel-tabset
-
-
 ### Maps
 
 ```{r}
@@ -142,7 +140,9 @@ TIGER_RUCC %>% filter(STATEFP!="15" & STATEFP!="02" & RUCC_2013==9) %>%
           title = "RUCC", 
           id = "NAMELSAD", 
           palette = "inferno", 
-          )
+          ) 
+
+tm_view(set.view = c(zoom = 1))
 
 ```
 
