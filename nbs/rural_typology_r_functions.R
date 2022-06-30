@@ -5,21 +5,10 @@ library(rprojroot)
 library(fs)
 library(readxl)
 library(openxlsx)
+library(rlog)
 
-# #Function to save r functions
-# fun_saver <- function (funct){
-#   
-#   # Create r function folder if not already done
-#   fun_dir = file.path(find_rstudio_root_file(), "data", "rfuns")
-#   if (!file.exists(fun_dir)) {
-#     dir.create(fun_dir)
-#   }
-#   
-#   if (!file.exists(file.path(fun_dir, as.character(substitute(funct))))){
-#     saveRDS(funct, file = file.path(fun_dir, as.character(substitute(funct))))
-#   }
-# }
-
+# Display start time
+log_info("Define functions start")
 
 # Function to download  data
 data_getr <- function(FileURL,
@@ -132,5 +121,30 @@ importr <- function(x){
   assign(deparse(substitute(x)), readRDS(file.path(find_rstudio_root_file(), "data", "robjs", as.character(substitute(x)) )), envir=.GlobalEnv)
 }
 
+
+
+#Function to save parsed r/python data tables
+pysaver <- function (dataname){
+  
+  data_dir = file.path(find_rstudio_root_file(), "data", "rpyobjs")
+  if (!file.exists(data_dir)) {
+    dir.create(data_dir)
+  }
+  
+  if (!file.exists(file.path(data_dir, as.character(substitute(dataname))))){
+    saveRDS(dataname, file = file.path(data_dir, as.character(substitute(dataname))))
+  }
+  
+}
+
+
+#Function to import rpyobj data
+pyimportr <- function(x){
+  require(rprojroot)
+  assign(deparse(substitute(x)), readRDS(file.path(find_rstudio_root_file(), "data", "rpyobjs", as.character(substitute(x)) )), envir=.GlobalEnv)
+}
+
+# Display end time
+log_info("Define functions end")
 
 
