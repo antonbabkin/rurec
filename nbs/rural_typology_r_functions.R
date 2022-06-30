@@ -101,9 +101,9 @@ onerer <- function(x){
 
 
 #Function to save parsed r data tables
-saver <- function (dataname){
+saver <- function (dataname, filepath = file.path("data", "robjs")){
   
-  data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
+  data_dir = file.path(find_rstudio_root_file(), filepath)
   if (!file.exists(data_dir)) {
     dir.create(data_dir)
   }
@@ -116,33 +116,12 @@ saver <- function (dataname){
 
 
 #Function to import robj data
-importr <- function(x){
+importr <- function(x, filepath = file.path("data", "robjs")){
   require(rprojroot)
-  assign(deparse(substitute(x)), readRDS(file.path(find_rstudio_root_file(), "data", "robjs", as.character(substitute(x)) )), envir=.GlobalEnv)
+  assign(deparse(substitute(x)), readRDS(file.path(find_rstudio_root_file(), filepath, as.character(substitute(x)) )), envir=.GlobalEnv)
 }
 
 
-
-#Function to save parsed r/python data tables
-pysaver <- function (dataname){
-  
-  data_dir = file.path(find_rstudio_root_file(), "data", "rpyobjs")
-  if (!file.exists(data_dir)) {
-    dir.create(data_dir)
-  }
-  
-  if (!file.exists(file.path(data_dir, as.character(substitute(dataname))))){
-    saveRDS(dataname, file = file.path(data_dir, as.character(substitute(dataname))))
-  }
-  
-}
-
-
-#Function to import rpyobj data
-pyimportr <- function(x){
-  require(rprojroot)
-  assign(deparse(substitute(x)), readRDS(file.path(find_rstudio_root_file(), "data", "rpyobjs", as.character(substitute(x)) )), envir=.GlobalEnv)
-}
 
 # Display end time
 log_info("Define functions end")
