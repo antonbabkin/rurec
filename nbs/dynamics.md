@@ -27,7 +27,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from rurec import rurality
-from rurec.pubdata import cbp, bds, naics, population, ers_rurality
+from rurec.pubdata import geography, cbp, bds, naics, population, ers_rurality
 from rurec.reseng.nbd import Nbd
 nbd = Nbd('rurec')
 ```
@@ -38,7 +38,7 @@ nbd = Nbd('rurec')
 pd.options.display.max_colwidth = 300
 ```
 
-## Data
+# Data
 
 GDP price deflator from BEA, downloaded from [FRED](https://fred.stlouisfed.org/series/A191RD3A086NBEA).
 
@@ -55,18 +55,168 @@ def get_deflator():
 ```
 
 ```{code-cell} ipython3
-:tags: []
-
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
 get_deflator().set_index('year').plot(grid=True)
 ```
 
-# Rurality
+# Rurality definition
 
-Business dynamics in rural areas, based on different definitions of rurality.
+County based OMB CBSA. Rural = nonmetro.
 
-+++
+```{code-cell} ipython3
+:tags: []
 
-## OMB definition
+def get_county_rurality():
+    """County classification to span 2000-2019 years of data.
+    RURAL_2000 and RURAL_2010 use respective OMB revisions.
+    RURAL_CHNG groups entire period into "rural", "nonrural" and "formerly rural".
+    "nonrural->rural" is small in size (estab, emp) and is lumped together with "rural".
+    """
+    df = geography.get_county_df(2010, False)
+
+    d = rurality.get_cbsa_delin_df(2003)[['STATE_CODE', 'COUNTY_CODE', 'METRO_MICRO']]
+    df = df.merge(d, 'left')
+    df['RURAL_2000'] = ~(df['METRO_MICRO'] == 'metro')
+    del df['METRO_MICRO']
+
+    d = rurality.get_cbsa_delin_df(2013)[['STATE_CODE', 'COUNTY_CODE', 'METRO_MICRO']]
+    df = df.merge(d, 'left')
+    df['RURAL_2010'] = ~(df['METRO_MICRO'] == 'metro')
+    del df['METRO_MICRO']
+    
+    df['RURAL_CHNG'] = pd.Series(dtype=pd.CategoricalDtype(['rural', 'formerly rural', 'nonrural'], True))
+    df.loc[df['RURAL_2010'], 'RURAL_CHNG'] = 'rural'
+    df.loc[~df['RURAL_2000'] & ~df['RURAL_2010'], 'RURAL_CHNG'] = 'nonrural'
+    df.loc[df['RURAL_2000'] & ~df['RURAL_2010'], 'RURAL_CHNG'] = 'formerly rural'
+
+    return df[['STATE_CODE', 'COUNTY_CODE', 'RURAL_2000', 'RURAL_2010', 'RURAL_CHNG']]
+```
+
+```{code-cell} ipython3
+:tags: []
+
+get_county_rurality()[['RURAL_2000', 'RURAL_2010']].value_counts()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+get_county_rurality()['RURAL_CHNG'].value_counts()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_county_rurality()
+d = cbp.get_df('county', 2010)\
+    .rename(columns=str.upper)\
+    .query('INDUSTRY == "-"')\
+    .rename(columns={'FIPSTATE': 'STATE_CODE', 'FIPSCTY': 'COUNTY_CODE'})\
+    [['STATE_CODE', 'COUNTY_CODE', 'EST', 'EMP', 'AP']]
+df = df.merge(d, 'left')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.groupby(['RURAL_2000', 'RURAL_2010'])[['EST', 'EMP', 'AP']].sum()
+```
+
+# BDS by rurality
+
+Explore 2000-2019 trends in rural, nonrural and formerly rural from BDS data.
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('cty')\
+    .rename(columns=str.upper)\
+    .rename(columns={'ST': 'STATE_CODE', 'CTY': 'COUNTY_CODE'})\
+    .query('YEAR >= 2000')
+
+df = df.merge(get_county_rurality())
+```
+
+- Nonrural grows faster than rural.
+- Formerly rural is looks like a mix between rural and nonrural.
+- Notable difference of rural is slower recover after great recession.
+EMP has barely recovered, and EST is stuck at the decreased level.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'RURAL_CHNG'])[['ESTABS', 'EMP']].sum()
+t.columns.name = 'MEASURE'
+t = t.unstack('RURAL_CHNG')
+t.plot(subplots=True, layout=(2, 3), figsize=(16, 8), grid=True, title='Aggregate estab and emp by YEAR and RURAL_CHNG');
+```
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'RURAL_CHNG'])[['ESTABS', 'EMP']].sum()
+t.columns.name = 'MEASURE'
+t = t.unstack('RURAL_CHNG')
+t = t.apply(lambda col: col / col.iloc[0])
+ax = t.plot(subplots=True, layout=(2, 3), figsize=(16, 8), grid=True, ylim=(0.8, 1.2),
+            title='Growth in Aggregate estab and emp by YEAR and RURAL_CHNG (2000 = 100%)');
+```
+
+- Rural establishments are smaller in mean employment.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'RURAL_CHNG'])[['ESTABS', 'EMP']].sum()
+t.columns.name = 'MEASURE'
+t = t['EMP'] / t['ESTABS']
+t = t.unstack('RURAL_CHNG')
+t.plot(subplots=True, layout=(1, 3), figsize=(16, 4), title='Mean EMP by YEAR and RURAL_CHNG', grid=True, ylim=(0, 20));
+```
+
+- Churn is decreasing over time everywhere.
+- Rural has less churn than nonrural.
+- Entry rate after GR is stuck steady at lower levels everywhere.
+- In rural, unlike elsewhere, exit rate has not fallen enough to be offset by entry, so number of establishments has not recovered.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'RURAL_CHNG'])[['ESTABS', 'ESTABS_ENTRY', 'ESTABS_EXIT']].sum()
+t.columns.name = 'MEASURE'
+t['ENTRY_RATE'] = t['ESTABS_ENTRY'] / t['ESTABS'] * 100
+t['EXIT_RATE'] = t['ESTABS_EXIT'] / t['ESTABS'] * 100
+t = t[['ENTRY_RATE', 'EXIT_RATE']]
+t = t.unstack('RURAL_CHNG')
+ax = t['ENTRY_RATE'].add_suffix(' ENTRY_RATE')\
+    .plot(subplots=True, layout=(1, 3), figsize=(16, 4), title='Estab entry and exit rate by YEAR and RURAL_CHNG')
+t['EXIT_RATE'].add_suffix(' EXIT_RATE').plot(subplots=True, ax=ax, ls='--', grid=True, ylim=(5, 15));
+```
+
+- Slightly less churn in jobs in rural than elsewhere.
+- Patterns are similar, with slightly weaker net creation in rural post-GR.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'RURAL_CHNG'])[['DENOM', 'JOB_CREATION', 'JOB_DESTRUCTION']].sum()
+t.columns.name = 'MEASURE'
+t['JOB_CREATION_RATE'] = t['JOB_CREATION'] / t['DENOM'] * 100
+t['JOB_DESTRUCTION_RATE'] = t['JOB_DESTRUCTION'] / t['DENOM'] * 100
+t = t[['JOB_CREATION_RATE', 'JOB_DESTRUCTION_RATE']]
+t = t.unstack('RURAL_CHNG')
+ax = t['JOB_CREATION_RATE'].add_suffix(' CREATION')\
+    .plot(subplots=True, layout=(1, 3), figsize=(16, 4), title='Job creation and destruction rate by YEAR and RURAL_CHNG')
+t['JOB_DESTRUCTION_RATE'].add_suffix(' DESTRUCTION').plot(subplots=True, ax=ax, ls='--', grid=True, ylim=(0, 20));
+```
+
++++ {"tags": []}
+
+# CBP by rurality
 
 Rural = micropolitan and noncore. Non-rural = metropolitan.
 
@@ -195,7 +345,7 @@ for ry, c in zip([1993, 2003, 2013, 'chng'], colors):
 fig.suptitle('Share of population, employment, establishments and payroll in rural areas, %');
 ```
 
-## BDS
+## Rural in CBP vs BDS
 
 ```{code-cell} ipython3
 :tags: []
