@@ -37,7 +37,7 @@ This R Markdown document is a reference page for all things Input-Output related
 
 **Introduction**
 
-I-O analysis, or "inter-industry analysis," is an economic tool that measures the relationships between various industries in the economy. The framework measures flows of products from each of the sectors (as a producer/seller) to each of the sectors (as a purchaser/buyer); these *interindustry* flows, or transactions (or intersectoral flows -- the terms *industry* and *sector* are often used interchangeably in input--output analysis) are measured for a particular time period (usually a year) and in monetary terms [@leontief_qio_1936]. 
+I-O analysis, or "inter-industry analysis," is an economic tool that measures the relationships between various industries in the economy. The framework measures flows of products from each of the sectors (as a producer/seller) to each of the sectors (as a purchaser/buyer); these *interindustry* flows, or transactions (or intersectoral flows -- the terms *industry* and *sector* are often used interchangeably in input--output analysis) are measured for a particular time period (usually a year) and in monetary terms. 
 
 **Fundamental Relationships**
 
@@ -231,7 +231,7 @@ One solution to this problem is to find an expression transforming industry outp
 
 **Technology and Total Requirement Matrices**
 
-The direct requirements table shows the amount of a commodity that is required by an industry to produce a dollar of the industry's output. Total requirements tables show the relationship between final uses and gross output. There are three variations of total requirements tables. The commodity-by-commodity total requirements table shows the production required, both directly and indirectly, of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-commodity total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-industry total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the industry at the top of the column [@horowitz_concepts_2009].
+The direct requirements table shows the amount of a commodity that is required by an industry to produce a dollar of the industry's output. Total requirements tables show the relationship between final uses and gross output. There are three variations of total requirements tables. The commodity-by-commodity total requirements table shows the production required, both directly and indirectly, of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-commodity total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the commodity at the top of the column. The industry-by-industry total requirements table shows the production required, both directly and indirectly, from the industry at the beginning of the row per dollar of delivery to final use of the industry at the top of the column.
 
 Define $d_{ij} = v_{ij}/q_{j}$, so that $d_{ij}$ denotes the fraction of total commodity $j$ output that was produced by industry $i$. Therefore a matrix of *commodity output proportions*, $\underset{(i \times c)}{\mathbf{D}} = [d_{ij}]$ is denoted as
 
@@ -855,21 +855,82 @@ $$
 
 The two-region logic may also be implemented across more than two regions. The idea is to use location quotients, a sequence of two-region models, and an RAS balancing approach.
 
+### Further Reading
+
+The majority of this documents structure is a selective abbreviation of Miller and Blair's superb and elucidative book *Input-Output Analysis: Foundations and Extensions* [-@miller_io_2009]. 
+
+**For more on I-O foundations and fundamentals see:**  
+@leontief_qio_1936  
+@christ_review_1955  
+@leontief_environmental_1970  
+@leontief_ioe_1986  
+@UN_accounts_2003  
+@ten_econio_2006  
+@horowitz_concepts_2009  
+
+**For Regional I-O see:**  
+@isard_methods_1960  
+@leontief_multiregional_1963  
+@round_nonsurvey_1983  
+@batten_spatial_1987  
+@hewings_regional_1987  
+@polenske_leontief_1995  
+@benat_rims2_1997  
+@brand_reassessment_1998  
+@nan_inflows_2004  
+@polenske_trade_2004  
+@lindall_implan_2006  
+@sargento_rio_2009  
+
+**For I-O Gravity models and other extensions see:**  
+@polenski_mrio_1969  
+@curry_spatial_1972  
+@ahmad_operationalisation_1991  
+@anderson_gravity_2003  
+@trinh_ras_2013  
+
+**For rurality and other applied topics see:**  
+@beyers_methods_2006  
+@isserman_prosper_2007  
+@feser_rural_2009  
+@locke_industry_2009  
+@han_resilience_2019  
+@khalaf_typology_2021  
+
+
 
 ### Emperics 
 
 **NAICS**
 
-The highest level of NAICS classification is called the sector. There are 20 broad NAICS sectors two-digit NAICS. The subsiquent hierarchy of NAICS specifications include subsector (three-digit), industry group (four-digit), NAICS industry (five-digit), and U.S. industry (six-digit). Counts of unique NAICS specifications for CBP 2019 data include 20, 86, 288, 635, and 960 clusters respectively.
+The North American Industry Classification System ([NAICS](https://www.census.gov/naics/)) is the standard used by Federal statistical agencies in classifying business establishments for the purpose of collecting, analyzing, and publishing statistical data related to the U.S. business economy. NAICS was developed under the auspices of the Office of Management and Budget (OMB), and adopted in 1997 to replace the Standard Industrial Classification ([SIC](https://www.osha.gov/data/sic-manual)) system.
+
+The highest level of NAICS classification is called the sector. There are 20 broad NAICS sectors two-digit NAICS. The subsiquent hierarchy of NAICS specifications include subsector (three-digit), industry group (four-digit), NAICS industry (five-digit), and U.S. industry (six-digit). Counts of unique NAICS specifications for CBP 2019 data include 20, 86, 288, 635, and 960 clusters respectively [@executive_naics_2022].
 
 **BEA**
 
-Estimates in the Industry Economic Accounts of the Bureau of Economic Analysis (BEA) are generally available at four levels of detail: sector (21 industry groups), summary (71 industry groups), underlying summary (138 industry groups), and detail (405 industry groups). However, in practice the BEA industry codes present in the SUP (Use) tables are sector (SEC) with 15 $\times$ 15 commodities and industries, summary (SUM) with 71 $\times$ 71 commodities and industries, and detail (DET) with 401 $\times$ 405 commodities and industries. For most IO type data products from BEA, estimates at the detail level are available only for available for year 2007 and 2012. Data products from BEA at the sector and summary detail levels are available from 1997 to 2020.
+Bureau of Economic Analysis ([BEA](https://www.bea.gov/resources)) methodologies broadly encompass [National](https://www.bea.gov/data/economic-accounts/national), 
+[International](https://www.bea.gov/data/economic-accounts/international), 
+[Regional](https://www.bea.gov/data/economic-accounts/regional), and 
+[Industry](https://www.bea.gov/data/economic-accounts/industry). Of principal relevance to this project are the industry economic accounts. The industry economic accounts, presenting both an input-output framework and an annual output of each industry, provide a detailed view of the interrelationships between U.S. producers and users, and the contribution to production across industries. See [here](https://www.bea.gov/resources/learning-center/what-to-know-industries) for more. Industry account data products include: 
+[GDP by Industry](https://www.bea.gov/data/gdp/gdp-industry), 
+[Gross Output by Industry](https://www.bea.gov/data/industries/gross-output-by-industry), 
+[Input-Output Accounts](https://www.bea.gov/data/industries/input-output-accounts-data), 
+[Employment by Industry](https://www.bea.gov/data/employment/employment-by-industry), and 
+[Integrated Industry-Level Production Account (KLEMS)](https://www.bea.gov/data/special-topics/integrated-industry-level-production-account-klems). 
+
+At the foundation of most BEA industry statistics are the input-output accounts, which are of principal relevance to this project. Also called [I-O accounts](https://www.bea.gov/industry/input-output-accounts-data), these detailed tables capture the flow of goods and services from one industry to another and to consumers. An important use of the I-O tables is in the estimation of the direct and indirect effects that changes in final uses will have on industry and commodity output, on employment, or on income [@horowitz_concepts_2009]. 
+
+The input-output accounts contain many data files including: Supply Tables, Use Tables, and Import Matrices. Supply Tables show the value of goods and services available in the U.S. economy, whether produced by domestic industries or imported. Whereas, Use Tables show how the supply of goods and services is used: including purchases by U.S. industries, individuals, and government, and exports to foreign purchasers. In addition, supplemental estimate tables encompass Requirements Tables, Make-Use Tables, and Historical Make-Use Tables. Requirements Tables are a summary of the full supply chain, with both direct and indirect connections among industries. For example, a baker relies directly on a miller for flour and indirectly on a farmer who supplies the miller with wheat.
+
+Estimates in the Industry Economic Accounts are generally [available](https://apps.bea.gov/iTable/itable.cfm?isuri=1&reqid=151&step=1) at four levels of detail: sector (21 industry groups), summary (71 industry groups), underlying summary (138 industry groups), and detail (405 industry groups). However, in practice the avalible BEA industry codes are sector (SEC) with 15 $\times$ 15 commodities and industries, summary (SUM) with 71 $\times$ 71 commodities and industries, and detail (DET) with 401 $\times$ 405 commodities and industries. For most I-O type data products from BEA, estimates at the detail level are available only for available for year 2007 and 2012. Data products from at the sector and summary detail levels are available from 1997 to 2020.
+
+Annual I‐O accounts, which are updated once a year, are available from 1997 to 2020 at the sector and summary levels. Benchmark I‐O accounts include more detail, but are prepared less frequently, roughly once every 5 years based on detailed data from the [Economic Census](https://www.census.gov/programs-surveys/economic-census.html) conducted by the Census Bureau. The 2002 benchmark was released in October 2007 [@locke_industry_2009]. Detail level estimates are only available for 2007 and 2012.
+
+BEA develops analytical tools derived from the I-O framework, too, including: Trade in Value Added (TiVA) Statistics — Trace global value chains through direct and indirect U.S. trade partners, improving understanding of the U.S. role in international trade. Computable General Equilibrium (CGE) Models —
+Used to anticipate the response of the economy to changes in policy, changes in technology, and other external shocks. Regional Impact Analysis Models (such as BEA’s Regional Input-Output Modeling System - [RIMS II](https://www.bea.gov/resources/methodologies/RIMSII-user-guide)) — Used to show the local impact of a specific project or event like a strike or natural disaster. For example, state or local government planners could use these models to assess the economic impact of a new baseball stadium or the closing of a military base.
 
 BEA industry codes used in national IO tables are not bijective with NAICS codes. Though they are similar at many levels and groupings some codes are not applicable (government) or do not align at any higher detail specificity e.g., construction data published by BEA at the detail level do not align with 2012 NAICS industries.
-
-An important use of the I-O tables is in the estimation of the direct and indirect effects that changes in final uses will have on industry and commodity output, on employment, or on income. BEA's Regional Economic Analysis Division relies on data in the I-O accounts to generate its Regional Input-Output Modeling System, or RIMS II, which can be used to analyze the impact of a state or local project or a change in a state or local program on the economy of an area. For example, state or local government planners can use the model to assess the economic impact of a new baseball stadium or airport or of the closing of a military base.
-
 
 
 ### Notes
