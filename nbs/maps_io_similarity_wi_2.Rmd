@@ -72,6 +72,12 @@ Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel
 names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
 
 
+# Create r object only data sub-folder if not already done
+data_dir = file.path(find_rstudio_root_file(), "data", "robjs", "wi_2")
+if (!file.exists(data_dir)) {
+  dir.create(data_dir)
+}
+
 ```
 
 
@@ -80,10 +86,77 @@ This R Markdown document is the second attempt at mapping the various topologica
 ::: {.panel-tabset}
 
 
+### Methods
+
+
+We can derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A^{n}}$, from the national-level, industry-by-industry total requirements matrix, $\mathbf{L^{n}}$, using $\mathbf{A^{n}} = \mathbf{I} - (\mathbf{L^{n}})^{-1}$. Furthermore, we can construct the location specific total output vector, $\mathbf{x^{r}}$ from a payroll and labor share quotient. As  a first pass assume unit labor share, such that location specific industry payroll is equivalent to location specific total output. 
+
+**Location specific metrics of industry input needs**
+
+We specify a vector of *location input needs* as the product of the national input coefficient matrix and the location specific total output vector, $\mathbf{Ax^{r}}$.  
+
+Similarly, let the *share* or *relative input needs* vector be given as $\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
+
+In addition, we define the *actual* or *import input needs* vector as, $\max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
+
+(Similarly, let the *actual* exports vector $\mathbf{\tilde{x}^{r}}$ be defined as $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$)
+
+And let the *relative import input needs* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$.
+
+Note: one may concatenate the input needs vectors across each location to construct an industry-by-location matrix of input needs for each specification above. Specifically denoted by: 
+
+ $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
+ 
+
+**Cross location industry compatibility**
+
+To elucidate the industrial compatibility across locations, we construct a *similarity index*. In general, it is defined on the metric space $(\mathbf{X}, D)$ where $\mathbf{X}$ is a set of vectors $\{\mathbf{x}_{i} \in \mathbb{R} : i \in \{1, \dots, n \}\}$ and $D:\mathbf{X} \times \mathbf{X}	\rightarrow \mathbb{R}$ is a distance function.  
+
+Specifying $D$ as a *Euclidean* or *2-norm distance*, we define the industrial compatibility distance or *simple similarity index* between two locations $r$ and $s$ as:
+
+$$D^{rs} = \Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}$$
+
+In addition, let the *relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+The  *import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2}$$
+
+Let the *relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+(I would argue that when a similarity index employs an import specification the "exporting" location should be specified instead as $\mathbf{\tilde{x}^{s}} = \vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ )
+
+One may further weight a *similarity index* by a geographical impedance function, $\mathbf{Q}$. In general terms, let this metric be defined by $\mathfrak{D}\left(\mathbf{Ax^{r}}, \mathbf{x^{s}}, \mathbf{Q}\right)$. In practice, the geographical impedance between locations $r$ and $s$ is given by, $Q^{rs} = e^{-d^{rs}}$ or $Q^{rs} = 1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
+
+$$d^{rs}  = R \cdot \arccos(\sin(\phi_{r})\sin(\phi_{s}) + \cos(\phi_{r})\cos(\phi_{s})\cos(\vert \lambda_{r} - \lambda_{s} \vert)) $$
+Where $\lambda_{r}, \phi_{r}$ and $\lambda_{s}, \phi_{r}$ are the longitude and latitude of locations $r$ and $s$, and $R$ is the radius of the reference sphere, which in this case is the *mean earth radius* from the WGS84 ellipsoid. 
+
+As such the *spatial simple similarity index* is given by 
+
+$$\mathfrak{D}^{rs} = D^{rs}/Q^{rs} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}/Q^{rs}$$
+
+
+Let the *spatial relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})}  / Q^{rs}$$
+Let the  *spatial import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})^{'}([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})}/Q^{rs}$$
+
+Let the *spatial relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}]  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}] - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})} / Q^{rs}$$
+For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
+
+Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
+
+
 
 ### WI Test
 
-```{r}
+```{r extent}
 WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
@@ -92,7 +165,7 @@ WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
 WItest_primary <- c("55009", "55025", "55079", "17031", "27053")
 names(WItest_primary) <- WItest_primary
 
-WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
+#WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
 
 available_indicators_lab <- c("Simple Similarity Index", 
                               "Relative Similarity Index",  
@@ -109,7 +182,7 @@ sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_ma
 
 
 
-```{r}
+```{r maps}
 
 g <- vector(mode='list', length=length(Sim_list))
 names(g) <- sim_levels
@@ -173,75 +246,10 @@ g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]],
 
 
 
-```{r}
-mapsim <- function(similarity, industry){ 
-  
-  dataset <- Sim_list[[similarity]][[industry]][WItest_rural, WItest_primary]
-
-  mincom <- cbind(place = rownames(dataset), match = colnames(dataset)[apply(dataset, 1, which.min)], min_value = apply(dataset, 1, min)) %>% as.data.frame()
-  mincom$min_value <- as.numeric(mincom$min_value)
-  mincom %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-  mincom <- rbind(  mincom, as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[similarity]][[industry]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
-  mincom$Nor <- as.numeric(mincom$Nor)
-  
-  
-  fdataset <- inner_join(TIGER_RUCC, mincom, by = "place", copy = TRUE)
-  fdataset %<>% mutate(match_name = fdataset$NAME[match(match, fdataset$place)])
-  
-  
-ggplot( fdataset ) +
-    geom_sf(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
-    guides(alpha = "none") +
-    coord_sf() +
-    theme_void() +
-    labs(fill = "Regional Cluster") +
-    scale_fill_brewer(palette = "Set1",
-                      labels = (fdataset  %>% filter(place %in% unique(fdataset$match) ) %>% pull(County_Name)) ) 
-  
-  
-    
-}
-
-```
-
-
-```{r}
-
-df <- function(similarity, industry){ 
-  
-  dataset <- Sim_list[[similarity]][[industry]][WItest_rural, WItest_primary]
-
-  mincom <- cbind(place = rownames(dataset), match = colnames(dataset)[apply(dataset, 1, which.min)], min_value = apply(dataset, 1, min)) %>% as.data.frame()
-  mincom$min_value <- as.numeric(mincom$min_value)
-  mincom %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-  mincom <- rbind(  mincom, as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[similarity]][[industry]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
-  mincom$Nor <- as.numeric(mincom$Nor)
-  
-  
-  fdataset <- inner_join(TIGER_RUCC, mincom, by = "place", copy = TRUE)
-  fdataset %<>% mutate(match_name = fdataset$NAME[match(match, fdataset$place)])
-
-  }
-
-```
-
-```{r}
-
-#mapsim("Sim_mat", "Sector") 
-
-
-manipulateWidget(
-  mapsim(similarity, industry),
-  similarity = mwSelect(c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")),
-  industry = mwSelect(c("Sector", "Summary", "Detail"))
-)
-
-```
-
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
 
-```{r}
+```{r new total output}
 
 
 WI_match <- vector(mode='list', length=length(Total_mat))
@@ -276,7 +284,7 @@ for (i in 1:length(Sim_list)){
 ```
 
 
-```{r}
+```{r histograms}
 
 primary_c <- vector(mode='list', length=length(Total_mat))
 names(primary_c) <- industry_levels
@@ -384,7 +392,7 @@ g[[6]]
 
 
 
-```{r}
+```{r maps with impedance}
 
 sg <- vector(mode='list', length=length(Sim_list))
 names(sg) <- sim_levels
@@ -444,9 +452,117 @@ sg[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]],
 ```
 
 
+```{r functioning}
+
+
+Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+names(Sim_list) <- sim_levels
+industry_levels <- c("Sector", "Summary", "Detail")
+
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
+WItest_primary <- c("55009", "55025", "55079", "17031", "27053")
+names(WItest_primary) <- WItest_primary
+
+available_indicators_lab <- c("Simple Similarity Index", 
+                              "Relative Similarity Index",  
+                              "Import Similarity Index", 
+                              "Import Similarity Index - Net Exports", 
+                              "Relative Import Similarity Index", 
+                              "Relative Import Similarity Index - Net Exports")
+
+
+               
+
+mapr <- function(list_of_sim_specifications = Sim_list, 
+                 sim_specification_names = sim_levels, 
+                 industry_level_names = names(Total_mat),
+                 rural_extent = WItest_rural,
+                 primary_extent = WItest_primary,
+                 impedance = Q_mat,
+                 space_vec = TIGER_RUCC){
+  
+      sg <<- vector(mode='list', length=length(list_of_sim_specifications))
+      names(sg) <- names(list_of_sim_specifications)
+      title <- sg
+      Sim <- vector(mode='list', length=length(industry_level_names))
+      names(Sim) <- industry_level_names
+      RowMin <- Sim
+      h1m <- Sim
+      p <- Sim
+      subtitle <- Sim
+  
+  for (i in 1:length(list_of_sim_specifications)){
+    for (l in 1:length(industry_level_names)){
+          
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
+        
+        RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
+                             match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
+                             min_value = apply(Sim[[l]], 1, min)
+                             ) %>% as.data.frame()
+        RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+        RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+        RowMin[[l]] <- rbind(RowMin[[l]], 
+                             as.data.frame(cbind(place = primary_extent, 
+                                                 match = primary_extent, 
+                                                 min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
+                                                 Nor = rep(c(1), each=length(primary_extent)) 
+                                                )
+                                          )
+                             )
+        RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
+        
+        h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
+        h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+        
+        p[[l]] <- ggplot( h1m[[l]] ) +
+                  geom_sf_interactive(aes(fill = match, 
+                                          alpha = Nor, 
+                                          tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
+                                          data_id = place
+                                          ), 
+                                          color = NA
+                                      ) +
+                  guides(alpha = "none") +
+                  coord_sf() +
+                  theme_void() +
+                  labs(fill = "Regional Cluster") +
+                  scale_fill_brewer(palette = "Set1",
+                                    labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+        }
+        
+        title[[i]] <- ggdraw() + 
+          draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
+          theme(plot.margin = margin(0, 0, 0, 7))
+
+        sg[[i]] <- girafe(ggobj = plot_grid(p[[1]], 
+                                            p[[2]], 
+                                            p[[3]], 
+                                            labels = c("Sector", "Summary", "Detail")
+                                            ),
+                          options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                         opts_hover_inv(css = "opacity:0.9;"),
+                                         opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                                         )
+                          )
+}
+ 
+} 
+
+```
+
+
+
+
+
 "New Regional-level Total Output Table":  $\mathbf{X}$
 
-```{r}
+```{r new total output with impedance}
 
 
 WI_match <- vector(mode='list', length=length(Total_mat))
@@ -519,6 +635,21 @@ sg[[6]]
 
 
 
+
+### WI Test - Natural
+
+```{r extent natural bounds}
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
+WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+names(WItest_primary) <- WItest_primary
+
+#WItest_all <- c(WItest_primary) %>% as.vector()
+
+```
 
 
 
