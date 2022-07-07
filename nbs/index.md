@@ -37,12 +37,20 @@ Exploring economic dynamics in rural areas of the United States.
     - The .Rproj file will also look for a <renv.lock> file to maintain environment version and structure, which makes the project Isolated, Portable, and Reproducible. 
     
 - Next navigate to the desired script or notebook using the Files tab (bottom right window in R), or File in computer tool bar (left top most), or ⌘O.  
-    - For more on the relationships of project scripts and notebooks see the *repo_structure* [schematic](https://docs.google.com/drawings/d/1z4iLABHF8wnfhSumAU7tXr68zDFd4wUfL8vclrVioBs/edit). 
-    - For example, in the /nbs folder is an RMarkdown notebook <io_for_dummies.Rmd> that is a reference page for all things Input-Output related. 
-    
+    - For more on the relationships of project scripts and notebooks located in the /nbs folder see the *repo_structure* [schematic](https://docs.google.com/drawings/d/1z4iLABHF8wnfhSumAU7tXr68zDFd4wUfL8vclrVioBs/edit). 
     - As a rule simple .R scripts will generate function, download raw data, and import, clean, and generate new data products. Whereas, .Rmd and .qmd notebooks will provide a narative with accompanying visualizations into a human readible and self contained .html output. 
-    
-- To get a clear reset of all data and generated objects simply delete the /data folder. 
+        - The script <rural_typology_r_functions.R> is a repository for user generated functions used by all other project files.  
+        - The script <rural_typology_r_data_sources.R> downloads all outside data used in the project. 
+        - The script <rural_typology_r_data_import.R> imports all downloaded data used in the project as R data objects.
+        - The script <rural_typology_r_data_clean.R> cleans and reshapes imported data used in the project.
+        - The script <rural_typology_r_data_generation.R> generates new data products (e.g., similarity index specifications) used in the project.       
+        
+        - The notebook <io_for_dummies.Rmd> is a reference page for all things Input-Output related. 
+        - The notebook <toy_stoy.Rmd> is a testing ground for Toy model specifications with numerical examples. 
+        - The notebook <maps_io_similarity_wi.Rmd> is an attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
+        - The notebook <maps_io_similarity_national.qmd> is an attempt at mapping the various topological similarity index relationships at the national level. 
+    - All data and generated R objects are stored in the /data and the /data/robjs files respectively. 
+    - To get a clear reset of all data and generated objects simply delete the /data folder. 
     
 
 +++
