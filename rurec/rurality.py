@@ -9,7 +9,7 @@ import pandas as pd
 import geopandas
 
 from .pubdata import geography, ers_rurality
-from .reseng.util import download_file
+from .reseng import util
 from .reseng.nbd import Nbd
 
 nbd = Nbd('rurec')
@@ -35,7 +35,7 @@ def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(url, local.parent, local.name)
+        util.download_file(url, local.parent, local.name)
     return local
 
 
@@ -94,6 +94,7 @@ def get_cbsa_delin_src(year: int):
         2004: f'{base}2004/historical-delineation-files/list3.xls',
         2003: f'{base}2003/historical-delineation-files/0312cbsas-csas.xls',
         # 2003-june: f'{base}2003/historical-delineation-files/030606omb-cbsa-csa.xls',
+        1993: f'{base}1993/historical-delineation-files/93mfips.txt'
     }
     
     assert year in urls, f'CBSA delineation not available for {year}.'
@@ -104,11 +105,14 @@ def get_cbsa_delin_src(year: int):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(url, local.parent, local.name)
+        util.download_file(url, local.parent, local.name)
     return local
 
 def get_cbsa_delin_df(year: int):
     f = get_cbsa_delin_src(year)
+    
+    if year == 1993:
+        return _prep_cbsa_delin_df_1993(f)
     
     # number of rows to skip at top and bottom varies by year
     if year in [2003, 2013, 2015, 2017, 2018, 2020]:
@@ -183,6 +187,28 @@ def get_cbsa_delin_df(year: int):
     return df
 
 
+def _prep_cbsa_delin_df_1993(src_file):
+
+    df = pd.read_fwf(src_file, skiprows=22, skipfooter=29, dtype=str, header=None,
+                     colspecs=[(0, 4), (8, 12), (16, 18), (24, 26), (26, 29), (32, 33), (40, 45), (48, 106)],
+                     names=['MSA_CMSA_CODE', 'PRIMARY_MSA_CODE', 'ALT_CMSA_CODE',
+                            'STATE_CODE', 'COUNTY_CODE', 'CENTRAL_OUTLYING',
+                            'TOWN_CODE', 'NAME'])
+
+    assert not util.tag_invalid_values(df['MSA_CMSA_CODE'], notna=True, nchar=4, number=True).any()
+    assert not util.tag_invalid_values(df['PRIMARY_MSA_CODE'], nchar=4, number=True).any()
+    assert not util.tag_invalid_values(df['ALT_CMSA_CODE'], nchar=2, number=True).any()
+    assert not util.tag_invalid_values(df['STATE_CODE'], nchar=2, number=True).any()
+    assert not util.tag_invalid_values(df['COUNTY_CODE'], nchar=3, number=True).any()
+    assert not util.tag_invalid_values(df['CENTRAL_OUTLYING'], cats=['1', '2']).any()
+    assert not util.tag_invalid_values(df['TOWN_CODE'], nchar=5, number=True).any()
+    assert not util.tag_invalid_values(df['NAME'], notna=True).any()
+
+    df['CENTRAL_OUTLYING'] = df['CENTRAL_OUTLYING'].map({'1': 'central', '2': 'outlying'})
+
+    return df
+
+
 def get_cbsa_shape_src(year=2021, scale='20m'):
     """Download and return path to CBSA boundary shapefile."""
 
@@ -203,7 +229,7 @@ def get_cbsa_shape_src(year=2021, scale='20m'):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(urls[(year, scale)], local.parent, local.name)
+        util.download_file(urls[(year, scale)], local.parent, local.name)
     return local
 
 
@@ -254,7 +280,7 @@ def get_far_src(year: typing.Literal[2000, 2010] = 2010):
         
     if local.exists():
         return local
-    return download_file(url, local.parent, local.name)
+    return util.download_file(url, local.parent, local.name)
 
 def get_far_df(year: typing.Literal[2000, 2010] = 2010):
     assert year in [2000, 2010]

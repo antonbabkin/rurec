@@ -41,7 +41,7 @@ import pandas as pd
 import geopandas
 
 from rurec.pubdata import geography, ers_rurality
-from rurec.reseng.util import download_file
+from rurec.reseng import util
 from rurec.reseng.nbd import Nbd
 
 nbd = Nbd('rurec')
@@ -54,6 +54,8 @@ PATH = {
 ```
 
 ```{code-cell} ipython3
+:tags: []
+
 # notebook-only imports
 import shapely
 import folium
@@ -134,7 +136,7 @@ def get_source_ua(year: typing.Literal[2000, 2010] = 2010):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(url, local.parent, local.name)
+        util.download_file(url, local.parent, local.name)
     return local
 
 
@@ -225,6 +227,47 @@ Multiple sets of delineation files exist:
 - metropolitan divisions, which are a county or group of counties (or equivalent entities) delineated within a larger metropolitan statistical area, provided that the larger metropolitan statistical area contains a single core with a population of at least 2.5 million and other criteria are met;
 - NECTA divisions.
 
+## Revisions
+
+Changes chiefly consist of inclusion of new counties as they reach required urban area population or commute flows to neighboring metro areas.
+The first delineation was created from 1950 decennial census.
+The standards for delineating the areas are reviewed and revised once every ten years, prior to each decennial census.
+Commute flow updates happen every ten years.
+Population driven updates happen more frequently, based on data from American Community Survey and Population Estimates Program.
+
+2000 revision (first delineation published in 2003) introduced micropolitan areas.
+
+
+| Revision | Census |
+|----------|--------|
+| Mar 2020 | 2010   |
+| Sep 2018 | 2010   |
+| Apr 2018 | 2010   |
+| Aug 2017 | 2010   |
+| Jul 2015 | 2010   |
+| Feb 2013 | 2010   |
+| Dec 2009 | 2000   |
+| Nov 2008 | 2000   |
+| Nov 2007 | 2000   |
+| Dec 2006 | 2000   |
+| Dec 2005 | 2000   |
+| Nov 2004 | 2000   |
+| Dec 2003 | 2000   |
+| Jun 2003 | 2000   |
+| Jun 1999 | 2000*  |
+| Jun 1993 | 1990** |
+| Jun 1990 | 1990*  |
+| Jun 1983 | 1980** |
+| Jun 1981 | 1980*  |
+| Apr 1973 | 1980** |
+| Feb 1971 | 1970*  |
+| Oct 1963 | 1960** |
+| Nov 1960 | 1960*  |
+| Oct 1950 | 1950*  |
+
+\* Delineations used for presenting metropolitan area statistics in upcoming Census publications.  
+\** Delineations based on application of metropolitan area standards to preceding census data.
+
 ```{code-cell} ipython3
 :tags: [nbd-module]
 
@@ -250,6 +293,7 @@ def get_cbsa_delin_src(year: int):
         2004: f'{base}2004/historical-delineation-files/list3.xls',
         2003: f'{base}2003/historical-delineation-files/0312cbsas-csas.xls',
         # 2003-june: f'{base}2003/historical-delineation-files/030606omb-cbsa-csa.xls',
+        1993: f'{base}1993/historical-delineation-files/93mfips.txt'
     }
     
     assert year in urls, f'CBSA delineation not available for {year}.'
@@ -260,11 +304,14 @@ def get_cbsa_delin_src(year: int):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(url, local.parent, local.name)
+        util.download_file(url, local.parent, local.name)
     return local
 
 def get_cbsa_delin_df(year: int):
     f = get_cbsa_delin_src(year)
+    
+    if year == 1993:
+        return _prep_cbsa_delin_df_1993(f)
     
     # number of rows to skip at top and bottom varies by year
     if year in [2003, 2013, 2015, 2017, 2018, 2020]:
@@ -339,6 +386,39 @@ def get_cbsa_delin_df(year: int):
     return df
 ```
 
+## 1993 delineation
+
+1993 delineation is hierarchical "staircase" table, CMSA -> MSA -> county -> city.
+CMSA = Consolidated Metropolitan Statistical Area, a collection of MSA's.
+First column is both for CMSA and MSA, and when it is CMSA, then MSA components are in the PRIMARY_MSA_CODE.
+
+It seems that sometimes MSA boundary is going though the county, and then county NAME has "(pt.)" in it, and is followed by county towns that belong to the MSA. In that case, only towns - and not the county itself - are classified as central or outlying.
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def _prep_cbsa_delin_df_1993(src_file):
+
+    df = pd.read_fwf(src_file, skiprows=22, skipfooter=29, dtype=str, header=None,
+                     colspecs=[(0, 4), (8, 12), (16, 18), (24, 26), (26, 29), (32, 33), (40, 45), (48, 106)],
+                     names=['MSA_CMSA_CODE', 'PRIMARY_MSA_CODE', 'ALT_CMSA_CODE',
+                            'STATE_CODE', 'COUNTY_CODE', 'CENTRAL_OUTLYING',
+                            'TOWN_CODE', 'NAME'])
+
+    assert not util.tag_invalid_values(df['MSA_CMSA_CODE'], notna=True, nchar=4, number=True).any()
+    assert not util.tag_invalid_values(df['PRIMARY_MSA_CODE'], nchar=4, number=True).any()
+    assert not util.tag_invalid_values(df['ALT_CMSA_CODE'], nchar=2, number=True).any()
+    assert not util.tag_invalid_values(df['STATE_CODE'], nchar=2, number=True).any()
+    assert not util.tag_invalid_values(df['COUNTY_CODE'], nchar=3, number=True).any()
+    assert not util.tag_invalid_values(df['CENTRAL_OUTLYING'], cats=['1', '2']).any()
+    assert not util.tag_invalid_values(df['TOWN_CODE'], nchar=5, number=True).any()
+    assert not util.tag_invalid_values(df['NAME'], notna=True).any()
+
+    df['CENTRAL_OUTLYING'] = df['CENTRAL_OUTLYING'].map({'1': 'central', '2': 'outlying'})
+
+    return df
+```
+
 ```{code-cell} ipython3
 :tags: []
 
@@ -347,15 +427,18 @@ def get_cbsa_delin_df(year: int):
 #| layout-nrow: 2
 t0 = {}
 t1 = {}
-for year in [2003, 2004, 2005, 2006, 2007, 2008, 2009, 2013, 2015, 2017, 2018, 2020]:
+for year in [1993, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2013, 2015, 2017, 2018, 2020]:
     df = get_cbsa_delin_df(year)
+    if year == 1993:
+        df = df.dropna(subset='COUNTY_CODE').drop_duplicates(['STATE_CODE', 'COUNTY_CODE'])
+        df['METRO_MICRO'] = 'metro'
     t0[year] = df['METRO_MICRO'].value_counts(dropna=False)
     if 'CENTRAL_OUTLYING' in df:
         t1[year] = df[['METRO_MICRO', 'CENTRAL_OUTLYING']].value_counts(dropna=False)
 t0 = pd.concat(t0, axis=1)
-t0.loc['all'] = t0.sum()
+t0 = t0.fillna(0).astype(int)
 display(t0)
-t1 = pd.concat(t1, axis=1).sort_index()
+t1 = pd.concat(t1, axis=1).sort_index().fillna(0).astype(int)
 t1
 ```
 
@@ -384,7 +467,7 @@ def get_cbsa_shape_src(year=2021, scale='20m'):
         
     if not local.exists():
         print(f'File "{local}" not found, attempting download.')
-        download_file(urls[(year, scale)], local.parent, local.name)
+        util.download_file(urls[(year, scale)], local.parent, local.name)
     return local
 ```
 
@@ -623,7 +706,7 @@ def get_far_src(year: typing.Literal[2000, 2010] = 2010):
         
     if local.exists():
         return local
-    return download_file(url, local.parent, local.name)
+    return util.download_file(url, local.parent, local.name)
 
 def get_far_df(year: typing.Literal[2000, 2010] = 2010):
     assert year in [2000, 2010]
