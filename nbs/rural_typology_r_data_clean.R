@@ -5,6 +5,10 @@ library(rprojroot)
 library(dplyr)
 library(geosphere)
 library(spdep)
+library(rlog)
+
+# Display start time
+log_info("Define data clean start")
 
 # Connect  and  parse  code  from  another  file 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_import.R"))
@@ -124,6 +128,8 @@ saver(QCEW_2020_Sum_XBEA)
 rm(QCEW_2020_Sum_XBEA)
 }
 
+log_info("BEA/QCEW 2020 Summary complete")
+
 # Process  and  parse  hierarchical  structure  of  CBP  data
 if (!file.exists(file.path(data_dir, "CBP_2019_C"))){
   CBP_2019_C <- file.path(data_dir, "CBP_2019") %>% readRDS() %>% subset(select = c(fipstate, fipscty, place, naics, emp, qp1, ap, est)) %>% filter(naics == "------")
@@ -218,6 +224,7 @@ if (!file.exists(file.path(data_dir, "CBP_2019_Sector_XBEA"))){
 saver(CBP_2019_Sector_XBEA)
 rm(CBP_2019_Sector_XBEA)
 }
+log_info("BEA/CBP 2019 Sector complete")
 
 ### All unique "related NAICS codes" from BEA industry code detail level economic accounts
 Naics_Det = c(11111,  11112,  11113,  11114,  11115,  11116,  11119,   1112,   1113,   1114,   1119,  11212,  11211,  11213,   1123,   1122,   1124,   1125,   1129, 113, 114, 115,
@@ -647,7 +654,7 @@ if (!file.exists(file.path(data_dir, "CBP_2019_Detail_XBEA"))){
 saver(CBP_2019_Detail_XBEA) 
 rm(CBP_2019_Detail_XBEA, CBP_2019_Detail_XBEAt)
 }
-
+log_info("BEA/CBP 2019 Detail complete")
 
 # Produce  Distance  Matrix
 if (!file.exists(file.path(data_dir, "Dist_mat"))){
@@ -655,6 +662,7 @@ if (!file.exists(file.path(data_dir, "Dist_mat"))){
   rownames(Dist_mat) = colnames(Dist_mat) <- file.path(data_dir, "TIGERData") %>% readRDS() %>%  .$place
 saver(Dist_mat)
 }
+log_info("Distance Matrix complete")
 
 # Produce  Decay/Impedance  Matrix
 if (!file.exists(file.path(data_dir, "QI_mat"))){
@@ -665,14 +673,16 @@ if (!file.exists(file.path(data_dir, "QI_mat"))){
 saver(QI_mat)
 }
 rm(Dist_mat, QI_mat)
+log_info("Impedance Matrix complete")
 
-## Produce  Proximity  Matrix
+## Produce Proximity  Matrix
 if (!file.exists(file.path(data_dir, "Prox_mat"))){
   Prox_mat <-  file.path(data_dir, "TIGERData") %>% readRDS() %>% poly2nb(queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
   colnames(Prox_mat) <- rownames(Prox_mat)
 saver(Prox_mat)
 rm(Prox_mat)
 }
+log_info("Proximity Matrix complete")
 
 # TIGER  and RUCC
 if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
@@ -684,6 +694,8 @@ if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
 saver(TIGER_RUCC)
 rm(TIGER_RUCC)
 }
+log_info("TIGER/RUCC merge complete")
+
 
 # Parse  TIGER  and  CBP  2019  county  overlap
 if (!file.exists(file.path(data_dir, "TIGER_CBP"))){
@@ -693,6 +705,8 @@ if (!file.exists(file.path(data_dir, "TIGER_CBP"))){
 saver(TIGER_CBP)
 rm(TIGER_CBP)
 }
+log_info("TIGER/CBP 2019 merge complete")
+
 
 #Parse  TIGER/CBP  and  RUCC  crosswalk
 if (!file.exists(file.path(data_dir, "TIGER_CBP_RUCC"))){
@@ -703,6 +717,8 @@ if (!file.exists(file.path(data_dir, "TIGER_CBP_RUCC"))){
 saver(TIGER_CBP_RUCC)
 rm(TIGER_CBP_RUCC)
 }
+log_info("TIGER/CBP/RUCC merge complete")
+
 
 # Parse  TIGER  and  QCED  crosswalk
 if (!file.exists(file.path(data_dir, "QCEW_2020_places_Summary"))){
@@ -711,7 +727,6 @@ if (!file.exists(file.path(data_dir, "QCEW_2020_places_Summary"))){
 saver(QCEW_2020_places_Summary)
 rm(QCEW_2020_places_Summary)
 }
-
 if (!file.exists(file.path(data_dir, "TIGER_QCEW"))){
   TIGER_QCEW <- inner_join(readRDS(file.path(data_dir, "TIGERData")), readRDS(file.path(data_dir, "QCEW_2020_places_Summary")), by = "place")
   TIGER_QCEW  <- TIGER_QCEW[order(TIGER_QCEW$place), ]
@@ -719,8 +734,9 @@ if (!file.exists(file.path(data_dir, "TIGER_QCEW"))){
 saver(TIGER_QCEW)
 rm(TIGER_QCEW)
 }
+log_info("TIGER/QCED merge complete")
 
-#Parse  TIGER/CBP  and  RUCC  crosswalk
+#Parse  TIGER/QCEW  and  RUCC  crosswalk
 if (!file.exists(file.path(data_dir, "TIGER_QCEW_RUCC"))){
   TIGER_QCEW_RUCC <- inner_join(readRDS(file.path(data_dir, "TIGER_QCEW")),  readRDS(file.path(data_dir, "RUCCData")), by = "place")
   rownames(TIGER_QCEW_RUCC) <- TIGER_QCEW_RUCC$place
@@ -729,21 +745,14 @@ if (!file.exists(file.path(data_dir, "TIGER_QCEW_RUCC"))){
 saver(TIGER_QCEW_RUCC)
 rm(TIGER_QCEW_RUCC)
 }
+log_info("TIGER/QCEW/RUCC merge complete")
 
 # Remove clutter
 rm(BEA_Details, BEA_Sectors, BEA_Summary, data_dir, Naics_Det)
 
+# Display end time
+log_info("Define data clean end")
 
-
-# Import  CBP  data  using  separate  Python  pre-processing (If  trouble  restart  R load  reticulate load  conda  env "rurec")
-# library(reticulate)
-# # use_condaenv('rurec')
-# cbp <- import('rurec.cbp')
-# regional_data_py <- cbp$get_df("state", 2019L)
-# head(regional_data_py)
-# 
-# CBP <- cbp$get_df("county", 2019L)
-# CBP %<>% filter(industry != "-")
 
 
 

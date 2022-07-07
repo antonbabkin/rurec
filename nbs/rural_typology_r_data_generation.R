@@ -2,6 +2,10 @@
 
 # Load and attach necessary packages
 library(rprojroot)
+library(rlog)
+
+# Display start time
+log_info("Define data generation start")
 
 # Connect  and  parse  code  from  another  file 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_clean.R"))
@@ -96,6 +100,7 @@ if (!file.exists(file.path(data_dir, "Total_mat"))){
   saver(Total_mat)
   rm(Total_mat)
 }
+log_info("Total matrix complete")
   
 #Extract county level industry employment data and reshape to industry-by-county matrix
 if (!file.exists(file.path(data_dir, "Xemp_mat"))){
@@ -117,7 +122,7 @@ if (!file.exists(file.path(data_dir, "Xemp_mat"))){
   saver(Xemp_mat)
   rm(Xemp_mat)
 }  
-  
+log_info("Employment matrix complete")
   
 #Extract county level industry payroll data and reshape to industry-by-county matrix
 if (!file.exists(file.path(data_dir, "Xpay_mat"))){
@@ -139,7 +144,7 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
   saver(Xpay_mat)
   rm(Xpay_mat)
 }  
-
+log_info("Payroll matrix complete")
 
 #### Direct requirements matrices (Technical Coefficients) 
 if (!file.exists(file.path(data_dir, "Direct_mat"))){
@@ -156,7 +161,7 @@ if (!file.exists(file.path(data_dir, "Direct_mat"))){
   saver(Direct_mat)
   rm(Direct_mat, Total_mat)
 } 
-
+log_info("Direct requirements matrix complete")
 
 #### Trimming distance decay matrix to only counties with economic data (varies by industry level specification)   
 if (!file.exists(file.path(data_dir, "Q_mat"))){
@@ -187,7 +192,7 @@ if (!file.exists(file.path(data_dir, "Q_mat"))){
   saver(Q_mat)
   rm(Q_mat, Total_mat, CBP_2019_Sector_XBEA, QCEW_2020_Sum_XBEA, CBP_2019_Detail_XBEA, QI_mat, TIGERData, RUCCData)
 }
-
+log_info("Distance decay matrix triming complete")
 
 
 ############ Input Needs
@@ -207,6 +212,7 @@ if (!file.exists(file.path(data_dir, "Input_mat"))){
   saver(Input_mat)
   rm(Input_mat, Total_mat, Direct_mat, Xpay_mat)
 }
+log_info("Input Needs matrix complete")
 
 ############ Relative Input Needs
 if (!file.exists(file.path(data_dir, "Input_mat_rel"))){
@@ -226,6 +232,7 @@ if (!file.exists(file.path(data_dir, "Input_mat_rel"))){
   saver(Input_mat_rel)
   rm(Input_mat_rel, Total_mat, Direct_mat, Input_mat)
 }
+log_info("Relative Input Needs matrix complete")
 
 ############ Import Input Needs
 if (!file.exists(file.path(data_dir, "Input_mat_imp"))){
@@ -244,6 +251,7 @@ if (!file.exists(file.path(data_dir, "Input_mat_imp"))){
   saver(Input_mat_imp)
   rm(Input_mat_imp, Total_mat, Xpay_mat, Input_mat)
 }
+log_info("Import Input Needs matrix complete")
 
 ############ Net Exports 
 if (!file.exists(file.path(data_dir, "Input_mat_exp"))){
@@ -262,6 +270,7 @@ if (!file.exists(file.path(data_dir, "Input_mat_exp"))){
   saver(Input_mat_exp)
   rm(Input_mat_exp, Total_mat, Xpay_mat, Input_mat)
 }
+log_info("Net Exports matrix complete")
 
 ############ Relative Import Input Needs
 if (!file.exists(file.path(data_dir, "Input_mat_imp_rel"))){
@@ -282,7 +291,7 @@ if (!file.exists(file.path(data_dir, "Input_mat_imp_rel"))){
 saver(Input_mat_imp_rel)
 rm(Input_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
 }
-
+log_info("Relative Import Input Needs matrix complete")
 
 
 ############ Similarity Index
@@ -313,6 +322,8 @@ if (!file.exists(file.path(data_dir, "Sim_mat"))){
   saver(Sim_mat)
   rm(Sim_mat, Total_mat, Xpay_mat, Input_mat)
 }
+log_info("Similarity Index matrix complete")
+
 
 ############ Relative Similarity Index
 if (!file.exists(file.path(data_dir, "Sim_mat_rel"))){
@@ -341,7 +352,7 @@ if (!file.exists(file.path(data_dir, "Sim_mat_rel"))){
   saver(Sim_mat_rel)
   rm(Sim_mat_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
 }
-
+log_info("Relative Similarity Index matrix complete")
 
 ############ Import Similarity Index
 if (!file.exists(file.path(data_dir, "Sim_mat_imp"))){
@@ -370,9 +381,10 @@ if (!file.exists(file.path(data_dir, "Sim_mat_imp"))){
   saver(Sim_mat_imp)
   rm(Sim_mat_imp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp)
 }
+log_info("Import Similarity Index matrix complete")
 
 
-############ *Import Similarity Index - Net Exports
+############ Import Similarity Index - Net Exports
 if (!file.exists(file.path(data_dir, "Sim_mat_exp"))){
   
   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
@@ -400,6 +412,8 @@ if (!file.exists(file.path(data_dir, "Sim_mat_exp"))){
   saver(Sim_mat_exp)
   rm(Sim_mat_exp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
 }
+log_info("Import Similarity Index - Net Exports matrix complete")
+
 
 ############ Relative Import Similarity Index
 if (!file.exists(file.path(data_dir, "Sim_mat_imp_rel"))){
@@ -428,8 +442,10 @@ if (!file.exists(file.path(data_dir, "Sim_mat_imp_rel"))){
   saver(Sim_mat_imp_rel)
   rm(Sim_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel)
 }
+log_info("Relative Import Similarity Index matrix complete")
 
-############ *Relative Import Similarity Index - Net Exports
+
+############ Relative Import Similarity Index - Net Exports
 if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
   
   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
@@ -456,26 +472,20 @@ if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
   saver(Sim_mat_exp_rel)
   rm(Sim_mat_exp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel, Input_mat_exp)
 }
+log_info("Relative Import Similarity Index - Net Exports matrix complete")
 
 
 # Remove clutter
 rm(data_dir, industry_levels, i, j, l)
 
 
-
-# Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
-# names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
-
+# Display end time
+log_info("Define data generation end")
 
 ##### prox test
 #test <- Sim_mat_imp_rel*Prox_mat
 #test <- replace(test, test<=0, Inf)
 
 
-
-####### OLD Saved Data for use in other renderable files
-# save.image(file=file.path(find_rstudio_root_file(), "data", "all_data.RData"))
-# save(list = c("Sim_list", "TIGER_RUCC", "Direct_mat", "Total_mat", "Xpay_mat", "Sim_mat",  "Sim_mat_rel", "Sim_mat_imp", "Sim_mat_imp_rel", "Sim_mat_exp", "Sim_mat_exp_rel", "Q_mat", "Dist_mat"),
-#      file=file.path(find_rstudio_root_file(), "data", "sub_data.RData"))
 
 

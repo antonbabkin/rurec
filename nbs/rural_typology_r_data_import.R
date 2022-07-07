@@ -4,6 +4,10 @@
 library(rprojroot)
 library(magrittr)
 library(sf)
+library(rlog)
+
+# Display start time
+log_info("Define data import start")
 
 # Connect and parse code from another file 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_sources.R"))
@@ -23,6 +27,7 @@ if (!file.exists(file.path(data_dir, "IO_tables"))){
   )
 }
 saver(IO_tables)
+log_info("IO tables import complete")
 
 
 # Import CBP data 2019
@@ -36,7 +41,7 @@ if (!file.exists(file.path(data_dir, "CBP_2019"))){
   }
 }
 saver(CBP_2019)
-
+log_info("CBP 2019 import complete")
 
 # Import CBP data 2012 
 if (!file.exists(file.path(data_dir, "CBP_2012"))){
@@ -49,6 +54,7 @@ if (!file.exists(file.path(data_dir, "CBP_2012"))){
   }
 }
 saver(CBP_2012)
+log_info("CBP 2012 import complete")
 
 #Import 2020 BLS Quarterly Census of Employment and Wages (QCEW) 
 if (!file.exists(file.path(data_dir, "QCEW_2020"))){
@@ -57,6 +63,7 @@ if (!file.exists(file.path(data_dir, "QCEW_2020"))){
   }
 }
 saver(QCEW_2020)
+log_info("QCWEW 2020 import complete")
 
 # Import TIGER data 
 if (!file.exists(file.path(data_dir, "TIGERData"))){
@@ -68,6 +75,7 @@ if (!file.exists(file.path(data_dir, "TIGERData"))){
   }
 }
 saver(TIGERData)
+log_info("TIGER import complete")
 
 # Import RUCA tables 
 if (!file.exists(file.path(data_dir, "RUCAData"))){
@@ -76,6 +84,7 @@ if (!file.exists(file.path(data_dir, "RUCAData"))){
   }
 }
 saver(RUCAData)
+log_info("RUCA import complete")
 
 # Import RUCC tables 
 if (!file.exists(file.path(data_dir, "RUCCData"))){
@@ -86,6 +95,7 @@ RUCCData$place <- RUCCData$FIPS
 }
 ####  Note:  2 counties (02158, 46102) are not common to TIGER_CBP in RUCCData
 saver(RUCCData)
+log_info("RUCC import complete")
 
 # Import UIC tables 
 if (!file.exists(file.path(data_dir, "UICData"))){
@@ -95,11 +105,13 @@ if (!file.exists(file.path(data_dir, "UICData"))){
 UICData$place <- UICData$FIPS
 }
 saver(UICData)
+log_info("UIC import complete")
 
 # Remove clutter
 rm(CBP_2012, CBP_2019, IO_tables, QCEW_2020, TIGERData, RUCAData, RUCCData, UICData, data_dir)
 
-
+# Display end time
+log_info("Define data import end")
 
 
 
