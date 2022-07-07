@@ -31,7 +31,7 @@ library(tools)
 This R Markdown document is a reference page for all things Input-Output related.
 
 
-::: panel-tabset
+::: {.panel-tabset}
 
 ### IO Fundamentals
 
