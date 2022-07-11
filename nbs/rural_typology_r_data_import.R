@@ -108,7 +108,7 @@ saver(UICData)
 log_info("UIC import complete")
 
 # Remove clutter
-rm(CBP_2012, CBP_2019, IO_tables, QCEW_2020, TIGERData, RUCAData, RUCCData, UICData, data_dir)
+rm(CBP_2012, CBP_2019, IO_tables, QCEW_2020, TIGERData, RUCAData, RUCCData, UICData, data_dir) %>% suppressWarnings()
 
 # Display end time
 log_info("Define data import end")

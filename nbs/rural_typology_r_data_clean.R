@@ -16,7 +16,8 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_import.
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
 
-# QCEW  2020  subseted  and  cleaned  into  private county  level  observations  and  pertinent  variables
+
+# QCEW  2020  subsetted  and  cleaned  into  private county  level  observations  and  pertinent  variables
 if (!file.exists(file.path(data_dir, "QCEW_2020_Sum"))){
   QCEW_2020_Sum <- file.path(data_dir, "QCEW_2020") %>% readRDS() 
   QCEW_2020_Sum %<>% filter(agglvl_code == 75)
@@ -672,7 +673,7 @@ if (!file.exists(file.path(data_dir, "QI_mat"))){
   QI_mat <- 2/(exp(-(Dist_mat/1000000)) + exp(Dist_mat/1000000))
 saver(QI_mat)
 }
-rm(Dist_mat, QI_mat)
+rm(Dist_mat, QI_mat) %>% suppressWarnings()
 log_info("Impedance Matrix complete")
 
 ## Produce Proximity  Matrix
@@ -748,7 +749,7 @@ rm(TIGER_QCEW_RUCC)
 log_info("TIGER/QCEW/RUCC merge complete")
 
 # Remove clutter
-rm(BEA_Details, BEA_Sectors, BEA_Summary, data_dir, Naics_Det)
+rm(BEA_Details, BEA_Sectors, BEA_Summary, data_dir, Naics_Det) %>% suppressWarnings()
 
 # Display end time
 log_info("Define data clean end")

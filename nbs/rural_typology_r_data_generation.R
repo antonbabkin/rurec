@@ -98,7 +98,7 @@ if (!file.exists(file.path(data_dir, "Total_mat"))){
     
     names(Total_mat) <- industry_levels
   saver(Total_mat)
-  rm(Total_mat)
+  rm(Total_mat, Detail_drop_list)
 }
 log_info("Total matrix complete")
   
@@ -476,7 +476,7 @@ log_info("Relative Import Similarity Index - Net Exports matrix complete")
 
 
 # Remove clutter
-rm(data_dir, industry_levels, i, j, l)
+rm(data_dir, industry_levels, i, j, l) %>% suppressWarnings()
 
 
 # Display end time
