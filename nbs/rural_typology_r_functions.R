@@ -128,69 +128,160 @@ importr <- function(x, filepath = file.path("data", "robjs")){
 
 
 
-mapr <- function(x){
-
-
-
-g <- vector(mode='list', length=length(Sim_list))
-names(g) <- sim_levels
-title <- g
-
-for (i in 1:length(Sim_list)){
+mapr <- function(list_of_sim_specifications = Sim_list, 
+                  sim_specification_names = sim_levels, 
+                  industry_level_names = names(Total_mat),
+                  rural_extent = WItest_rural,
+                  primary_extent = WItest_primary,
+                  space_vec = TIGER_RUCC){
   
-  WISim <- vector(mode='list', length=length(Total_mat))
-  names(WISim) <- industry_levels
-  RowMin <- WISim
-  TIGER_RUCC_h1m <- WISim
-  p <- WISim
-  subtitle <- WISim
+  g <<- vector(mode='list', length=length(list_of_sim_specifications))
+  names(g) <- names(list_of_sim_specifications)
+  title <- g
+  Sim <- vector(mode='list', length=length(industry_level_names))
+  names(Sim) <- industry_level_names
+  RowMin <- Sim
+  h1m <- Sim
+  p <<- vector(mode='list', length=length(industry_level_names))
+  subtitle <- Sim
   
-  
-  for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary]
+  for (i in 1:length(list_of_sim_specifications)){
+    for (l in 1:length(industry_level_names)){
+      
+      Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent]
+      
+      RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
+                           match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
+                           min_value = apply(Sim[[l]], 1, min)
+      ) %>% as.data.frame()
+      RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+      RowMin[[l]] <- rbind(RowMin[[l]], 
+                           as.data.frame(cbind(place = primary_extent, 
+                                               match = primary_extent, 
+                                               min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
+                                               Nor = rep(c(1), each=length(primary_extent)) 
+                           )
+                           )
+      )
+      RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
+      
+      h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
+      h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+      
+      p[[l]] <<- ggplot( h1m[[l]] ) +
+        geom_sf_interactive(aes(fill = match, 
+                                alpha = Nor, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) +
+        guides(alpha = "none") +
+        coord_sf() +
+        theme_void() +
+        labs(fill = "Regional Cluster") +
+        scale_fill_brewer(palette = "Set1",
+                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+    }
     
+    title[[i]] <- ggdraw() + 
+      draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
+      theme(plot.margin = margin(0, 0, 0, 7))
     
-    
-    RowMin[[l]] <- cbind(place = rownames(WISim[[l]]), match = colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)], min_value = apply(WISim[[l]], 1, min)) %>% as.data.frame()
-    RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-    RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-    RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[i]][[l]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
-    RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
-    
-    
-    TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
-    TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
-    
-    
-    p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
-      geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
-      guides(alpha = "none") +
-      coord_sf() +
-      theme_void() +
-      labs(fill = "Regional Cluster") +
-      scale_fill_brewer(palette = "Set1",
-                        labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) ) 
-    
-    
+    g[[i]] <<- girafe(ggobj = plot_grid(p[[1]], 
+                                         p[[2]], 
+                                         p[[3]], 
+                                         labels = c("Sector", "Summary", "Detail")
+    ),
+    options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                   opts_hover_inv(css = "opacity:0.9;"),
+                   opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+    )
+    )
   }
   
-  title[[i]] <- ggdraw() + 
-    draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
-    theme(plot.margin = margin(0, 0, 0, 7))
-  
-  
-  g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]], 
-                                     labels = c("Sector", "Summary", "Detail")),
-                   options = list(
-                     opts_hover(css = "stroke:gray;r:20pt;"),
-                     opts_hover_inv(css = "opacity:0.9;"),
-                     opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") ))
-  
-}
-
-}
+} 
 
 
+
+
+
+smapr <- function(list_of_sim_specifications = Sim_list, 
+                  sim_specification_names = sim_levels, 
+                  industry_level_names = names(Total_mat),
+                  rural_extent = WItest_rural,
+                  primary_extent = WItest_primary,
+                  impedance = Q_mat,
+                  space_vec = TIGER_RUCC){
+  
+  sg <<- vector(mode='list', length=length(list_of_sim_specifications))
+  names(sg) <- names(list_of_sim_specifications)
+  title <- sg
+  Sim <- vector(mode='list', length=length(industry_level_names))
+  names(Sim) <- industry_level_names
+  RowMin <- Sim
+  h1m <- Sim
+  p <<- vector(mode='list', length=length(industry_level_names))
+  subtitle <- Sim
+  
+  for (i in 1:length(list_of_sim_specifications)){
+    for (l in 1:length(industry_level_names)){
+      
+      Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
+      
+      RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
+                           match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
+                           min_value = apply(Sim[[l]], 1, min)
+      ) %>% as.data.frame()
+      RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+      RowMin[[l]] <- rbind(RowMin[[l]], 
+                           as.data.frame(cbind(place = primary_extent, 
+                                               match = primary_extent, 
+                                               min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
+                                               Nor = rep(c(1), each=length(primary_extent)) 
+                           )
+                           )
+      )
+      RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
+      
+      h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
+      h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+      
+      p[[l]] <<- ggplot( h1m[[l]] ) +
+        geom_sf_interactive(aes(fill = match, 
+                                alpha = Nor, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) +
+        guides(alpha = "none") +
+        coord_sf() +
+        theme_void() +
+        labs(fill = "Regional Cluster") +
+        scale_fill_brewer(palette = "Set1",
+                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+    }
+    
+    title[[i]] <- ggdraw() + 
+      draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
+      theme(plot.margin = margin(0, 0, 0, 7))
+    
+    sg[[i]] <<- girafe(ggobj = plot_grid(p[[1]], 
+                                         p[[2]], 
+                                         p[[3]], 
+                                         labels = c("Sector", "Summary", "Detail")
+    ),
+    options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                   opts_hover_inv(css = "opacity:0.9;"),
+                   opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+    )
+    )
+  }
+  
+} 
 
 # Display end time
 log_info("Define functions end")
