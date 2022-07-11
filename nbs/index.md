@@ -35,6 +35,9 @@ Exploring economic dynamics in rural areas of the United States.
     - It keeps all the files associated with the project together e.g., data, scripts, results, and figures.
     - It lets you get back to where you left off: the same working directory, command history, and all the open files will persist across sessions.
     - The .Rproj file will also look for a <renv.lock> file to maintain environment version and structure, which makes the project Isolated, Portable, and Reproducible. 
+        - Use command renv::status() to check differences between the project lockfile and the current library.
+        - Use command renv::restore(lockfile = file.path(rprojroot::find_rstudio_root_file(), "renv.lock") ) to sync system and project package versions.
+        - Use command renv::snapshot() if packages are added or updated. 
     
 - Next navigate to the desired script or notebook using the Files tab (bottom right window in R), or File in computer tool bar (left top most), or ⌘O.  
     - For more on the relationships of project scripts and notebooks located in the /nbs folder see the *repo_structure* [schematic](https://docs.google.com/drawings/d/1z4iLABHF8wnfhSumAU7tXr68zDFd4wUfL8vclrVioBs/edit). 
@@ -50,8 +53,7 @@ Exploring economic dynamics in rural areas of the United States.
         - The notebook <maps_io_similarity_wi.Rmd> is an attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
         - The notebook <maps_io_similarity_national.qmd> is an attempt at mapping the various topological similarity index relationships at the national level. 
     - All data and generated R objects are stored in the /data and the /data/robjs files respectively. 
-    - To get a clear reset of all data and generated objects simply delete the /data folder. 
-    
+    - To get a clear reset of all data and generated objects simply delete the /data folder.
 
 +++
 
