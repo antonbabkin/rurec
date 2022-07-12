@@ -6,9 +6,25 @@ library(fs)
 library(readxl)
 library(openxlsx)
 library(rlog)
+library(reticulate)
 
 # Display start time
 log_info("Define functions start")
+
+
+# Load conda environment "rurec"
+use_condaenv('rurec')
+
+# Import pubdata Python modules
+bds <- import("rurec.pubdata.bds")
+bea_io <- import("rurec.pubdata.bea_io")
+cbp <- import("rurec.pubdata.cbp")
+ers_rurality <- import("rurec.pubdata.ers_rurality")
+geography <- import("rurec.pubdata.geography")
+naics <- import("rurec.pubdata.naics")
+population <- import("rurec.pubdata.population")
+
+
 
 # Function to download  data
 data_getr <- function(FileURL,
@@ -282,6 +298,36 @@ smapr <- function(list_of_sim_specifications = Sim_list,
   }
   
 } 
+
+
+
+
+reshaper <- function(industry_data_frame){ 
+  ucname <- industry_data_frame[[2]] %>% unique()
+  x <- reshape(industry_data_frame, idvar = names(industry_data_frame[2]), timevar = "place", direction = "wide") %>% suppressWarnings()
+  x <- x[order(x[[1]]), ]
+  rownames(x) <- 1:nrow(x)
+  x[is.na(x)] <- 0
+  x <- x[,-1] %>% t() %>%  as.data.frame()
+  colnames(x) <- ucname %>% sort()
+  x <- x %>% t()
+  
+  x <- cbind(indcode = row.names(x), x) %>% as.data.frame()
+  x <- x %>% reshape(idvar = names(industry_data_frame[1]), varying = c(colnames(x)[-1]), direction = "long")
+  rownames(x) <- 1:nrow(x)
+  names(x)[names(x)=="time"] <- "place"
+  x$place <- x$place  %>% formatC(width = 5, format = "d", flag = "0")
+  x$emp <-  as.numeric(x$emp)
+  x$qp1 <-  as.numeric(x$qp1)
+  x$ap <-  as.numeric(x$ap)
+  x$est <-  as.numeric(x$est)
+  x <- x[1:6]
+  assign(paste0(deparse(substitute(industry_data_frame)), "_XBEA"), x, envir=.GlobalEnv)
+  }
+
+
+
+
 
 # Display end time
 log_info("Define functions end")

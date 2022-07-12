@@ -51,7 +51,7 @@ log_info("CBP data 2012 download complete")
 data_zipr(
   ZipURL = "https://data.bls.gov/cew/data/files/2020/csv/2020_annual_singlefile.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("QCEW 2020 download complete")
 
 
@@ -60,13 +60,13 @@ log_info("QCEW 2020 download complete")
 data_zipr(
   ZipURL = "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("TIGER line data download complete")
 
 data_zipr(
   ZipURL = "https://www2.census.gov/geo/tiger/GENZ2021/shp/cb_2021_us_county_500k.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("TIGER 500k county data download complete")
 
 # Download RUCA codes.
