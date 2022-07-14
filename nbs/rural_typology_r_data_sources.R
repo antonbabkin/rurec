@@ -51,7 +51,7 @@ log_info("CBP data 2012 download complete")
 data_zipr(
   ZipURL = "https://data.bls.gov/cew/data/files/2020/csv/2020_annual_singlefile.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("QCEW 2020 download complete")
 
 
@@ -60,13 +60,13 @@ log_info("QCEW 2020 download complete")
 data_zipr(
   ZipURL = "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("TIGER line data download complete")
 
 data_zipr(
   ZipURL = "https://www2.census.gov/geo/tiger/GENZ2021/shp/cb_2021_us_county_500k.zip",
   DestDir = data_dir
-)
+) %>% suppressWarnings()
 log_info("TIGER 500k county data download complete")
 
 # Download RUCA codes.
@@ -82,7 +82,7 @@ data_getr(
   FileURL = "https://www.ers.usda.gov/webdocs/DataFiles/53251/ruralurbancodes2013.xls",
   DestDir = data_dir
 )
-log_info("RUCc data download complete")
+log_info("RUCC data download complete")
 
 # Download Urban Influence codes.
 data_getr(
@@ -95,7 +95,7 @@ log_info("Urban Influence Codes download complete")
 options(timeout = download_timeout_old)
 
 # Remove clutter
-rm(data_dir, zip_dir, download_timeout_old)
+rm(data_dir, zip_dir, download_timeout_old) %>% suppressWarnings()
 
 # Display end time
 log_info("Define data sources end")
