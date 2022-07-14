@@ -28,34 +28,6 @@ if (!file.exists(file.path(data_dir, "CBP_2019p"))){
 log_info("Import 'pubdata' CBP complete")
 
 
-# # Import, cleanup, and save BEA/NAICS concordance table
-# if (!file.exists(file.path(data_dir, "Concord"))){
-#   Concord <- bea_io$get_naics_df()
-#   Concord$SUMMARY <- unlist(Concord$SUMMARY)
-#   Concord$U_SUMMARY <- unlist(Concord$U_SUMMARY)
-#   Concord$DETAIL <- unlist(Concord$DETAIL)
-#   Concord$NAICS <- unlist(Concord$NAICS)
-#   Concord %<>% filter(NAICS != "NaN") 
-#   Concord %<>% filter(NAICS != "n.a.")
-#   Concord$NAICS %<>% as.character()
-#   Concord$SECTOR <- ifelse(Concord$SECTOR == "33DG" | Concord$SECTOR == "31ND" , "31G",  Concord$SECTOR)
-#   Concord$SECTOR <- ifelse(Concord$SECTOR == "52" | Concord$SECTOR == "53" , "FIRE",  Concord$SECTOR)
-#   Concord$SECTOR <- ifelse(Concord$SECTOR == "54" | Concord$SECTOR == "55" | Concord$SECTOR == "56" , "PROF",  Concord$SECTOR)
-#   Concord$SECTOR <- ifelse(Concord$SECTOR == "61" | Concord$SECTOR == "62" , "6",  Concord$SECTOR)
-#   Concord$SECTOR <- ifelse(Concord$SECTOR == "71" | Concord$SECTOR == "72" , "7",  Concord$SECTOR) 
-#   Concord$NAICS <- ifelse(Concord$NAICS == "531", "531*",  Concord$NAICS)
-#   Concord %<>% add_row( SECTOR = "23", SUMMARY = "23", U_SUMMARY = "23", DETAIL = "23", NAICS = "23", .after = 	39)
-#   Concord %<>% add_row( SECTOR = "FIRE", SUMMARY = "531", U_SUMMARY = "531", DETAIL = "531", NAICS = "531", .after = 	390)
-#   Concord %<>% filter(NAICS != "23*")
-#   Concord %<>% filter(NAICS != "531*")
-#   saver(Concord)
-# }
-# 
-# CBP_2019p_Concord <- left_join(readRDS(file.path(data_dir, "CBP_2019p")), readRDS(file.path(data_dir, "Concord")), by = "NAICS")
-# rm(CBP_2019p, Concord) %>% suppressWarnings()
-
-
-
 # Specific Detail level concordance
 if (!file.exists(file.path(data_dir, "det_cord"))){
   x <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
@@ -65,7 +37,6 @@ if (!file.exists(file.path(data_dir, "det_cord"))){
   det_cord <- as.data.frame(det_cord)
   det_cord$NAICS <- ifelse(det_cord$NAICS == "531" & det_cord$DETAIL == "531HST", "531*",  det_cord$NAICS)
   det_cord %<>% add_row(DETAIL = "23", NAICS = "23", .after = 39)
-  #det_cord %<>% add_row(DETAIL = "531XXX", NAICS = "531", .after = 390)
   det_cord %<>% filter(NAICS != "23*")
   det_cord %<>% filter(NAICS != "531*")
   det_cord <- det_cord[order(det_cord$NAICS), ]
@@ -84,7 +55,6 @@ if (!file.exists(file.path(data_dir, "sum_cord"))){
   sum_cord <- as.data.frame(sum_cord)
   sum_cord$NAICS <- ifelse(sum_cord$NAICS == "531" & sum_cord$SUMMARY == "HS", "531*",  sum_cord$NAICS)
   sum_cord %<>% add_row(SUMMARY = "23", NAICS = "23", .after = 39)
-  #sum_cord %<>% add_row(SUMMARY = "531XXX", NAICS = "531", .after = 390)
   sum_cord %<>% filter(NAICS != "23*")
   sum_cord %<>% filter(NAICS != "531*")
   sum_cord <- sum_cord[order(sum_cord$NAICS), ]
@@ -110,8 +80,8 @@ if (!file.exists(file.path(data_dir, "sec_cord"))){
 
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the detail level 
 if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA"))){
-  CBP_2019p_Concord_Detail <- left_join(readRDS(file.path(data_dir, "CBP_2019p")), readRDS(file.path(data_dir, "det_cord")), by = "NAICS") %>% filter(DETAIL != "NULL") %>% group_by(place, DETAIL) %>%  summarise(across(where(is.numeric), sum), .groups = 'drop')  %>% as.data.frame() %>% subset(select = c(place, DETAIL, emp, qp1, ap, est))
-  reshaper(CBP_2019p_Concord_Detail)
+  CBP_2019p_Concord_Detail <- concordr("det_cord")
+  reshaper(CBP_2019p_Concord_Detail, "det_cord")
   saver(CBP_2019p_Concord_Detail_XBEA)
   rm(CBP_2019p_Concord_Detail_XBEA, CBP_2019p_Concord_Detail)
 }
@@ -119,8 +89,8 @@ log_info("Detail level CBP/BEA crosswalk complete")
 
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the Summary level 
 if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA"))){
-  CBP_2019p_Concord_Summary <- left_join(readRDS(file.path(data_dir, "CBP_2019p")), readRDS(file.path(data_dir, "sum_cord")), by = "NAICS") %>% filter(SUMMARY != "NULL") %>% group_by(place, SUMMARY) %>%  summarise(across(where(is.numeric), sum), .groups = 'drop') %>% as.data.frame() %>% subset(select = c(place, SUMMARY, emp, qp1, ap, est))
-  reshaper(CBP_2019p_Concord_Summary)
+  CBP_2019p_Concord_Summary <- concordr("sum_cord")
+  reshaper(CBP_2019p_Concord_Summary, "sum_cord")
   saver(CBP_2019p_Concord_Summary_XBEA)
   rm(CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Summary)
 }
@@ -128,8 +98,8 @@ log_info("Summary level CBP/BEA crosswalk complete")
 
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the Sector level 
 if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA"))){
-  CBP_2019p_Concord_Sector <- left_join(readRDS(file.path(data_dir, "CBP_2019p")), readRDS(file.path(data_dir, "sec_cord")), by = "NAICS") %>% filter(SECTOR != "NULL") %>% group_by(place, SECTOR) %>%  summarise(across(where(is.numeric), sum), .groups = 'drop') %>% as.data.frame() %>% subset(select = c(place, SECTOR, emp, qp1, ap, est))
-  reshaper(CBP_2019p_Concord_Sector)
+  CBP_2019p_Concord_Sector <- concordr("sec_cord")
+  reshaper(CBP_2019p_Concord_Sector, "sec_cord")
   saver(CBP_2019p_Concord_Sector_XBEA)
   rm(CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Sector)
 }

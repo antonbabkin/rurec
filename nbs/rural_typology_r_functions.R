@@ -143,7 +143,7 @@ importr <- function(x, filepath = file.path("data", "robjs")){
 
 
 
-
+#Function to map similarity indices 
 mapr <- function(list_of_sim_specifications = Sim_list, 
                   sim_specification_names = sim_levels, 
                   industry_level_names = names(Total_mat),
@@ -222,7 +222,7 @@ mapr <- function(list_of_sim_specifications = Sim_list,
 
 
 
-
+#Function to map similarity indices with spatial weights
 smapr <- function(list_of_sim_specifications = Sim_list, 
                   sim_specification_names = sim_levels, 
                   industry_level_names = names(Total_mat),
@@ -299,21 +299,33 @@ smapr <- function(list_of_sim_specifications = Sim_list,
   
 } 
 
+#Function add NAICS to BEA codes  
+concordr <- function(cordname, econpath = "CBP_2019p", filepath = file.path("data", "robjs")){
+  econ <- file.path(find_rstudio_root_file(), filepath, econpath) %>% readRDS()
+  cord <- file.path(find_rstudio_root_file(), filepath, cordname) %>% readRDS()
+  x <- left_join(econ, cord, by = "NAICS") 
+  x <- x %>%
+    filter(.[9] != "NULL") %>%
+    group_by(place, .[9]) %>%
+    summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
+    as.data.frame()
+  x <- x %>%
+    group_by(place) %>%
+    arrange(factor(x[[2]], levels = unique(readRDS(file.path(data_dir, cordname))[[1]])), .by_group = TRUE) %>%
+    as.data.frame()
+  return(x)
+}
 
 
-
-reshaper <- function(industry_data_frame){ 
-  ucname <- industry_data_frame[[2]] %>% unique()
-  x <- reshape(industry_data_frame, idvar = names(industry_data_frame[2]), timevar = "place", direction = "wide") %>% suppressWarnings()
-  x <- x[order(x[[1]]), ]
-  rownames(x) <- 1:nrow(x)
+#Function to generate full economic industry/county table 
+reshaper <- function(industry_data_frame, cordname){ 
+  x <- reshape(industry_data_frame, idvar = names(industry_data_frame[2]), timevar = "place", direction = "wide") %>% 
+    suppressWarnings()
+  x <- x %>% arrange(factor(x[[1]], levels = unique(readRDS(file.path(data_dir, cordname))[[1]])), .by_group = TRUE)
+  rownames(x) <- x[,1]
   x[is.na(x)] <- 0
-  x <- x[,-1] %>% t() %>%  as.data.frame()
-  colnames(x) <- ucname %>% sort()
-  x <- x %>% t()
-  
-  x <- cbind(indcode = row.names(x), x) %>% as.data.frame()
-  x <- x %>% reshape(idvar = names(industry_data_frame[1]), varying = c(colnames(x)[-1]), direction = "long")
+  colnames(x)[1] <- "indcode"
+  x <- x %>% reshape(idvar = "place", varying = c(colnames(x)[-1]), direction = "long")
   rownames(x) <- 1:nrow(x)
   names(x)[names(x)=="time"] <- "place"
   x$place <- x$place  %>% formatC(width = 5, format = "d", flag = "0")
@@ -327,9 +339,10 @@ reshaper <- function(industry_data_frame){
 
 
 
-
-
 # Display end time
 log_info("Define functions end")
+
+
+
 
 

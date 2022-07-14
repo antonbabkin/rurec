@@ -18,73 +18,64 @@ industry_levels  = c("Sector", "Summary", "Detail")
 
 ### Total Requirements matrix
 if (!file.exists(file.path(data_dir, "Total_mat"))){
+  Total_mat <- list()
+  
  ### Sector level 14-by-14 
-  #match_x <- as.data.frame(unique(readRDS(file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA"))$indcode))
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique() %>% as.data.frame()
-  colnames(match_x) <- 1:ncol(match_x) 
-  Total_mat  <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SEC"]] %>% .[["2020"]]
-  colnames(Total_mat) <- 1:ncol(Total_mat) 
-  Total_mat <- inner_join(match_x, Total_mat, by = "1")
-  name_x <- Total_mat[[1]] 
-  Total_mat %<>% subset(select = -c(1:2)) %>% subset(select = c(1:dim(.)[1])) %>% unlist() %>% as.numeric() %>% matrix(ncol = length(name_x))
-  rownames(Total_mat) = colnames(Total_mat) <- name_x 
-  Total_mat <- list(Total_mat)
+  Total_mat[[1]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SEC"]] %>% .[["2020"]] %>% .[6:20,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
+  rownames(Total_mat[[1]]) = colnames(Total_mat[[1]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SEC"]] %>% .[["2020"]] %>%  .[4,3:17] %>% as.list()
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+  Total_mat[[1]] %<>% t() %>% subset(rownames(Total_mat[[1]]) %in% match_x) %>% t() %>% subset(rownames(Total_mat[[1]]) %in% match_x) 
+  
   
  ### Summary level 59-by-59 Total Requirements matrix
-  #match_x <- as.data.frame(unique(readRDS(file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA"))$indcode))
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique() %>% as.data.frame()
-  colnames(match_x) <- 1:ncol(match_x) 
-  Total_mat[[2]]   <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SUM"]] %>% .[["2020"]]
-  colnames(Total_mat[[2]] ) <- 1:ncol(Total_mat[[2]] ) 
-  Total_mat[[2]]  <- inner_join(match_x, Total_mat[[2]] , by = "1")
-  name_x <- Total_mat[[2]] [[1]] 
-  Total_mat[[2]]  %<>% subset(select = -c(1:2)) %>% subset(select = c(1:dim(.)[1])) %>% unlist() %>% as.numeric() %>% matrix(ncol = length(name_x))
-  rownames(Total_mat[[2]] ) = colnames(Total_mat[[2]] ) <- name_x 
+  Total_mat[[2]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SUM"]] %>% .[["2020"]] %>% .[6:76,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71)
+  rownames(Total_mat[[2]]) = colnames(Total_mat[[2]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_1997-2020_PRO_SUM"]] %>% .[["2020"]] %>% .[4,3:73] %>% as.list()
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+  Total_mat[[2]] %<>% t() %>% subset(rownames(Total_mat[[2]]) %in% match_x) %>% t() %>% subset(rownames(Total_mat[[2]]) %in% match_x) 
+
   
  ### Detail level 360-by-360 Total Requirements matrix 
   Total_mat[[3]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_2007_2012_PRO_DET"]] %>% .[["2012"]] %>% .[4:408,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
   rownames(Total_mat[[3]]) = colnames(Total_mat[[3]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["IxI_TR_2007_2012_PRO_DET"]] %>% .[["2012"]] %>% .[3,3:407] %>% as.list()
   #Collapse ambiguous industry 23* codes
-  Total_mat[[3]][,25] <- Total_mat[[3]][,25] + Total_mat[[3]][,26] + Total_mat[[3]][,27] + Total_mat[[3]][,28] + Total_mat[[3]][,29] + Total_mat[[3]][,30] + Total_mat[[3]][,31] + Total_mat[[3]][,32] + Total_mat[[3]][,33]+ Total_mat[[3]][,34] + Total_mat[[3]][,35] + Total_mat[[3]][,36]
+  d  <- sum(Total_mat[[3]][25:36,25:36])/12
+  Total_mat[[3]][,25] <- (Total_mat[[3]][,25] + Total_mat[[3]][,26] + Total_mat[[3]][,27] + Total_mat[[3]][,28] + Total_mat[[3]][,29] + Total_mat[[3]][,30] + Total_mat[[3]][,31] + Total_mat[[3]][,32] + Total_mat[[3]][,33]+ Total_mat[[3]][,34] + Total_mat[[3]][,35] + Total_mat[[3]][,36])/12
   for(i in 36:26){
     Total_mat[[3]] <- Total_mat[[3]][,-i]
   }
-  Total_mat[[3]][25,] <- Total_mat[[3]][25,] + Total_mat[[3]][26,] + Total_mat[[3]][27,] + Total_mat[[3]][28,] + Total_mat[[3]][29,] + Total_mat[[3]][30,] + Total_mat[[3]][31,] + Total_mat[[3]][32,] + Total_mat[[3]][33,]+ Total_mat[[3]][34,] + Total_mat[[3]][35,] + Total_mat[[3]][36,]
+  Total_mat[[3]][25,] <- (Total_mat[[3]][25,] + Total_mat[[3]][26,] + Total_mat[[3]][27,] + Total_mat[[3]][28,] + Total_mat[[3]][29,] + Total_mat[[3]][30,] + Total_mat[[3]][31,] + Total_mat[[3]][32,] + Total_mat[[3]][33,]+ Total_mat[[3]][34,] + Total_mat[[3]][35,] + Total_mat[[3]][36,])/12
   for(i in 36:26){
     Total_mat[[3]] <- Total_mat[[3]][-i,]
   }
+  Total_mat[[3]][25,25] <- d
   colnames(Total_mat[[3]])[25] = "23"
   rownames(Total_mat[[3]])[25] = "23"
-  Total_mat[[3]] <- cbind("1" = colnames(Total_mat[[3]]), Total_mat[[3]] )
-  Total_mat[[3]] %<>% as.data.frame()
-  
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique() %>% as.data.frame()
-  colnames(match_x) <- 1:ncol(match_x) 
-  Total_mat[[3]]  <- inner_join(match_x, Total_mat[[3]] , by = "1")
-  name_x <- Total_mat[[3]][[1]] 
-  Total_mat[[3]]  %<>% subset(select = -c(1)) %>% subset(select = c(name_x)) %>% unlist() %>% as.numeric() %>% matrix(ncol = length(name_x))
-  rownames(Total_mat[[3]] ) = colnames(Total_mat[[3]] ) <- name_x 
-  
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+  Total_mat[[3]] %<>% t() %>% subset(rownames(Total_mat[[3]]) %in% match_x) %>% t() %>% subset(rownames(Total_mat[[3]]) %in% match_x) 
+
     names(Total_mat) <- industry_levels
   saver(Total_mat)
-  rm(Total_mat, match_x, name_x)
+  rm(Total_mat, match_x, d)
 }
 log_info("Total matrix complete")
   
 #Extract county level industry employment data and reshape to industry-by-county matrix
 if (!file.exists(file.path(data_dir, "Xemp_mat"))){
+  Xemp_mat <- list()
  ### Sector level
-    Xemp_mat <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "emp")]
-    Xemp_mat %<>% reshape(idvar = "indcode", v.names = "emp", varying = unique(Xemp_mat$place), timevar = "place", new.row.names = unique(Xemp_mat$indcode),  direction = "wide")
-    Xemp_mat %<>% subset(select = -c(indcode)) %>% as.matrix()
-    Xemp_mat <- list(Xemp_mat)
+    Xemp_mat[[1]] <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "emp")]
+    Xemp_mat[[1]] %<>% reshape(idvar = "indcode", v.names = "emp", varying = unique(Xemp_mat[[1]]$place), timevar = "place", new.row.names = unique(Xemp_mat[[1]]$indcode),  direction = "wide")
+    Xemp_mat[[1]] %<>% as.data.frame() %>% arrange(factor(Xemp_mat[[1]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[1]])), .by_group = TRUE) 
+    Xemp_mat[[1]] %<>% subset(select = -c(indcode)) %>% as.matrix()
  ### Summary level   
     Xemp_mat[[2]] <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "emp")]
     Xemp_mat[[2]] %<>% reshape(idvar = "indcode", v.names = "emp", varying = unique(Xemp_mat[[2]]$place), timevar = "place", new.row.names = unique(Xemp_mat[[2]]$indcode),  direction = "wide")
+    Xemp_mat[[2]] %<>% as.data.frame() %>% arrange(factor(Xemp_mat[[2]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[2]])), .by_group = TRUE)
     Xemp_mat[[2]] %<>% subset(select = -c(indcode)) %>% as.matrix()
  ### Detail level  
     Xemp_mat[[3]] <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "emp")]
     Xemp_mat[[3]] %<>% reshape(idvar = "indcode", v.names = "emp", varying = unique(Xemp_mat[[3]]$place), timevar = "place", new.row.names = unique(Xemp_mat[[3]]$indcode),  direction = "wide")
+    Xemp_mat[[3]] %<>% as.data.frame() %>% arrange(factor(Xemp_mat[[3]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[3]])), .by_group = TRUE) 
     Xemp_mat[[3]] %<>% subset(select = -c(indcode)) %>% as.matrix()
     
     names(Xemp_mat) <- industry_levels
@@ -95,18 +86,21 @@ log_info("Employment matrix complete")
   
 #Extract county level industry payroll data and reshape to industry-by-county matrix
 if (!file.exists(file.path(data_dir, "Xpay_mat"))){
+  Xpay_mat <- list()
   ### Sector level
-  Xpay_mat <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "ap")]
-  Xpay_mat %<>% reshape(idvar = "indcode", v.names = "ap", varying = unique(Xpay_mat$place), timevar = "place", new.row.names = unique(Xpay_mat$indcode),  direction = "wide")
-  Xpay_mat %<>% subset(select = -c(indcode)) %>% as.matrix()
-  Xpay_mat <- list(Xpay_mat)
+  Xpay_mat[[1]] <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "ap")]
+  Xpay_mat[[1]] %<>% reshape(idvar = "indcode", v.names = "ap", varying = unique(Xpay_mat[[1]]$place), timevar = "place", new.row.names = unique(Xpay_mat[[1]]$indcode),  direction = "wide")
+  Xpay_mat[[1]] %<>% as.data.frame() %>% arrange(factor(Xpay_mat[[1]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[1]])), .by_group = TRUE) 
+  Xpay_mat[[1]] %<>% subset(select = -c(indcode)) %>% as.matrix()
   ### Summary level   
   Xpay_mat[[2]] <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "ap")]
   Xpay_mat[[2]] %<>% reshape(idvar = "indcode", v.names = "ap", varying = unique(Xpay_mat[[2]]$place), timevar = "place", new.row.names = unique(Xpay_mat[[2]]$indcode),  direction = "wide")
+  Xpay_mat[[2]] %<>% as.data.frame() %>% arrange(factor(Xpay_mat[[2]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[2]])), .by_group = TRUE) 
   Xpay_mat[[2]] %<>% subset(select = -c(indcode)) %>% as.matrix()
   ### Detail level  
   Xpay_mat[[3]] <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .[, c("indcode", "place", "ap")]
   Xpay_mat[[3]] %<>% reshape(idvar = "indcode", v.names = "ap", varying = unique(Xpay_mat[[3]]$place), timevar = "place", new.row.names = unique(Xpay_mat[[3]]$indcode),  direction = "wide")
+  Xpay_mat[[3]] %<>% as.data.frame() %>% arrange(factor(Xpay_mat[[3]][[1]], levels = rownames(readRDS(file.path(data_dir, "Total_mat"))[[3]])), .by_group = TRUE) 
   Xpay_mat[[3]] %<>% subset(select = -c(indcode)) %>% as.matrix()
   
     names(Xpay_mat) <- industry_levels
@@ -116,9 +110,11 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
 log_info("Payroll matrix complete")
 
 # ### Test that county industry data and I/O tables are compatible
-# for(i in 1:3){
-#   identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
-# }
+importr(Xpay_mat)
+importr(Total_mat)
+for(i in 1:3){
+  identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
+}
 
 #### Direct requirements matrices (Technical Coefficients) 
 if (!file.exists(file.path(data_dir, "Direct_mat"))){
