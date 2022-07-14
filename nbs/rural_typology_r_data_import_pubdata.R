@@ -17,7 +17,8 @@ data_dir = file.path(find_rstudio_root_file(), "data", "rpyobjs")
 
 
 # Load conda environment "rurec"
-use_condaenv('rurec')
+# (should happen at session start from .Rprofile)
+# use_condaenv('rurec')
 
 # Import pubdata Python modules
 bds <- import("rurec.pubdata.bds")
@@ -38,7 +39,9 @@ if (!file.exists(file.path(data_dir, "CBP_2019"))){
 }
 saver(CBP_2019, filepath = file.path("data", "rpyobjs"))
 
-TIGER <- geography$get_county_df(year=2020L, geometry=FALSE, scale="500k")
+TIGER <- geography$get_county_df(year=2020L, geometry=TRUE, scale="500k")
+# testing: plot Wisconsin counties
+# ggplot2::ggplot(TIGER %>% filter(STATE_CODE == "55")) + ggplot2::geom_sf()
 
 
 #tCBP_2019 <- file.path(data_dir, "CBP_2019") %>% readRDS()
