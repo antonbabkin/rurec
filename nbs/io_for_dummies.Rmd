@@ -147,20 +147,20 @@ These equations serve to make explicit the dependence of interindustry flows on 
 
 **IO Analysis**
 
-In input--output *analysis*, one may pose the question: If the demands of the exogenous sectors were forecast to be some specific amounts next year, how much output from each of the sectors would be necessary to supply these final demands? From the point of view of this equation, the $f_{1} \dots f_{n}$ are known numbers, the $a_{ij}$ are known coefficients, and the $f_{1} \dots f_{n}$ are to be found. Rearranging to answer the question gives:
+In input--output *analysis*, one may pose the question: If the demands of the exogenous sectors were forecast to be some specific amounts next year, how much output from each of the sectors would be necessary to supply these final demands? From the point of view of this equation, the $f_{1} \dots f_{n}$ are known numbers, the $a_{ij}$ are known coefficients, and the $x_{1} \dots x_{n}$ are to be found. Rearranging to answer the question gives:
 
 ```{=tex}
 \begin{align*}
 & \left(1- a_{11}\right)x_{1} - ... - a_{1j}x_{i} - ... - a_{1n}x_{n} = f_{1} \\
 & \vdots \\
-& a_{i1}x_{1} - ... - \left(1- a_{ij}\right)x_{i} - ... - a_{in}x_{n} = f_{i} \\
+& -a_{i1}x_{1} - ... + \left(1- a_{ij}\right)x_{i} - ... - a_{in}x_{n} = f_{i} \\
 & \vdots \\
-& a_{n1}x_{1} - ... - a_{nj}x_{i} - ... - \left(1- a_{nn}\right)x_{n} = f_{n} \\
+& -a_{n1}x_{1} - ... - a_{nj}x_{i} - ... + \left(1- a_{nn}\right)x_{n} = f_{n} \\
 \end{align*}
 ```
 Or in matrix notation as
 
-$$\left(\mathbf{I} - \mathbf{A}\right)\mathbf{x} = \mathbf{f}$$ If $\left(\mathbf{I} - \mathbf{A}\right)$ is singular; that is, $\left(\mathbf{I} - \mathbf{A}\right)^{-1}$ exists, then the solution is given by
+$$\left(\mathbf{I} - \mathbf{A}\right)\mathbf{x} = \mathbf{f}$$ If $\left(\mathbf{I} - \mathbf{A}\right)$ is non-singular, that is, $\left(\mathbf{I} - \mathbf{A}\right)^{-1}$ exists, then the solution is given by
 
 $$\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f} = \mathbf{Lf}$$ where $\left(\mathbf{I} - \mathbf{A}\right)^{-1} = \mathbf{L} = \left[l_{ij}\right]$ is known as the *Leontief inverse* or the *total requirements matrix*. Also recognizing that $\partial{x_{i}}/\partial{f_{j}} = l_{ij}$, this equation makes clear the dependence of gross output on the value of final demand.
 
