@@ -110,11 +110,11 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
 log_info("Payroll matrix complete")
 
 # ### Test that county industry data and I/O tables are compatible
-importr(Xpay_mat)
-importr(Total_mat)
-for(i in 1:3){
-  identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
-}
+# importr(Xpay_mat)
+# importr(Total_mat)
+# for(i in 1:3){
+#   identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
+# }
 
 #### Direct requirements matrices (Technical Coefficients) 
 if (!file.exists(file.path(data_dir, "Direct_mat"))){

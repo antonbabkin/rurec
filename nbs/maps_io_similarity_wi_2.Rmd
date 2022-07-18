@@ -72,12 +72,7 @@ importr(Q_mat)
 Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
 names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
 
-
-# Create r object only data sub-folder if not already done
-data_dir = file.path(find_rstudio_root_file(), "data", "robjs", "wi_2")
-if (!file.exists(data_dir)) {
-  dir.create(data_dir)
-}
+data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
 ```
 
@@ -168,13 +163,13 @@ names(WItest_primary) <- WItest_primary
 
 #WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
 
-available_indicators_lab <- c("Simple Similarity Index", 
-                              "Relative Similarity Index",  
-                              "Import Similarity Index", 
-                              "Import Similarity Index - Net Exports", 
-                              "Relative Import Similarity Index", 
-                              "Relative Import Similarity Index - Net Exports")
-
+# available_indicators_lab <- c("Simple Similarity Index", 
+#                               "Relative Similarity Index",  
+#                               "Import Similarity Index", 
+#                               "Import Similarity Index - Net Exports", 
+#                               "Relative Import Similarity Index", 
+#                               "Relative Import Similarity Index - Net Exports")
+# 
 industry_levels  <-  c("Sector", "Summary", "Detail")
 
 sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
@@ -185,64 +180,14 @@ sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_ma
 
 ```{r maps}
 
-g <- vector(mode='list', length=length(Sim_list))
-names(g) <- sim_levels
-title <- g
-
-for (i in 1:length(Sim_list)){
-  
-WISim <- vector(mode='list', length=length(Total_mat))
-names(WISim) <- industry_levels
-RowMin <- WISim
-TIGER_RUCC_h1m <- WISim
-p <- WISim
-subtitle <- WISim
-
-
-for (l in 1:length(WISim)){
-WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary]
-
-
-
-RowMin[[l]] <- cbind(place = rownames(WISim[[l]]), match = colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)], min_value = apply(WISim[[l]], 1, min)) %>% as.data.frame()
-RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[i]][[l]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
-RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
-
-
-TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
-TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
-
-
-p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
-  geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
-  guides(alpha = "none") +
-  coord_sf() +
-  theme_void() +
-  labs(fill = "Regional Cluster") +
-  scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) ) 
-
-
+if (!exists("WI_Test_Plots")){
+  mapr(WI_Test_Plots)
 }
 
-title[[i]] <- ggdraw() + 
-  draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
-  theme(plot.margin = margin(0, 0, 0, 7))
-
-
-g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]], 
-                        labels = c("Sector", "Summary", "Detail")),
-   options = list(
-    opts_hover(css = "stroke:gray;r:20pt;"),
-    opts_hover_inv(css = "opacity:0.9;"),
-    opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") ))
- 
+if (!exists("WI_Test_Plots_XINT")){
+  dismapr(WI_Test_Plots)
 }
- 
 
- 
 ```
 
 
@@ -251,6 +196,9 @@ g[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]],
 "New Regional-level Total Output Table":  $\mathbf{X}$
 
 ```{r new total output}
+
+WISim <- vector(mode='list', length=length(Total_mat))
+names(WISim) <- industry_levels
 
 
 WI_match <- vector(mode='list', length=length(Total_mat))
@@ -286,55 +234,53 @@ for (i in 1:length(Sim_list)){
 
 
 ```{r histograms}
-
-primary_c <- vector(mode='list', length=length(Total_mat))
-names(primary_c) <- industry_levels
-
-test_industry <- vector(mode='list', length=length(Total_mat))
-names(test_industry) <- industry_levels
-
-for (l in 1:length(Total_mat)){
-    primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
-    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]]) 
-    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
-}
-
-for (l in 1:length(Total_mat)){
-  for (p in 1:length(WItest_rural)){
-    test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
-    colnames( test_industry[[l]][[p]]) <- c("value")
-    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]]) 
-  }
-  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
-}
-
-
-ggbase <- test_industry
-
-
-for (l in 1:length(Total_mat)){
-  for (p in 1:length(WItest_rural)){
-     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-      geom_col(aes(x = industry, 
-                  y = log10(value))) +
-      geom_point(data = primary_c[[l]], 
-                 aes(x = industry,
-                     y = log10(value),
-                     color = variable)) +   
-      geom_line(data = primary_c[[l]], 
-                aes(x = industry,
-                    y = log10(value),
-                    color = variable)) +
-      labs(x = "Industry", y = "log(Payroll)") +
-      scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
-      scale_y_continuous(trans='log10') +
-       labs(title = "Payroll Distribution by Industry",
-           color = "Counties")   +
-      scale_color_discrete( labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) )
-    }
-}
-
-
+# 
+# primary_c <- vector(mode='list', length=length(Total_mat))
+# names(primary_c) <- industry_levels
+# 
+# test_industry <- vector(mode='list', length=length(Total_mat))
+# names(test_industry) <- industry_levels
+# 
+# for (l in 1:length(Total_mat)){
+#     primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
+#     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]]) 
+#     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+# }
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(WItest_rural)){
+#     test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
+#     colnames( test_industry[[l]][[p]]) <- c("value")
+#     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]]) 
+#   }
+#   names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
+# }
+# 
+# 
+# ggbase <- test_industry
+# 
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(WItest_rural)){
+#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+#       geom_col(aes(x = industry, 
+#                   y = log10(value))) +
+#       geom_point(data = primary_c[[l]], 
+#                  aes(x = industry,
+#                      y = log10(value),
+#                      color = variable)) +   
+#       geom_line(data = primary_c[[l]], 
+#                 aes(x = industry,
+#                     y = log10(value),
+#                     color = variable)) +
+#       labs(x = "Industry", y = "log(Payroll)") +
+#       scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
+#       scale_y_continuous(trans='log10') +
+#        labs(title = "Payroll Distribution by Industry",
+#            color = "Counties")   +
+#       scale_color_discrete( labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) )
+#     }
+# }
 
 ```
 
@@ -343,48 +289,46 @@ for (l in 1:length(Total_mat)){
 ```{r}
 #ggplotly(ggbase[[1]][[5]])
  #girafe(ggobj = ggbase[[1]][[5]])
- print(ggbase[[1]][[5]])
+ #print(ggbase[[1]][[5]])
 ```
-
-
 
 
 
 "Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[1]]
+WI_Test_Plots_XINT[[1]]
 ```
 
 
 "Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[2]]
+WI_Test_Plots_XINT[[2]]
 ```
 
 "Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[3]]
+WI_Test_Plots_XINT[[3]]
 ```
 
 "Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[4]]
+WI_Test_Plots_XINT[[4]]
 ```
 
 "Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[5]]
+WI_Test_Plots_XINT[[5]]
 ```
 
 "Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-g[[6]]
+WI_Test_Plots_XINT[[6]]
 ```
 
 ### WI Test - Spatial
@@ -395,95 +339,15 @@ g[[6]]
 
 ```{r maps with impedance}
 
-sg <- vector(mode='list', length=length(Sim_list))
-names(sg) <- sim_levels
-title <- sg
-
-
-for (i in 1:length(Sim_list)){
-  
-WISim <- vector(mode='list', length=length(Total_mat))
-names(WISim) <- industry_levels
-RowMin <- WISim
-TIGER_RUCC_h1m <- WISim
-p <- WISim
-subtitle <- WISim
-
-
-for (l in 1:length(WISim)){
-WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Q_mat[[l]][WItest_rural, WItest_primary] 
-
-RowMin[[l]] <- cbind(place = rownames(WISim[[l]]), match = colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)], min_value = apply(WISim[[l]], 1, min)) %>% as.data.frame()
-RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-RowMin[[l]] <- rbind(  RowMin[[l]], as.data.frame(cbind(place = WItest_primary, match = WItest_primary, min_value = diag(Sim_list[[i]][[l]][WItest_primary, WItest_primary]), Nor = rep(c(1), each=length(WItest_primary)) )))
-RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
-
-
-TIGER_RUCC_h1m[[l]] <- inner_join(TIGER_RUCC, RowMin[[l]], by = "place", copy = TRUE)
-TIGER_RUCC_h1m[[l]] %<>% mutate(match_name = TIGER_RUCC_h1m[[l]]$NAME[match(match, TIGER_RUCC_h1m[[l]]$place)])
-
-p[[l]] <- ggplot( TIGER_RUCC_h1m[[l]] ) +
-  geom_sf_interactive(aes(fill = match, alpha = Nor, tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), data_id = place), color = NA) +
-  guides(alpha = "none") +
-  coord_sf() +
-  theme_void() +
-  labs(fill = "Regional Cluster") +
-  scale_fill_brewer(palette = "Set1",
-                    labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) ) 
-
-
+if (!exists("WI_Test_Plots_Imped")){
+  mapr(WI_Test_Plots_Imped, impedance = Q_mat)
 }
 
-title[[i]] <- ggdraw() + 
-  draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
-  theme(plot.margin = margin(0, 0, 0, 7))
-
-
-sg[[i]] <- girafe(ggobj = plot_grid(p[[1]], p[[2]], p[[3]], 
-                        labels = c("Sector", "Summary", "Detail")),
-   options = list(
-    opts_hover(css = "stroke:gray;r:20pt;"),
-    opts_hover_inv(css = "opacity:0.9;"),
-    opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") ))
- 
+if (!exists("WI_Test_Plots_Imped_XINT")){
+  dismapr(WI_Test_Plots_Imped)
 }
- 
- 
-```
-
-
-```{r functioning}
-
-
-Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
-sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
-names(Sim_list) <- sim_levels
-industry_levels <- c("Sector", "Summary", "Detail")
-
-WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
-                grep("55009", ., value=TRUE, invert = TRUE) %>% 
-                grep("55025", ., value=TRUE, invert = TRUE) %>% 
-                grep("55079", ., value=TRUE, invert = TRUE)
-
-WItest_primary <- c("55009", "55025", "55079", "17031", "27053")
-names(WItest_primary) <- WItest_primary
-
-available_indicators_lab <- c("Simple Similarity Index", 
-                              "Relative Similarity Index",  
-                              "Import Similarity Index", 
-                              "Import Similarity Index - Net Exports", 
-                              "Relative Import Similarity Index", 
-                              "Relative Import Similarity Index - Net Exports")
-
-
-smapr()
-sg[[1]]
 
 ```
-
-
-
 
 
 "New Regional-level Total Output Table":  $\mathbf{X}$
@@ -526,37 +390,37 @@ for (i in 1:length(Sim_list)){
 "Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[1]]
+WI_Test_Plots_Imped_XINT[[1]]
 ```
 
 "Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[2]]
+WI_Test_Plots_Imped_XINT[[2]]
 ```
 
 "Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[3]]
+WI_Test_Plots_Imped_XINT[[3]]
 ```
 
 "Spatial Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2}  / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[4]]
+WI_Test_Plots_Imped_XINT[[4]]
 ```
 
 "Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[5]]
+WI_Test_Plots_Imped_XINT[[5]]
 ```
 
 "Spatial Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-sg[[6]]
+WI_Test_Plots_Imped_XINT[[6]]
 ```
 
 
@@ -565,26 +429,64 @@ sg[[6]]
 ### WI Test - Natural
 
 ```{r extent natural bounds}
-WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
-                grep("55009", ., value=TRUE, invert = TRUE) %>% 
-                grep("55025", ., value=TRUE, invert = TRUE) %>% 
-                grep("55079", ., value=TRUE, invert = TRUE)
-
+WItest_rural <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
-names(WItest_primary) <- WItest_primary
 
-#WItest_all <- c(WItest_primary) %>% as.vector()
+
+```
+
+
+```{r maps with natural bounds}
+
+if (!exists("WI_Test_Plots_Nat")){
+  bmapr(WI_Test_Plots_Nat)
+}
+
+if (!exists("WI_Test_Plots_Nat_XINT")){
+  dismapr(WI_Test_Plots_Nat)
+}
+
 
 ```
 
 
 
+"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[1]]
+```
 
 
+"Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
 
+```{r}
+WI_Test_Plots_Nat_XINT[[2]]
+```
 
+"Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
+```{r}
+WI_Test_Plots_Nat_XINT[[3]]
+```
 
+"Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[4]]
+```
+
+"Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[5]]
+```
+
+"Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[6]]
+```
 
 
 
