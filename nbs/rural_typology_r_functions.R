@@ -192,7 +192,8 @@ bmapr <- function(specname,
         theme_void() +
         labs(fill = "Regional Cluster") + 
         scale_fill_manual(labels = (h1m[[l]] %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)), 
-                          values = (my_colors %>% filter(FIPS %in% unique(h1m[[l]]$match) ) %>% pull(color)) )
+                          values = (my_colors %>% filter(FIPS %in% unique(h1m[[l]]$match) ) %>% pull(color)) ) + 
+     theme(legend.key.size = unit(2, 'mm'))
     }
   }
   assign(deparse(substitute(specname)), p, envir=.GlobalEnv)

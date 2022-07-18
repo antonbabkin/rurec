@@ -55,7 +55,7 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_generat
 ```
 
 ```{r load data, include=FALSE}
-## Load previously generated datafiles
+# Load previously generated datafiles
 
 importr(TIGER_RUCC)
 importr(Total_mat)
@@ -188,6 +188,7 @@ if (!exists("WI_Test_Plots_XINT")){
   dismapr(WI_Test_Plots)
 }
 
+
 ```
 
 
@@ -234,53 +235,53 @@ for (i in 1:length(Sim_list)){
 
 
 ```{r histograms}
-# 
-# primary_c <- vector(mode='list', length=length(Total_mat))
-# names(primary_c) <- industry_levels
-# 
-# test_industry <- vector(mode='list', length=length(Total_mat))
-# names(test_industry) <- industry_levels
-# 
-# for (l in 1:length(Total_mat)){
-#     primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
-#     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]]) 
-#     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
-# }
-# 
-# for (l in 1:length(Total_mat)){
-#   for (p in 1:length(WItest_rural)){
-#     test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
-#     colnames( test_industry[[l]][[p]]) <- c("value")
-#     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]]) 
-#   }
-#   names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
-# }
-# 
-# 
-# ggbase <- test_industry
-# 
-# 
-# for (l in 1:length(Total_mat)){
-#   for (p in 1:length(WItest_rural)){
-#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-#       geom_col(aes(x = industry, 
-#                   y = log10(value))) +
-#       geom_point(data = primary_c[[l]], 
-#                  aes(x = industry,
-#                      y = log10(value),
-#                      color = variable)) +   
-#       geom_line(data = primary_c[[l]], 
-#                 aes(x = industry,
-#                     y = log10(value),
-#                     color = variable)) +
-#       labs(x = "Industry", y = "log(Payroll)") +
-#       scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
-#       scale_y_continuous(trans='log10') +
-#        labs(title = "Payroll Distribution by Industry",
-#            color = "Counties")   +
-#       scale_color_discrete( labels = (TIGER_RUCC_h1m[[l]]  %>% filter(place %in% unique(TIGER_RUCC_h1m[[l]]$match) ) %>% pull(County_Name)) )
-#     }
-# }
+
+primary_c <- vector(mode='list', length=length(Total_mat))
+names(primary_c) <- industry_levels
+
+test_industry <- vector(mode='list', length=length(Total_mat))
+names(test_industry) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+    primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(WItest_rural)){
+    test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
+    colnames( test_industry[[l]][[p]]) <- c("value")
+    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+  }
+  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
+}
+
+
+ggbase <- test_industry
+
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(WItest_rural)){
+     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+      geom_col(aes(x = industry,
+                  y = log10(value))) +
+      geom_point(data = primary_c[[l]],
+                 aes(x = industry,
+                     y = log10(value),
+                     color = variable)) +
+      geom_line(data = primary_c[[l]],
+                aes(x = industry,
+                    y = log10(value),
+                    color = variable)) +
+      labs(x = "Industry", y = "log(Payroll)") +
+      scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
+      scale_y_continuous(trans='log10') +
+       labs(title = "Payroll Distribution by Industry",
+           color = "Counties") + 
+       scale_color_discrete( labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% WItest_primary) %>% pull(County_Name)) )
+    }
+}
 
 ```
 
@@ -289,7 +290,7 @@ for (i in 1:length(Sim_list)){
 ```{r}
 #ggplotly(ggbase[[1]][[5]])
  #girafe(ggobj = ggbase[[1]][[5]])
- #print(ggbase[[1]][[5]])
+ print(ggbase[[1]]$`55015`)
 ```
 
 
@@ -297,7 +298,7 @@ for (i in 1:length(Sim_list)){
 "Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
 ```{r}
-WI_Test_Plots_XINT[[1]]
+WI_Test_Plots_XINT[[1]]  
 ```
 
 
@@ -329,6 +330,10 @@ WI_Test_Plots_XINT[[5]]
 
 ```{r}
 WI_Test_Plots_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots, WI_Test_Plots_XINT) %>% suppressWarnings()
 ```
 
 ### WI Test - Spatial
@@ -423,7 +428,9 @@ WI_Test_Plots_Imped_XINT[[5]]
 WI_Test_Plots_Imped_XINT[[6]]
 ```
 
-
+```{r}
+rm(WI_Test_Plots_Imped, WI_Test_Plots_Imped_XINT) %>% suppressWarnings()
+```
 
 
 ### WI Test - Natural
@@ -446,10 +453,9 @@ if (!exists("WI_Test_Plots_Nat_XINT")){
   dismapr(WI_Test_Plots_Nat)
 }
 
-
 ```
 
-
+Note: the "natural" specification does not have alpha shading with respect to the strength of the similarity as the previous maps have.  
 
 "Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
 
@@ -488,9 +494,70 @@ WI_Test_Plots_Nat_XINT[[5]]
 WI_Test_Plots_Nat_XINT[[6]]
 ```
 
+```{r}
+rm(WI_Test_Plots_Nat, WI_Test_Plots_Nat_XINT) %>% suppressWarnings()
+```
 
 
 
+
+
+
+
+### WI Test - Natural and Spatial 
+
+```{r maps with natural bounds and impedance}
+
+if (!exists("WI_Test_Plots_Nat_Imped")){
+  bmapr(WI_Test_Plots_Nat_Imped, impedance = Q_mat)
+}
+
+if (!exists("WI_Test_Plots_Nat_Imped_XINT")){
+  dismapr(WI_Test_Plots_Nat_Imped)
+}
+
+```
+
+
+"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[1]]
+```
+
+"Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[2]]
+```
+
+"Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[3]]
+```
+
+"Spatial Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2}  / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[4]]
+```
+
+"Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[5]]
+```
+
+"Spatial Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots_Nat_Imped, WI_Test_Plots_Nat_Imped_XINT) %>% suppressWarnings()
+```
 
 
 FIN
