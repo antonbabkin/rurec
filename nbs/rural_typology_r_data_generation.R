@@ -134,32 +134,32 @@ if (!file.exists(file.path(data_dir, "Direct_mat"))){
 log_info("Direct requirements matrix complete")
 
 #### Trimming distance decay matrix to only counties with economic data (varies by industry level specification)   
-if (!file.exists(file.path(data_dir, "Q_mat"))){
+if (!file.exists(file.path(data_dir, "D_mat"))){
   importr(Total_mat)
   importr(CBP_2019p_Concord_Sector_XBEA)
   importr(CBP_2019p_Concord_Summary_XBEA)
   importr(CBP_2019p_Concord_Detail_XBEA)
-  importr(QI_mat)
+  importr(Dist_mat)
   importr(TIGERData)
   importr(RUCCData)
   
-    Q_mat <- vector(mode='list', length=length(Total_mat))
-    names(Q_mat) <- industry_levels
+    D_mat <- vector(mode='list', length=length(Total_mat))
+    names(D_mat) <- industry_levels
     
-    Q_mat[[1]] <- QI_mat
-    Q_mat[[1]] <- Q_mat[[1]][rownames(Q_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[1]] <- Q_mat[[1]][ , colnames(Q_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[1]] <- Dist_mat
+    D_mat[[1]] <- D_mat[[1]][rownames(D_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[1]] <- D_mat[[1]][ , colnames(D_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-    Q_mat[[2]] <- QI_mat
-    Q_mat[[2]] <- Q_mat[[2]][rownames(Q_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[2]] <- Q_mat[[2]][ , colnames(Q_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[2]] <- Dist_mat
+    D_mat[[2]] <- D_mat[[2]][rownames(D_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[2]] <- D_mat[[2]][ , colnames(D_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-    Q_mat[[3]] <- QI_mat
-    Q_mat[[3]] <- Q_mat[[3]][rownames(Q_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[3]] <- Q_mat[[3]][ , colnames(Q_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[3]] <- Dist_mat
+    D_mat[[3]] <- D_mat[[3]][rownames(D_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[3]] <- D_mat[[3]][ , colnames(D_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-  saver(Q_mat)
-  rm(Q_mat, Total_mat, CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Detail_XBEA, QI_mat, TIGERData, RUCCData)
+  saver(D_mat)
+  rm(D_mat, Total_mat, CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Detail_XBEA, Dist_mat, TIGERData, RUCCData)
 }
 log_info("Distance decay matrix triming complete")
 

@@ -56,7 +56,6 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_generat
 
 ```{r load data, include=FALSE}
 # Load previously generated datafiles
-
 importr(TIGER_RUCC)
 importr(Total_mat)
 importr(Xpay_mat)
@@ -66,13 +65,31 @@ importr(Sim_mat_imp)
 importr(Sim_mat_imp_rel)
 importr(Sim_mat_exp)
 importr(Sim_mat_exp_rel)
-importr(Q_mat)
-
+importr(D_mat)
 
 Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
 names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
 
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
+
+
+#Specify spatial impedance structure
+### inverse square function
+for (i in 1:length(D_mat)){
+  Impede_mat <- D_mat
+  Impede_mat[[i]] <- (1/(D_mat[[i]])^2)
+  }
+### exponential decay function
+# for (i in 1:length(D_mat)){
+#   Impede_mat <- D_mat
+#   Impede_mat[[i]] <- exp(-(D_mat[[i]]/10000))
+#   }
+### hyperbolic secant function
+# for (i in 1:length(D_mat)){
+#   Impede_mat <- D_mat
+#   Impede_mat[[i]] <-  2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))
+#   }
+
 
 ```
 
@@ -179,7 +196,6 @@ sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_ma
 
 
 ```{r maps}
-
 if (!exists("WI_Test_Plots")){
   mapr(WI_Test_Plots)
 }
@@ -187,7 +203,6 @@ if (!exists("WI_Test_Plots")){
 if (!exists("WI_Test_Plots_XINT")){
   dismapr(WI_Test_Plots)
 }
-
 
 ```
 
@@ -345,7 +360,7 @@ rm(WI_Test_Plots, WI_Test_Plots_XINT) %>% suppressWarnings()
 ```{r maps with impedance}
 
 if (!exists("WI_Test_Plots_Imped")){
-  mapr(WI_Test_Plots_Imped, impedance = Q_mat)
+  mapr(WI_Test_Plots_Imped, impedance = Impede_mat)
 }
 
 if (!exists("WI_Test_Plots_Imped_XINT")){
@@ -372,7 +387,7 @@ for (l in 1:length(Sim_list)){
 for (i in 1:length(Sim_list)){
   
   for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Q_mat[[l]][WItest_rural, WItest_primary] 
+    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Impede_mat[[l]][WItest_rural, WItest_primary] 
     
     
     WI_match[[l]] <- sparseMatrix(
@@ -436,9 +451,17 @@ rm(WI_Test_Plots_Imped, WI_Test_Plots_Imped_XINT) %>% suppressWarnings()
 ### WI Test - Natural
 
 ```{r extent natural bounds}
-WItest_rural <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+
+WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
 WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 
+## Alternative "natural" specification with no predefined urban hubs
+# WItest_rural <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+# WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 
 ```
 
@@ -509,7 +532,7 @@ rm(WI_Test_Plots_Nat, WI_Test_Plots_Nat_XINT) %>% suppressWarnings()
 ```{r maps with natural bounds and impedance}
 
 if (!exists("WI_Test_Plots_Nat_Imped")){
-  bmapr(WI_Test_Plots_Nat_Imped, impedance = Q_mat)
+  bmapr(WI_Test_Plots_Nat_Imped, impedance = Impede_mat)
 }
 
 if (!exists("WI_Test_Plots_Nat_Imped_XINT")){
@@ -558,6 +581,53 @@ WI_Test_Plots_Nat_Imped_XINT[[6]]
 ```{r}
 rm(WI_Test_Plots_Nat_Imped, WI_Test_Plots_Nat_Imped_XINT) %>% suppressWarnings()
 ```
+
+
+
+
+
+
+
+
+### More  Maps
+
+```{r}
+##Match rural to mid
+
+rural <- rownames(Impede_mat[[1]])[rownames(Impede_mat[[1]]) %in% filter(TIGER_RUCC, H3==3)$place ]
+primary <- rownames(Impede_mat[[1]])[rownames(Impede_mat[[1]]) %in% filter(TIGER_RUCC, H3==2)$place ]
+
+Sim <- Sim_mat[[1]][rural, primary]
+
+RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[apply(Sim, 1, which.min)])
+
+table(RowMin[,"match"])
+
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
+
+ggplot(  filter(TIGER_RUCC_h1m, STATEFP=="55")) +
+  geom_sf(aes(fill = match), color = NA) +
+  coord_sf() +
+  theme_void() +
+  labs(title = "              First Order Similarity Matching",
+       subtitle = "              Simple Similarity Index",
+       fill = "Regional Cluster") +
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
+
+
+H_match <- sparseMatrix(
+  i = match(rownames(Sim), rural), 
+  j = match(c(colnames(Sim)[apply(Sim, 1, which.min)]), primary),  
+  x = 1L,
+  dims = c(nrow(Sim), ncol(Sim)),
+  dimnames = list(rural, primary)
+) %>% as.matrix()
+
+
+
+
+```
+
 
 
 FIN

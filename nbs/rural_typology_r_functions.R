@@ -168,16 +168,21 @@ bmapr <- function(specname,
       else {
         Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
       }
-      
+     
       RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
                            match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
                            min_value = apply(Sim[[l]], 1, min)
-      ) %>% as.data.frame()
+                           ) %>% as.data.frame()
       RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-      
+      RowMin[[l]] <- rbind(RowMin[[l]], 
+                           data.frame(
+                                      place = setdiff(WItest_primary, WItest_rural), 
+                                      match = setdiff(WItest_primary, WItest_rural), 
+                                      min_value = rep(1, length(setdiff(WItest_primary, WItest_rural))) 
+                                      ) 
+                           )
       h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
       h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-
       my_colors <-  hue_pal(h = c(20, 320))(length(levels(factor(c(primary_extent, rural_extent))))) %>% 
         cbind ( color = .,  FIPS =  h1m[[l]]$FIPS) %>% as.data.frame()
       
