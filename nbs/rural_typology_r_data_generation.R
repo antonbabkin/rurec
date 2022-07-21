@@ -172,7 +172,7 @@ if (!file.exists(file.path(data_dir, "Impede_mat"))){
   ### inverse square function
   Impede_mat[[1]] <- D_mat
   for (i in 1:length(D_mat)){
-    Impede_mat[[1]][[i]] <- ((1/(D_mat[[i]])^2) * 10000000)
+    Impede_mat[[1]][[i]] <- ((1/(D_mat[[i]])^2))
   }
   ### exponential decay function
   Impede_mat[[2]] <- D_mat
@@ -182,7 +182,7 @@ if (!file.exists(file.path(data_dir, "Impede_mat"))){
   ### hyperbolic secant function
   Impede_mat[[3]] <- D_mat
   for (i in 1:length(D_mat)){
-    Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000)))/10 )
+    Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))))
   }
   saver(Impede_mat)
   rm(D_mat, Impede_mat)
@@ -469,6 +469,22 @@ if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
   rm(Sim_mat_exp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel, Input_mat_exp)
 }
 log_info("Relative Import Similarity Index - Net Exports matrix complete")
+
+if (!file.exists(file.path(data_dir, "Sim_list"))){
+  importr(Sim_mat)
+  importr(Sim_mat_rel)
+  importr(Sim_mat_imp)
+  importr(Sim_mat_exp)
+  importr(Sim_mat_imp_rel)
+  importr(Sim_mat_exp_rel)
+
+  Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+  names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+  saver(Sim_list)
+  rm(Sim_list, Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+}
+log_info("All Similarity Indices complete")
+
 
 
 # Remove clutter
