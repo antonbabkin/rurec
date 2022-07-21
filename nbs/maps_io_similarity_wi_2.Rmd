@@ -65,31 +65,13 @@ importr(Sim_mat_imp)
 importr(Sim_mat_imp_rel)
 importr(Sim_mat_exp)
 importr(Sim_mat_exp_rel)
+importr(Impede_mat)
 importr(D_mat)
 
 Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
 names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
 
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
-
-
-#Specify spatial impedance structure
-### inverse square function
-for (i in 1:length(D_mat)){
-  Impede_mat <- D_mat
-  Impede_mat[[i]] <- (1/(D_mat[[i]])^2)
-  }
-### exponential decay function
-# for (i in 1:length(D_mat)){
-#   Impede_mat <- D_mat
-#   Impede_mat[[i]] <- exp(-(D_mat[[i]]/10000))
-#   }
-### hyperbolic secant function
-# for (i in 1:length(D_mat)){
-#   Impede_mat <- D_mat
-#   Impede_mat[[i]] <-  2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))
-#   }
-
 
 ```
 
@@ -170,15 +152,15 @@ Alternative specifications of the spatial distance are possible. One possibility
 ### WI Test
 
 ```{r extent}
-WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c("55009", "55025", "55079", "17031", "27053")
-names(WItest_primary) <- WItest_primary
+primary_extent <- c("55009", "55025", "55079", "17031", "27053")
+names(primary_extent) <- primary_extent
 
-#WItest_all <- c(WItest_rural, WItest_primary) %>% as.vector()
+all_extent <- c(rural_extent, primary_extent) %>% as.vector()
 
 # available_indicators_lab <- c("Simple Similarity Index", 
 #                               "Relative Similarity Index",  
@@ -196,13 +178,43 @@ sim_levels <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_ma
 
 
 ```{r maps}
-if (!exists("WI_Test_Plots")){
-  mapr(WI_Test_Plots)
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_XINT"))){
+  if (!exists("WI_Test_Plots")){
+    mapr(WI_Test_Plots)
+  }
+  if (!exists("WI_Test_Plots_XINT")){
+    dismapr(WI_Test_Plots)
+  }
+  saver(WI_Test_Plots_XINT)
+} else {
+  importr(WI_Test_Plots_XINT)
 }
 
-if (!exists("WI_Test_Plots_XINT")){
-  dismapr(WI_Test_Plots)
-}
+```
+
+```{r}
+#testing parameters
+# t1 <- Sim_list
+#   for (i in 1:6){
+#     for (l in 1:3){
+#       t1[[i]][[l]] <- t1[[i]][[l]][all_extent, primary_extent]
+#     }
+#   }
+# 
+# 
+# d1 <- D_mat[[1]][all_extent, primary_extent]
+# 
+# 
+# i1 <- vector(mode='list', length=3)
+# 
+#     for (l in 1:3){
+#       i1[[l]] <- Impede_mat[[l]][[1]][all_extent, primary_extent]
+#     }
+
+# max(i1[[1]][i1[[1]] != max(i1[[1]])]) 
+# 
+# (t1[[1]][[3]] /i1[[1]]) > 1
+#  
 
 ```
 
@@ -229,19 +241,19 @@ for (l in 1:length(Sim_list)){
 for (i in 1:length(Sim_list)){
   
   for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary]
+    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent]
     
     
     WI_match[[l]] <- sparseMatrix(
-      i = match(rownames(WISim[[l]]), WItest_rural), 
-      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), WItest_primary),  
+      i = match(rownames(WISim[[l]]), rural_extent), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
       x = 1L,
       dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
-      dimnames = list(WItest_rural, WItest_primary)
+      dimnames = list(rural_extent, primary_extent)
     ) %>% as.matrix()
     
   
-  Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, WItest_rural] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+  Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
 
 }
 }
@@ -258,18 +270,18 @@ test_industry <- vector(mode='list', length=length(Total_mat))
 names(test_industry) <- industry_levels
 
 for (l in 1:length(Total_mat)){
-    primary_c[[l]] <- Xpay_mat[[l]][, names(WItest_primary)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- Xpay_mat[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
 }
 
 for (l in 1:length(Total_mat)){
-  for (p in 1:length(WItest_rural)){
-    test_industry[[l]][[p]] <- Xpay_mat[[l]][, WItest_rural][, p] %>% as.data.frame()
+  for (p in 1:length(rural_extent)){
+    test_industry[[l]][[p]] <- Xpay_mat[[l]][, rural_extent][, p] %>% as.data.frame()
     colnames( test_industry[[l]][[p]]) <- c("value")
     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
   }
-  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, WItest_rural])
+  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, rural_extent])
 }
 
 
@@ -277,7 +289,7 @@ ggbase <- test_industry
 
 
 for (l in 1:length(Total_mat)){
-  for (p in 1:length(WItest_rural)){
+  for (p in 1:length(rural_extent)){
      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
       geom_col(aes(x = industry,
                   y = log10(value))) +
@@ -294,7 +306,7 @@ for (l in 1:length(Total_mat)){
       scale_y_continuous(trans='log10') +
        labs(title = "Payroll Distribution by Industry",
            color = "Counties") + 
-       scale_color_discrete( labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% WItest_primary) %>% pull(County_Name)) )
+       scale_color_discrete( labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(County_Name)) )
     }
 }
 
@@ -353,18 +365,17 @@ rm(WI_Test_Plots, WI_Test_Plots_XINT) %>% suppressWarnings()
 
 ### WI Test - Spatial
 
-"Geographical Impedance": $Q^{rs} = e^{-d^{rs}} ~ \forall ~ r,s \in l$
-
-
-
 ```{r maps with impedance}
-
-if (!exists("WI_Test_Plots_Imped")){
-  mapr(WI_Test_Plots_Imped, impedance = Impede_mat)
-}
-
-if (!exists("WI_Test_Plots_Imped_XINT")){
-  dismapr(WI_Test_Plots_Imped)
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Imped_XINT"))){
+  if (!exists("WI_Test_Plots_Imped")){
+    mapr(WI_Test_Plots_Imped, impedance = Impede_mat[[3]])
+  }
+  if (!exists("WI_Test_Plots_Imped_XINT")){
+    dismapr(WI_Test_Plots_Imped)
+  }
+  saver(WI_Test_Plots_Imped_XINT)
+} else {
+  importr(WI_Test_Plots_Imped_XINT)
 }
 
 ```
@@ -373,7 +384,6 @@ if (!exists("WI_Test_Plots_Imped_XINT")){
 "New Regional-level Total Output Table":  $\mathbf{X}$
 
 ```{r new total output with impedance}
-
 
 WI_match <- vector(mode='list', length=length(Total_mat))
 names(WI_match) <- industry_levels
@@ -387,23 +397,33 @@ for (l in 1:length(Sim_list)){
 for (i in 1:length(Sim_list)){
   
   for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][WItest_rural, WItest_primary] / Impede_mat[[l]][WItest_rural, WItest_primary] 
+    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent] / Impede_mat[[1]][[l]][rural_extent, primary_extent] 
     
     
     WI_match[[l]] <- sparseMatrix(
-      i = match(rownames(WISim[[l]]), WItest_rural), 
-      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), WItest_primary),  
+      i = match(rownames(WISim[[l]]), rural_extent), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
       x = 1L,
       dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
-      dimnames = list(WItest_rural, WItest_primary)
+      dimnames = list(rural_extent, primary_extent)
     ) %>% as.matrix()
     
   
-  Xpay_mat_H1_space[[i]][[l]] <- (Xpay_mat[[l]][, WItest_rural] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+  Xpay_mat_H1_space[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
 
 }
 }
 
+```
+
+
+
+"Spatial Impedance Only": $1 / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+  mapr(WI_TT, impedance = Impede_mat[[1]], spo = TRUE)
+  WI_TT[[1]][[1]] 
+  rm(WI_TT)
 ```
 
 
@@ -447,33 +467,130 @@ WI_Test_Plots_Imped_XINT[[6]]
 rm(WI_Test_Plots_Imped, WI_Test_Plots_Imped_XINT) %>% suppressWarnings()
 ```
 
+###  Impedance Sensitivity 
+
+
+```{r}
+
+if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
+    DI_mat  <- D_mat
+    for (i in 1:length(D_mat)){DI_mat[[i]] =  DI_mat[[i]][rural_extent, primary_extent]}
+    Sens_list  <- list()
+    Sens_list[[1]] <- Sim_list[[6]]
+    WI_Test_Sens_XINT <- list()
+  
+    Imp <- vector(mode='list', length = 10)
+    for(l in 1:length(Imp)){ 
+      Imp[[l]] <- vector(mode='list', length=length(industry_levels))
+      names(Imp[[l]]) <- industry_levels
+    }
+
+    x = 1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = DI_mat[[i]]/DI_mat[[i]] }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 1/(DI_mat[[i]]) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^2) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = ((1/(DI_mat[[i]])^2) * 1000) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = ((1/(DI_mat[[i]])^2) * 10000000) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]])) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/10)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/10000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/1000000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000)))/10) }
+    
+    for (l in 1:length(Imp)){     
+      mapr(Sens, 
+           list_of_sim_specifications = Sens_list, 
+           impedance = Imp[[l]]
+           )
+      dismapr(Sens)
+      WI_Test_Sens_XINT[[l]] <- Sens_XINT
+    }
+    
+    rm(DI_mat, Sens_list, Sens, Sens_XINT, Imp)
+  saver(WI_Test_Sens_XINT)
+} else {
+  importr(WI_Test_Sens_XINT)
+}
+
+#Add necessary/sufficient conditions check for impedance values with relative indices
+
+```
+
+
+Specification sensitivity example for various impedance measures using the "Relative Import Similarity Index - Net Exports" data.  
+
+**Base map** 
+
+$Q^{rs} = \mathbf{1}$
+
+```{r}
+WI_Test_Sens_XINT[[1]]
+```
+
+**Inverse Square Function**
+
+$Q^{rs} = (1/(d^{rs})^2)c$ where scalar $c = 10,000,000$ 
+
+```{r}
+WI_Test_Sens_XINT[[2]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 100,000$  100000
+
+```{r}
+WI_Test_Sens_XINT[[3]]
+```
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = (2/(e^{-d^{rs}c} + e^{d^{rs}c}))k$ where scalar $c = 1,000,000$ and scalar $k = 10$
+
+```{r}
+WI_Test_Sens_XINT[[4]]
+```
+
 
 ### WI Test - Natural
 
 ```{r extent natural bounds}
 
-WItest_rural <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
                 grep("55025", ., value=TRUE, invert = TRUE) %>% 
                 grep("55079", ., value=TRUE, invert = TRUE)
 
-WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+primary_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 
 ## Alternative "natural" specification with no predefined urban hubs
-# WItest_rural <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
-# WItest_primary <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+# rural_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+# primary_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
 
 ```
 
 
 ```{r maps with natural bounds}
 
-if (!exists("WI_Test_Plots_Nat")){
-  bmapr(WI_Test_Plots_Nat)
-}
-
-if (!exists("WI_Test_Plots_Nat_XINT")){
-  dismapr(WI_Test_Plots_Nat)
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Nat_XINT"))){
+  if (!exists("WI_Test_Plots_Nat")){
+    bmapr(WI_Test_Plots_Nat)
+  }
+  if (!exists("WI_Test_Plots_Nat_XINT")){
+    dismapr(WI_Test_Plots_Nat)
+  }
+  saver(WI_Test_Plots_Nat_XINT)
+} else {
+  importr(WI_Test_Plots_Nat_XINT)
 }
 
 ```
@@ -531,15 +648,20 @@ rm(WI_Test_Plots_Nat, WI_Test_Plots_Nat_XINT) %>% suppressWarnings()
 
 ```{r maps with natural bounds and impedance}
 
-if (!exists("WI_Test_Plots_Nat_Imped")){
-  bmapr(WI_Test_Plots_Nat_Imped, impedance = Impede_mat)
-}
-
-if (!exists("WI_Test_Plots_Nat_Imped_XINT")){
-  dismapr(WI_Test_Plots_Nat_Imped)
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Nat_Imped_XINT"))){
+  if (!exists("WI_Test_Plots_Nat_Imped")){
+    bmapr(WI_Test_Plots_Nat_Imped, impedance = Impede_mat[[3]])
+  }
+  if (!exists("WI_Test_Plots_Nat_Imped_XINT")){
+    dismapr(WI_Test_Plots_Nat_Imped)
+  }
+  saver(WI_Test_Plots_Nat_Imped_XINT)
+} else {
+  importr(WI_Test_Plots_Nat_Imped_XINT)
 }
 
 ```
+
 
 
 "Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
@@ -594,8 +716,8 @@ rm(WI_Test_Plots_Nat_Imped, WI_Test_Plots_Nat_Imped_XINT) %>% suppressWarnings()
 ```{r}
 ##Match rural to mid
 
-rural <- rownames(Impede_mat[[1]])[rownames(Impede_mat[[1]]) %in% filter(TIGER_RUCC, H3==3)$place ]
-primary <- rownames(Impede_mat[[1]])[rownames(Impede_mat[[1]]) %in% filter(TIGER_RUCC, H3==2)$place ]
+rural <- rownames(Impede_mat[[1]][[1]])[rownames(Impede_mat[[1]][[1]]) %in% filter(TIGER_RUCC, H3==3)$place ]
+primary <- rownames(Impede_mat[[1]][[1]])[rownames(Impede_mat[[1]][[1]]) %in% filter(TIGER_RUCC, H3==2)$place ]
 
 Sim <- Sim_mat[[1]][rural, primary]
 

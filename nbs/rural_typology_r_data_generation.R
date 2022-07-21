@@ -164,6 +164,33 @@ if (!file.exists(file.path(data_dir, "D_mat"))){
 log_info("Distance decay matrix triming complete")
 
 
+#Specify spatial impedance structure
+if (!file.exists(file.path(data_dir, "Impede_mat"))){
+  importr(D_mat) 
+  Impede_mat <- vector(mode='list', length = 3)
+  
+  ### inverse square function
+  Impede_mat[[1]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[1]][[i]] <- ((1/(D_mat[[i]])^2) * 10000000)
+  }
+  ### exponential decay function
+  Impede_mat[[2]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[2]][[i]] <- (exp(-(D_mat[[i]]/10000)) )
+  }
+  ### hyperbolic secant function
+  Impede_mat[[3]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000)))/10 )
+  }
+  saver(Impede_mat)
+  rm(D_mat, Impede_mat)
+}
+log_info("Spatial impedance structure complete")
+
+
+
 ############ Input Needs
 if (!file.exists(file.path(data_dir, "Input_mat"))){
   

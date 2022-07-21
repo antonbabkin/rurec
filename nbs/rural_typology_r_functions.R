@@ -139,12 +139,14 @@ importr <- function(x, filepath = file.path("data", "robjs")){
 
 
 
+
+
 #Function to map similarity indices 
 bmapr <- function(specname,
                  list_of_sim_specifications = Sim_list, 
                  industry_level_names = names(Total_mat),
-                 rural_extent = WItest_rural,
-                 primary_extent = WItest_primary,
+                 r_extent = rural_extent,
+                 p_extent = primary_extent,
                  space_vec = TIGER_RUCC,
                  impedance = NULL){
   
@@ -163,10 +165,10 @@ bmapr <- function(specname,
     for (l in 1:length(industry_level_names)){
       
       if (is.null(impedance)){
-        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] 
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] 
       }
       else {
-        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent] 
       }
      
       RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
@@ -175,15 +177,14 @@ bmapr <- function(specname,
                            ) %>% as.data.frame()
       RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
       RowMin[[l]] <- rbind(RowMin[[l]], 
-                           data.frame(
-                                      place = setdiff(WItest_primary, WItest_rural), 
-                                      match = setdiff(WItest_primary, WItest_rural), 
-                                      min_value = rep(1, length(setdiff(WItest_primary, WItest_rural))) 
+                           data.frame(place = setdiff(p_extent, r_extent), 
+                                      match = setdiff(p_extent, r_extent), 
+                                      min_value = rep(1, length(setdiff(p_extent, r_extent))) 
                                       ) 
                            )
       h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
       h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-      my_colors <-  hue_pal(h = c(20, 320))(length(levels(factor(c(primary_extent, rural_extent))))) %>% 
+      my_colors <-  hue_pal(h = c(20, 320))(length(levels(factor(c(p_extent, r_extent))))) %>% 
         cbind ( color = .,  FIPS =  h1m[[l]]$FIPS) %>% as.data.frame()
       
       
@@ -206,16 +207,15 @@ bmapr <- function(specname,
 
 
 
-
-
 #Function to map similarity indices 
 mapr <- function(specname,
                  list_of_sim_specifications = Sim_list, 
                  industry_level_names = names(Total_mat),
-                 rural_extent = WItest_rural,
-                 primary_extent = WItest_primary,
+                 r_extent = rural_extent,
+                 p_extent = primary_extent,
                  space_vec = TIGER_RUCC,
-                 impedance = NULL){
+                 impedance = NULL,
+                 spo = FALSE){
   
   Sim <- vector(mode='list', length=length(industry_level_names))
   names(Sim) <- industry_level_names
@@ -227,32 +227,35 @@ mapr <- function(specname,
     p[[i]] <- vector(mode='list', length=length(industry_level_names))
     names(p[[i]]) <- industry_level_names
   }
-  
+
   for (i in 1:length(list_of_sim_specifications)){
     for (l in 1:length(industry_level_names)){
       
-      
       if (is.null(impedance)){
-        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] 
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] 
+      }
+      else if (isTRUE(spo)){
+        Sim[[l]] <- (1 / impedance[[l]][r_extent, p_extent])
       }
       else {
-        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent] 
       }
-      
+
       RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
                            match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
                            min_value = apply(Sim[[l]], 1, min)
       ) %>% as.data.frame()
       RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min(min_value)/min_value) %>% as.data.frame()
+
       RowMin[[l]] <- rbind(RowMin[[l]], 
-                           as.data.frame(cbind(place = primary_extent, 
-                                               match = primary_extent, 
-                                               min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
-                                               Nor = rep(c(1), each=length(primary_extent)) 
+                           as.data.frame(cbind(place = p_extent, 
+                                               match = p_extent, 
+                                               min_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
+                                               Nor = rep(c(1), each=length(p_extent)) 
+                                          )
                            )
-                           )
-      )
+                      )
       RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
       
       h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
