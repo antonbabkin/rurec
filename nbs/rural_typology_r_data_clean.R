@@ -112,19 +112,10 @@ if (!file.exists(file.path(data_dir, "Dist_mat"))){
   Dist_mat <- file.path(data_dir, "TIGERData") %>% readRDS() %>% .$center %>% as_Spatial() %>% distm()
   rownames(Dist_mat) = colnames(Dist_mat) <- file.path(data_dir, "TIGERData") %>% readRDS() %>%  .$place
 saver(Dist_mat)
+rm(Dist_mat) 
 }
 log_info("Distance Matrix complete")
 
-# Produce  Decay/Impedance  Matrix
-if (!file.exists(file.path(data_dir, "QI_mat"))){
-  #QI_mat <- (1/(Dist_mat/1)^2)
-  #QI_mat <- exp(-(Dist_mat/10000))
-  ### hyperbolic secant function
-  QI_mat <- 2/(exp(-(Dist_mat/1000000)) + exp(Dist_mat/1000000))
-saver(QI_mat)
-}
-rm(Dist_mat, QI_mat) %>% suppressWarnings()
-log_info("Impedance Matrix complete")
 
 ## Produce Proximity  Matrix
 if (!file.exists(file.path(data_dir, "Prox_mat"))){

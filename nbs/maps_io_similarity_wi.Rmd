@@ -1,0 +1,866 @@
+---
+title: "Maps and IO Similarity Index: II"
+author: "Austin Sandler"
+date: "2022-06-02"
+format:
+  html:
+    self-contained: false
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+
+```{r preamble, include = FALSE}
+# When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+#For nonscientific notation
+options(scipen=999)
+
+```
+
+
+```{r packages and libraries, include = FALSE}
+# Load and attach necessary packages
+library(rprojroot)
+library(cowplot)
+library(dash)
+library(dlm)
+library(DT)
+library(geosphere)
+library(ggiraph)
+library(glue)
+library(gtools)
+library(knitr)
+library(magrittr)
+library(manipulateWidget)
+library(Matrix)
+library(plotly)
+library(reshape2)
+library(scales)
+library(spdep)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+library(tools)
+
+#Load custom functions
+#source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_generation.R"))
+
+
+```
+
+```{r load data, include=FALSE}
+# Load previously generated datafiles
+importr(TIGER_RUCC)
+importr(Total_mat)
+importr(Xpay_mat)
+importr(Sim_list)
+importr(Impede_mat)
+importr(D_mat)
+
+data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
+
+```
+
+
+This R Markdown document is the second attempt at mapping the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
+
+::: {.panel-tabset}
+
+
+### Methods
+
+
+We can derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A^{n}}$, from the national-level, industry-by-industry total requirements matrix, $\mathbf{L^{n}}$, using $\mathbf{A^{n}} = \mathbf{I} - (\mathbf{L^{n}})^{-1}$. Furthermore, we can construct the location specific total output vector, $\mathbf{x^{r}}$ from a payroll and labor share quotient. As  a first pass assume unit labor share, such that location specific industry payroll is equivalent to location specific total output. 
+
+**Location specific metrics of industry input needs**
+
+We specify a vector of *location input needs* as the product of the national input coefficient matrix and the location specific total output vector, $\mathbf{Ax^{r}}$.  
+
+Similarly, let the *share* or *relative input needs* vector be given as $\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
+
+In addition, we define the *actual* or *import input needs* vector as, $\max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
+
+(Similarly, let the *actual* exports vector $\mathbf{\tilde{x}^{r}}$ be defined as $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$)
+
+And let the *relative import input needs* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$.
+
+Note: one may concatenate the input needs vectors across each location to construct an industry-by-location matrix of input needs for each specification above. Specifically denoted by: 
+
+ $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
+ 
+
+**Cross location industry compatibility**
+
+To elucidate the industrial compatibility across locations, we construct a *similarity index*. In general, it is defined on the metric space $(\mathbf{X}, D)$ where $\mathbf{X}$ is a set of vectors $\{\mathbf{x}_{i} \in \mathbb{R} : i \in \{1, \dots, n \}\}$ and $D:\mathbf{X} \times \mathbf{X}	\rightarrow \mathbb{R}$ is a distance function.  
+
+Specifying $D$ as a *Euclidean* or *2-norm distance*, we define the industrial compatibility distance or *simple similarity index* between two locations $r$ and $s$ as:
+
+$$D^{rs} = \Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}$$
+
+In addition, let the *relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+The  *import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2}$$
+
+Let the *relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+(I would argue that when a similarity index employs an import specification the "exporting" location should be specified instead as $\mathbf{\tilde{x}^{s}} = \vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ )
+
+One may further weight a *similarity index* by a geographical impedance function, $\mathbf{Q}$. In general terms, let this metric be defined by $\mathfrak{D}\left(\mathbf{Ax^{r}}, \mathbf{x^{s}}, \mathbf{Q}\right)$. In practice, the geographical impedance between locations $r$ and $s$ is given by, $Q^{rs} = e^{-d^{rs}}$ or $Q^{rs} = 1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
+
+$$d^{rs}  = R \cdot \arccos(\sin(\phi_{r})\sin(\phi_{s}) + \cos(\phi_{r})\cos(\phi_{s})\cos(\vert \lambda_{r} - \lambda_{s} \vert)) $$
+Where $\lambda_{r}, \phi_{r}$ and $\lambda_{s}, \phi_{r}$ are the longitude and latitude of locations $r$ and $s$, and $R$ is the radius of the reference sphere, which in this case is the *mean earth radius* from the WGS84 ellipsoid. 
+
+As such the *spatial simple similarity index* is given by 
+
+$$\mathfrak{D}^{rs} = D^{rs}/Q^{rs} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}/Q^{rs}$$
+
+
+Let the *spatial relative similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})}  / Q^{rs}$$
+Let the  *spatial import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})^{'}([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})}/Q^{rs}$$
+
+Let the *spatial relative import similarity index* between two locations $r$ and $s$ be given by:
+
+$$\sqrt{([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}]  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}] - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})} / Q^{rs}$$
+For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
+
+Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
+
+
+
+### WI Test
+
+```{r extent}
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
+primary_extent <- c("55009", "55025", "55079", "17031", "27053")
+names(primary_extent) <- primary_extent
+
+all_extent <- c(rural_extent, primary_extent) %>% as.vector()
+
+# available_indicators_lab <- c("Simple Similarity Index", 
+#                               "Relative Similarity Index",  
+#                               "Import Similarity Index", 
+#                               "Import Similarity Index - Net Exports", 
+#                               "Relative Import Similarity Index", 
+#                               "Relative Import Similarity Index - Net Exports")
+# 
+industry_levels  <-  c("Sector", "Summary", "Detail")
+
+
+```
+
+
+
+```{r maps}
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_XINT"))){
+  if (!exists("WI_Test_Plots")){
+    mapr(WI_Test_Plots)
+  }
+  if (!exists("WI_Test_Plots_XINT")){
+    dismapr(WI_Test_Plots)
+  }
+  saver(WI_Test_Plots_XINT)
+} else {
+  importr(WI_Test_Plots_XINT)
+}
+
+```
+
+```{r}
+#testing parameters
+# t1 <- Sim_list
+#   for (i in 1:6){
+#     for (l in 1:3){
+#       t1[[i]][[l]] <- t1[[i]][[l]][all_extent, primary_extent]
+#     }
+#   }
+# 
+# 
+# d1 <- D_mat[[1]][all_extent, primary_extent]
+# 
+# 
+# i1 <- vector(mode='list', length=3)
+# 
+#     for (l in 1:3){
+#       i1[[l]] <- Impede_mat[[l]][[1]][all_extent, primary_extent]
+#     }
+
+# max(i1[[1]][i1[[1]] != max(i1[[1]])]) 
+# 
+# (t1[[1]][[3]] /i1[[1]]) > 1
+#  
+
+```
+
+
+
+
+"New Regional-level Total Output Table":  $\mathbf{X}$
+
+```{r new total output}
+
+WISim <- vector(mode='list', length=length(Total_mat))
+names(WISim) <- industry_levels
+
+
+WI_match <- vector(mode='list', length=length(Total_mat))
+names(WI_match) <- industry_levels
+Xpay_mat_H1 <- vector(mode='list', length=length(Sim_list))
+names(Xpay_mat_H1) <- names(Sim_list)
+for (l in 1:length(Sim_list)){
+  Xpay_mat_H1[[l]] <- vector(mode='list', length=length(Total_mat))
+  names(Xpay_mat_H1[[l]] ) <- industry_levels
+}
+
+for (i in 1:length(Sim_list)){
+  
+  for (l in 1:length(WISim)){
+    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent]
+    
+    
+    WI_match[[l]] <- sparseMatrix(
+      i = match(rownames(WISim[[l]]), rural_extent), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
+      x = 1L,
+      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
+      dimnames = list(rural_extent, primary_extent)
+    ) %>% as.matrix()
+    
+  
+  Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+
+}
+}
+
+```
+
+
+```{r histograms}
+
+primary_c <- vector(mode='list', length=length(Total_mat))
+names(primary_c) <- industry_levels
+
+test_industry <- vector(mode='list', length=length(Total_mat))
+names(test_industry) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+    primary_c[[l]] <- Xpay_mat[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    test_industry[[l]][[p]] <- Xpay_mat[[l]][, rural_extent][, p] %>% as.data.frame()
+    colnames( test_industry[[l]][[p]]) <- c("value")
+    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+  }
+  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, rural_extent])
+}
+
+
+ggbase <- test_industry
+
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+      geom_col(aes(x = industry,
+                  y = log10(value))) +
+      geom_point(data = primary_c[[l]],
+                 aes(x = industry,
+                     y = log10(value),
+                     color = variable)) +
+      geom_line(data = primary_c[[l]],
+                aes(x = industry,
+                    y = log10(value),
+                    color = variable)) +
+      labs(x = "Industry", y = "log(Payroll)") +
+      scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
+      scale_y_continuous(trans='log10') +
+       labs(title = "Payroll Distribution by Industry",
+           color = "Counties") + 
+       scale_color_discrete( labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(County_Name)) )
+    }
+}
+
+```
+
+
+
+```{r}
+#ggplotly(ggbase[[1]][[5]])
+ #girafe(ggobj = ggbase[[1]][[5]])
+ print(ggbase[[1]]$`55015`)
+```
+
+
+
+"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[1]]  
+```
+
+
+"Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[2]]
+```
+
+"Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[3]]
+```
+
+"Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[4]]
+```
+
+"Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[5]]
+```
+
+"Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots, WI_Test_Plots_XINT) %>% suppressWarnings()
+```
+
+### WI Test - Spatial
+
+```{r maps with impedance}
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Imped_XINT"))){
+  if (!exists("WI_Test_Plots_Imped")){
+    mapr(WI_Test_Plots_Imped, impedance = Impede_mat[[3]])
+  }
+  if (!exists("WI_Test_Plots_Imped_XINT")){
+    dismapr(WI_Test_Plots_Imped)
+  }
+  saver(WI_Test_Plots_Imped_XINT)
+} else {
+  importr(WI_Test_Plots_Imped_XINT)
+}
+
+```
+
+
+"New Regional-level Total Output Table":  $\mathbf{X}$
+
+```{r new total output with impedance}
+
+WI_match <- vector(mode='list', length=length(Total_mat))
+names(WI_match) <- industry_levels
+Xpay_mat_H1_space <- vector(mode='list', length=length(Sim_list))
+names(Xpay_mat_H1_space) <- names(Sim_list)
+for (l in 1:length(Sim_list)){
+  Xpay_mat_H1_space[[l]] <- vector(mode='list', length=length(Total_mat))
+  names(Xpay_mat_H1_space[[l]] ) <- industry_levels
+}
+
+for (i in 1:length(Sim_list)){
+  
+  for (l in 1:length(WISim)){
+    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent] / Impede_mat[[1]][[l]][rural_extent, primary_extent] 
+    
+    
+    WI_match[[l]] <- sparseMatrix(
+      i = match(rownames(WISim[[l]]), rural_extent), 
+      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
+      x = 1L,
+      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
+      dimnames = list(rural_extent, primary_extent)
+    ) %>% as.matrix()
+    
+  
+  Xpay_mat_H1_space[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+
+}
+}
+
+```
+
+
+
+"Spatial Impedance Only": $1 / Q^{rs} ~ \forall ~ r,s \in l$ where $Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ and scalar $c = 10^{6}$ 
+
+```{r}
+  mapr(WI_TT, impedance = Impede_mat[[3]], spo = TRUE)
+  WI_TT[[1]][[1]] 
+  rm(WI_TT)
+```
+
+
+"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[1]]
+```
+
+"Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[2]]
+```
+
+"Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[3]]
+```
+
+"Spatial Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2}  / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[4]]
+```
+
+"Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[5]]
+```
+
+"Spatial Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Imped_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots_Imped, WI_Test_Plots_Imped_XINT) %>% suppressWarnings()
+```
+
+###  Impedance Sensitivity 
+
+```{r}
+
+if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
+    DI_mat  <- D_mat
+    for (i in 1:length(D_mat)){DI_mat[[i]] =  DI_mat[[i]][rural_extent, primary_extent]}
+    Sens_list  <- list()
+    Sens_list[[1]] <- Sim_list[[6]]
+    
+    WI_Test_Sens_XINT = Imp <- vector(mode='list', length = 15)
+
+    for(l in 1:length(Imp)){ 
+      Imp[[l]] <- vector(mode='list', length=length(industry_levels))
+      names(Imp[[l]]) <- industry_levels
+    }
+
+    x = 1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = DI_mat[[i]]/DI_mat[[i]] }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 1/(DI_mat[[i]]) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^2) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/2)) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/3)) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/10)) } 
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]])) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/min(DI_mat[[i]]))) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/1000000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/10000000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/100000000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]])) + exp(D_mat[[i]])) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/100000)) + exp(D_mat[[i]]/100000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000)) }
+    x=x+1
+    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/10000000)) + exp(D_mat[[i]]/10000000)) }
+     
+    for (l in 1:length(Imp)){     
+      mapr(Sens, 
+           list_of_sim_specifications = Sens_list, 
+           impedance = Imp[[l]]
+           )
+      dismapr(Sens)
+      WI_Test_Sens_XINT[l] <- Sens_XINT
+    }
+  
+  saver(WI_Test_Sens_XINT)
+  rm(DI_mat, Sens_list, Sens, Sens_XINT, Imp)
+
+} else {
+  importr(WI_Test_Sens_XINT)
+}
+
+
+#Add necessary/sufficient conditions check for impedance values with relative indices
+
+```
+
+
+Specification sensitivity example for various impedance measures using the "Relative Import Similarity Index - Net Exports" data.  
+
+**Base map** 
+
+$Q^{rs} = \mathbf{1}$
+
+```{r}
+WI_Test_Sens_XINT[[1]]
+```
+
+**Inverse Distance Function**
+
+$Q^{rs} = 1/(d^{rs})$ where $d^{rs}$ is the great-circle distance between the two locations
+
+```{r}
+WI_Test_Sens_XINT[[2]]
+```
+
+**Inverse Square Function**
+
+$Q^{rs} = 1/(d^{rs})^2$
+
+```{r}
+WI_Test_Sens_XINT[[3]]
+```
+
+**Inverse Square Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/2}$
+
+```{r}
+WI_Test_Sens_XINT[[4]]
+```
+
+**Inverse Cube Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/3}$
+
+```{r}
+WI_Test_Sens_XINT[[5]]
+```
+
+**Inverse Tenth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/10}$
+
+```{r}
+WI_Test_Sens_XINT[[6]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}}$ 
+
+```{r}
+WI_Test_Sens_XINT[[7]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = \min\{ \text{Distance}\}$ 
+
+```{r}
+WI_Test_Sens_XINT[[8]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{6}$ 
+
+```{r}
+WI_Test_Sens_XINT[[9]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{7}$ 
+
+```{r}
+WI_Test_Sens_XINT[[10]]
+```
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{8}$ 
+
+```{r}
+WI_Test_Sens_XINT[[11]]
+```
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}} + e^{d^{rs}})$ 
+
+```{r}
+WI_Test_Sens_XINT[[12]]
+```
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{5}$ 
+
+```{r}
+WI_Test_Sens_XINT[[13]]
+```
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{6}$ 
+
+```{r}
+WI_Test_Sens_XINT[[14]]
+```
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{7}$ 
+
+```{r}
+WI_Test_Sens_XINT[[15]]
+```
+
+
+
+
+
+
+### WI Test - Natural
+
+```{r extent natural bounds}
+
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                grep("55025", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE)
+
+primary_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+
+## Alternative "natural" specification with no predefined urban hubs
+# rural_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+# primary_extent <- c(grep("^55", rownames(TIGER_RUCC), value=TRUE) , "17031", "27053")
+
+```
+
+
+```{r maps with natural bounds}
+
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Nat_XINT"))){
+  if (!exists("WI_Test_Plots_Nat")){
+    bmapr(WI_Test_Plots_Nat)
+  }
+  if (!exists("WI_Test_Plots_Nat_XINT")){
+    dismapr(WI_Test_Plots_Nat)
+  }
+  saver(WI_Test_Plots_Nat_XINT)
+} else {
+  importr(WI_Test_Plots_Nat_XINT)
+}
+
+```
+
+Note: the "natural" specification does not have alpha shading with respect to the strength of the similarity as the previous maps have.  
+
+"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[1]]
+```
+
+
+"Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[2]]
+```
+
+"Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[3]]
+```
+
+"Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[4]]
+```
+
+"Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[5]]
+```
+
+"Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots_Nat, WI_Test_Plots_Nat_XINT) %>% suppressWarnings()
+```
+
+
+
+
+
+
+
+### WI Test - Natural and Spatial 
+
+```{r maps with natural bounds and impedance}
+
+if (!file.exists(file.path(data_dir, "WI_Test_Plots_Nat_Imped_XINT"))){
+  if (!exists("WI_Test_Plots_Nat_Imped")){
+    bmapr(WI_Test_Plots_Nat_Imped, impedance = Impede_mat[[3]])
+  }
+  if (!exists("WI_Test_Plots_Nat_Imped_XINT")){
+    dismapr(WI_Test_Plots_Nat_Imped)
+  }
+  saver(WI_Test_Plots_Nat_Imped_XINT)
+} else {
+  importr(WI_Test_Plots_Nat_Imped_XINT)
+}
+
+```
+
+Let $Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ and scalar $c = 10^{6}$ 
+
+"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[1]]
+```
+
+"Spatial Relative Similarity Index": $\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[2]]
+```
+
+"Spatial Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[3]]
+```
+
+"Spatial Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{\tilde{x}^{s}} \Vert_{2}  / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[4]]
+```
+
+"Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[5]]
+```
+
+"Spatial Relative Import Similarity Index - Net Exports": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{\tilde{x}^{s}}(\mathbf{i\tilde{x}^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
+
+```{r}
+WI_Test_Plots_Nat_Imped_XINT[[6]]
+```
+
+```{r}
+rm(WI_Test_Plots_Nat_Imped, WI_Test_Plots_Nat_Imped_XINT) %>% suppressWarnings()
+```
+
+
+
+
+
+
+
+
+### More  Maps
+
+```{r}
+##Match rural to mid
+
+rural <- rownames(Impede_mat[[1]][[1]])[rownames(Impede_mat[[1]][[1]]) %in% filter(TIGER_RUCC, H3==3)$place ]
+primary <- rownames(Impede_mat[[1]][[1]])[rownames(Impede_mat[[1]][[1]]) %in% filter(TIGER_RUCC, H3==2)$place ]
+
+Sim <- Sim_list[[1]][[1]][rural, primary]
+
+RowMin <- cbind(place = rownames(Sim), match = colnames(Sim)[apply(Sim, 1, which.min)])
+
+table(RowMin[,"match"])
+
+TIGER_RUCC_h1m <- inner_join(TIGER_RUCC, RowMin, by = "place", copy = TRUE)
+
+ggplot(  filter(TIGER_RUCC_h1m, STATEFP=="55")) +
+  geom_sf(aes(fill = match), color = NA) +
+  coord_sf() +
+  theme_void() +
+  labs(title = "              First Order Similarity Matching",
+       subtitle = "              Simple Similarity Index",
+       fill = "Regional Cluster") +
+       scale_fill_discrete(labels = (TIGER_RUCC_h1m  %>% filter(place %in% unique(TIGER_RUCC_h1m$match) ) %>% pull(County_Name)) )
+
+
+H_match <- sparseMatrix(
+  i = match(rownames(Sim), rural), 
+  j = match(c(colnames(Sim)[apply(Sim, 1, which.min)]), primary),  
+  x = 1L,
+  dims = c(nrow(Sim), ncol(Sim)),
+  dimnames = list(rural, primary)
+) %>% as.matrix()
+
+
+
+
+```
+
+
+
+FIN
+::: 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

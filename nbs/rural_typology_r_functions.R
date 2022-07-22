@@ -141,51 +141,127 @@ importr <- function(x, filepath = file.path("data", "robjs")){
 
 
 
+#Function to map similarity indices 
+bmapr <- function(specname,
+                 list_of_sim_specifications = Sim_list, 
+                 industry_level_names = names(Total_mat),
+                 r_extent = rural_extent,
+                 p_extent = primary_extent,
+                 space_vec = TIGER_RUCC,
+                 impedance = NULL){
+  
+  Sim <- vector(mode='list', length=length(industry_level_names))
+  names(Sim) <- industry_level_names
+  RowMin <- Sim
+  h1m <- Sim
+  p <- vector(mode='list', length=length(list_of_sim_specifications))
+  names(p) <- names(list_of_sim_specifications)
+  for(i in 1:length(p)){ 
+    p[[i]] <- vector(mode='list', length=length(industry_level_names))
+    names(p[[i]]) <- industry_level_names
+  }
+
+  for (i in 1:length(list_of_sim_specifications)){
+    for (l in 1:length(industry_level_names)){
+      
+      if (is.null(impedance)){
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] 
+      }
+      else {
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent] 
+      }
+     
+      RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
+                           match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
+                           min_value = apply(Sim[[l]], 1, min)
+                           ) %>% as.data.frame()
+      RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
+      RowMin[[l]] <- rbind(RowMin[[l]], 
+                           data.frame(place = setdiff(p_extent, r_extent), 
+                                      match = setdiff(p_extent, r_extent), 
+                                      min_value = rep(1, length(setdiff(p_extent, r_extent))) 
+                                      ) 
+                           )
+      h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
+      h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+      my_colors <-  hue_pal(h = c(20, 320))(length(levels(factor(c(p_extent, r_extent))))) %>% 
+        cbind ( color = .,  FIPS =  h1m[[l]]$FIPS) %>% as.data.frame()
+      
+      
+   p[[i]][[l]] <- ggplot( h1m[[l]] ) +
+        geom_sf_interactive(aes(fill = match,
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
+                                data_id = place), 
+                color = NA
+                ) +
+        coord_sf() +
+        theme_void() +
+        labs(fill = "Regional Cluster") + 
+        scale_fill_manual(labels = (h1m[[l]] %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)), 
+                          values = (my_colors %>% filter(FIPS %in% unique(h1m[[l]]$match) ) %>% pull(color)) ) + 
+     theme(legend.key.size = unit(2, 'mm'))
+    }
+  }
+  assign(deparse(substitute(specname)), p, envir=.GlobalEnv)
+} 
+
 
 
 #Function to map similarity indices 
-mapr <- function(list_of_sim_specifications = Sim_list, 
-                  sim_specification_names = sim_levels, 
-                  industry_level_names = names(Total_mat),
-                  rural_extent = WItest_rural,
-                  primary_extent = WItest_primary,
-                  space_vec = TIGER_RUCC){
+mapr <- function(specname,
+                 list_of_sim_specifications = Sim_list, 
+                 industry_level_names = names(Total_mat),
+                 r_extent = rural_extent,
+                 p_extent = primary_extent,
+                 space_vec = TIGER_RUCC,
+                 impedance = NULL,
+                 spo = FALSE){
   
-  g <<- vector(mode='list', length=length(list_of_sim_specifications))
-  names(g) <- names(list_of_sim_specifications)
-  title <- g
   Sim <- vector(mode='list', length=length(industry_level_names))
   names(Sim) <- industry_level_names
   RowMin <- Sim
   h1m <- Sim
-  p <<- vector(mode='list', length=length(industry_level_names))
-  subtitle <- Sim
-  
+  p <- vector(mode='list', length=length(list_of_sim_specifications))
+  names(p) <- names(list_of_sim_specifications)
+  for(i in 1:length(p)){ 
+    p[[i]] <- vector(mode='list', length=length(industry_level_names))
+    names(p[[i]]) <- industry_level_names
+  }
+
   for (i in 1:length(list_of_sim_specifications)){
     for (l in 1:length(industry_level_names)){
       
-      Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent]
-      
+      if (is.null(impedance)){
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] 
+      }
+      else if (isTRUE(spo)){
+        Sim[[l]] <- (1 / impedance[[l]][r_extent, p_extent])
+      }
+      else {
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent] 
+      }
+
       RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
                            match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
                            min_value = apply(Sim[[l]], 1, min)
       ) %>% as.data.frame()
       RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
+      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min(min_value)/min_value) %>% as.data.frame()
+
       RowMin[[l]] <- rbind(RowMin[[l]], 
-                           as.data.frame(cbind(place = primary_extent, 
-                                               match = primary_extent, 
-                                               min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
-                                               Nor = rep(c(1), each=length(primary_extent)) 
+                           as.data.frame(cbind(place = p_extent, 
+                                               match = p_extent, 
+                                               min_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
+                                               Nor = rep(c(1), each=length(p_extent)) 
+                                          )
                            )
-                           )
-      )
+                      )
       RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
       
       h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
       h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
       
-      p[[l]] <<- ggplot( h1m[[l]] ) +
+      p[[i]][[l]] <- ggplot( h1m[[l]] ) +
         geom_sf_interactive(aes(fill = match, 
                                 alpha = Nor, 
                                 tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
@@ -200,104 +276,37 @@ mapr <- function(list_of_sim_specifications = Sim_list,
         scale_fill_brewer(palette = "Set1",
                           labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
     }
-    
-    title[[i]] <- ggdraw() + 
-      draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
-      theme(plot.margin = margin(0, 0, 0, 7))
-    
-    g[[i]] <<- girafe(ggobj = plot_grid(p[[1]], 
-                                         p[[2]], 
-                                         p[[3]], 
-                                         labels = c("Sector", "Summary", "Detail")
-    ),
-    options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                   opts_hover_inv(css = "opacity:0.9;"),
-                   opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-    )
-    )
   }
-  
+  assign(deparse(substitute(specname)), p, envir=.GlobalEnv)
 } 
 
 
-
-
-#Function to map similarity indices with spatial weights
-smapr <- function(list_of_sim_specifications = Sim_list, 
-                  sim_specification_names = sim_levels, 
-                  industry_level_names = names(Total_mat),
-                  rural_extent = WItest_rural,
-                  primary_extent = WItest_primary,
-                  impedance = Q_mat,
-                  space_vec = TIGER_RUCC){
-  
-  sg <<- vector(mode='list', length=length(list_of_sim_specifications))
-  names(sg) <- names(list_of_sim_specifications)
-  title <- sg
-  Sim <- vector(mode='list', length=length(industry_level_names))
-  names(Sim) <- industry_level_names
-  RowMin <- Sim
-  h1m <- Sim
-  p <<- vector(mode='list', length=length(industry_level_names))
-  subtitle <- Sim
-  
-  for (i in 1:length(list_of_sim_specifications)){
-    for (l in 1:length(industry_level_names)){
-      
-      Sim[[l]] <- list_of_sim_specifications[[i]][[l]][rural_extent, primary_extent] / impedance[[l]][rural_extent, primary_extent] 
-      
-      RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
-                           match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
-                           min_value = apply(Sim[[l]], 1, min)
-      ) %>% as.data.frame()
-      RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/max(min_value)) %>% as.data.frame()
-      RowMin[[l]] <- rbind(RowMin[[l]], 
-                           as.data.frame(cbind(place = primary_extent, 
-                                               match = primary_extent, 
-                                               min_value = diag(list_of_sim_specifications[[i]][[l]][primary_extent, primary_extent]), 
-                                               Nor = rep(c(1), each=length(primary_extent)) 
-                           )
-                           )
+#Function to display mapped similarity indices 
+dismapr <- function(p){
+  if (exists(as.character(substitute(p)))){
+    g <- vector(mode='list', length=length(p))
+    names(g) <- names(p)
+    
+    for (i in 1:length(p)){
+      g[[i]] <- girafe(ggobj = plot_grid(p[[i]][[1]], 
+                                         p[[i]][[2]], 
+                                         p[[i]][[3]], 
+                                         labels = c("Sector", "Summary", "Detail")
+      ),
+      options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                     opts_hover_inv(css = "opacity:0.9;"),
+                     opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
       )
-      RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
-      
-      h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
-      h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-      
-      p[[l]] <<- ggplot( h1m[[l]] ) +
-        geom_sf_interactive(aes(fill = match, 
-                                alpha = Nor, 
-                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}"), 
-                                data_id = place
-        ), 
-        color = NA
-        ) +
-        guides(alpha = "none") +
-        coord_sf() +
-        theme_void() +
-        labs(fill = "Regional Cluster") +
-        scale_fill_brewer(palette = "Set1",
-                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+      )
     }
-    
-    title[[i]] <- ggdraw() + 
-      draw_label(available_indicators_lab[i], fontface = 'bold', x = 0, hjust = 0) +
-      theme(plot.margin = margin(0, 0, 0, 7))
-    
-    sg[[i]] <<- girafe(ggobj = plot_grid(p[[1]], 
-                                         p[[2]], 
-                                         p[[3]], 
-                                         labels = c("Sector", "Summary", "Detail")
-    ),
-    options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                   opts_hover_inv(css = "opacity:0.9;"),
-                   opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-    )
-    )
+    assign(paste0(deparse(substitute(p)), "_XINT"), g, envir=.GlobalEnv)
+  } 
+  else{
+    print("Error: Base plots not found")
   }
-  
-} 
+}
+
+
 
 #Function add NAICS to BEA codes  
 concordr <- function(cordname, econpath = "CBP_2019p", filepath = file.path("data", "robjs")){

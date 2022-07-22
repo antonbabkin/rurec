@@ -110,11 +110,11 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
 log_info("Payroll matrix complete")
 
 # ### Test that county industry data and I/O tables are compatible
-importr(Xpay_mat)
-importr(Total_mat)
-for(i in 1:3){
-  identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
-}
+# importr(Xpay_mat)
+# importr(Total_mat)
+# for(i in 1:3){
+#   identical(rownames(Xpay_mat[[i]] ), rownames(Total_mat[[i]] )) %>% print()
+# }
 
 #### Direct requirements matrices (Technical Coefficients) 
 if (!file.exists(file.path(data_dir, "Direct_mat"))){
@@ -134,34 +134,61 @@ if (!file.exists(file.path(data_dir, "Direct_mat"))){
 log_info("Direct requirements matrix complete")
 
 #### Trimming distance decay matrix to only counties with economic data (varies by industry level specification)   
-if (!file.exists(file.path(data_dir, "Q_mat"))){
+if (!file.exists(file.path(data_dir, "D_mat"))){
   importr(Total_mat)
   importr(CBP_2019p_Concord_Sector_XBEA)
   importr(CBP_2019p_Concord_Summary_XBEA)
   importr(CBP_2019p_Concord_Detail_XBEA)
-  importr(QI_mat)
+  importr(Dist_mat)
   importr(TIGERData)
   importr(RUCCData)
   
-    Q_mat <- vector(mode='list', length=length(Total_mat))
-    names(Q_mat) <- industry_levels
+    D_mat <- vector(mode='list', length=length(Total_mat))
+    names(D_mat) <- industry_levels
     
-    Q_mat[[1]] <- QI_mat
-    Q_mat[[1]] <- Q_mat[[1]][rownames(Q_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[1]] <- Q_mat[[1]][ , colnames(Q_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[1]] <- Dist_mat
+    D_mat[[1]] <- D_mat[[1]][rownames(D_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[1]] <- D_mat[[1]][ , colnames(D_mat[[1]]) %in% intersect(unique(CBP_2019p_Concord_Sector_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-    Q_mat[[2]] <- QI_mat
-    Q_mat[[2]] <- Q_mat[[2]][rownames(Q_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[2]] <- Q_mat[[2]][ , colnames(Q_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[2]] <- Dist_mat
+    D_mat[[2]] <- D_mat[[2]][rownames(D_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[2]] <- D_mat[[2]][ , colnames(D_mat[[2]]) %in% intersect(unique(CBP_2019p_Concord_Summary_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-    Q_mat[[3]] <- QI_mat
-    Q_mat[[3]] <- Q_mat[[3]][rownames(Q_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
-    Q_mat[[3]] <- Q_mat[[3]][ , colnames(Q_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
+    D_mat[[3]] <- Dist_mat
+    D_mat[[3]] <- D_mat[[3]][rownames(D_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ), ]
+    D_mat[[3]] <- D_mat[[3]][ , colnames(D_mat[[3]]) %in% intersect(unique(CBP_2019p_Concord_Detail_XBEA$place), intersect(unique(TIGERData$place), unique(RUCCData$place) ) ) ]
     
-  saver(Q_mat)
-  rm(Q_mat, Total_mat, CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Detail_XBEA, QI_mat, TIGERData, RUCCData)
+  saver(D_mat)
+  rm(D_mat, Total_mat, CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Detail_XBEA, Dist_mat, TIGERData, RUCCData)
 }
 log_info("Distance decay matrix triming complete")
+
+
+#Specify spatial impedance structure
+if (!file.exists(file.path(data_dir, "Impede_mat"))){
+  importr(D_mat) 
+  Impede_mat <- vector(mode='list', length = 3)
+  
+  ### inverse square function
+  Impede_mat[[1]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[1]][[i]] <- ((1/(D_mat[[i]])^2))
+  }
+  ### exponential decay function
+  Impede_mat[[2]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[2]][[i]] <- (exp(-(D_mat[[i]]/10000)) )
+  }
+  ### hyperbolic secant function
+  Impede_mat[[3]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))))
+  }
+  saver(Impede_mat)
+  rm(D_mat, Impede_mat)
+}
+log_info("Spatial impedance structure complete")
+
 
 
 ############ Input Needs
@@ -442,6 +469,22 @@ if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
   rm(Sim_mat_exp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel, Input_mat_exp)
 }
 log_info("Relative Import Similarity Index - Net Exports matrix complete")
+
+if (!file.exists(file.path(data_dir, "Sim_list"))){
+  importr(Sim_mat)
+  importr(Sim_mat_rel)
+  importr(Sim_mat_imp)
+  importr(Sim_mat_exp)
+  importr(Sim_mat_imp_rel)
+  importr(Sim_mat_exp_rel)
+
+  Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+  names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+  saver(Sim_list)
+  rm(Sim_list, Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+}
+log_info("All Similarity Indices complete")
+
 
 
 # Remove clutter
