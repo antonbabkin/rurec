@@ -188,7 +188,7 @@ $$b_{ij} = u_{ij}/x_{j}$$ Or in matrix notation as
 
 $$\mathbf{B} = \mathbf{U\hat{x}}^{-1}$$
 
-The Use matrix, $\mathbf{U}$ is constructed in dimensions of commodities (rows) by industries (columns) and, in matrix terms, the accounting identities are $\mathbf{q} = \mathbf{Ui} + \mathbf{e}$ and $\mathbf{x'} = \mathbf{i'U} + \mathbf{v'}$, where $\mathbf{q}$ is the vector of total commodity outputs, $\mathbf{e}$ is the vector of commodity final demands, $\mathbf{v'}$ is the (row) vector of total value-added inputs, $\mathbf{x}$, and is the vector of total industry outputs. The dimensions of $\mathbf{B}$ are therefore commodities-by-industries.
+The Use matrix, $\mathbf{U}$ is constructed in dimensions of commodities (rows) by industries (columns) and, in matrix terms, the accounting identities are $\mathbf{q} = \mathbf{Ui} + \mathbf{e}$ and $\mathbf{x'} = \mathbf{i'U} + \mathbf{v'}$, where $\mathbf{q}$ is the vector of total commodity outputs, $\mathbf{e}$ is the vector of commodity final demands, $\mathbf{v'}$ is the (row) vector of total value-added inputs, and $\mathbf{x}$ is the vector of total industry outputs. The dimensions of $\mathbf{B}$ are therefore commodities-by-industries.
 
 The Make table shows the production of commodities by industries, $\underset{(i \times c)}{\mathbf{V}} = [v_{ij}]$. The rows present the industries, and the columns display the commodities that the industries produce. Looking across a row, all the commodities produced by that industry are identified, and the sum of the entries is that industry's output. Looking down a column, all the industries producing that commodity are identified, and the sum of the entries is the output of that commodity. Define the Make matrix (or *output* matrix) as $\mathbf{V}$, the row sums of which comprise the vector of total industry output, $\mathbf{x} = \mathbf{Vi}$, and the column sums of which comprise total commodity output, $\mathbf{q'} = \mathbf{i'V}$.
 
@@ -258,6 +258,8 @@ These output matrices offer two possible sources from which to generate the tech
 
 **Commodity-Demand Driven Models**
 
+<!-- Something is wrong in the texts of this section. Same texts, different equations. -->
+
 Using $\mathbf{D}$, one can derive the *commodity-by-commodity total requirements matrix*, connecting commodity final demand to commodity output by:
 
 $$\mathbf{q} = \left(\mathbf{I} - \mathbf{BD}\right)^{-1}\mathbf{e}$$ and the *industry-by-commodity total requirements matrix*, connecting commodity final demand to industry output by:
@@ -273,6 +275,8 @@ $$\mathbf{x} = [\mathbf{C}^{-1}(\mathbf{I} - \mathbf{BC}^{-1})^{-1}]\mathbf{e}$$
 **Industry-Demand Driven Models**
 
 It is also possible to derive total requirements matrices for *industry-demand driven* models, replacing $\mathbf{e}$ by an equivalent expression involving $\mathbf{f}$ in appropriate equations
+
+<!-- Something is wrong in the texts of this section. Same texts, different equations. -->
 
 Using $\mathbf{D}$, one can derive the *industry-by-industry total requirements matrix*, connecting industry final demand to industry output by:
 
