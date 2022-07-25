@@ -584,6 +584,7 @@ Rural areas, derived from RUCA codes, often cross CBSA-based rural boundaries, a
 :tags: []
 
 #| tbl-cap: "Primary RUCA codes, 2010 revision."
+ers_rurality.download_and_combine_ruca()
 d = pd.read_fwf(ers_rurality.PATH['ruca_doc'], skiprows=144, header=None, widths=[4, 999]).head(11)
 d.columns = ['RUCA_CODE', 'RUCA_DESC']
 d = d.apply(lambda c: c.str.strip())
