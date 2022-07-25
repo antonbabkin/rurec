@@ -893,7 +893,7 @@ def rural_map_far(state_code, simplify=True):
     return d
 ```
 
-```{code-cell} ipython3
+```{raw-cell}
 :tags: []
 
 # test all definitions in all states
@@ -949,7 +949,7 @@ ipywidgets.VBox([ipywidgets.HBox([w_state, w_show]), w_out])
 
 # Build this module
 
-```{code-cell} ipython3
+```{raw-cell}
 :tags: []
 
 nbd.nb2mod('rurality.ipynb')
