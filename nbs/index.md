@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.13.7
+    jupytext_version: 1.14.0
 kernelspec:
   display_name: Python 3 (ipykernel)
   language: python
@@ -27,7 +27,73 @@ Exploring economic dynamics in rural areas of the United States.
 - InfoGroup data preparation.
 - Dynamics: summary statistics by geography and sector.
 
-+++ {"jp-MarkdownHeadingCollapsed": true, "tags": []}
++++
+
+# Recreate symlinks (Windows)
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+import os, pathlib
+
+def init_symlinks():
+    """Recreate symlinks of this project and all subprojects."""
+    print('Initializing symlinks for the project "rurec".')
+    root_dir = _dir_up()
+    print(f'VERIFY! Project root directory: "{root_dir}"')
+    
+    _recreate_dir_symlink('nbs/rurec', '../rurec', root_dir)
+    _recreate_dir_symlink('rurec/reseng', '../submodules/reseng/reseng', root_dir)
+    from rurec import reseng
+    _recreate_dir_symlink('rurec/pubdata', '../submodules/pubdata/pubdata', root_dir)
+    _recreate_dir_symlink('data/pubdata', '../submodules/pubdata/data', root_dir)
+    from rurec import pubdata
+    _recreate_dir_symlink('rurec/infogroup', '../submodules/infogroup/infogroup', root_dir)
+    from rurec import infogroup
+    
+    from rurec.pubdata import index as pubdata_index
+    pubdata_index.init_symlinks()
+    
+def _dir_up():
+    """Return dir path two levels above current notebook or script."""
+    try:
+        caller_dir = pathlib.Path(__file__).parent.resolve()
+    except Exception as e:
+        if str(e) != "name '__file__' is not defined": raise
+        caller_dir = pathlib.Path.cwd()
+    return caller_dir.parent
+
+def _recreate_dir_symlink(link, targ, root):
+    """Remove and create new symlink from `link` to `targ`.
+    `link` must be relative to `root`.
+    `targ must be relative to directory containing `link`.
+    """
+    link = (root / link).absolute()
+    assert (link.parent / targ).is_dir()
+    link.unlink(missing_ok=True)
+    link.symlink_to(pathlib.Path(targ), target_is_directory=True)
+    link_res = link.resolve()
+    assert link_res.is_dir()
+    print(f'symlink: "{link.relative_to(root)}" -> "{link_res.relative_to(root)}"')
+```
+
+```{code-cell} ipython3
+init_symlinks()
+```
+
+# Quick test
+
+```{code-cell} ipython3
+from rurec.pubdata import geography
+geography.get_state_df(scale='20m').query('CONTIGUOUS').plot()
+```
+
+```{code-cell} ipython3
+from rurec import rurality
+rurality.get_cbsa_delin_df(2020).query('CBSA_TITLE == "Madison, WI"')
+```
+
++++ {"tags": []}
 
 # Reproduction: rurec.Rproj
 
@@ -57,23 +123,10 @@ Exploring economic dynamics in rural areas of the United States.
 
 +++
 
-::: {.hidden}
-# Control panel
-:::
+# Build this module
 
 ```{code-cell} ipython3
-#| echo: false
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser(description='Perform tasks within Rural Economy project.')
-    parser.add_argument('task', help='choose a task', choices=['build_parquet', 'add_rurality'])
-    args = parser.parse_args()
-    print(args.task, 'started')
-    if args.task == 'build_parquet':
-        from rurec import infogroup
-        infogroup.build_parquet_dataset(21)
-    elif args.task == 'add_rurality':
-        from rurec import rurality
-        rurality.build_parquet_dataset(11)
-    print(args.task, 'finished')
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
+nbd.nb2mod('index.ipynb')
 ```
