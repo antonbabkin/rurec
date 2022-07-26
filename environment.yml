@@ -3,10 +3,8 @@ channels:
   - conda-forge
   - nodefaults
 dependencies:
-  - python>=3.8
   - jupyterlab>=3
-  - nbdime
-  - jupyter_contrib_nbextensions # needed for nbconvert
+  - jupytext
   - ipywidgets
   - requests
   - matplotlib
@@ -15,3 +13,4 @@ dependencies:
   - xlrd # old .xls format
   - geopandas
   - pyarrow # parquet for geopandas
+  - python-graphviz # option visualization of NAICS concordances
