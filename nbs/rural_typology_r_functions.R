@@ -197,7 +197,7 @@ bmapr <- function(specname,
         coord_sf() +
         theme_void() +
         labs(fill = "Regional Cluster") + 
-        scale_fill_manual(labels = (h1m[[l]] %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)), 
+        scale_fill_manual(labels = (h1m[[l]] %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)), 
                           values = (my_colors %>% filter(FIPS %in% unique(h1m[[l]]$match) ) %>% pull(color)) ) + 
      theme(legend.key.size = unit(2, 'mm'))
     }
@@ -215,6 +215,7 @@ mapr <- function(specname,
                  p_extent = primary_extent,
                  space_vec = TIGER_RUCC,
                  impedance = NULL,
+                 distance = TRUE,
                  spo = FALSE){
   
   Sim <- vector(mode='list', length=length(industry_level_names))
@@ -238,24 +239,47 @@ mapr <- function(specname,
         Sim[[l]] <- (1 / impedance[[l]][r_extent, p_extent])
       }
       else {
-        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent] 
+        if (isTRUE(distance)){
+          Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] / impedance[[l]][r_extent, p_extent]
+        }
+        else {
+          Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] * impedance[[l]][r_extent, p_extent] 
+        }
       }
 
       RowMin[[l]] <- cbind(place = rownames(Sim[[l]]), 
                            match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.min)], 
                            min_value = apply(Sim[[l]], 1, min)
       ) %>% as.data.frame()
+      
+      RowMin[[l]]$match[RowMin[[l]]$min_value == 0] <- "NA"
+      
       RowMin[[l]]$min_value <- as.numeric(RowMin[[l]]$min_value)
-      RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min(min_value)/min_value) %>% as.data.frame()
+      
+      if (isTRUE(distance)){
+        RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min(min_value)/min_value) %>% as.data.frame()
+        RowMin[[l]] <- rbind(RowMin[[l]], 
+                             as.data.frame(cbind(place = p_extent, 
+                                                 match = p_extent, 
+                                                 min_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
+                                                 Nor = rep(c(1), each=length(p_extent)) 
+                             )
+                             )
+        )
+      }
+      else {
+        RowMin[[l]] %<>% group_by(match) %>% mutate(Nor = min_value/min(min_value)) %>% as.data.frame()
+        RowMin[[l]] <- rbind(RowMin[[l]], 
+                             as.data.frame(cbind(place = p_extent, 
+                                                 match = p_extent, 
+                                                 min_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
+                                                 Nor = rep(c(0), each=length(p_extent)) 
+                             )
+                             )
+        )
+      }
+      
 
-      RowMin[[l]] <- rbind(RowMin[[l]], 
-                           as.data.frame(cbind(place = p_extent, 
-                                               match = p_extent, 
-                                               min_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
-                                               Nor = rep(c(1), each=length(p_extent)) 
-                                          )
-                           )
-                      )
       RowMin[[l]]$Nor <- as.numeric(RowMin[[l]]$Nor)
       
       h1m[[l]] <- inner_join(space_vec, RowMin[[l]], by = "place", copy = TRUE)
@@ -274,7 +298,7 @@ mapr <- function(specname,
         theme_void() +
         labs(fill = "Regional Cluster") +
         scale_fill_brewer(palette = "Set1",
-                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(County_Name)) ) 
+                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
     }
   }
   assign(deparse(substitute(specname)), p, envir=.GlobalEnv)

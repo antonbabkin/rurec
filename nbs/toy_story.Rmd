@@ -1215,17 +1215,21 @@ The Gravity of the Absolute and Relative "Total Use Coefficients", uses an alter
 
 We specify a vector of *location input needs* as the product of the national input coefficient matrix and the location specific total output vector, $\mathbf{Ax^{r}}$.  
 
-Similarly, let the *share* or *relative input needs* vector be given as $\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
+Similarly, let the *relative input needs* vector, denoted with a tilde, be given as $\mathbf{\widetilde{Ax^{r}}} = \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
 
-In addition, we define the *actual* or *import input needs* vector as, $\max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
+In addition, we define the *net import shortage* vector as, $\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
 
-(Similarly, let the *actual* exports vector $\mathbf{\tilde{x}^{r}}$ be defined as $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$)
+Similarly, let the *net input excess* vector be defined as, $\text{NIE}^{r} =$  $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ $\equiv$ $\max \{\mathbf{x^{r}} - \mathbf{Ax^{r}}, 0\}$.
 
-And let the *relative import input needs* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$.
+And let the *relative net import shortage* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$ $\equiv$ $\max \{\mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{r}}}, 0\}$ $\equiv$ $\widetilde{\text{NIS}^{r}}$.
+
+Similarly, let the *relative net input excess* vector be given by, $\max \{\mathbf{x^{r}}(\mathbf{ix^{r}})^{-1} - \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}, 0\}$ $\equiv$ $\max \{\mathbf{\widetilde{x^{r}}} - \mathbf{\widetilde{Ax^{r}}}, 0\}$ $\equiv$ $\widetilde{\text{NIE}^{r}}$.
 
 Note: one may concatenate the input needs vectors across each location to construct an industry-by-location matrix of input needs for each specification above. Specifically denoted by: 
 
- $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
+ $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, $\max \{\mathbf{X} - \mathbf{AX} , 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
+ 
+ 
  
 
 **Cross location industry compatibility**
@@ -1238,15 +1242,38 @@ $$D^{rs} = \Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} = \sqrt{(\mathbf{Ax^
 
 In addition, let the *relative similarity index* between two locations $r$ and $s$ be given by:
 
-$$\Vert \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
+$$\Vert \mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2}$$
 The  *import similarity index* between two locations $r$ and $s$ be given by:
 
-$$\Vert \max\{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} - \mathbf{x^{s}} \Vert_{2}$$
+$$\Vert \mathbf{\text{NIS}^{r}} - \mathbf{x^{s}} \Vert_{2}$$
 
 Let the *relative import similarity index* between two locations $r$ and $s$ be given by:
 
-$$\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2}$$
-(I would argue that when a similarity index employs an import specification the "exporting" location should be specified instead as $\mathbf{\tilde{x}^{s}} = \vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ )
+$$\Vert \mathbf{\widetilde{\text{NIS}^{r}}}  - \mathbf{\widetilde{x^{s}}} \Vert_{2}$$
+
+Arguably, when a similarity index employs an import specification the "exporting" location should be specified instead as $\text{NIE}^{s} = \vert \min \{\mathbf{Ax^{s}} - \mathbf{x^{s}}, 0\} \vert$ 
+
+As such, let the *import similarity index - net exports* between two locations $r$ and $s$ be given by:
+
+$$\Vert \mathbf{\text{NIS}^{r}} - \mathbf{\text{NIE}^{s}} \Vert_{2}$$
+
+Similarly, let the *relative import similarity index - net exports* between two locations $r$ and $s$ be given by:
+
+$$\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{\text{NIE}^{s}}} \Vert_{2}$$
+
+
+Taken together, the *net input excess* vector and the *net import shortage* vector allow us to define an *absorption* vector between exporting location $r$ and importing location $s$:
+
+$$\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$$
+
+We may specify the novel *Queeg* distance specification between exporting locations $r$ and importing location $s$ as:
+
+$$ \mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} $$
+
+Note: Contrary to the other similarity indices the *Queeg* measure is not a "distance" where the row minimum matches two places. But rather the *Queeg* specification is a congruence or compatibility metric where the row maximum matches two places.
+
+In practice $s$ places enter as pre-specified non-rural cores and all other rural places $r$ are matched to them. 
+
 
 One may further weight a *similarity index* by a geographical impedance function, $\mathbf{Q}$. In general terms, let this metric be defined by $\mathfrak{D}\left(\mathbf{Ax^{r}}, \mathbf{x^{s}}, \mathbf{Q}\right)$. In practice, the geographical impedance between locations $r$ and $s$ is given by, $Q^{rs} = e^{-d^{rs}}$ or $Q^{rs} = 1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
 
@@ -1257,21 +1284,15 @@ As such the *spatial simple similarity index* is given by
 
 $$\mathfrak{D}^{rs} = D^{rs}/Q^{rs} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}/Q^{rs}$$
 
+Similarly, all other indices are divided by the geographical impedance function, $\mathbf{Q}$.
 
-Let the *spatial relative similarity index* between two locations $r$ and $s$ be given by:
-
-$$\sqrt{(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}(\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})}  / Q^{rs}$$
-Let the  *spatial import similarity index* between two locations $r$ and $s$ be given by:
-
-$$\sqrt{([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})^{'}([\mathbf{Ax^{r}} - \mathbf{x^{r}}] - \mathbf{x^{s}})}/Q^{rs}$$
-
-Let the *spatial relative import similarity index* between two locations $r$ and $s$ be given by:
-
-$$\sqrt{([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}]  - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})^{'}([\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}] - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1})} / Q^{rs}$$
 For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
 
-Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
+Let the novel *spatial Queeg* distance between exporting locations $r$ and importing location $s$ be given by:
 
+$$ \mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / Q^{rs}$$
+
+Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
 
 
 
@@ -1332,14 +1353,14 @@ colnames(Toy_X_mat) <- c("AllElse", "Brown", "Cook", "Dane")
 Toy_X_mat
 ```
 
-"Industry-by-Location Input Needs Table": $\mathbf{AX}$
+"Input Needs Table": $\mathbf{AX}$
 
 ```{r}
 Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
 Toy_Input_mat  %>% round(2)
 ```
 
-"Relative Industry-by-Location Input Needs Table":  $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$
+"Relative Input Needs Table":  $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$
 
 ```{r}
 Toy_Input_mat_rel <- (Toy_Input_mat) %*% solve(diag(c((rep(c(1), each=ncol(Toy_Direct_mat)) %*% Toy_Input_mat))))
@@ -1347,21 +1368,21 @@ colnames(Toy_Input_mat_rel) <- c("AllElse", "Brown", "Cook", "Dane")
 Toy_Input_mat_rel  %>% round(4)
 ```
 
-"Import Industry-by-Location Input Needs Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
+"Net Import Shortage Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
 
 ```{r}
 Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
 Toy_Input_mat_imp  %>% round(2)
 ```
 
-"Net Exports Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ $\mathbf{\tilde{X}} = \vert \min \{\mathbf{AX}  - \mathbf{X}, 0\} \vert$ 
+"Net Input Excess  Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
 
 ```{r}
 Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
 Toy_Input_mat_exp  %>% round(2)
 ```
 
-"Relative Import Industry-by-Location Input Needs Table":  $\max \{\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0\}$ 
+"Relative Net Import Shortage Table":  $\max \{\mathbf{\widetilde{AX}} - \mathbf{\widetilde{X}}, 0\}$
 
 ```{r}
 Toy_Input_mat_imp_rel <- pmax(Toy_Input_mat_rel - Toy_X_mat %*% solve(diag(c((rep(c(1), each=nrow(Toy_X_mat)) %*% Toy_X_mat)))), 0)
@@ -1369,6 +1390,29 @@ colnames(Toy_Input_mat_imp_rel) <- c("AllElse", "Brown", "Cook", "Dane")
 Toy_Input_mat_imp_rel  %>% round(4)
 
 ```
+
+"Queeg distance": $\mathbf{i'} \min \{\max \{\mathbf{X} - \mathbf{AX, 0\}, \max \{\mathbf{AX}} - \mathbf{X}, 0\} \} $
+
+```{r}
+
+diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))
+
+Toy_Queeg<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Queeg) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Queeg[i,j]  <-  rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])
+    }
+  }
+
+
+colnames(Toy_Queeg) <- c("AllElse", "Brown", "Cook", "Dane")
+Toy_Queeg  %>% round(4)
+
+```
+
+
 
 Assuming a Euclidean distance function, the similarity index is given by 
 

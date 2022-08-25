@@ -106,11 +106,22 @@ if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA"))){
 log_info("Sector level CBP/BEA crosswalk complete")
 
 
+# Import and cleanup "pubdata" TIGER data
+if (!file.exists(file.path(data_dir, "TIGERDatap"))){
+  TIGERDatap <- geography$get_county_df(year=2020L, geometry=TRUE, scale="500k")
+  TIGERDatap %<>% rename(place = CODE)
+  TIGERDatap$center <- st_centroid(TIGERDatap$geometry)
+  TIGERDatap %<>% arrange(place)
+  saver(TIGERDatap)
+  rm(TIGERDatap) 
+}
+log_info("Import 'pubdata' TIGER complete")
+
 
 # Produce  Distance  Matrix
 if (!file.exists(file.path(data_dir, "Dist_mat"))){
-  Dist_mat <- file.path(data_dir, "TIGERData") %>% readRDS() %>% .$center %>% as_Spatial() %>% distm()
-  rownames(Dist_mat) = colnames(Dist_mat) <- file.path(data_dir, "TIGERData") %>% readRDS() %>%  .$place
+  Dist_mat <- file.path(data_dir, "TIGERDatap") %>% readRDS() %>% .$center %>% as_Spatial() %>% distm()
+  rownames(Dist_mat) = colnames(Dist_mat) <- file.path(data_dir, "TIGERDatap") %>% readRDS() %>%  .$place
 saver(Dist_mat)
 rm(Dist_mat) 
 }
@@ -119,20 +130,35 @@ log_info("Distance Matrix complete")
 
 ## Produce Proximity  Matrix
 if (!file.exists(file.path(data_dir, "Prox_mat"))){
-  Prox_mat <-  file.path(data_dir, "TIGERData") %>% readRDS() %>% poly2nb(queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
+  Prox_mat <-  file.path(data_dir, "TIGERDatap") %>% readRDS() %>% poly2nb(queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
   colnames(Prox_mat) <- rownames(Prox_mat)
 saver(Prox_mat)
 rm(Prox_mat)
 }
 log_info("Proximity Matrix complete")
 
+
+
+# Import and cleanup "pubdata" RUCC data
+if (!file.exists(file.path(data_dir, "RUCCData"))){
+  RUCCDatap <- ers_rurality$get_ruc_df()
+  RUCCDatap %<>% filter(RUC_YEAR=="2013")
+  RUCCDatap$place <- RUCCDatap$FIPS
+  saver(RUCCDatap)
+  rm(RUCCDatap) 
+}
+log_info("Import 'pubdata' RUCC complete")
+
+
 # TIGER  and RUCC
 if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
-  TIGER_RUCC <- inner_join(readRDS(file.path(data_dir, "TIGERData")), readRDS(file.path(data_dir, "RUCCData")), by = "place")
+  TIGER_RUCC <- inner_join(readRDS(file.path(data_dir, "TIGERDatap")), readRDS(file.path(data_dir, "RUCCDatap")), by = "place")
   ### Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515")
+  ##setdiff(TIGERDatap$place, RUCCDatap$place)
+  ##setdiff(RUCCDatap$place, TIGERDatap$place)
   TIGER_RUCC <- TIGER_RUCC[order(TIGER_RUCC$place), ]
   rownames(TIGER_RUCC) <- TIGER_RUCC$place
-  TIGER_RUCC <- transform(TIGER_RUCC, H3 = ifelse(RUCC_2013 %in% 1:3, 1, ifelse(RUCC_2013 %in% 4:6, 2, ifelse(RUCC_2013%in% 7:9, 3, 0)  ) ) )
+  TIGER_RUCC <- transform(TIGER_RUCC, H3 = ifelse(RUC_CODE %in% 1:3, 1, ifelse(RUC_CODE %in% 4:6, 2, ifelse(RUC_CODE%in% 7:9, 3, 0)  ) ) )
 saver(TIGER_RUCC)
 rm(TIGER_RUCC)
 }
