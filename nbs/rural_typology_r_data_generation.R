@@ -470,6 +470,70 @@ if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
 }
 log_info("Relative Import Similarity Index - Net Exports matrix complete")
 
+
+
+############  Queeg specification
+if (!file.exists(file.path(data_dir, "Queeg"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+  Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
+  Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
+  
+  Queeg <- vector(mode='list', length=length(Total_mat))
+  names(Queeg) <- industry_levels
+  
+  for (l in 1:length(Queeg)){
+    Queeg[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+    rownames(Queeg[[l]]) = colnames(Queeg[[l]]) <- colnames(Input_mat[[l]])
+  }
+  
+  for (l in 1:length(Queeg)){
+    for (i in 1:ncol(Xpay_mat[[l]])){
+      for (j in 1:ncol(Xpay_mat[[l]])){
+        Queeg[[l]][i,j]  <- rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_exp[[l]][,i], Input_mat_imp[[l]][,j])
+      }
+    }
+  }
+  
+  saver(Queeg)
+  rm(Queeg, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
+}
+log_info("Queeg specification complete")
+
+############ Relative Queeg specification
+if (!file.exists(file.path(data_dir, "Queeg_rel"))){
+
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+  Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
+  Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
+
+  Queeg_rel <- vector(mode='list', length=length(Total_mat))
+  names(Queeg_rel) <- industry_levels
+
+  for (l in 1:length(Queeg_rel)){
+    Queeg_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+    rownames(Queeg_rel[[l]]) = colnames(Queeg_rel[[l]]) <- colnames(Input_mat[[l]])
+  }
+
+  for (l in 1:length(Queeg_rel)){
+    for (i in 1:ncol(Xpay_mat[[l]])){
+      for (j in 1:ncol(Xpay_mat[[l]])){
+        Queeg_rel[[l]][i,j]  <- rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_exp[[l]][,i] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_exp[[l]][,i] ))), Input_mat_imp[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_imp[[l]][,j] ))))
+      }
+    }
+  }
+
+  saver(Queeg_rel)
+  rm(Queeg_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
+}
+log_info("Relative Queeg specification complete")
+
+
+############ All Similarities
 if (!file.exists(file.path(data_dir, "Sim_list"))){
   importr(Sim_mat)
   importr(Sim_mat_rel)
