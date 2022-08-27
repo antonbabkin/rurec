@@ -522,7 +522,7 @@ if (!file.exists(file.path(data_dir, "Queeg_rel"))){
   for (l in 1:length(Queeg_rel)){
     for (i in 1:ncol(Xpay_mat[[l]])){
       for (j in 1:ncol(Xpay_mat[[l]])){
-        Queeg_rel[[l]][i,j]  <- rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_exp[[l]][,i] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_exp[[l]][,i] ))), Input_mat_imp[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_imp[[l]][,j] ))))
+        Queeg_rel[[l]][i,j]  <- (rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_exp[[l]][,i], Input_mat_imp[[l]][,j]) ) /  (rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_exp[[l]][,i] )
       }
     }
   }

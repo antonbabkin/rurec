@@ -81,7 +81,7 @@ We  derive a national-level, industry-by-industry direct requirements matrix, $\
 
 **Location specific metrics of industry input needs**
 
-We specify a vector of *location input needs* as the product of the national input coefficient matrix and the location specific total output vector, $\mathbf{Ax^{r}}$.  
+We derive a place specific *input needs* vector from the product of the national input coefficient matrix and the place specific total output vector, $\mathbf{Ax^{r}}$.  
 
 Similarly, let the *relative input needs* vector, denoted with a tilde, be given as $\mathbf{\widetilde{Ax^{r}}} = \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
 
@@ -275,7 +275,7 @@ for (i in 1:length(Sim_list)){
       dimnames = list(rural_extent, primary_extent)
     ) %>% as.matrix()
     
-  
+
   Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
 
 }
@@ -557,7 +557,8 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
     DI_mat  <- D_mat
     for (i in 1:length(D_mat)){DI_mat[[i]] =  DI_mat[[i]][rural_extent, primary_extent]}
     Sens_list  <- list()
-    Sens_list[[1]] <- Sim_list[[6]]
+    #Sens_list[[1]] <- Sim_list[[6]]
+    Sens_list[[1]] <- mQueeg_list[[2]]
     
     WI_Test_Sens_XINT = Imp <- vector(mode='list', length = 15)
 
@@ -600,7 +601,8 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
     for (l in 1:length(Imp)){     
       mapr(Sens, 
            list_of_sim_specifications = Sens_list, 
-           impedance = Imp[[l]]
+           impedance = Imp[[l]],
+           distance = FALSE
            )
       dismapr(Sens)
       WI_Test_Sens_XINT[l] <- Sens_XINT
@@ -619,7 +621,7 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
 ```
 
 
-Specification sensitivity example for various impedance measures using the "Relative Import Similarity Index - Net Exports" data.  
+Specification sensitivity example for various impedance measures using the "Spatial Queeg distance" data.  
 
 **Base map** 
 
