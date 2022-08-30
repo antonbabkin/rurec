@@ -296,7 +296,7 @@ mapr <- function(specname,
         guides(alpha = "none") +
         coord_sf() +
         theme_void() +
-        labs(fill = "Regional Cluster") +
+        labs(fill = "Cluster") +
         scale_fill_brewer(palette = "Set1",
                           labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
     }
@@ -305,22 +305,115 @@ mapr <- function(specname,
 } 
 
 
-#Function to display mapped similarity indices 
+
+#Function to map capacitance
+cmapr <- function(specname,
+                 list_of_sim_specifications = Queeg_list, 
+                 industry_level_names = names(Total_mat),
+                 r_extent = rural_extent,
+                 p_extent = primary_extent,
+                 space_vec = TIGER_RUCC,
+                 impedance = NULL,
+                 spo = FALSE){
+  
+  Sim <- vector(mode='list', length=length(industry_level_names))
+  names(Sim) <- industry_level_names
+  RowMax <- Sim
+  h1m <- Sim
+  p <- vector(mode='list', length=length(list_of_sim_specifications))
+  names(p) <- names(list_of_sim_specifications)
+  for(i in 1:length(p)){ 
+    p[[i]] <- vector(mode='list', length=length(industry_level_names))
+    names(p[[i]]) <- industry_level_names
+  }
+  
+  for (i in 1:length(list_of_sim_specifications)){
+    for (l in 1:length(industry_level_names)){
+      
+      if (is.null(impedance)){
+        Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] 
+      }
+      else if (isTRUE(spo)){
+        Sim[[l]] <- ( impedance[[l]][r_extent, p_extent])
+      }
+      else {
+          Sim[[l]] <- list_of_sim_specifications[[i]][[l]][r_extent, p_extent] * impedance[[l]][r_extent, p_extent] 
+      }
+      
+      RowMax[[l]] <- cbind(place = rownames(Sim[[l]]), 
+                           match = colnames(Sim[[l]])[apply(Sim[[l]], 1, which.max)], 
+                           max_value = apply(Sim[[l]], 1, max)
+      ) %>% as.data.frame()
+      
+      RowMax[[l]]$match[RowMax[[l]]$max_value == 0] <- "NA"
+      
+      RowMax[[l]]$max_value <- as.numeric(RowMax[[l]]$max_value)
+      
+        RowMax[[l]] %<>% group_by(match) %>% mutate(Nor = (max_value)/max(max_value)) %>% as.data.frame()
+        RowMax[[1]]$Nor[RowMax[[1]]$match == "NA"] <- 1
+        RowMax[[l]] <- rbind(RowMax[[l]], 
+                             as.data.frame(cbind(place = p_extent, 
+                                                 match = p_extent, 
+                                                 max_value = diag(list_of_sim_specifications[[i]][[l]][p_extent, p_extent]), 
+                                                 Nor = rep(c(1), each=length(p_extent)) 
+                             )
+                             )
+        )
+      
+    
+      RowMax[[l]]$Nor <- as.numeric(RowMax[[l]]$Nor)
+      
+      h1m[[l]] <- inner_join(space_vec, RowMax[[l]], by = "place", copy = TRUE)
+      h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+      h1m[[l]]$max_value %<>% as.numeric() %>% round(digits = 3)
+
+      p[[i]][[l]] <- ggplot( h1m[[l]] ) +
+        geom_sf_interactive(aes(fill = match, 
+                                alpha = Nor, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {max_value}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) +
+        guides(alpha = "none") +
+        coord_sf() +
+        theme_void() +
+        labs(fill = "Cluster") +
+        scale_fill_brewer(palette = "Set1",
+                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
+    }
+  }
+  assign(deparse(substitute(specname)), p, envir=.GlobalEnv)
+} 
+
+
 dismapr <- function(p){
   if (exists(as.character(substitute(p)))){
     g <- vector(mode='list', length=length(p))
     names(g) <- names(p)
     
     for (i in 1:length(p)){
-      g[[i]] <- girafe(ggobj = plot_grid(p[[i]][[1]], 
-                                         p[[i]][[2]], 
-                                         p[[i]][[3]], 
-                                         labels = c("Sector", "Summary", "Detail")
-      ),
-      options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                     opts_hover_inv(css = "opacity:0.9;"),
-                     opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+      gplot = plot_grid(p[[i]][[1]] + theme(legend.position = 'none'), 
+                        p[[i]][[2]] + theme(legend.position = 'none'), 
+                        p[[i]][[3]] + theme(legend.position = 'none'),
+                        labels = c("Sector", "Summary", "Detail"),
+                        nrow = 1,
+                        label_x = 0, label_y = .75,
+                        hjust = -0.5
       )
+      
+      gleg = get_legend(p[[i]][[1]] +
+                          guides(color = guide_legend(nrow = 1)) +
+                          theme(legend.position = "bottom", 
+                                legend.key.size = unit(.2, "cm"))
+      )
+      
+      gall = gplot + draw_grob(gleg, x = 0, y = 0, width = 1, height = .5, scale = .5)
+      
+      g[[i]] <- girafe(ggobj = gall, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
       )
     }
     assign(paste0(deparse(substitute(p)), "_XINT"), g, envir=.GlobalEnv)
@@ -329,6 +422,7 @@ dismapr <- function(p){
     print("Error: Base plots not found")
   }
 }
+
 
 
 

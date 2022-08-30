@@ -30,7 +30,7 @@ library(cowplot)
 library(dash)
 library(dlm)
 library(DT)
-library(geosphere)
+#library(geosphere)
 library(ggiraph)
 library(glue)
 library(gtools)
@@ -42,7 +42,7 @@ library(plotly)
 library(reshape2)
 library(scales)
 #library(spdep)
-library(tidyverse)
+#library(tidyverse)
 #library(tmap)
 #library(tmaptools)
 library(tools)
@@ -57,106 +57,84 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_generat
 ```{r load data, include=FALSE}
 # Load previously generated datafiles
 importr(TIGER_RUCC)
+importr(Direct_mat)
 importr(Total_mat)
 importr(Xpay_mat)
-importr(Sim_list)
 importr(Impede_mat)
 importr(D_mat)
 importr(Queeg)
 importr(Queeg_rel)
+importr(Input_mat_exp)
+importr(Input_mat_imp)
 
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
 ```
 
 
-This R Markdown document is the second attempt at mapping the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
+This document attempts to map the various topological similarity index relationships for Wisconsin counties. Updates include shading intensity for level of connectiveness and histograms on a industry level matching similarity, as well as more concise code. 
 
 ::: {.panel-tabset}
 
 
 ### Methods
 
-We  derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A^{n}}$, from the national-level, industry-by-industry total requirements matrix, $\mathbf{L^{n}}$, from $\mathbf{A^{n}} = \mathbf{I} - (\mathbf{L^{n}})^{-1}$. Furthermore, we construct the location specific total output vector, $\mathbf{x^{r}}$ from a payroll and labor share quotient. As a first pass assume unit labor share, such that location specific industry payroll is equivalent to location specific total output. 
+I-O analysis, or inter-industry analysis, is an economic tool that measures the relationships between industries in the economy. The framework measures flows of products from each of the sectors (as a producer/seller) to each of the sectors (as a purchaser/buyer); these interindustry flows, or transactions are measured for a particular time period and in monetary terms.  
 
-**Location specific metrics of industry input needs**
+We categorize the economy into $n$ sectors and let $x_{i}$ denote the total output of sector $i$. We denote $f_{i}$ as *final demand*, which represents all sales that are *exogenous* to the industrial sectors (e.g., households, government, and foreign trade). Taken together, we specify sector  $i$'s *output* with an accounting  identity $x_{i} = \sum^{n}_{j=1}z_{ij} + f_{i}$ that describes the way in which sector $i$ distributes its product to other sectors and to final demand, here the $z_{ij}$ terms represent *interindustry* sales by sector $i$ to all $j$ sectors in $n$. 
 
-We derive a place specific *input needs* vector from the product of the national input coefficient matrix and the place specific total output vector, $\mathbf{Ax^{r}}$.  
+Let the *total output* of all sectors be summarized by: 
+$$\mathbf{x} = \mathbf{Zi} + \mathbf{f}$$
+where $\mathbf{i}$ represent a column vector of 1’s. 
 
-Similarly, let the *relative input needs* vector, denoted with a tilde, be given as $\mathbf{\widetilde{Ax^{r}}} = \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}$. 
+We define the *input coefficient*, $a_{ij} = z_{ij}/x_{j}$ to be the quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output. This ratio is also known as the *technical coefficient*; the *input–output coefficient*;  or the *direct input coefficient*, specifies the required amount of industry $i$’s commodity used to produce of one unit of industry $j$’s commodity. 
 
-In addition, we define the *net import shortage* vector as, $\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$. 
+Let the $n \times n$ *technical coefficient matrix* by summarized by:  
+$$\mathbf{A} = \mathbf{Z\hat{x}^{-1}}$$
+where the “hat” over a vector denotes a diagonal matrix. Therefore, given a set of fixed technical coefficients, $\mathbf{x} = \mathbf{Ax} + \mathbf{f}$ denotes the accounting equation for the distribution of total output to all sectors and final demand. Note the inherent production functions of this system are isoquant “curves” that exhibit constant output. Such *Leontief* production functions require inputs in fixed proportions, where a fixed amount of each input is required to produce one unit of output.  
 
-Similarly, let the *net input excess* vector be defined as, $\text{NIE}^{r}$ $=$ $\vert \min \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\} \vert$ $\equiv$ $\max \{\mathbf{x^{r}} - \mathbf{Ax^{r}}, 0\}$.
+If $(\mathbf{I} - \mathbf{A})$ is non-singular, where $\mathbf{I}$ is the identity matrix, then rearranging gives, $\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$. Let the *Leontief* inverse or the *total requirements matrix* be given by:
+$$\mathbf{L} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}$$ 
+Finally, in much the same way that subscript $i$ denotes an industry sector, we let superscript $r$ designate subnational geographies. Thus, $\mathbf{x^{r}}$ denotes the vector of gross output of all industries  in region $r$.
 
-And let the *relative net import shortage* vector be given by, $\max \{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\}$ $\equiv$ $\max \{\mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{r}}}, 0\}$ $\equiv$ $\widetilde{\text{NIS}^{r}}$.
 
-Similarly, let the *relative net input excess* vector be given by, $\max \{\mathbf{x^{r}}(\mathbf{ix^{r}})^{-1} - \mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1}, 0\}$ $\equiv$ $\max \{\mathbf{\widetilde{x^{r}}} - \mathbf{\widetilde{Ax^{r}}}, 0\}$ $\equiv$ $\widetilde{\text{NIE}^{r}}$.
+In  practice, we derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A}$ from the national-level, industry-by-industry total requirements matrix, $\mathbf{L}$ available from the U.S. Bureau of Economic Analysis (BEA) at three levels of industry specificity  (i.e.,  Sector,  Summary, and Detail). We construct the location specific total output vector, 𝐱rfrom a payroll and labor share quotient using  Census Bureau County Business Patterns  (CBP) or FSRDC depending on the desired spatial scale. With these two inputs we construct location specific metrics of industry input needs.
 
-Note: one may concatenate the input needs vectors across each location to construct an industry-by-location matrix of input needs for each specification above. Specifically denoted by: 
+**Location specific metrics of industry inputs**
 
- $\mathbf{AX}$, $\mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1}$, $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$, $\max \{\mathbf{X} - \mathbf{AX} , 0\}$, and $\max \{ \mathbf{AX}\left(\mathbf{\widehat{iAX}}\right)^{-1} - \mathbf{X}\left(\mathbf{\widehat{iX}}\right)^{-1}, 0 \}$ 
- 
- 
- 
+First, we specify the place specific *input needs vector* as: 
+$$\mathbf{Ax^{r}}$$
+In addition, we define the *net import shortage vector* as: 
+$$\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$$  
+Similarly, we define the *net input excess vector* as: 
+$$\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$$
 
 **Cross location industry compatibility**
 
-To elucidate the industrial compatibility across locations, we construct a *similarity index*. In general, it is defined on the metric space $(\mathbf{X}, D)$ where $\mathbf{X}$ is a set of vectors $\{\mathbf{x}_{i} \in \mathbb{R} : i \in \{1, \dots, n \}\}$ and $D:\mathbf{X} \times \mathbf{X}	\rightarrow \mathbb{R}$ is a distance function.  
+To elucidate the industrial compatibility across locations, we construct a *similarity index*. In general, it is defined on the metric space $(\mathfrak{X}, \mathfrak{D})$ where $\mathfrak{X}$ is a set of vectors $\{\mathbf{x}_{i} \in \mathbb{R} : i \in \{1, \dots, n \}\}$ and $\mathfrak{D}:\mathfrak{X} \times \mathfrak{X}	\rightarrow \mathbb{R}$ is a distance function.  
 
-Specifying $D$ as a *Euclidean* or *2-norm distance*, we define the industrial compatibility distance or *simple similarity index* between two locations $r$ and $s$ as:
-
-$$D^{rs} = \Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}$$
-
-In addition, let the *relative similarity index* between two locations $r$ and $s$ be given by:
-
-$$\Vert \mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2}$$
-The *import similarity index* between two locations $r$ and $s$ be given by:
-
-$$\Vert \mathbf{\text{NIS}^{r}} - \mathbf{x^{s}} \Vert_{2}$$
-
-Let the *relative import similarity index* between two locations $r$ and $s$ be given by:
-
-$$\Vert \mathbf{\widetilde{\text{NIS}^{r}}}  - \mathbf{\widetilde{x^{s}}} \Vert_{2}$$
-Arguably, when a similarity index employs an import specification the "exporting" location should be specified instead as $\text{NIE}^{s} = \vert \min \{\mathbf{Ax^{s}} - \mathbf{x^{s}}, 0\} \vert$ 
-
-As such, let the *import similarity index - net exports* between two locations $r$ and $s$ be given by:
-
-$$\Vert \mathbf{\text{NIS}^{r}} - \mathbf{\text{NIE}^{s}} \Vert_{2}$$
-Similarly, let the *relative import similarity index - net exports* between two locations $r$ and $s$ be given by:
-
-$$\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{\text{NIE}^{s}}} \Vert_{2}$$
-
-
-Taken together, the *net input excess* vector and the *net import shortage* vector allow us to define an *absorption* vector between exporting location $r$ and importing location $s$:
-
+We first define an *absorption* vector between exporting location $r$ and importing location $s$ as: 
 $$\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$$
 
-We may specify the novel *Queeg* distance specification between exporting locations $r$ and importing location $s$ as:
+Finally, to match geographies through their supply chain capacitance we specify the novel *Queeg* distance as: 
+$$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$$ 
 
-$$ \mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} $$
-Note: Contrary to the other similarity indices the *Queeg* measure is not a "distance" where the row minimum matches two places. But rather the *Queeg* specification is a congruence or compatibility metric where the row maximum matches two places.
+Places with net input excesses will have capacity to export their commodities to places with net shortage capacity. The pair of geographies with the largest overall economic capacity overlap are matched together. In practice $s$ places enter as pre-specified non-rural cores and all other rural places $r$ are matched to them. 
 
-In practice $s$ places enter as pre-specified non-rural cores and all other rural places $r$ are matched to them. 
+To restrict the capacitance magnitudes we specify the *Relative Queeg* distance as: 
+$$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$$
+Note: Contrary to the other similarity indices the *Queeg* measure is not a "distance" where the $\arg \min$ matches two places. But rather the *Queeg* specification is a congruence or compatibility metric where the $\arg \max$  matches two places.
+
+**Spatial considerations**
+
+In addition, we weight the economic capacitance metric by a *geographical impedance function*, $\mathbf{Q}$.  For example, in practice the geographical impedance between locations $r$ and $s$ may be defined as: the Inverse Square Function $Q^{rs} = 1/(d^{rs})^2$, the Exponential Decay Function $Q^{rs} = e^{-d^{rs}}$, or the Hyperbolic Secant Function $Q^{rs} = 2 / (e^{-d^{rs}} +e^{d^{rs}})$, where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
+$d^{rs}  = R \cdot \arccos(\sin(\phi_{r})\sin(\phi_{s}) + \cos(\phi_{r})\cos(\phi_{s})\cos(\vert \lambda_{r} - \lambda_{s} \vert))$, where $\lambda_{r}, \phi_{r}$ and $\lambda_{s}, \phi_{r}$ are the longitude and latitude of locations $r$ and $s$, and $R$ is the radius of the reference sphere, which in this case is the *mean earth radius* from the WGS84 ellipsoid. 
 
 
-One may further weight a *similarity index* by a geographical impedance function, $\mathbf{Q}$. In general terms, let this metric be defined by $\mathfrak{D}\left(\mathbf{Ax^{r}}, \mathbf{x^{s}}, \mathbf{Q}\right)$. In practice, the geographical impedance between locations $r$ and $s$ is given by, $Q^{rs} = e^{-d^{rs}}$ or $Q^{rs} = 1/(d^{rs})^2$ where $d^{rs}$ is the great-circle distance between the two locations. Specifically, 
-
-$$d^{rs}  = R \cdot \arccos(\sin(\phi_{r})\sin(\phi_{s}) + \cos(\phi_{r})\cos(\phi_{s})\cos(\vert \lambda_{r} - \lambda_{s} \vert)) $$
-Where $\lambda_{r}, \phi_{r}$ and $\lambda_{s}, \phi_{r}$ are the longitude and latitude of locations $r$ and $s$, and $R$ is the radius of the reference sphere, which in this case is the *mean earth radius* from the WGS84 ellipsoid. 
-
-As such the *spatial simple similarity index* is given by 
-
-$$\mathfrak{D}^{rs} = D^{rs}/Q^{rs} = \sqrt{(\mathbf{Ax^{r}} - \mathbf{x^{s}})^{'}(\mathbf{Ax^{r}} - \mathbf{x^{s}})}/Q^{rs}$$
-
-Similarly, all other indices are divided by the geographical impedance function, $\mathbf{Q}$.
-
-For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.
-
-Let the novel *spatial Queeg* distance between exporting locations $r$ and importing location $s$ be given by:
-
-$$ \mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / Q^{rs}$$
-
+Let the novel *Spatial Queeg* distance between exporting locations $r$ and importing location $s$ be given by:
+$$\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}) * Q^{rs} \}~ \forall ~ r,s \in l$$ 
+And similarly, let the *Spatial Relative Queeg* distance be given by: 
+$$\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}  \}~ \forall ~ r,s \in l$$
 Alternative specifications of the spatial distance are possible. One possibility is to discretize the impedance matrix as a binary proximity operator which is one when two locations share a boundary (or vertex) and zero otherwise.  
 
 
@@ -174,117 +152,67 @@ names(primary_extent) <- primary_extent
 
 all_extent <- c(rural_extent, primary_extent) %>% as.vector()
 
-
-
-# available_indicators_lab <- c("Simple Similarity Index", 
-#                               "Relative Similarity Index",  
-#                               "Import Similarity Index", 
-#                               "Import Similarity Index - Net Exports", 
-#                               "Relative Import Similarity Index", 
-#                               "Relative Import Similarity Index - Net Exports")
-# 
 industry_levels  <-  c("Sector", "Summary", "Detail")
 
-Queeg_list <- list(Queeg,  Queeg_rel)
+Queeg_list <- list(Queeg, Queeg_rel)
 names(Queeg_list) <- c("Queeg",  "Queeg_rel")
 
-mQueeg_list <- Queeg_list
-for (i in 1:length(industry_levels)){
-  for (j in 1:length(Queeg_list)){
-    mQueeg_list[[j]][[i]] <- -1 * Queeg_list[[j]][[i]]
- }
-}
 
 ```
 
 
 
-```{r maps}
-if (!file.exists(file.path(data_dir, "WI_Test_Plots_XINT"))){
-  if (!exists("WI_Test_Plots")){
-    mapr(WI_Test_Plots)
-  }
-  if (!exists("WI_Test_Plots_XINT")){
-    dismapr(WI_Test_Plots)
-  }
-  saver(WI_Test_Plots_XINT)
-} else {
-  importr(WI_Test_Plots_XINT)
-}
-
-```
-
-
-```{r}
-#testing parameters
-# t1 <- Sim_list
-#   for (i in 1:6){
-#     for (l in 1:3){
-#       t1[[i]][[l]] <- t1[[i]][[l]][all_extent, primary_extent]
-#     }
-#   }
-# 
-# 
-# d1 <- D_mat[[1]][all_extent, primary_extent]
-# 
-# 
-# i1 <- vector(mode='list', length=3)
-# 
-#     for (l in 1:3){
-#       i1[[l]] <- Impede_mat[[l]][[1]][all_extent, primary_extent]
-#     }
-
-# max(i1[[1]][i1[[1]] != max(i1[[1]])]) 
-# 
-# (t1[[1]][[3]] /i1[[1]]) > 1
-#  
-
-```
-
-
-
-
-"New Regional-level Total Output Table":  $\mathbf{X}$
+"New Regional-level Total Output Table":  $\mathbf{X}^*$
 
 ```{r new total output}
 
-WISim <- vector(mode='list', length=length(Total_mat))
-names(WISim) <- industry_levels
+Xpay_mat_H1 <- vector(mode='list', length=length(Total_mat))
+names(Xpay_mat_H1) <- industry_levels
 
+WISim <- Xpay_mat_H1
+NoMatch <- Xpay_mat_H1
+MatMat <- Xpay_mat_H1
+WI_match <- Xpay_mat_H1
 
-WI_match <- vector(mode='list', length=length(Total_mat))
-names(WI_match) <- industry_levels
-Xpay_mat_H1 <- vector(mode='list', length=length(Sim_list))
-names(Xpay_mat_H1) <- names(Sim_list)
-for (l in 1:length(Sim_list)){
-  Xpay_mat_H1[[l]] <- vector(mode='list', length=length(Total_mat))
-  names(Xpay_mat_H1[[l]] ) <- industry_levels
-}
-
-for (i in 1:length(Sim_list)){
+Pmatch <- diag(rep(c(1), each=length(primary_extent)))
+colnames(Pmatch) = rownames(Pmatch) <- primary_extent
   
   for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent]
     
-    
-    WI_match[[l]] <- sparseMatrix(
-      i = match(rownames(WISim[[l]]), rural_extent), 
-      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
-      x = 1L,
-      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
-      dimnames = list(rural_extent, primary_extent)
-    ) %>% as.matrix()
-    
+    WISim[[l]] <- (Queeg_list[[2]][[l]][rural_extent, primary_extent] * Impede_mat[[3]][[l]][rural_extent, primary_extent]) %>% 
+                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
+    NoMatch[[l]] <- Queeg_list[[2]][[l]][rural_extent, primary_extent] %>% 
+                     as.data.frame() %>% filter( rowSums(.) == 0) %>% as.matrix()
 
-  Xpay_mat_H1[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
+    MatMat[[l]] <- cbind(
+                    rbind(WISim[[l]], 
+                          Pmatch, 
+                          NoMatch[[l]]
+                          ), 
+                    rbind(matrix(0, dim(rbind(WISim[[l]], Pmatch))[1], dim(NoMatch[[l]])[1]), 
+                          diag(rep(c(1), each=dim(NoMatch[[l]])[1]))
+                          ) 
+                    )
+    colnames(MatMat[[l]]) <- c(colnames(WISim[[l]]), rownames(NoMatch[[l]]))
 
+    WI_match[[l]] <- sparseMatrix(i = match(rownames(MatMat[[l]]), rownames(MatMat[[l]])),
+                                  j = match(c(colnames(MatMat[[l]])[apply(MatMat[[l]], 1, which.max)]), colnames(MatMat[[l]])),
+                                  x = 1L,
+                                  dims = c(nrow(MatMat[[l]]), ncol(MatMat[[l]])),
+                                  dimnames = list(rownames(MatMat[[l]]), colnames(MatMat[[l]]))
+                                   ) %>% as.matrix()
+    
+  Xpay_mat_H1[[l]] <- Xpay_mat[[l]][, rownames(WI_match[[l]])[order(rownames(WI_match[[l]]))]] %*% 
+                      WI_match[[l]][order(rownames(WI_match[[l]])), order(colnames(WI_match[[l]]))]
 }
-}
+
 
 ```
 
 
-```{r histograms}
+ 
+
+```{r}
 
 primary_c <- vector(mode='list', length=length(Total_mat))
 names(primary_c) <- industry_levels
@@ -293,101 +221,63 @@ test_industry <- vector(mode='list', length=length(Total_mat))
 names(test_industry) <- industry_levels
 
 for (l in 1:length(Total_mat)){
-    primary_c[[l]] <- Xpay_mat[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
 }
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
-    test_industry[[l]][[p]] <- Xpay_mat[[l]][, rural_extent][, p] %>% as.data.frame()
+    test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
     colnames( test_industry[[l]][[p]]) <- c("value")
     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
   }
-  names( test_industry[[l]]) <- colnames(Xpay_mat[[l]][, rural_extent])
+  names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
 }
 
-
 ggbase <- test_industry
+```
 
+
+```{r}
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
+    county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-      geom_col(aes(x = industry,
-                  y = log10(value))) +
-      geom_point(data = primary_c[[l]],
+      geom_col_interactive(aes(x = industry,
+                               y = (value)),
+                               fill = "grey") +
+      geom_point_interactive(data = filter(primary_c[[l]], value != 0),
                  aes(x = industry,
-                     y = log10(value),
-                     color = variable)) +
-      geom_line(data = primary_c[[l]],
-                aes(x = industry,
-                    y = log10(value),
-                    color = variable)) +
-      labs(x = "Industry", y = "log(Payroll)") +
-      scale_x_discrete(limits=factor(1:dim(Xpay_mat[[l]])[1]), labels = c(rownames(Xpay_mat[[l]]))) +
-      scale_y_continuous(trans='log10') +
-       labs(title = "Payroll Distribution by Industry",
-           color = "Counties") + 
-       scale_color_discrete( labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) )
+                     y = (value),
+                     color = variable), 
+                     size  = 3.5) +
+      labs(x = "Industry Sector", y = "Input Value") +
+      scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
+      scale_y_continuous() +
+       labs(title = "Absorption Distribution Capacitance",
+            subtitle = glue("Net Input Excess: {county}"),
+            color = "Net Import Shortage") +
+       scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+       theme_minimal()
     }
 }
 
+
+
+print(ggbase[[1]]$`55027`)
+
 ```
 
 
-
-```{r}
-#ggplotly(ggbase[[1]][[5]])
- #girafe(ggobj = ggbase[[1]][[5]])
- print(ggbase[[1]]$`55015`)
-```
-
-Note: Alpha shading is not consistent *between* categories only within.   
-
-"Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[1]]  
-```
-
-
-"Relative Similarity Index": $\Vert \mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[2]]
-```
-
-"Import Similarity Index": $\Vert \mathbf{\text{NIS}^{r}} - \mathbf{x^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[3]]
-```
-
-"Import Similarity Index - Net Exports": $\Vert \mathbf{\text{NIS}^{r}} - \mathbf{\text{NIE}^{s}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[4]]
-```
-
-"Relative Import Similarity Index": $\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[5]]
-```
-
-"Relative Import Similarity Index - Net Exports": $\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{\text{NIE}^{s}}} \Vert_{2} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_XINT[[6]]
-```
 
 
 ```{r queeg maps}
 
 if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_XINT"))){
   if (!exists("WI_Queeg_Plots")){
-    mapr(WI_Queeg_Plots, list_of_sim_specifications = mQueeg_list, distance = FALSE)
+    cmapr(WI_Queeg_Plots)
   }
   if (!exists("WI_Queeg_Plots_XINT")){
     dismapr(WI_Queeg_Plots)
@@ -399,130 +289,43 @@ if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_XINT"))){
 
 ```
 
-"Queeg distance": $\arg \min_{l} \{-(\mathbf{i'}\min\{\mathbf{\text{NIE}^{r}}, \mathbf{\text{NIS}^{s}} \})\}~ \forall ~ r,s \in l$
+"Queeg distance": $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
 
 ```{r}
 WI_Queeg_Plots_XINT[[1]] 
 ```
 
-"Relative Queeg distance": $\arg \min_{l} \{-(\mathbf{i'}\min\{\mathbf{\widetilde{\text{NIE}^{r}}}, \mathbf{\widetilde{\text{NIS}^{s}}} \})\}~ \forall ~ r,s \in l$
+"Relative Queeg distance":  $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$
 
 ```{r}
 WI_Queeg_Plots_XINT[[2]] 
 ```
 
 ```{r}
-rm(WI_Test_Plots, WI_Test_Plots_XINT) %>% suppressWarnings()
+rm(WI_Queeg_Plots, WI_Queeg_Plots_XINT) %>% suppressWarnings()
 ```
+
+Note: Alpha shading is not consistent *between* categories only within.  
 
 ### WI Test - Spatial
-
-```{r maps with impedance}
-if (!file.exists(file.path(data_dir, "WI_Test_Plots_Imped_XINT"))){
-  if (!exists("WI_Test_Plots_Imped")){
-    mapr(WI_Test_Plots_Imped, impedance = Impede_mat[[3]])
-  }
-  if (!exists("WI_Test_Plots_Imped_XINT")){
-    dismapr(WI_Test_Plots_Imped)
-  }
-  saver(WI_Test_Plots_Imped_XINT)
-} else {
-  importr(WI_Test_Plots_Imped_XINT)
-}
-
-```
-
-
-"New Regional-level Total Output Table":  $\mathbf{X}$
-
-```{r new total output with impedance}
-
-WI_match <- vector(mode='list', length=length(Total_mat))
-names(WI_match) <- industry_levels
-Xpay_mat_H1_space <- vector(mode='list', length=length(Sim_list))
-names(Xpay_mat_H1_space) <- names(Sim_list)
-for (l in 1:length(Sim_list)){
-  Xpay_mat_H1_space[[l]] <- vector(mode='list', length=length(Total_mat))
-  names(Xpay_mat_H1_space[[l]] ) <- industry_levels
-}
-
-for (i in 1:length(Sim_list)){
-  
-  for (l in 1:length(WISim)){
-    WISim[[l]] <- Sim_list[[i]][[l]][rural_extent, primary_extent] / Impede_mat[[1]][[l]][rural_extent, primary_extent] 
-    
-    
-    WI_match[[l]] <- sparseMatrix(
-      i = match(rownames(WISim[[l]]), rural_extent), 
-      j = match(c(colnames(WISim[[l]])[apply(WISim[[l]], 1, which.min)]), primary_extent),  
-      x = 1L,
-      dims = c(nrow(WISim[[l]]), ncol(WISim[[l]])),
-      dimnames = list(rural_extent, primary_extent)
-    ) %>% as.matrix()
-    
-  
-  Xpay_mat_H1_space[[i]][[l]] <- (Xpay_mat[[l]][, rural_extent] %*% WI_match[[l]]) + Xpay_mat[[l]][, colnames(WI_match[[l]])]
-
-}
-}
-
-```
-
 
 
 "Spatial Impedance Only": $1 / Q^{rs} ~ \forall ~ r,s \in l$ where $Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ and scalar $c = 10^{6}$ 
 
 ```{r}
-  mapr(WI_TT, impedance = Impede_mat[[3]], spo = TRUE)
-  WI_TT[[1]][[1]] 
+  cmapr(WI_TT,  impedance = Impede_mat[[3]], spo = TRUE)
+  WI_TT[[1]][[1]]
   rm(WI_TT)
 ```
 
 
-
-"Spatial Simple Similarity Index": $\Vert \mathbf{Ax^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[1]]
-```
-
-"Spatial Relative Similarity Index": $\Vert \mathbf{\widetilde{Ax^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[2]]
-```
-
-"Spatial Import Similarity Index": $\Vert \mathbf{\text{NIS}^{r}} - \mathbf{x^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[3]]
-```
-
-"Spatial Import Similarity Index - Net Exports": $\Vert \mathbf{\text{NIS}^{r}} - \mathbf{\text{NIE}^{s}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[4]]
-```
-
-"Spatial Relative Import Similarity Index": $\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{x^{s}}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[5]]
-```
-
-"Spatial Relative Import Similarity Index - Net Exports": $\Vert \mathbf{\widetilde{\text{NIS}^{r}}} - \mathbf{\widetilde{\text{NIE}^{s}}} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
-
-```{r}
-WI_Test_Plots_Imped_XINT[[6]]
-```
-
-"Spatial Queeg distance": $\arg \min_{l} \{-(\mathbf{i'}\min\{\mathbf{\text{NIE}^{r}}, \mathbf{\text{NIS}^{s}} \} * Q^{rs}) \}~ \forall ~ r,s \in l$
+"Spatial Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} )* Q^{rs} \}~ \forall ~ r,s \in l$
 
 ```{r queeg maps with impedance}
 
 if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_Imped_XINT"))){
   if (!exists("WI_Queeg_Plots_Imped")){
-    mapr(WI_Queeg_Plots_Imped, list_of_sim_specifications = mQueeg_list, distance = FALSE, impedance = Impede_mat[[3]])
+    cmapr(WI_Queeg_Plots_Imped, impedance = Impede_mat[[3]])
   }
   if (!exists("WI_Queeg_Plots_Imped_XINT")){
     dismapr(WI_Queeg_Plots_Imped)
@@ -538,7 +341,7 @@ if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_Imped_XINT"))){
 WI_Queeg_Plots_Imped_XINT[[1]] 
 ```
 
-"Spatial Relative Queeg distance": $\arg \min_{l} \{-(\mathbf{i'}\min\{\mathbf{\widetilde{\text{NIE}^{r}}}, \mathbf{\widetilde{\text{NIS}^{s}}} \}* Q^{rs})\}~ \forall ~ r,s \in l$
+"Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$
 
 ```{r}
 WI_Queeg_Plots_Imped_XINT[[2]] 
@@ -546,7 +349,7 @@ WI_Queeg_Plots_Imped_XINT[[2]]
 
 
 ```{r}
-rm(WI_Test_Plots_Imped, WI_Test_Plots_Imped_XINT) %>% suppressWarnings()
+rm(WI_Queeg_Plots_Imped, WI_Queeg_Plots_Imped_XINT) %>% suppressWarnings()
 ```
 
 ###  Impedance Sensitivity 
@@ -557,10 +360,9 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
     DI_mat  <- D_mat
     for (i in 1:length(D_mat)){DI_mat[[i]] =  DI_mat[[i]][rural_extent, primary_extent]}
     Sens_list  <- list()
-    #Sens_list[[1]] <- Sim_list[[6]]
-    Sens_list[[1]] <- mQueeg_list[[2]]
+    Sens_list[[1]] <- Queeg_list[[2]]
     
-    WI_Test_Sens_XINT = Imp <- vector(mode='list', length = 15)
+    WI_Test_Sens_XINT = Imp <- vector(mode='list', length = 11)
 
     for(l in 1:length(Imp)){ 
       Imp[[l]] <- vector(mode='list', length=length(industry_levels))
@@ -577,32 +379,31 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/2)) } 
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/3)) } 
-    x=x+1
-    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/10)) } 
+    # x=x+1
+    # for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = (1/(DI_mat[[i]])^(1/10)) } 
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]])) }
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/min(DI_mat[[i]]))) }
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/1000000)) }
-    x=x+1
-    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/10000000)) }
-    x=x+1
-    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/100000000)) }
+    # x=x+1
+    # for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/10000000)) }
+    # x=x+1
+    # for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = exp(-(DI_mat[[i]]/100000000)) }
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]])) + exp(D_mat[[i]])) }
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/100000)) + exp(D_mat[[i]]/100000)) }
     x=x+1
     for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000)) }
-    x=x+1
-    for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/10000000)) + exp(D_mat[[i]]/10000000)) }
+    # x=x+1
+    # for (i in 1:length(DI_mat)){ Imp[[x]][[i]] = 2/(exp(-(D_mat[[i]]/10000000)) + exp(D_mat[[i]]/10000000)) }
      
     for (l in 1:length(Imp)){     
-      mapr(Sens, 
+      cmapr(Sens, 
            list_of_sim_specifications = Sens_list, 
-           impedance = Imp[[l]],
-           distance = FALSE
+           impedance = Imp[[l]]
            )
       dismapr(Sens)
       WI_Test_Sens_XINT[l] <- Sens_XINT
@@ -621,7 +422,7 @@ if (!file.exists(file.path(data_dir, "WI_Test_Sens_XINT"))){
 ```
 
 
-Specification sensitivity example for various impedance measures using the "Spatial Queeg distance" data.  
+Specification sensitivity example for various impedance measures using the "Spatial Relative Queeg distance" data.  
 
 **Base map** 
 
@@ -663,9 +464,10 @@ $Q^{rs} = 1/(d^{rs})^{1/3}$
 WI_Test_Sens_XINT[[5]]
 ```
 
-**Inverse Tenth Root Function**
 
-$Q^{rs} = 1/(d^{rs})^{1/10}$
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}}$ 
 
 ```{r}
 WI_Test_Sens_XINT[[6]]
@@ -673,7 +475,7 @@ WI_Test_Sens_XINT[[6]]
 
 **Exponential Decay Function**
 
-$Q^{rs} = e^{-d^{rs}}$ 
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = \min\{ \text{Distance}\}$ 
 
 ```{r}
 WI_Test_Sens_XINT[[7]]
@@ -681,34 +483,10 @@ WI_Test_Sens_XINT[[7]]
 
 **Exponential Decay Function**
 
-$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = \min\{ \text{Distance}\}$ 
-
-```{r}
-WI_Test_Sens_XINT[[8]]
-```
-
-**Exponential Decay Function**
-
 $Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{6}$ 
 
 ```{r}
-WI_Test_Sens_XINT[[9]]
-```
-
-**Exponential Decay Function**
-
-$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{7}$ 
-
-```{r}
-WI_Test_Sens_XINT[[10]]
-```
-
-**Exponential Decay Function**
-
-$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{8}$ 
-
-```{r}
-WI_Test_Sens_XINT[[11]]
+WI_Test_Sens_XINT[[8]]
 ```
 
 **Hyperbolic Secant Function**
@@ -716,7 +494,7 @@ WI_Test_Sens_XINT[[11]]
 $Q^{rs} = 2/(e^{-d^{rs}} + e^{d^{rs}})$ 
 
 ```{r}
-WI_Test_Sens_XINT[[12]]
+WI_Test_Sens_XINT[[9]]
 ```
 
 **Hyperbolic Secant Function**
@@ -724,7 +502,7 @@ WI_Test_Sens_XINT[[12]]
 $Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{5}$ 
 
 ```{r}
-WI_Test_Sens_XINT[[13]]
+WI_Test_Sens_XINT[[10]]
 ```
 
 **Hyperbolic Secant Function**
@@ -732,20 +510,532 @@ WI_Test_Sens_XINT[[13]]
 $Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{6}$ 
 
 ```{r}
-WI_Test_Sens_XINT[[14]]
+WI_Test_Sens_XINT[[11]]
 ```
 
-**Hyperbolic Secant Function**
 
-$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{7}$ 
+
+
+### WI Hierarchical
+
+In this 2-stage analysis, the counties of Wisconsin are first matched internally. Metro counties in areas with a population of 1 million or more (RUC  Code: 1) serve as first-order cores which all other counties are matched based on their capacitance.  
+We then perform a second analysis where all Wisconsin counties are matched to Cook and Hennepin counties based on their capacitance.
+Finally, we perform a second-level hierarchical analysis where clusters and non-matched counties from the first-level internal matching for Wisconsin are then matched to Cook and Hennepin counties based on their capacitance.
+
+
+
+```{r hierarchical extent}
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55059", ., value=TRUE, invert = TRUE) %>% 
+                grep("55079", ., value=TRUE, invert = TRUE) %>% 
+                grep("55089", ., value=TRUE, invert = TRUE) %>%
+                grep("55093", ., value=TRUE, invert = TRUE) %>%
+                grep("55109", ., value=TRUE, invert = TRUE) %>%
+                grep("55131", ., value=TRUE, invert = TRUE) %>%
+                grep("55133", ., value=TRUE, invert = TRUE) 
+
+primary_extent <- c("55059", "55079", "55089", "55093", "55109", "55131", "55133")
+names(primary_extent) <- primary_extent
+
+all_extent <- c(rural_extent, primary_extent) %>% as.vector()
+
+```
+
+
 
 ```{r}
-WI_Test_Sens_XINT[[15]]
+
+primary_c <- vector(mode='list', length=length(Total_mat))
+names(primary_c) <- industry_levels
+
+test_industry <- vector(mode='list', length=length(Total_mat))
+names(test_industry) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+    primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
+    colnames( test_industry[[l]][[p]]) <- c("value")
+    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+  }
+  names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
+}
+
+ggbase <- test_industry
+```
+
+
+```{r}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+      geom_col_interactive(aes(x = industry,
+                               y = (value)),
+                               fill = "grey") +
+      geom_point_interactive(data = filter(primary_c[[l]], value != 0),
+                 aes(x = industry,
+                     y = (value),
+                     color = variable), 
+                     size  = 3.5) +
+      labs(x = "Industry Sector", y = "Input Value") +
+      scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
+      scale_y_continuous() +
+       labs(title = "Absorption Distribution Capacitance",
+            subtitle = glue("Net Input Excess: {county}"),
+            color = "Net Import Shortage") +
+       scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+       theme_minimal()
+    }
+}
+
+
+
+#print(ggbase[[1]]$`55027`)
+
 ```
 
 
 
 
+*First-level Hierarchical Matching*
+
+```{r hierarchical queeg maps}
+
+if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_H1_XINT"))){
+  if (!exists("WI_Queeg_Plots_H1")){
+    cmapr(WI_Queeg_Plots_H1)
+  }
+  if (!exists("WI_Queeg_Plots_H1_XINT")){
+    dismapr(WI_Queeg_Plots_H1)
+  }
+  saver(WI_Queeg_Plots_H1_XINT)
+} else {
+  importr(WI_Queeg_Plots_H1_XINT)
+}
+
+```
+
+"Queeg distance": $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queeg_Plots_H1_XINT[[1]] 
+```
+
+"Relative Queeg distance":  $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queeg_Plots_H1_XINT[[2]] 
+```
+
+```{r}
+rm(WI_Queeg_Plots_H1, WI_Queeg_Plots_H1_XINT) %>% suppressWarnings()
+```
+
+
+
+```{r hierarchical new total output  }
+
+Xpay_mat_H1 <- vector(mode='list', length=length(Total_mat))
+names(Xpay_mat_H1) <- industry_levels
+
+WISim <- Xpay_mat_H1
+NoMatch <- Xpay_mat_H1
+MatMat <- Xpay_mat_H1
+WI_match <- Xpay_mat_H1
+
+Pmatch <- diag(rep(c(1), each=length(primary_extent)))
+colnames(Pmatch) = rownames(Pmatch) <- primary_extent
+  
+  for (l in 1:length(WISim)){
+    
+    WISim[[l]] <- (Queeg_list[[2]][[l]][rural_extent, primary_extent] * Impede_mat[[3]][[l]][rural_extent, primary_extent]) %>% 
+                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
+    NoMatch[[l]] <- Queeg_list[[2]][[l]][rural_extent, primary_extent] %>%
+                     as.data.frame() %>% filter( rowSums(.) == 0) %>% as.matrix()
+
+    MatMat[[l]] <- cbind(
+                    rbind(WISim[[l]], 
+                          Pmatch, 
+                          NoMatch[[l]]
+                          ), 
+                    rbind(matrix(0, dim(rbind(WISim[[l]], Pmatch))[1], dim(NoMatch[[l]])[1]), 
+                          diag(rep(c(1), each=dim(NoMatch[[l]])[1]))
+                          ) 
+                    )
+    colnames(MatMat[[l]]) <- c(colnames(WISim[[l]]), rownames(NoMatch[[l]]))
+
+    WI_match[[l]] <- sparseMatrix(i = match(rownames(MatMat[[l]]), rownames(MatMat[[l]])),
+                                  j = match(c(colnames(MatMat[[l]])[apply(MatMat[[l]], 1, which.max)]), colnames(MatMat[[l]])),
+                                  x = 1L,
+                                  dims = c(nrow(MatMat[[l]]), ncol(MatMat[[l]])),
+                                  dimnames = list(rownames(MatMat[[l]]), colnames(MatMat[[l]]))
+                                   ) %>% as.matrix()
+    
+    WI_match[[l]] <- WI_match[[l]][order(rownames(WI_match[[l]])),]
+  }
+    
+    ```
+
+
+```{r}
+    
+L2_extent <- c("17031","27053")
+  
+for (l in 1:length(Xpay_mat)){
+
+    Xpay_mat_H1[[l]] <- cbind(Xpay_mat[[l]][, all_extent[order(all_extent)]] %*% 
+                              WI_match[[l]][all_extent[order(all_extent)], primary_extent[order(primary_extent)]], 
+                              Xpay_mat[[l]][, rural_extent[order(rural_extent)]],
+                              Xpay_mat[[l]][, L2_extent[order(L2_extent)]])
+    
+    Xpay_mat_H1[[l]] <- Xpay_mat_H1[[l]][, order(colnames(Xpay_mat_H1[[l]]))] 
+  
+}
+
+```
+
+
+```{r}
+
+############ Input Needs
+if (!file.exists(file.path(data_dir, "Input_mat_H1"))){
+
+  Input_mat_H1 <- vector(mode='list', length=length(Total_mat))
+  names(Input_mat_H1) <- industry_levels
+
+    for (l in 1:length(Input_mat_H1)){
+      Input_mat_H1[[l]] <- (Direct_mat[[l]]  %*%  Xpay_mat_H1[[l]])
+    }
+
+  saver(Input_mat_H1)
+
+}
+
+############ Import Input Needs
+if (!file.exists(file.path(data_dir, "Input_mat_imp_H1"))){
+
+  Input_mat_imp_H1 <- vector(mode='list', length=length(Total_mat))
+  names(Input_mat_imp_H1) <- industry_levels
+
+    for (l in 1:length(Input_mat_imp_H1)){
+      Input_mat_imp_H1[[l]] <- pmax(Input_mat_H1[[l]] - Xpay_mat_H1[[l]], 0)
+    }
+
+  saver(Input_mat_imp_H1)
+
+}
+
+
+############ Net Exports
+if (!file.exists(file.path(data_dir, "Input_mat_exp_H1"))){
+
+  Input_mat_exp_H1 <- vector(mode='list', length=length(Total_mat))
+  names(Input_mat_exp_H1) <- industry_levels
+
+    for (l in 1:length(Input_mat_exp_H1)){
+      Input_mat_exp_H1[[l]] <- pmax(Xpay_mat_H1[[l]] - Input_mat_H1[[l]], 0)
+    }
+
+  saver(Input_mat_exp_H1)
+
+}
+
+
+```
+
+
+
+
+```{r}
+
+  importr(Input_mat_exp_H1)
+  importr(Input_mat_imp_H1)
+  
+H2_con <- vector(mode='list', length=length(Total_mat))
+names(H2_con) <- industry_levels
+excess <- H2_con 
+shortage <- H2_con 
+  
+  for (l in 1:length(H2_con)){
+    H2_con[[l]] <- rbind(data.frame(place = rownames(WI_match[[l]]), match  = colnames(WI_match[[l]])[apply(WI_match[[l]], 1, which.max)]), 
+                        as.data.frame(cbind(place = L2_extent, 
+                                            match = L2_extent)
+                                )
+                  )
+    H2_con[[l]] <- H2_con[[l]][order(H2_con[[l]]$place),]
+    
+    excess[[l]]  <- Input_mat_exp_H1[[l]][,  match(H2_con[[l]]$match, colnames(Input_mat_exp_H1[[l]]))]
+    colnames(excess[[l]]) <- H2_con[[l]]$place
+    
+    shortage[[l]]  <- Input_mat_imp_H1[[l]][,  match(H2_con[[l]]$match, colnames(Input_mat_imp_H1[[l]]))]
+    colnames(shortage[[l]]) <- H2_con[[l]]$place
+  }
+
+
+############  Queeg specification
+if (!file.exists(file.path(data_dir, "Queeg_H1"))){
+  
+
+
+  Queeg_H1 <- vector(mode='list', length=length(Total_mat))
+  names(Queeg_H1) <- industry_levels
+
+  for (l in 1:length(Queeg_H1)){
+    Queeg_H1[[l]] <-  matrix(0, nrow = ncol(Xpay_mat_H1[[l]]), 
+                                ncol = ncol(Xpay_mat_H1[[l]]) )
+    rownames(Queeg_H1[[l]]) = colnames(Queeg_H1[[l]]) <- colnames(Xpay_mat_H1[[l]])
+  }
+
+  for (l in 1:length(Queeg_H1)){
+    for (i in 1:nrow(Queeg_H1[[l]])){
+      for (j in 1:nrow(Queeg_H1[[l]])){
+        Queeg_H1[[l]][i,j]  <- rep(c(1), each=ncol(Total_mat[[l]])) %*% 
+                                pmin(excess[[l]][,i], shortage[[l]][,j])
+        
+        
+      }
+    }
+  }
+
+  saver(Queeg_H1)
+}
+
+
+############ Relative Queeg specification
+if (!file.exists(file.path(data_dir, "Queeg_rel_H1"))){
+  
+  Queeg_rel_H1 <- vector(mode='list', length=length(Total_mat))
+  names(Queeg_rel_H1) <- industry_levels
+
+  for (l in 1:length(Queeg_rel_H1)){
+    Queeg_rel_H1[[l]] <-  matrix(0, nrow = ncol(Xpay_mat_H1[[l]]), 
+                                ncol = ncol(Xpay_mat_H1[[l]]) )
+    rownames(Queeg_rel_H1[[l]]) = colnames(Queeg_rel_H1[[l]]) <- colnames(Xpay_mat_H1[[l]])
+  }
+
+  for (l in 1:length(Queeg_rel_H1)){
+    for (i in 1:nrow(Queeg_rel_H1[[l]])){
+      for (j in 1:nrow(Queeg_rel_H1[[l]])){
+        Queeg_rel_H1[[l]][i,j] <- (rep(c(1), each=ncol(Total_mat[[l]])) %*% 
+                                   pmin(excess[[l]][,i], shortage[[l]][,j])) / 
+                                   (rep(c(1), each=ncol(Total_mat[[l]])) %*% 
+                                    excess[[l]][,i])
+      }
+    }
+  }
+
+  saver(Queeg_rel_H1)
+}
+
+```
+
+
+
+*Second Stage Matching: All WI to Cook and Hennepin*
+
+```{r second stage matching}
+
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) 
+
+primary_extent <- L2_extent
+
+all_extent <- c(rural_extent, primary_extent) %>% as.vector()
+
+```
+
+
+```{r }
+
+if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_C2_XINT"))){
+  if (!exists("WI_Queeg_Plots_C2")){
+    cmapr(WI_Queeg_Plots_C2)
+  }
+  if (!exists("WI_Queeg_Plots_C2_XINT")){
+    dismapr(WI_Queeg_Plots_C2)
+  }
+  saver(WI_Queeg_Plots_C2_XINT)
+} else {
+  importr(WI_Queeg_Plots_C2_XINT)
+}
+
+```
+
+
+"Queeg distance": $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queeg_Plots_C2_XINT[[1]] 
+```
+
+"Relative Queeg distance":  $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$
+
+
+```{r}
+WI_Queeg_Plots_C2_XINT[[2]] 
+```
+
+```{r}
+rm(WI_Queeg_Plots_C2, WI_Queeg_Plots_C2_XINT) %>% suppressWarnings()
+```
+
+
+*Second-level Hierarchical Capacitance*
+
+```{r}
+
+importr(Queeg_H1)
+importr(Queeg_rel_H1)
+
+Queeg_list_H1 <- list(Queeg_H1, Queeg_rel_H1)
+names(Queeg_list_H1) <- c("Queeg_H1",  "Queeg_rel_H1")
+
+
+
+if (!file.exists(file.path(data_dir, "WI_Queeg_Plots_H2_XINT"))){
+  if (!exists("WI_Queeg_Plots_H2")){
+    cmapr(WI_Queeg_Plots_H2, list_of_sim_specifications = Queeg_list_H1)
+  }
+  if (!exists("WI_Queeg_Plots_H2_XINT")){
+    dismapr(WI_Queeg_Plots_H2)
+  }
+  saver(WI_Queeg_Plots_H2_XINT)
+} else {
+  importr(WI_Queeg_Plots_H2_XINT)
+}
+
+```
+
+"Queeg distance": $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queeg_Plots_H2_XINT[[1]] 
+```
+
+"Relative Queeg distance":  $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queeg_Plots_H2_XINT[[2]] 
+```
+
+```{r}
+rm(WI_Queeg_Plots_H2, WI_Queeg_Plots_H2_XINT) %>% suppressWarnings()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r second hierarchical extent}
+
+
+# 
+# spacet <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% c(names(L2_extent), all_extent))
+# test  <-  st_union(filter(spacet, spacet$FIPS %in% "55043"), filter(spacet, spacet$FIPS %in% "55133"))
+# ggplot(test) + geom_sf()
+# 
+# spacet <- left_join(filter(TIGER_RUCC, TIGER_RUCC$FIPS %in% c(names(L2_extent), all_extent)),  
+#           data.frame(place = rownames(WI_match$Sector), match  = colnames(WI_match$Sector)[apply(WI_match$Sector, 1, which.max)]), by = "place", copy = TRUE )
+# spacet$match[is.na(spacet$match)] <- spacet %>% filter(is.na(spacet$match)) %>% pull(place)
+# 
+# 
+# 
+# test  <- data.frame(matrix(NA, nrow = 0, ncol = ncol(spacet)  ))
+# #test  <- spacet
+# colnames(test) <- colnames(spacet) 
+# for (l in unique(spacet$match)){
+#  test[nrow(test) + 1, ] <- st_union(filter(spacet, spacet$match == l),  by_feature = TRUE)   
+# }
+# #test <- test[75:90,]
+# View(test)
+# 
+# 
+# test  <-  st_union(st_union(filter(spacet, spacet$match == "55089")), st_union(filter(spacet, spacet$match == "55131")), by_feature = TRUE)
+# 
+# test  <-  st_union(filter(spacet, spacet$match == "55089"))
+# ggplot(test) + geom_sf()
+# 
+
+
+
+
+```
+
+
+
+```{r}
+# 
+# primary_c <- vector(mode='list', length=length(Total_mat))
+# names(primary_c) <- industry_levels
+# 
+# test_industry <- vector(mode='list', length=length(Total_mat))
+# names(test_industry) <- industry_levels
+# 
+# for (l in 1:length(Total_mat)){
+#     primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
+#     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+#     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+# }
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(rural_extent)){
+#     test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
+#     colnames( test_industry[[l]][[p]]) <- c("value")
+#     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+#   }
+#   names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
+# }
+# 
+# ggbase <- test_industry
+```
+
+
+```{r}
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(rural_extent)){
+#     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+#       geom_col_interactive(aes(x = industry,
+#                                y = (value)),
+#                                fill = "grey") +
+#       geom_point_interactive(data = filter(primary_c[[l]], value != 0),
+#                  aes(x = industry,
+#                      y = (value),
+#                      color = variable), 
+#                      size  = 3.5) +
+#       labs(x = "Industry Sector", y = "Input Value") +
+#       scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
+#       scale_y_continuous() +
+#        labs(title = "Absorption Distribution Capacitance",
+#             subtitle = glue("Net Input Excess: {county}"),
+#             color = "Net Import Shortage") +
+#        scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+#        theme_minimal()
+#     }
+# }
+# 
+# 
+# 
+# print(ggbase[[1]]$`55027`)
+
+```
+
+
+Note: two-level hierarchy is not the same as two-stage matching
 
 
 
