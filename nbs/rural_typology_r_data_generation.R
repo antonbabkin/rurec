@@ -58,6 +58,58 @@ if (!file.exists(file.path(data_dir, "Total_mat"))){
   rm(Total_mat, match_x, d)
 }
 log_info("Total matrix complete")
+
+
+# 
+# 
+# ### Labor share
+# if (!file.exists(file.path(data_dir, "Labor_mat"))){
+#   Labor_mat <- list()
+#   
+#   ### Sector level 1-by-14 
+#   Labor_mat[[1]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[24,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15) /
+#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[23,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
+#   colnames(Labor_mat[[1]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>%  .[4,3:17] %>% as.list()
+#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+#   Labor_mat[[1]] %<>% subset(select = (colnames(Labor_mat[[1]]) %in% match_x))
+#   
+#   ### Summary level 1-by-59 
+#   Labor_mat[[2]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[80,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71) /
+#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[79,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71)
+#   colnames(Labor_mat[[2]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>%  .[4,3:73] %>% as.list()
+#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+#   Labor_mat[[2]] %<>% subset(select = (colnames(Labor_mat[[2]]) %in% match_x))
+#   
+#   
+#   ### Detail level 1-by-360 
+#   Labor_mat[[3]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[411,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405) /
+#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[410,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
+#   colnames(Labor_mat[[3]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>%  .[3,3:407] %>% as.list()
+#   
+#   Labor_mat[[3]][,25] <- (Labor_mat[[3]][,25] + Labor_mat[[3]][,26] + Labor_mat[[3]][,27] + Labor_mat[[3]][,28] + Labor_mat[[3]][,29] + Labor_mat[[3]][,30] + Labor_mat[[3]][,31] + Labor_mat[[3]][,32] + Labor_mat[[3]][,33]+ Labor_mat[[3]][,34] + Labor_mat[[3]][,35] + Labor_mat[[3]][,36])/12
+#   for(i in 36:26){
+#     Labor_mat[[3]] <- Labor_mat[[3]][,-i]
+#   }
+#   colnames(Labor_mat[[3]])[25] = "23"
+#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
+#   Labor_mat[[3]] %<>% subset(select = (colnames(Labor_mat[[3]]) %in% match_x))
+#   
+#   names(Labor_mat) <- industry_levels
+#   saver(Labor_mat)
+#   rm(Labor_mat, match_x, d)
+# }
+# log_info("Labor matrix complete")
+# 
+
+
+
+
+
+
+
+
+
+
   
 #Extract county level industry employment data and reshape to industry-by-county matrix
 if (!file.exists(file.path(data_dir, "Xemp_mat"))){
