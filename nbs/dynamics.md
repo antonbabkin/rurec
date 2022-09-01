@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.13.7
+    jupytext_version: 1.14.0
 kernelspec:
   display_name: Python 3 (ipykernel)
   language: python
@@ -25,10 +25,13 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import pyarrow
+import pyarrow.dataset
 
 from rurec import rurality
 from rurec.pubdata import geography, cbp, bds, naics, population, ers_rurality
 from rurec.reseng.nbd import Nbd
+from rurec.reseng.util import download_file
 nbd = Nbd('rurec')
 ```
 
@@ -52,15 +55,6 @@ def get_deflator():
     # normalize latest year = 1
     d['deflator'] /= d['deflator'].iloc[-1]
     return d
-```
-
-```{code-cell} ipython3
----
-jupyter:
-  outputs_hidden: true
-tags: []
----
-get_deflator().set_index('year').plot(grid=True)
 ```
 
 # Rurality definition
@@ -451,4 +445,276 @@ d.plot()
 d = df.query('_merge == "both" and year == 2019').copy()
 d['bds/cbp'] = d['est_bds'] / d['est_cbp']
 d['bds/cbp'].describe()
+```
+
+# Business dynamism county distribution
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('cty').rename(columns=str.upper)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df['ESTABS_CHURN_RATE'] = df['ESTABS_ENTRY_RATE'] + df['ESTABS_EXIT_RATE']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.columns
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df['ESTABS_CHURN_RATE'].describe()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = df.query('YEAR == 2002')
+# df.plot.box(
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d.groupby('RURAL_CHNG')['ESTABS_CHURN_RATE'].describe()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d.boxplot('ESTABS_CHURN_RATE', 'RURAL_2000')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d.boxplot('ESTABS_CHURN_RATE', 'RURAL_CHNG')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+import matplotlib.pyplot as plt
+```
+
+```{code-cell} ipython3
+:tags: []
+
+plt.violinplot([
+    d.loc[d['RURAL_2000'] == False, 'ESTABS_CHURN_RATE'].dropna(),
+    d.loc[d['RURAL_2000'] == True, 'ESTABS_CHURN_RATE'].dropna(),
+], showmedians=True)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+plt.violinplot([
+    d.loc[d['RURAL_2010'] == False, 'ESTABS_CHURN_RATE'].dropna(),
+    d.loc[d['RURAL_2010'] == True, 'ESTABS_CHURN_RATE'].dropna(),
+])
+```
+
+# Wage
+
+## CBP
+
+```{code-cell} ipython3
+:tags: []
+
+df = cbp.get_parquet('county', ['fipstate', 'fipscty', 'year', 'emp', 'ap'], [('industry', '==', '-')])
+df = df.rename(columns=str.upper).rename(columns={'FIPSTATE': 'ST', 'FIPSCTY': 'CTY'})
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = get_deflator().rename(columns=str.upper)
+df = df.merge(d, 'left', 'YEAR')
+df['AP'] /= df['DEFLATOR']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+tb = {}
+for r in ['RURAL_2000', 'RURAL_2010']:
+    t = df.groupby(['YEAR', r])[['EMP', 'AP']].sum()
+    t = t['AP'] / t['EMP']
+    t = t.unstack() * 1000
+    tb[r] = (t[True] / t[False])
+tb = pd.concat(tb, axis=1, names=['OMB rurality revision'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+t.rename(columns={True: 'rural', False: 'urban'}).plot(ax=ax[0], title='Mean real wage, $2021\nCBP', grid=True);
+tb.plot(ax=ax[1], legend=True, grid=True, title='Rural-to-urban mean wage ratio\nCBP');
+```
+
+## QCEW
+
+### construction
+
+[Data files](https://www.bls.gov/cew/downloadable-data-files.htm) |
+[CSV layout](https://www.bls.gov/cew/about-data/downloadable-file-layouts/annual/naics-based-annual-layout.htm)
+
+```{code-cell} ipython3
+:tags: []
+
+def get_qcew_src(y):
+    url = f'https://data.bls.gov/cew/data/files/{y}/csv/{y}_annual_singlefile.zip'
+    src_dir = nbd.root / 'data/source/qcew'
+    f = download_file(url, src_dir)
+    return f
+```
+
+```{code-cell} ipython3
+:tags: []
+
+for y in range(1990, 2022):
+    print(y, end=' ')
+    get_qcew_src(y)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+def build_qcew(y):
+    pq_dir = nbd.root / 'data/qcew.pq'
+    path = pq_dir / f'{y}/part.pq'
+
+    src = get_qcew_src(y)
+
+    cols = {
+        'area_fips': str, 
+        'agglvl_code': str, 
+        'annual_avg_estabs': 'int64',
+        'annual_avg_emplvl': 'int64', 
+        'total_annual_wages': 'int64', 
+        'taxable_annual_wages': 'int64',
+        'annual_contributions': 'int64', 
+        'annual_avg_wkly_wage': 'int64', 
+        'avg_annual_pay': 'int64'
+    }
+    df = pd.read_csv(src, usecols=cols.keys(), dtype=cols)
+    df = df.query('agglvl_code == "70"')
+    del df['agglvl_code']
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, 'pyarrow', index=False)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+for y in range(1990, 2022):
+    print(y, end=' ')
+    build_qcew(y)
+```
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_qcew_df(cols=None, filters=None):
+    path = nbd.root / 'data/qcew.pq'
+    part = pyarrow.dataset.partitioning(field_names=['year'])
+    return pd.read_parquet(path, 'pyarrow', columns=cols, filters=filters,
+                           partitioning=part)
+```
+
+### validation
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(['area_fips', 'year', 'annual_avg_emplvl', 'total_annual_wages'],
+                 [('year', '==', 2020)])
+assert not df['area_fips'].duplicated().any()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(filters=[('area_fips', '==', '01001')])
+df['st'] = df['area_fips'].str[:2]
+df['cty'] = df['area_fips'].str[2:]
+df = df.rename(columns={'annual_avg_emplvl': 'emp', 'total_annual_wages': 'ap', 'avg_annual_pay': 'wage_qcew'})
+df = df[['st', 'cty', 'year', 'emp', 'ap', 'wage_qcew']]
+df = df.rename(columns=str.upper)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = cbp.get_parquet('county', ['fipstate', 'fipscty', 'year', 'emp', 'ap'], [('industry', '==', '-'), ('fipstate', '==', '01'), ('fipscty', '==', '001')])
+d = d.rename(columns=str.upper).rename(columns={'FIPSTATE': 'ST', 'FIPSCTY': 'CTY'})
+df = df.merge(d, 'inner', ['ST', 'CTY', 'YEAR'], suffixes=('_QCEW', '_CBP'))
+```
+
+```{code-cell} ipython3
+df['AP_CBP'] *= 1000
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.set_index('YEAR')[['EMP_QCEW', 'EMP_CBP']].plot()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.set_index('YEAR')[['AP_QCEW', 'AP_CBP']].plot()
+```
+
+### urban-rural wage
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(['area_fips', 'year', 'annual_avg_emplvl', 'total_annual_wages']).rename(columns=str.upper)
+df['ST'] = df['AREA_FIPS'].str[:2]
+df['CTY'] = df['AREA_FIPS'].str[2:]
+
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = get_deflator().rename(columns=str.upper)
+df = df.merge(d, 'left', 'YEAR')
+df['TOTAL_ANNUAL_WAGES'] /= df['DEFLATOR']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+tb = {}
+for r in ['RURAL_2000', 'RURAL_2010']:
+    t = df.groupby(['YEAR', r])[['ANNUAL_AVG_EMPLVL', 'TOTAL_ANNUAL_WAGES']].sum()
+    t = t['TOTAL_ANNUAL_WAGES'] / t['ANNUAL_AVG_EMPLVL']
+    t = t.unstack()
+    tb[r] = (t[True] / t[False])
+tb = pd.concat(tb, axis=1, names=['OMB rurality revision'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+t.rename(columns={True: 'rural', False: 'urban'}).plot(ax=ax[0], title='Mean real wage, $2021\nQCEW', grid=True);
+tb.plot(ax=ax[1], legend=True, grid=True, title='Rural-to-urban mean wage ratio\nQCEW');
 ```
