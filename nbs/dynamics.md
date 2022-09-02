@@ -447,86 +447,131 @@ d['bds/cbp'] = d['est_bds'] / d['est_cbp']
 d['bds/cbp'].describe()
 ```
 
-# Business dynamism county distribution
+# Growth vs dynamism
 
 ```{code-cell} ipython3
-:tags: []
-
-df = bds.get_df('cty').rename(columns=str.upper)
+import altair as alt
+import statsmodels.formula.api as smf
 ```
 
 ```{code-cell} ipython3
 :tags: []
+
+df = bds.get_df('cty').rename(columns=str.upper).query('not CTY.isin(["998", "999"])')
 
 df['ESTABS_CHURN_RATE'] = df['ESTABS_ENTRY_RATE'] + df['ESTABS_EXIT_RATE']
-```
-
-```{code-cell} ipython3
-:tags: []
-
-df.columns
-```
-
-```{code-cell} ipython3
-:tags: []
-
-df['ESTABS_CHURN_RATE'].describe()
-```
-
-```{code-cell} ipython3
-:tags: []
+df['ESTABS_DENOM'] = 0.5 * (df['ESTABS'] + df.groupby(['ST', 'CTY'])['ESTABS'].shift())
 
 d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
 df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = rurality.get_cbsa_delin_df(2003)\
+    .rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})\
+    [['ST', 'CTY', 'METRO_MICRO']]
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+df['METRO_MICRO'] = df['METRO_MICRO'].fillna('noncore')
+df['METRO'] = df['METRO_MICRO'].replace({'micro': 'nonmetro', 'noncore': 'nonmetro'})
+```
+
+Estab growth and churn both decline over time. Both lower in nonmetro than in metro.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'METRO'])[['ESTABS', 'ESTABS_ENTRY', 'ESTABS_EXIT']].sum()
+t['ESTABS_TM1'] = t.groupby('METRO')['ESTABS'].shift()
+t['ESTABS_GR'] = 2 * (t['ESTABS_ENTRY'] - t['ESTABS_EXIT']) / (t['ESTABS'] + t['ESTABS_TM1']) * 100
+t['ESTABS_CHURN_RATE'] = 2 * (t['ESTABS_ENTRY'] + t['ESTABS_EXIT']) / (t['ESTABS'] + t['ESTABS_TM1']) * 100
+t = t.unstack()
 ```
 
 ```{code-cell} ipython3
 :tags: []
 
-d = df.query('YEAR == 2002')
-# df.plot.box(
+pfit, pval = np.polynomial.polynomial.polyfit, np.polynomial.polynomial.polyval
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+
+a = t['ESTABS_GR'].plot(ax=ax[0], title='Establishment growth rate')
+tr = t['ESTABS_GR'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+tr.plot(ax=ax[0], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+a.legend(handles=a.lines[:2])
+
+a = t['ESTABS_CHURN_RATE'].plot(ax=ax[1], title='Establishment churn rate')
+tr = t['ESTABS_CHURN_RATE'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+tr.plot(ax=ax[1], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+a.legend(handles=a.lines[:2]);
+```
+
+Create a 3-year moving average for every county to smooth variation.
+
+```{code-cell} ipython3
+:tags: []
+
+d = df[['YEAR', 'ST', 'CTY', 'METRO', 'ESTABS', 'ESTABS_ENTRY', 'ESTABS_EXIT']].copy()
+d['ESTABS_DENOM'] = df.eval('ESTABS + (ESTABS_EXIT - ESTABS_ENTRY) / 2')
+d = d.set_index('YEAR').groupby(['ST', 'CTY', 'METRO']).rolling(3).mean().dropna()
+d['ESTABS_CHURN_RATE'] = d.eval('(ESTABS_ENTRY + ESTABS_EXIT) / ESTABS_DENOM * 100')
+
+d['ESTABS_TP10'] = d.groupby(['ST', 'CTY'])['ESTABS'].shift(-10)
+d['ESTABS_GR10'] = d.eval('2 * (ESTABS_TP10 - ESTABS) / (ESTABS_TP10 + ESTABS) * 100')
+df_rol = d
+d.groupby('METRO')['ESTABS_GR10'].describe()
+```
+
+Making sure than smothing worked fine.
+
+```{code-cell} ipython3
+:tags: []
+
+t = d.groupby(['YEAR', 'METRO'])[['ESTABS_ENTRY', 'ESTABS_EXIT', 'ESTABS_DENOM']].sum()
+t = t.eval('(ESTABS_ENTRY + ESTABS_EXIT) / ESTABS_DENOM * 100').unstack()
+t.plot(title='Estab churn rate (3-year moving average)');
+```
+
+Positive association between growth and dynamism also holds in the cross-section of counties, although this relationship is weaker in rural areas. 1 p.p. increase in churn corresponds to 2 p.p. increase in growth rate over the subsequent ten year period in metropolitan counties, while only 1.1 p.p. higher growth rate in nonmetropolitan.
+
+```{code-cell} ipython3
+:tags: []
+
+y = range(1996, 2006)
+d = df_rol.query('YEAR.isin(@y)').reset_index().copy()
+d['YEAR'] = d['YEAR'].astype('category')
+
+m = smf.wls('ESTABS_GR10 ~ ESTABS_CHURN_RATE*METRO + YEAR', d, weights=d['ESTABS'])
+r = m.fit()
+# r.summary()
+
+xdomain = [10, 30]
+ydomain = [-40, 40]
+
+dp = pd.DataFrame([
+    [m, c] 
+    for m in ['metro', 'nonmetro']
+    for c in xdomain
+], columns=['METRO', 'ESTABS_CHURN_RATE'])
+dp['YEAR'] = 2000
+dp['ESTABS_GR10'] = r.predict(dp)
+
+
+scatter = alt.Chart(d.sample(3000)).mark_circle(size=20).encode(
+    x=alt.X('ESTABS_CHURN_RATE', scale=alt.Scale(domain=xdomain)),
+    y=alt.Y('ESTABS_GR10', scale=alt.Scale(domain=ydomain)),
+    color='METRO',
+    tooltip=['ST', 'CTY', 'ESTABS', 'ESTABS_ENTRY',
+       'ESTABS_EXIT', 'ESTABS_DENOM', 'ESTABS_CHURN_RATE', 'ESTABS_TP10',
+       'ESTABS_GR10'],
+)
+
+reg_lines = alt.Chart(dp).encode(x='ESTABS_CHURN_RATE', y='ESTABS_GR10', color='METRO').mark_line()
+
+(scatter + reg_lines).interactive().properties(width=600, height=400)
 ```
 
 ```{code-cell} ipython3
 :tags: []
 
-d.groupby('RURAL_CHNG')['ESTABS_CHURN_RATE'].describe()
-```
-
-```{code-cell} ipython3
-:tags: []
-
-d.boxplot('ESTABS_CHURN_RATE', 'RURAL_2000')
-```
-
-```{code-cell} ipython3
-:tags: []
-
-d.boxplot('ESTABS_CHURN_RATE', 'RURAL_CHNG')
-```
-
-```{code-cell} ipython3
-:tags: []
-
-import matplotlib.pyplot as plt
-```
-
-```{code-cell} ipython3
-:tags: []
-
-plt.violinplot([
-    d.loc[d['RURAL_2000'] == False, 'ESTABS_CHURN_RATE'].dropna(),
-    d.loc[d['RURAL_2000'] == True, 'ESTABS_CHURN_RATE'].dropna(),
-], showmedians=True)
-```
-
-```{code-cell} ipython3
-:tags: []
-
-plt.violinplot([
-    d.loc[d['RURAL_2010'] == False, 'ESTABS_CHURN_RATE'].dropna(),
-    d.loc[d['RURAL_2010'] == True, 'ESTABS_CHURN_RATE'].dropna(),
-])
+r.summary()
 ```
 
 # Wage
