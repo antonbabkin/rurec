@@ -38,7 +38,7 @@ library(ggforce)
 library(cowplot)
 library(tibble)
 library(sf)
-
+library(ggpattern)
 
 
 # library(dash)
@@ -62,23 +62,18 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"
 # Load previously generated datafiles
 importr(TIGER_RUCC)
 #importr(Queego)
-importr(Queeg_relo)
+#importr(Queeg_relo)
 importr(Output_mat)
 importr(Impede_mat)
 #importr(Input_mat_exp)
 #importr(Input_mat_imp)
-importr(Input_mat_expo)
-importr(Input_mat_impo)
-
+#importr(Input_mat_expo)
+#importr(Input_mat_impo)
 importr(Direct_mat)
-
 
 # importr(Total_mat)
 # importr(Xpay_mat)
 # #importr(D_mat)
-
-
-
 
 industry_levels  <-  c("Sector", "Summary", "Detail")
 
@@ -162,307 +157,233 @@ Alternative specifications of the spatial distance are possible. One possibility
 
 ### Natural Matching
 
-Location specific total output vector specified by annual industry payroll is now adjusted for labor share quotient.
 
-Natural Matching - no *ex ante* core specification 
+```{r}
+#Specify regional extent and possible (MSA) clusters
 
-All counties can match to  all counties
+metro <- c("19193", 
+           "19085",
+           "19155",
+           "19129",
+           "19121",
+           "19181",
+           "19077",
+           "19049",
+           "19153",
+           "19099",
+           "19015",
+           "19169",
+           "19017",
+           "19075",
+           "19013",
+           "19061",
+           "19011",
+           "19113",
+           "19105",
+           "19103",
+           "19183",
+           "19163")
+
+micro <- c("19059", 
+           "19041",
+           "19021",
+           "19027",
+           "19187",
+           "19195",
+           "19033",
+           "19127",
+           "19125",
+           "19123",
+           "19179",
+           "19101",
+           "19045",
+           "19139",
+           "19057",
+           "19111")
 
 
-```{r extent}
-rural_extent <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
-names(rural_extent) <- rural_extent
+Desmoines <- c("19153",
+               "19121",
+               "19181",
+               "19077",
+               "19049",
+               "19099")
 
-primary_extent <- rural_extent
-names(primary_extent) <- primary_extent
+Ames <- c("19169",
+          "19015")
 
+Siouxcity <- c("19193",
+               "46127",
+               "31043",
+               "31051")
 
-##Test it out for WI
-# rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
-#                 grep("55059", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55079", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55089", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55093", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55109", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55131", ., value=TRUE, invert = TRUE) %>%
-#                 grep("55133", ., value=TRUE, invert = TRUE)
-# 
-# names(rural_extent) <- rural_extent
-# 
-# primary_extent <- c("55059", "55079", "55089", "55093", "55109", "55131", "55133")
-# names(primary_extent) <- primary_extent
+Omaha  <- c("19155",
+            "19085",
+            "19129",
+            "31177",
+            "31055",
+            "31153",
+            "31025",
+            "31155")
 
+Wateloo <- c("19013",
+             "19017",
+             "19075")
+
+Cedarrrapids <- c("19113",
+                  "19011",
+                  "19105")
+
+Iowacity <-  c("19103",
+               "19183")
+
+Davenport <- c("19163",
+               "17161",
+               "17073",
+               "17131")
+
+Masoncity <- c("19033",
+               "19195")
+
+Burlington <- c("19057",
+                "17071")
+
+Keokuk  <- c("19111",
+             "17067",
+             "29045")
 
 ```
 
 
+```{r}
 
-
-```{r new total output}
 #Produce new clustered total output matrix from matched cores
 
-Output_mat_H1 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H1) <- industry_levels
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
+singcc <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
+ext <- NA
+industry_levels <-industry_levels
 
-CoreMatch <- Output_mat_H1
-MatchMat <- Output_mat_H1
-
-cuml_core_out <- Output_mat_H1
-perf_core_out <- Output_mat_H1 
-  
-for (l in 1:length(industry_levels)){
-    CoreMatch[[l]] <- (Queeg_relo[[l]][rural_extent, primary_extent] * Impede_mat[[3]][[l]][rural_extent, primary_extent]) %>% 
-                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
-
-    MatchMat[[l]] <- sparseMatrix(i = match(rownames(CoreMatch[[l]]), rownames(CoreMatch[[l]])),
-                                  j = match(c(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]), colnames(CoreMatch[[l]])),
-                                  x = 1L,
-                                  dims = c(nrow(CoreMatch[[l]]), ncol(CoreMatch[[l]])),
-                                  dimnames = list(rownames(CoreMatch[[l]]), colnames(CoreMatch[[l]]))
-                                   ) %>% as.matrix()
-
-  
-  cuml_core_out[[l]] <- (Output_mat[[l]][, rownames(MatchMat[[l]])[order(rownames(MatchMat[[l]]))]] %*% 
-                  MatchMat[[l]][order(rownames(MatchMat[[l]])), order(colnames(MatchMat[[l]]))]) %>% 
-          .[, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]))] 
-
-  perf_core_out[[l]] <- Output_mat[[l]][, rownames(as.data.frame(Queeg_relo[[l]][rural_extent, primary_extent]) %>% filter(rowSums(.) == 0))]
-
-  
-  Output_mat_H1[[l]] <- cbind(cuml_core_out[[l]], perf_core_out[[l]]) %>% .[, sort(c(colnames(cuml_core_out[[l]]), colnames(perf_core_out[[l]])))]
-
-}
-
-
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=NA, industry_levels=industry_levels)
 
 ```
 
 
- 
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r}
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
+```
+
 
 ```{r}
 ##Top absorption overlaps by core for each non-core
-
-macc <- rural_extent
-
-#impind <- colnames(cuml_core_out[[l]])
+im_mat=Input_mat_imp_H1
+ex_mat=Input_mat_exp_H1
+#impind <- colnames(CoreMatch[[l]])
 impind <- c("19113", "19103", "19021")
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
+
+absorbr(top_absorb=top_absorb, all_absorb=all_absorb, in_core=in_core, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, impind=impind, macc=macc, industry_levels=industry_levels)
 
 
-in_core <- vector(mode='list', length=length(industry_levels))
-names(in_core) <- industry_levels
-out_core <- in_core
-top_absorb <- in_core
 
-for (l in 1:length(industry_levels)){
-    in_core[[l]] <- Input_mat_impo[[l]][, impind] %>% as.data.frame() %>% select(order(colnames(.)))
-    in_core[[l]]$industry_label <- rownames(in_core[[l]])
-    in_core[[l]] <- melt(in_core[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable)
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    out_core[[l]][[p]] <- Input_mat_expo[[l]][, macc][, p] %>% as.data.frame()
-    colnames(out_core[[l]][[p]]) <- c("NIE")
-    out_core[[l]][[p]]$industry_label <- rownames(out_core[[l]][[p]])
-    
-  }
-  names(out_core[[l]]) <- colnames(Input_mat_expo[[l]][, macc])
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    top_absorb[[l]][[p]] <- inner_join(out_core[[l]][[p]], in_core[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
-    top_absorb[[l]][[p]]$absorb <- pmin(top_absorb[[l]][[p]]$NIE, top_absorb[[l]][[p]]$NIS)
-     top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% group_by(core_fips) %>% mutate(ab_sum = sum(absorb))
-    top_absorb[[l]][[p]]$trim <- ""
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(NIE > 1)
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0)
-    
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% arrange(desc(NIE)) %>% subset( NIE %in% head(unique(NIE),5))
-    
-    if (length(unique(top_absorb[[l]][[p]]$industry_label)) > 20){
-      top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
-      top_absorb[[l]][[p]]$trim <- "(top truncated values)"
-    }
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% group_by(industry_label) %>% mutate(indust_count = n())
-  }
-  names(top_absorb[[l]]) <- names(macc)
-}
-
-ggtop <- out_core
-
-
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-   my_pal <- c()
+###Custom Graph colors for import county bubbles
+  values = c("#ffffb3",  "#fccde5",  "#80b1d3")
+  #values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
+   my_pal_graph <- c()
       for(m in 1:length(unique(union(in_core[[1]]$core_fips, union(in_core[[2]]$core_fips, in_core[[3]]$core_fips))))){
-        my_pal[m] =  values[m]
+        my_pal_graph[m] =  values[m]
       }
-  names(my_pal) <- sort(unique(union(in_core[[1]]$core_fips, union(in_core[[2]]$core_fips, in_core[[3]]$core_fips))))
+  names(my_pal_graph) <- sort(unique(union(in_core[[1]]$core_fips, union(in_core[[2]]$core_fips, in_core[[3]]$core_fips))))
+
+
+  
+  
+ ###Graphs of import and export absorption
+graphr(specname=ggtop, top_absorb=top_absorb, TIGER_RUCC=TIGER_RUCC, my_pal=my_pal_graph, macc=macc, industry_levels=industry_levels)
+
+
+```
+
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- NULL
+  qdf <- Queeg_rel_H1
+  isolation_th <- .1
+  # ext <- list(Masoncity = Masoncity,
+  #             Burlington = Burlington,
+  #             Keokuk  = Keokuk,
+  #             Desmoines = Desmoines,
+  #             Ames = Ames,
+  #             Siouxcity = Siouxcity,
+  #             Omaha = Omaha,
+  #             Wateloo = Wateloo,
+  #             Cedarrrapids = Cedarrrapids,
+  #             Iowacity = Iowacity,
+  #             Davenport = Davenport)
+  #macc <- colnames(Queeg_rel_H1[[3]])
+ ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
+
+#####Custom colors 
+ values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+ placenames = h1m[[3]]$lab
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
  
-  
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
 
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-      county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% macc[p]) %>% pull(COUNTY)  
-    if  (dim(top_absorb[[l]][[p]])[1] == 0){
-       ggtop[[l]][[p]] <- c(glue("No absorbion overlap for {county}"))
-    } else {
-    trim <- top_absorb[[l]][[p]]$trim[1]
- ggtop[[l]][[p]] <- ggplot(top_absorb[[l]][[p]]) +
-     geom_col_interactive(
-                  aes(x = industry_label,
-                      y = (NIE/indust_count),
-                      tooltip = glue("NIE: {round(NIE)}")
-                      ),
-                      fill = "black") +
-      geom_point_interactive(
-                 aes(x = industry_label,
-                     y = (NIS),
-                     color = core_fips,
-                     tooltip = glue("NIS: {round(NIS)}") 
-                     ), 
-                     size  = 3.5) +  
-   labs(x = glue("Industry Sector {trim}"), y = "Input Value") +
-       labs(title = "Absorption Distribution Capacitance",
-            subtitle = glue("Net Input Excess: {county}"),
-            color = "Net Import Shortage:") +
-       #scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% colnames(cuml_core_out[[l]])) %>% pull(COUNTY)) ) +
-    scale_color_manual(values = c(my_pal[as.vector(unique(in_core[[l]]$core_fips))]),
-                             labels = paste0(TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% as.vector(unique(in_core[[l]]$core_fips))) %>% pull(COUNTY), ":\n Absorption ",
-                                            top_absorb[[l]][[p]] %>% arrange(core_fips) %>%  .$ab_sum  %>%  unique() %>% round(), "\n") ) +
-        theme(axis.text.x = element_text(angle=45, hjust=1),
-              legend.position = "top", 
-              legend.key.size = unit(.2, "cm")) 
-  # if (isFALSE(all(top_absorb[[l]][[p]]$NIS < sd(top_absorb[[l]][[p]]$NIS)*3))){
-  #     if (mean(top_absorb[[l]][[p]]$NIS) > sd(top_absorb[[l]][[p]]$NIS)){
-  #          ggtop[[l]][[p]] <- ggtop[[l]][[p]] + facet_zoom(ylim = c(0, (mean(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)*3))))
-  #     } else{
-  #         ggtop[[l]][[p]] <- ggtop[[l]][[p]] +  facet_zoom(ylim = c(0, (median(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)/3))))
-  #     }
-  # }
- }
-  }
-}
-
-
-
-
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+      
 ```
 
 
+```{r, warning=FALSE}
 
-```{r}
-girafe(ggobj =ggtop[[3]]$`19001`,
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
-                       ))
-
-#print(ggtop[[3]]$`19005`)
-
-
-```
-
-```{r}
-girafe(ggobj =ggtop[[3]]$`19009`,
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
-                       ))
-
-
-```
-
-
-
-```{r}
-girafe(ggobj =ggtop[[3]]$`19043`,
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
-                       ))
-
-
-```
-Note matching made by the maximum of within *minimum* as such large outliers do not necessarily hold sway over connectedness.     
-
-Note: maps or even metrics do not show what is. We do have  have actual inter-industry to expense reports. But better yet we show where thee greatest opportunities lie. That is, we are able to provide a product to entrepreneurs and local small business in rural place and across all industry types,where  and  how far is their greatest opportunity to serve an in demand product to a needs market.
-
-
-```{r}
-#Map max absorption
-
-  RowMax <- vector(mode='list', length=length(industry_levels))
-  names(RowMax) <- industry_levels
-  h1m  <- RowMax
-  p <- RowMax
-  
-  
-  
-  qdf <- Queeg_relo
-  singcc  <- setdiff(unique(c(primary_extent, rural_extent))[order(unique(c(primary_extent, rural_extent)))],  rownames(MatchMat[[l]]))
-  macc <- rural_extent
-  
-for (l in 1:length(industry_levels)){  
-  
-   RowMax[[l]] <-  rbind(
-                    cbind(place = rownames(MatchMat[[l]]), 
-                           match = colnames(MatchMat[[l]])[apply(MatchMat[[l]], 1, which.max)] 
-                           ) ,
-                     cbind(place = singcc, 
-                           match = singcc 
-                           ) %>% as.data.frame()
-                        )
-  
-  RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
-
-  
-  for (i in 1:nrow(RowMax[[l]])){
-   RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[3]][[l]][rural_extent, primary_extent])
-  }
-  
-  RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
-  
-  h1m[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
-  h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-  h1m[[l]]$match[h1m[[l]]$q_value == "NA" & h1m[[l]]$place %in% macc] <- "*Self Match"
-  h1m[[l]]$q_value %<>% as.numeric() %>% round(digits = 4)
-  h1m[[l]]$ind_level <- industry_levels[[l]]
-  h1m[[l]]$lab <- h1m[[l]]$match_name
-  h1m[[l]]$lab[is.na(h1m[[l]]$q_value) & h1m[[l]]$place %in% macc] <- "*Self Match"
-}
-  
-  #h1m_all  <- rbind(h1m[[1]],h1m[[2]],h1m[[3]])
-   h1m_all  <- h1m[[3]]
-  
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-  
-   my_pal <- c()
-      for(m in 1:length(setdiff(unique(h1m_all$lab), c("*Self Match")))){
-        my_pal[m] =  values[m]
-      }
-  names(my_pal) <- sort(setdiff(unique(h1m_all$lab), c("*Self Match")))
-  
-  if(isTRUE("*Self Match" %in%  unique(h1m_all$lab))){
-   my_pal <- c(my_pal, "*Self Match" = "#000000")
-  }
-  
-  for (l in 1:length(industry_levels)){  
-  p[[l]] <- ggplot( h1m[[l]] ) +
-          geom_sf_interactive(aes(fill = lab, 
-                                  #alpha = q_value, 
-                                  #alpha = 1, 
-                                  tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
-                                  data_id = place
-          ), 
-          color = NA
-          ) +
-          guides(alpha = "none") +
-          coord_sf() +
-          theme_void() +
-          labs(fill = "Cluster") +
-          scale_fill_manual(values = my_pal)
-  }
-   
-  ### For multiple industry  levels 
+  ### Maps for multiple industry  levels 
   # gplot = plot_grid(p[[1]] + theme(legend.position = 'none'), 
   #                   p[[2]] + theme(legend.position = 'none'), 
   #                   p[[3]] + theme(legend.position = 'none'),
@@ -487,1418 +408,828 @@ for (l in 1:length(industry_levels)){
   #     )
   #     
   #     
-      
-    
-     # sum(top_absorb[[3]]$`19043`$absorb)/length(unique(top_absorb[[3]]$`19043`$industry_label))
-      
-      
-      
-```
   
-"Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$
-```{r}
- #g
-
-girafe(ggobj = p[[3]], 
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-                       )
-      )
+      
+      
 ```
-This map shows that even with no prior specification of which counties are cores and which are not, and treating all counties as isolated i.e., not accounting for multicounty cores, our interconnectedness metric identifies most of the places one  would expect as being cores. That is errors of omission and commission are low despite the overly naive specification.
 
 
-```{r}
-print(ggtop[[3]]$`19001`)
 
-```
+
+Location specific total output vector specified by annual industry payroll is adjusted for labor share quotient.
+
+Note: matching made by the maximum of within *minimum* as such large outliers do not necessarily hold sway over connectedness.     
+
+Note: maps or even metrics do not show what is. We do have  have actual inter-industry to expense reports. But better yet we show where the greatest opportunities lie. That is, we are able to provide a product to entrepreneurs and local small business in rural place and across all industry types,where  and  how far is their greatest opportunity to serve an in demand product to a needs market.
+
 
 
 Consider Audubon IA, a small rural county with a total population of 5,635 in the west central part of the state. 38% of its excess production matches with Dallas County, which is part of West Des Moines and is the fastest growing county in Iowa and one of the fastest growing in the country. 
+
 Most of the strength of this interconnectedness is driven by:
+
 550000 (Management of Companies and Enterprises), 
+
 811100 (Automotive Mechanical and Electrical Repair and Maintenance),  
+
 and 811300 (Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance).
 
 ```{r}
-print(ggtop[[3]]$`19009`)
+#print(ggtop[[3]]$`19009`)
+girafe(ggobj =ggtop[[3]]$`19009`,
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
+                       ))
 
 ```
 
-Consider Adair County IA, a small rural county with a total population of 7,496 in the south-west of the state.  *A priori* one might assume based on geographical distance alone that Adair is best connected with either Des Moines or Omaha. However, 20% of its excess production matches with Buena Vista County, where the Tyson meat and poultry processing plant happens to be located. Their interconnectedness is driven by absorption of:  
+
+
+Consider Adair County IA, a small rural county with a total population of 7,496 in the south-west of the state. *A priori* one might assume based on geographical distance alone that Adair is best connected with either Des Moines or Omaha. However, 20% of its excess production matches with Buena Vista County, where the Tyson meat and poultry processing plant happens to be located. 
+
+Their interconnectedness is driven by absorption of:  
 484000 (Truck Transportation), 
+
 811300 (Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance), 
+
 and 541940 (Veterinary Services).
 
-
 ```{r}
-print(ggtop[[3]]$`19001`)
+#print(ggtop[[3]]$`19001`)
+girafe(ggobj =ggtop[[3]]$`19001`,
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
+                       ))
 
 ```
 
 On the other hand, consider the rural Clayton County with a population of 16,998 in the North-east of the state. *A priori* one might assume based on geographical distance alone that Clayton is best connected with either Dubuque or Waterloo. However, Clayton County is economically isolated, with at most only 2% of its excess production matching with Black Hawk County (Waterloo).
 
 
-
 ```{r}
-print(ggtop[[3]]$`19043`)
+#print(ggtop[[3]]$`19043`)
+girafe(ggobj =ggtop[[3]]$`19043`,
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
+                       ))
 
 ```
 
 
-**Natural Matching, with Metro and Micro aggregate clusters**
+**Maps of Natural Matching: no *ex ante* core matching restrictions or county clustering**
 
+All counties can match to all counties, and no clusters (e.g., MSAs) are prespecified.
 
+If maximum "connectedness" is below 10% a county is isolated. 
+
+If a county is matched with another because it has the maximum relative absorption of all possible net input shortage counties, then it is a cluster core. 
+  
+Matching is done using "Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$. However, the impedance factor in this example $Q^{rs}$ is only a very mild spatial tax, used principally for making assignments between counties withotherwise tied maximum absorption values. 
 
 ```{r}
-
-metro <- c("19193", 
-           "19085",
-           "19155",
-           "19129",
-           "19121",
-           "19181",
-           "19077",
-           "19049",
-           "19153",
-           "19099",
-           "19015",
-           "19169",
-           "19017",
-           "19075",
-           "19013",
-           "19061",
-           "19011",
-           "19113",
-           "19105",
-           "19103",
-           "19183",
-           "19163")
-
-micro <- c("19059", 
-           "19041",
-           "19021",
-           "19027",
-           "19187",
-           "19195",
-           "19033",
-           "19127",
-           "19125",
-           "19123",
-           "19179",
-           "19101",
-           "19045",
-           "19139",
-           "19057",
-           "19111")
-
-rural_extent <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
-rural_extent <- setdiff(rural_extent, metro )  %>% setdiff(., micro)
-names(rural_extent) <- rural_extent
-
-
-Desmoines <- c("19153",
-               "19121",
-               "19181",
-               "19077",
-               "19049",
-               "19099")
-
-Ames <- c("19169",
-          "19015")
-
-Siouxcity <- c("19193",
-               "46127",
-               "31043",
-               "31051")
-
-Omaha  <- c("19155",
-            "19085",
-            "19129",
-            "31177",
-            "31055",
-            "31153",
-            "31025",
-            "31155")
-
-Wateloo <- c("19013",
-             "19017",
-             "19075")
-
-Cedarrrapids <- c("19113",
-                  "19011",
-                  "19105")
-
-Iowacity <-  c("19103",
-               "19183")
-
-Davenport <- c("19163",
-               "17161",
-               "17073",
-               "17131")
-
-Masoncity <- c("19033",
-               "19195")
-
-Burlington <- c("19057",
-                "17071")
-
-Keokuk  <- c("19111",
-             "17067",
-             "29045")
-
-
-```
-
-
-
-
-```{r}
-
-#Produce new clustered total output matrix from matched cores
-
-  ext <- list(Masoncity = Masoncity,
-              Burlington = Burlington,
-              Keokuk  = Keokuk,
-              Desmoines = Desmoines,
-              Ames = Ames,
-              Siouxcity = Siouxcity,
-              Omaha = Omaha,
-              Wateloo = Wateloo,
-              Cedarrrapids = Cedarrrapids,
-              Iowacity = Iowacity,
-              Davenport = Davenport)
-
-shoname <- sapply(ext, function(x) x[1])
-
-macc <- rural_extent
-
-singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
-
-Output_mat_H1 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H1) <- industry_levels
-
-for (l in 1:length(industry_levels)){  
-  for(i in 1:length(ext)){
-    df <- Output_mat[[l]][, ext[[i]]] %>% as.matrix()
-    df[, 1:length(ext[[i]])] <- Output_mat[[l]][, ext[[i]]] %*% rep(c(1), each=length(ext[[i]])) 
-    Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  }
-  df <-  Output_mat[[l]][, setdiff(singcc, intersect(colnames(Output_mat_H1[[l]]), singcc)), drop = FALSE]
-  Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  
-  Output_mat_H1[[l]] <- Output_mat_H1[[l]][, singcc] 
-  
-  df <-  Output_mat[[l]][, setdiff(macc, colnames(Output_mat_H1[[l]])), drop = FALSE]
-  Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  
-  Output_mat_H1[[l]] <- Output_mat_H1[[l]][, colnames(Output_mat_H1[[l]])[order(colnames(Output_mat_H1[[l]]))]]
-  
-}
-
-
-
-```
-
-
-
-```{r}
-###First level calc
-
-############ Input Needs
-  Input_mat_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_H1)){
-      Input_mat_H1[[l]] <- (Direct_mat[[l]]  %*%  Output_mat_H1[[l]])
-    }
-
-############ Import Input Needs
-  Input_mat_imp_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_imp_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_imp_H1)){
-      Input_mat_imp_H1[[l]] <- pmax(Input_mat_H1[[l]] - Output_mat_H1[[l]], 0)
-    }
-
-############ Net Exports
-  Input_mat_exp_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_exp_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_exp_H1)){
-      Input_mat_exp_H1[[l]] <- pmax(Output_mat_H1[[l]] - Input_mat_H1[[l]], 0)
-    }
-
-############ Relative Queeg specification
-  Queeg_rel_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Queeg_rel_H1) <- industry_levels
-
-  for (l in 1:length(Queeg_rel_H1)){
-    Queeg_rel_H1[[l]] <-  matrix(0, nrow = ncol(Output_mat_H1[[l]]), 
-                                ncol = ncol(Output_mat_H1[[l]]) )
-    rownames(Queeg_rel_H1[[l]]) = colnames(Queeg_rel_H1[[l]]) <- colnames(Output_mat_H1[[l]])
-  }
-
-  for (l in 1:length(Queeg_rel_H1)){
-    for (i in 1:nrow(Queeg_rel_H1[[l]])){
-      for (j in 1:nrow(Queeg_rel_H1[[l]])){
-        Queeg_rel_H1[[l]][i,j] <- (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                   pmin(Input_mat_exp_H1[[l]][,i], Input_mat_imp_H1[[l]][,j])) / 
-                                   (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                    Input_mat_exp_H1[[l]][,i])
-      }
-    }
-  }
-
-```
-
-
-
-```{r}
-
-###Second level Output Vector
-Output_mat_H2 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H2) <- industry_levels
-
-CoreMatch <- Output_mat_H2
-MatchMat <- Output_mat_H2
-
-cuml_core_out <- Output_mat_H2
-perf_core_out <- Output_mat_H2 
-nomatch_core_out <- Output_mat_H2
-
-
-macc <- colnames(Output_mat_H1[[l]])
-singcc <- macc
-
-  
-for (l in 1:length(industry_levels)){
-    CoreMatch[[l]] <- (Queeg_rel_H1[[l]][macc,  singcc] * Impede_mat[[3]][[l]][macc,  singcc]) %>% 
-                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
-
-    MatchMat[[l]] <- sparseMatrix(i = match(rownames(CoreMatch[[l]]), rownames(CoreMatch[[l]])),
-                                  j = match(c(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]), colnames(CoreMatch[[l]])),
-                                  x = 1L,
-                                  dims = c(nrow(CoreMatch[[l]]), ncol(CoreMatch[[l]])),
-                                  dimnames = list(rownames(CoreMatch[[l]]), colnames(CoreMatch[[l]]))
-                                   ) %>% as.matrix()
-
-  #cumulative output of matched cores and non-cores 
-  cuml_core_out[[l]] <- (Output_mat_H1[[l]][, rownames(MatchMat[[l]])[order(rownames(MatchMat[[l]]))]] %*% 
-                  MatchMat[[l]][order(rownames(MatchMat[[l]])), order(colnames(MatchMat[[l]]))]) %>% 
-          .[, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]))] 
-  
-  #output of unmatched non-cores
-  perf_core_out[[l]] <- Output_mat_H1[[l]][, rownames(as.data.frame(Queeg_rel_H1[[l]][macc,  singcc]) %>% filter(rowSums(.) == 0))]
-  
-  #output of unmatched cores
-  nomatch_core_out[[l]] <- Output_mat_H1[[l]][, setdiff(colnames(Queeg_rel_H1[[l]][,  singcc]), colnames(cuml_core_out[[l]]))] %>% as.data.frame()
-
-  Output_mat_H2[[l]] <- cbind(cuml_core_out[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(cuml_core_out[[l]]), 
-                                                                                                            colnames(perf_core_out[[l]]), 
-                                                                                                            colnames(nomatch_core_out[[l]])
-                                                                                                        ))]
-  
-}
-
-
-
-```
-
-
-```{r}
-##Top absorption overlaps by core for each non-core
-
-in_core <- vector(mode='list', length=length(industry_levels))
-names(in_core) <- industry_levels
-out_core <- in_core
-top_absorb <- in_core
-
-for (l in 1:length(industry_levels)){
-    in_core[[l]] <- Input_mat_impo[[l]][, colnames(cuml_core_out[[l]])] %>% as.data.frame() %>% select(order(colnames(.)))
-    in_core[[l]]$industry_label <- rownames(in_core[[l]])
-    in_core[[l]] <- melt(in_core[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(rural_extent)){
-    out_core[[l]][[p]] <- Input_mat_expo[[l]][, rural_extent][, p] %>% as.data.frame()
-    colnames(out_core[[l]][[p]]) <- c("NIE")
-    out_core[[l]][[p]]$industry_label <- rownames(out_core[[l]][[p]])
-    
-  }
-  names(out_core[[l]]) <- colnames(Input_mat_expo[[l]][, rural_extent])
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(rural_extent)){
-    top_absorb[[l]][[p]] <- inner_join(out_core[[l]][[p]], in_core[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
-    top_absorb[[l]][[p]]$absorb <- pmin(top_absorb[[l]][[p]]$NIE, top_absorb[[l]][[p]]$NIS)
-    top_absorb[[l]][[p]]$trim <- ""
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(NIE > 1)
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0)
-    if (length(unique(top_absorb[[l]][[p]]$industry_label)) > 20){
-      top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
-      top_absorb[[l]][[p]]$trim <- "(top truncated values)"
-    }
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% group_by(industry_label) %>% mutate(indust_count = n())
-  }
-  names(top_absorb[[l]]) <- names(rural_extent)
-}
-
-ggtop <- out_core
-
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-   my_pal <- c()
-      for(m in 1:length(unique(union(in_core[[1]]$core_fips, union(in_core[[2]]$core_fips, in_core[[3]]$core_fips))))){
-        my_pal[m] =  values[m]
-      }
-  names(my_pal) <- sort(unique(union(in_core[[1]]$core_fips, union(in_core[[2]]$core_fips, in_core[[3]]$core_fips))))
- 
-  
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(rural_extent)){
-      county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)  
-    if  (dim(top_absorb[[l]][[p]])[1] == 0){
-       ggtop[[l]][[p]] <- c(glue("No absorbion overlap for {county}"))
-    } else {
-    trim <- top_absorb[[l]][[p]]$trim[1]
- ggtop[[l]][[p]] <- ggplot(top_absorb[[l]][[p]]) +
-     geom_col_interactive(
-                  aes(x = industry_label,
-                      y = (NIE/indust_count)),
-                      fill = "black") +
-      geom_point_interactive(
-                 aes(x = industry_label,
-                     y = (NIS),
-                     color = core_fips), 
-                     size  = 2.5) +  
-   labs(x = glue("Industry Sector {trim}"), y = "Input Value") +
-       labs(title = "Absorption Distribution Capacitance",
-            subtitle = glue("Net Input Excess: {county}"),
-            color = "Net Import Shortage") +
-       #scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% colnames(cuml_core_out[[l]])) %>% pull(COUNTY)) ) +
-          scale_color_manual(values = c(my_pal[as.vector(unique(in_core[[l]]$core_fips))]),
-                             labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% as.vector(unique(in_core[[l]]$core_fips))) %>% pull(COUNTY))) +
-        theme(axis.text.x = element_text(angle=45, hjust=1)) 
-  if (isFALSE(all(top_absorb[[l]][[p]]$NIS < sd(top_absorb[[l]][[p]]$NIS)*3))){
-      if (mean(top_absorb[[l]][[p]]$NIS) > sd(top_absorb[[l]][[p]]$NIS)){
-           ggtop[[l]][[p]] <- ggtop[[l]][[p]] + facet_zoom(ylim = c(0, (mean(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)*3))))
-      } else{
-          ggtop[[l]][[p]] <- ggtop[[l]][[p]] +  facet_zoom(ylim = c(0, (median(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)/3))))
-      }
-  }
- }
-  }
-}
-
-print(ggtop[[3]]$`19001`)
-
-
-```
-
-
-```{r}
-#Map max absorption
-
- 
-  qdf <- Queeg_rel_H1
-  singcc  <- setdiff(unique(c(colnames(Output_mat_H1[[l]]), colnames(Output_mat_H1[[l]])))[order(unique(c(colnames(Output_mat_H1[[l]]), colnames(Output_mat_H1[[l]]))))],  rownames(MatchMat[[l]]))
-  macc <- macc
-  
-  pmvec <- vector(mode='list', length=length(industry_levels))
-  for (l in 1:length(industry_levels)){  
-         pmvec[[l]] <- cbind(place = rownames(MatchMat[[l]]), match = colnames(MatchMat[[l]])[apply(MatchMat[[l]], 1, which.max)]) %>% as.data.frame()
-  }
-  
-  ext <- list(Masoncity = Masoncity,
-              Burlington = Burlington,
-              Keokuk  = Keokuk,
-              Desmoines = Desmoines,
-              Ames = Ames,
-              Siouxcity = Siouxcity,
-              Omaha = Omaha,
-              Wateloo = Wateloo,
-              Cedarrrapids = Cedarrrapids,
-              Iowacity = Iowacity,
-              Davenport = Davenport)
-  
-
-  
-  a_shade = FALSE
-  
-  RowMax <- vector(mode='list', length=length(industry_levels))
-  names(RowMax) <- industry_levels
-  h1m  <- RowMax
-  p <- RowMax
-  
-for (l in 1:length(industry_levels)){  
-  
-   RowMax[[l]] <-  rbind(
-                    cbind(place = pmvec[[l]][[1]], 
-                           match = pmvec[[l]][[2]] 
-                           ) ,
-                     cbind(place = singcc, 
-                           match = singcc 
-                           ) %>% as.data.frame()
-                        )
-  
-  RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
-  
-  for (i in 1:nrow(RowMax[[l]])){
-   RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[3]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
-  }
-  
-  RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
-  
-  h1m[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
-  h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-  h1m[[l]]$match[h1m[[l]]$q_value == "NA" & h1m[[l]]$place %in% macc] <- "*Self Match"
-  h1m[[l]]$q_value %<>% as.numeric() %>% round(digits = 4)
-  h1m[[l]]$ind_level <- industry_levels[[l]]
-  h1m[[l]]$lab <- h1m[[l]]$match_name
-  h1m[[l]]$lab[is.na(h1m[[l]]$q_value) & h1m[[l]]$place %in% macc] <- "*Self Match"
-  
-    for (i in 1:length(ext)){
-       h1m[[l]][h1m[[l]]$place == ext[[i]][1],]$geometry <-  TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% ext[[i]]) %>% st_union()
-    }
-
-  h1m[[l]]$a_shade = h1m[[l]]$q_value
-  if(a_shade!=TRUE){
-    h1m[[l]]$a_shade = NA
-  } 
-   
-}
-  
- #h1m_all  <- rbind(h1m[[1]],h1m[[2]],h1m[[3]])
-   h1m_all  <- h1m[[3]]
-  
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-  
-   my_pal <- c()
-      for(m in 1:length(setdiff(unique(h1m_all$lab), c("*Self Match")))){
-        my_pal[m] =  values[m]
-      }
-  names(my_pal) <- sort(setdiff(unique(h1m_all$lab), c("*Self Match")))
-  
-  if(isTRUE("*Self Match" %in%  unique(h1m_all$lab))){
-   my_pal <- c(my_pal, "*Self Match" = "#000000")
-  }
-  
-  for (l in 1:length(industry_levels)){  
-  p[[l]] <- ggplot( h1m[[l]] ) +
-  geom_sf_interactive(aes(fill = lab, 
-                                  alpha =  a_shade,
-                                  tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"),
-                                  data_id = place
-          ),
-          color = NA
-          ) +
-          guides(alpha = "none") +
-          coord_sf() +
-          theme_void() +
-          labs(fill = "Cluster") +
-          scale_fill_manual(values = my_pal)
-  }
-  # 
-  # gplot = plot_grid(p[[1]] + theme(legend.position = 'none'), 
-  #                   p[[2]] + theme(legend.position = 'none'), 
-  #                   p[[3]] + theme(legend.position = 'none'),
-  #                       labels = c("Sector", "Summary", "Detail"),
-  #                       nrow = 1,
-  #                       label_x = 0, label_y = .75,
-  #                       hjust = -0.5
-  #     )
-  #     
-  #     gleg = get_legend(p[[3]] +
-  #                         guides(color = guide_legend(nrow = 1)) +
-  #                         theme(legend.position = "bottom", 
-  #                               legend.key.size = unit(.2, "cm"))
-  #     )
-  #     
-  #     gall = gplot + draw_grob(gleg, x = 0, y = 0, width = 1, height = .5, scale = .5)
-  #     
-  #     g <- girafe(ggobj = gall, 
-  #                      options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-  #                                     opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-  #                      )
-  #     )
-  #     
-  #     
-  #   
-      
-```
-  
-"Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$
-```{r}
- #g 
-
-
 girafe(ggobj = p[[3]], 
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
                        )
       )
-
 ```
-
-
-
-```{r}
-print(ggtop[[3]]$`19009`)
-
-#View(top_absorb[[3]]$`19009` %>% group_by(core_fips) %>% summarize(tabsorb = sum(absorb)))
-
-```
-
-Adair and Clayton remain largely unchanged, however, given the new clustering regime Audubon County is now matched with the Micropolitan cluster Cerro Gordo, matching 37% of its excess production. 
-Most of the strength of this interconnectedness is driven by:
-550000 (Management of Companies and Enterprises), 
-811300 (Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance),
-and 541100 (Legal Services).
-
-Note: the second and third best matches include Omaha metropolitan area and Iowa City Metropolitan area (and in fact Iowa City wins out over Cerro Gordo is spatial impedance is ignored). 
+This map shows that even with no prior specification of which counties are cores and which are not, and treating all counties as isolated (i.e., not accounting for multicounty cores), our connectedness metric identifies most of the places one would expect as being cores: MSAs. That is errors of omission and commission are low despite the overly naive specification.
 
 
 
 
 
-### Hierarchical
-
-In this 2-stage analysis, the counties of Iowa are first matched internally. 
-Metro counties in areas with a population of under a 1 million serve as first-order cores which all other counties are matched based on their capacitance.  
 
 
-```{r hierarchical extent}
 
-metro <- c("19193", 
-           "19085",
-           "19155",
-           "19129",
-           "19121",
-           "19181",
-           "19077",
-           "19049",
-           "19153",
-           "19099",
-           "19015",
-           "19169",
-           "19017",
-           "19075",
-           "19013",
-           "19061",
-           "19011",
-           "19113",
-           "19105",
-           "19103",
-           "19183",
-           "19163")
-
-micro <- c("19059", 
-           "19041",
-           "19021",
-           "19027",
-           "19187",
-           "19195",
-           "19033",
-           "19127",
-           "19125",
-           "19123",
-           "19179",
-           "19101",
-           "19045",
-           "19139",
-           "19057",
-           "19111")
-
-rural_extent <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
-rural_extent <- setdiff(rural_extent, metro )  %>% setdiff(., micro)
-names(rural_extent) <- rural_extent
-
-# primary_extent <- micro
-# names(primary_extent) <- primary_extent
-
-Desmoines <- c("19153",
-               "19121",
-               "19181",
-               "19077",
-               "19049",
-               "19099")
-
-Ames <- c("19169",
-          "19015")
-
-Siouxcity <- c("19193",
-               "46127",
-               "31043",
-               "31051")
-
-Omaha  <- c("19155",
-            "19085",
-            "19129",
-            "31177",
-            "31055",
-            "31153",
-            "31025",
-            "31155")
-
-Wateloo <- c("19013",
-             "19017",
-             "19075")
-
-Cedarrrapids <- c("19113",
-                  "19011",
-                  "19105")
-
-Iowacity <-  c("19103",
-               "19183")
-
-Davenport <- c("19163",
-               "17161",
-               "17073",
-               "17131")
-
-Masoncity <- c("19033",
-               "19195")
-
-Burlington <- c("19057",
-                "17071")
-
-Keokuk  <- c("19111",
-             "17067",
-             "29045")
+**Maps of Natural Matching, with Metro and Micro core aggregate clusters, but no core matching restrictions**
 
 
-```
-
-
-```{r}
+```{r, warning=FALSE}
 
 #Produce new clustered total output matrix from matched cores
 
-ext <- list(Masoncity = Masoncity,
-            Burlington = Burlington,
-            Keokuk  = Keokuk)
 
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+
+#All metro and micro core county representative
 shoname <- sapply(ext, function(x) x[1])
 
-macc <- rural_extent
+#All non-metro, non-micro counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
 
-singcc <- setdiff(micro, setdiff(unlist(ext), shoname)) 
-
-Output_mat_H1 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H1) <- industry_levels
-
-for (l in 1:length(industry_levels)){  
-  for(i in 1:length(ext)){
-    df <- Output_mat[[l]][, ext[[i]]] %>% as.matrix()
-    df[, 1:length(ext[[i]])] <- Output_mat[[l]][, ext[[i]]] %*% rep(c(1), each=length(ext[[i]])) 
-    Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  }
-  df <-  Output_mat[[l]][, setdiff(singcc, intersect(colnames(Output_mat_H1[[l]]), singcc)), drop = FALSE]
-  Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  
-  Output_mat_H1[[l]] <- Output_mat_H1[[l]][, singcc] 
-  
-  df <-  Output_mat[[l]][, setdiff(macc, colnames(Output_mat_H1[[l]])), drop = FALSE]
-  Output_mat_H1[[l]] <-  cbind(Output_mat_H1[[l]], df)
-  
-  Output_mat_H1[[l]] <- Output_mat_H1[[l]][, colnames(Output_mat_H1[[l]])[order(colnames(Output_mat_H1[[l]]))]]
-  
-}
+#All metro and micro that are not the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
 
 
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels)
 
 ```
-
 
 
 ```{r}
 ###First level calc
 
 ############ Input Needs
-  Input_mat_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_H1)){
-      Input_mat_H1[[l]] <- (Direct_mat[[l]]  %*%  Output_mat_H1[[l]])
-    }
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
 
 ############ Import Input Needs
-  Input_mat_imp_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_imp_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_imp_H1)){
-      Input_mat_imp_H1[[l]] <- pmax(Input_mat_H1[[l]] - Output_mat_H1[[l]], 0)
-    }
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
 
 ############ Net Exports
-  Input_mat_exp_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_exp_H1) <- industry_levels
-
-    for (l in 1:length(Input_mat_exp_H1)){
-      Input_mat_exp_H1[[l]] <- pmax(Output_mat_H1[[l]] - Input_mat_H1[[l]], 0)
-    }
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
 
 ############ Relative Queeg specification
-  Queeg_rel_H1 <- vector(mode='list', length=length(industry_levels))
-  names(Queeg_rel_H1) <- industry_levels
-
-  for (l in 1:length(Queeg_rel_H1)){
-    Queeg_rel_H1[[l]] <-  matrix(0, nrow = ncol(Output_mat_H1[[l]]), 
-                                ncol = ncol(Output_mat_H1[[l]]) )
-    rownames(Queeg_rel_H1[[l]]) = colnames(Queeg_rel_H1[[l]]) <- colnames(Output_mat_H1[[l]])
-  }
-
-  for (l in 1:length(Queeg_rel_H1)){
-    for (i in 1:nrow(Queeg_rel_H1[[l]])){
-      for (j in 1:nrow(Queeg_rel_H1[[l]])){
-        Queeg_rel_H1[[l]][i,j] <- (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                   pmin(Input_mat_exp_H1[[l]][,i], Input_mat_imp_H1[[l]][,j])) / 
-                                   (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                    Input_mat_exp_H1[[l]][,i])
-      }
-    }
-  }
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
 
 ```
 
 
-```{r}
+
+```{r }
+#Produce new clustered total output matrix from matched cores
 
 ###Second level Output Vector
-Output_mat_H2 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H2) <- industry_levels
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
 
-CoreMatch <- Output_mat_H2
-MatchMat <- Output_mat_H2
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
 
-cuml_core_out <- Output_mat_H2
-perf_core_out <- Output_mat_H2 
-nomatch_core_out <- Output_mat_H2
-  
-for (l in 1:length(industry_levels)){
-    CoreMatch[[l]] <- (Queeg_rel_H1[[l]][macc,  singcc] * Impede_mat[[3]][[l]][macc,  singcc]) %>% 
-                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
 
-    MatchMat[[l]] <- sparseMatrix(i = match(rownames(CoreMatch[[l]]), rownames(CoreMatch[[l]])),
-                                  j = match(c(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]), colnames(CoreMatch[[l]])),
-                                  x = 1L,
-                                  dims = c(nrow(CoreMatch[[l]]), ncol(CoreMatch[[l]])),
-                                  dimnames = list(rownames(CoreMatch[[l]]), colnames(CoreMatch[[l]]))
-                                   ) %>% as.matrix()
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
 
-  #cumulative output of matched cores and non-cores 
-  cuml_core_out[[l]] <- (Output_mat_H1[[l]][, rownames(MatchMat[[l]])[order(rownames(MatchMat[[l]]))]] %*% 
-                  MatchMat[[l]][order(rownames(MatchMat[[l]])), order(colnames(MatchMat[[l]]))]) %>% 
-          .[, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]))] 
-  
-  #output of unmatched non-cores
-  perf_core_out[[l]] <- Output_mat_H1[[l]][, rownames(as.data.frame(Queeg_rel_H1[[l]][macc,  singcc]) %>% filter(rowSums(.) == 0))]
-  
-  #output of unmatched cores
-  nomatch_core_out[[l]] <- Output_mat_H1[[l]][, setdiff(colnames(Queeg_rel_H1[[l]][,  singcc]), colnames(cuml_core_out[[l]]))] %>% as.data.frame()
+#total industry output by county matrix
+out_mat <- Output_mat_H1
 
-  Output_mat_H2[[l]] <- cbind(cuml_core_out[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(cuml_core_out[[l]]), 
-                                                                                                            colnames(perf_core_out[[l]]), 
-                                                                                                            colnames(nomatch_core_out[[l]])
-                                                                                                        ))]
-  
-}
-
-
-
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
 ```
 
 
+```{r, warning=FALSE}
 
-
-
-```{r}
-##Top absorption overlaps by core for each non-core
-
-shortage <- Input_mat_imp_H1
-excess <- Input_mat_exp_H1
-
-in_core <- vector(mode='list', length=length(industry_levels))
-names(in_core) <- industry_levels
-out_core <- in_core
-top_absorb <- in_core
-
-for (l in 1:length(industry_levels)){
-    in_core[[l]] <- shortage[[l]][, colnames(cuml_core_out[[l]])] %>% as.data.frame() %>% select(order(colnames(.)))
-    in_core[[l]]$industry_label <- rownames(in_core[[l]])
-    in_core[[l]] <- melt(in_core[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    out_core[[l]][[p]] <- excess[[l]][, macc][, p] %>% as.data.frame()
-    colnames(out_core[[l]][[p]]) <- c("NIE")
-    out_core[[l]][[p]]$industry_label <- rownames(out_core[[l]][[p]])
-    
-  }
-  names(out_core[[l]]) <- colnames(excess[[l]][, macc])
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    top_absorb[[l]][[p]] <- inner_join(out_core[[l]][[p]], in_core[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
-    top_absorb[[l]][[p]]$absorb <- pmin(top_absorb[[l]][[p]]$NIE, top_absorb[[l]][[p]]$NIS)
-    top_absorb[[l]][[p]]$trim <- ""
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(NIE > 1)
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0)
-    if (length(unique(top_absorb[[l]][[p]]$industry_label)) > 20){
-      top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
-      top_absorb[[l]][[p]]$trim <- "(top truncated values)"
-    }
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% group_by(industry_label) %>% mutate(indust_count = n())
-  }
-  names(top_absorb[[l]]) <- names(macc)
-}
-
-ggtop <- out_core
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-      county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% macc[p]) %>% pull(COUNTY)  
-    if  (dim(top_absorb[[l]][[p]])[1] == 0){
-       ggtop[[l]][[p]] <- c(glue("No absorbion overlap for {county}"))
-    } else {
-    trim <- top_absorb[[l]][[p]]$trim[1]
- ggtop[[l]][[p]] <- ggplot(top_absorb[[l]][[p]]) +
-     geom_col_interactive(
-                  aes(x = industry_label,
-                      y = (NIE/indust_count)),
-                      fill = "black") +
-      geom_point_interactive(
-                 aes(x = industry_label,
-                     y = (NIS),
-                     color = core_fips), 
-                     size  = 2.5) +  
-   labs(x = glue("Industry Sector {trim}"), y = "Input Value") +
-       labs(title = "Absorption Distribution Capacitance",
-            subtitle = glue("Net Input Excess: {county}"),
-            color = "Net Import Shortage") +
-       scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% colnames(cuml_core_out[[l]])) %>% pull(COUNTY)) ) +
-        theme(axis.text.x = element_text(angle=45, hjust=1)) 
-  if (isFALSE(all(top_absorb[[l]][[p]]$NIS < sd(top_absorb[[l]][[p]]$NIS)*3))){
-      if (mean(top_absorb[[l]][[p]]$NIS) > sd(top_absorb[[l]][[p]]$NIS)){
-           ggtop[[l]][[p]] <- ggtop[[l]][[p]] + facet_zoom(ylim = c(0, (mean(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)*3))))
-      } else{
-          ggtop[[l]][[p]] <- ggtop[[l]][[p]] +  facet_zoom(ylim = c(0, (median(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)/3))))
-      }
-  }
- }
-  }
-}
-
-
-print(ggtop[[3]]$`19007`)
-
-
-```
-
-
-
-
-```{r}
-#Map max absorption
-
-  RowMax <- vector(mode='list', length=length(industry_levels))
-  names(RowMax) <- industry_levels
-  h1m  <- RowMax
-  p <- RowMax
-  
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- NULL
   qdf <- Queeg_rel_H1
-  singcc  <- singcc
-  macc <- macc
+  isolation_th <- .1
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
   
-for (l in 1:length(industry_levels)){  
   
-   RowMax[[l]] <-  rbind(
-                    cbind(place = rownames(MatchMat[[l]]), 
-                           match = colnames(MatchMat[[l]])[apply(MatchMat[[l]], 1, which.max)] 
-                           ) ,
-                     cbind(place = singcc, 
-                           match = singcc 
-                           ) %>% as.data.frame()
-                        )
-  
-  RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
-  
-  for (i in 1:nrow(RowMax[[l]])){
-   RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[3]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
-  }
-  
-  RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
-  
-  h1m[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
-  h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-  h1m[[l]]$match[h1m[[l]]$q_value == "NA" & h1m[[l]]$place %in% macc] <- "*Self Match"
-  h1m[[l]]$q_value %<>% as.numeric() %>% round(digits = 4)
-  h1m[[l]]$ind_level <- industry_levels[[l]]
-  h1m[[l]]$lab <- h1m[[l]]$match_name
-  h1m[[l]]$lab[is.na(h1m[[l]]$q_value) & h1m[[l]]$place %in% macc] <- "*Self Match"
-  
-    for (i in 1:length(ext)){
-       h1m[[l]][h1m[[l]]$place == ext[[i]][1],]$geometry <-  TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% ext[[i]]) %>% st_union()
-    }
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
 
-}
-  
-  h1m_all  <- rbind(h1m[[1]],h1m[[2]],h1m[[3]])
-  
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-  
-   my_pal <- c()
-      for(m in 1:length(setdiff(unique(h1m_all$lab), c("*Self Match")))){
-        my_pal[m] =  values[m]
-      }
-  names(my_pal) <- sort(setdiff(unique(h1m_all$lab), c("*Self Match")))
-  
-  if(isTRUE("*Self Match" %in%  unique(h1m_all$lab))){
-   my_pal <- c(my_pal, "*Self Match" = "#000000")
-  }
-  
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = h1m[[3]]$lab
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
 
-  for (l in 1:length(industry_levels)){  
-  p[[l]] <- ggplot( h1m[[l]] ) +
-          geom_sf_interactive(aes(fill = lab, 
-                                  alpha = q_value, 
-                                  #alpha = 1, 
-                                  tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
-                                  data_id = place
-          ), 
-          color = NA
-          ) +
-          guides(alpha = "none") +
-          coord_sf() +
-          theme_void() +
-          labs(fill = "Cluster") +
-          scale_fill_manual(values = my_pal)
-  }
-  
-  gplot = plot_grid(p[[1]] + theme(legend.position = 'none'), 
-                    p[[2]] + theme(legend.position = 'none'), 
-                    p[[3]] + theme(legend.position = 'none'),
-                        labels = c("Sector", "Summary", "Detail"),
-                        nrow = 1,
-                        label_x = 0, label_y = .75,
-                        hjust = -0.5
-      )
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
       
-      gleg = get_legend(p[[3]] +
-                          guides(color = guide_legend(nrow = 1)) +
-                          theme(legend.position = "bottom", 
-                                legend.key.size = unit(.2, "cm"))
-      )
-      
-      gall = gplot + draw_grob(gleg, x = 0, y = 0, width = 1, height = .5, scale = .5)
-      
-      g <- girafe(ggobj = gall, 
+```
+
+
+
+All counties/clusters can match to all counties/clusters.
+
+If "connectedness" is below 10% a county is isolated. 
+
+```{r}
+girafe(ggobj = p[[3]], 
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
                        )
       )
-      
 ```
-  
-"Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$
+
+
+This map shows how clustering causes more absorption from the larger with-in cluster economies. 
+
+
+
+
+
+
+
+
+
+
+
+**Maps of Restricted Core Matching to all Metro and Micro Stat Areas, with Metro and Micro core aggregation**
+
+
+```{r, warning=FALSE}
+
+#Produce new clustered total output matrix from matched cores
+
+
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+
+#All metro and micro core county representative
+shoname <- sapply(ext, function(x) x[1])
+
+#All non-metro, non-micro counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#All metro and micro that are not the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
+
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels)
+
+```
+
 
 ```{r}
- g 
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
 
 ```
+
+
+
+```{r}
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#importing "column" counties
+singcc <- union(setdiff(union(micro, metro), unlist(ext)), shoname) 
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
+```
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- union(setdiff(union(micro, metro), unlist(ext)), shoname)
+  qdf <- Queeg_rel_H1
+  isolation_th <- .1
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = h1m[[3]]$lab
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+      
+```
+
+
+
+All counties/clusters can match to all counties/clusters.
+
+If "connectedness" is below 10% a county is isolated. 
+
+```{r}
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+```
+
+
+
+
+
+
+
+
+**Maps of Restricted Core Matching to only Metro Stat Areas, with Metro and Micro core aggregation**
+
+
+```{r, warning=FALSE}
+
+#Produce new clustered total output matrix from matched cores
+
+
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+
+#All metro and micro core county representative
+shoname <- sapply(ext, function(x) x[1])
+
+#All non-metro, non-micro counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#All metro and micro that are not the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
+
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels)
+
+```
+
+
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r }
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(.,intersect(setdiff(unlist(ext), shoname), micro))
+
+#importing "column" counties
+singcc <- union(setdiff(metro, unlist(ext)), intersect(shoname, metro)) 
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
+```
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- union(setdiff(metro, unlist(ext)), intersect(shoname, metro)) 
+  qdf <- Queeg_rel_H1
+  isolation_th <- .1
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = h1m[[3]]$lab
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+      
+```
+
+
+
+All counties/clusters can match to all counties/clusters.
+
+If "connectedness" is below 10% a county is isolated. 
+
+```{r}
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+```
+
+
+
+
+
+
+
+
+**Hierarchical**
+
+
+**Maps of Natural Matching, with Metro and Micro core aggregate clusters, but no core matching restrictions**
+
+
+```{r, warning=FALSE}
+
+#Produce new clustered total output matrix from matched cores
+
+
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+
+#All metro and micro core county representative
+shoname <- sapply(ext, function(x) x[1])
+
+#All non-metro, non-micro counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#All metro and micro that are not the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
+
+
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels)
+
+```
+
+
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r}
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
+```
+
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- NULL
+  qdf <- Queeg_rel_H1
+  isolation_th <- .1
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = h1m[[3]]$lab
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+      
+```
+
+
+
+All counties/clusters can match to all counties/clusters.
+
+If "connectedness" is below 10% a county is isolated. 
+
+```{r}
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+```
+
+
+This map shows how clustering causes more absorption from the larger with-in cluster economies. 
+
+
+
+
+
+
+```{r}
+
+# 
+# #All previously isolated counties 
+# macc <- h1m[[3]]$NAME[h1m[[3]]$lab=="Isolated"]
+# 
+# #Each new core cluster 
+# df <- vector(mode='list', length=length(setdiff(unique(h1m[[3]]$lab) , "Isolated")))
+#   names(df) <- setdiff(unique(h1m[[3]]$lab) , "Isolated")
+# 
+# for(i in 1:length(setdiff(unique(h1m[[3]]$lab) , "Isolated"))){
+#   df[[i]] <- h1m[[3]]$place[h1m[[3]]$lab == setdiff(unique(h1m[[3]]$lab) , "Isolated")[i]]
+# }
+#   
+# ext <- df
+# 
+# #singcc <- unlist(df)
+# singcc <- setdiff(unlist(ext), h1m[[3]]$place[h1m[[3]]$NAME %in% setdiff(unique(h1m[[3]]$lab) , "Isolated")])
+# 
+# 
+# trimr(specname=Output_mat_H3, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels)
+# 
+
+
+
+```
+
+
+
+
+
+```{r}
+###First level calc
+# 
+# ############ Input Needs
+# Input_Needs(specname=Output_mat_H3, o_mat=Output_mat_H1, industry_levels=industry_levels)
+# 
+# ############ Import Input Needs
+# Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Output_mat_H3,  industry_levels=industry_levels)
+# 
+# ############ Net Exports
+# Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Output_mat_H3,  industry_levels=industry_levels)
+# 
+# ############ Relative Queeg specification
+# Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r }
+#Produce new clustered total output matrix from matched cores
+
+# ###Second level Output Vector
+# #county by county absorption matrix
+# queeg_mat <- Queeg_rel_H1
+# 
+# #geographical impedance (used here for breaking ties)
+# imp_mat <- Impede_mat[[4]]
+# 
+# #exporting "row" counties
+# macc <- colnames(Queeg_rel_H1[[3]])
+# 
+# #importing "column" counties
+# singcc <- colnames(Queeg_rel_H1[[3]])
+# 
+# #total industry output by county matrix
+# out_mat <- Output_mat_H1
+# 
+# Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1)
+```
+
+
+
+```{r, warning=FALSE}
+
+# ####Economic and Spatial cluster matching with isolation 
+#   mat_mat <- MatchMat
+#   spec_clust  <- NULL
+#   qdf <- Queeg_rel_H1
+#   isolation_th <- .1
+#   ext <- list(Masoncity = Masoncity,
+#               Burlington = Burlington,
+#               Keokuk  = Keokuk,
+#               Desmoines = Desmoines,
+#               Ames = Ames,
+#               Siouxcity = Siouxcity,
+#               Omaha = Omaha,
+#               Wateloo = Wateloo,
+#               Cedarrrapids = Cedarrrapids,
+#               Iowacity = Iowacity,
+#               Davenport = Davenport)
+#   #ext <- NA
+#   
+#   
+# hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th) 
+# 
+# #####Custom colors 
+#  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+# values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+#  placenames = h1m[[3]]$lab
+#  #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+#  
+# cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+#  
+# 
+# ####Mapping Economic and Spatial cluster matching with isolation
+#   mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+#       
+```
+
+
+
+All counties/clusters can match to all counties/clusters.
+
+If "connectedness" is below 10% a county is isolated. 
+
+```{r}
+# girafe(ggobj = p[[3]], 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
+```
+
+
+
+
+
+
+
+Note: Corner Cases.
+Story county has a maximum total absorption with Johnson along with 15 other counties 
+Allamakee has a maximum total absorption with Story and so would be matched to Story,making Story a cluster core.  However, 
+
+5 Counties that are the only match  for that county
+Allamakee to Story
+BuenaVista to Scott
+ Carrol  to  Linn
+ Hardin to Dubuque
+Johnson to Woodburry
+
+Of these 5 there are 3 (BuenaVista, Carrol, Johnson) which have other counties that match to them making them cluster cores and meaning that they CANNOT match to another county. 
+And 2 (Allamakee, Hardin) which do not have other exporting counties which they import from. 
+
+Johnson only has a very weak absorption with Woodburry, below the isolation threshold, thus also making Woodbury a cluster core without any matches.
+In addition, since BuenaVista, Carrol, and Johnson are themselves cluster cores, Scott, Linn and Woodburry are also cluster cores without any matches.
+
+ 
+
+
+
+
+
+In this 2-stage analysis, the counties of Iowa are first matched internally. 
+Metro counties in areas with a population of under a 1 million serve as first-order cores which all other counties are matched based on their capacitance.  
 
 
 Note: this matching asks the question: Where is the greatest industry development opportunity for all rural counties among the Iowa Micropolitan Statistical Areas group of places, ignoring all other market opportunities in and out of state?
 
 Next we ask: Where is the greatest industry development opportunity for all rural counties and Iowa Micropolitan Statistical Areas among the Iowa Metropolitan Statistical Areas group of places, ignoring all other market opportunities out of state? 
 
-```{r}
-
-#Produce new clustered total output matrix from matched cores
-ext <- list(Desmoines = Desmoines,
-            Ames = Ames,
-            Siouxcity = Siouxcity,
-            Omaha = Omaha,
-            Wateloo = Wateloo,
-            Cedarrrapids = Cedarrrapids,
-            Iowacity = Iowacity,
-            Davenport = Davenport)
-
-shoname <- sapply(ext, function(x) x[1])
-
-singcc <- metro
-
-macc <- rural_extent
-
-#Reuse micropolitan clusters with appropriate aggregates 
-Output_mat_H3 <- Output_mat_H2
-
-for (l in 1:length(industry_levels)){  
-  #Aggregate Metropolitan clusters  
-  for(i in 1:length(ext)){
-    df <- Output_mat[[l]][, ext[[i]]] %>% as.matrix()
-    df[, 1:length(ext[[i]])] <- Output_mat[[l]][, ext[[i]]] %*% rep(c(1), each=length(ext[[i]])) 
-    Output_mat_H3[[l]] <-  cbind(Output_mat_H3[[l]], df)
-  }
-  #Reduce duplicate cluster aggregates to representative county
-  Output_mat_H3[[l]] <- Output_mat_H3[[l]][, c(shoname, colnames(Output_mat_H2[[l]]))] 
-  
-  #Include Metropolitan clusters with only one county
-  df <-  Output_mat[[l]][, setdiff(singcc, unlist(ext)), drop = FALSE]
-  Output_mat_H3[[l]] <-  cbind(Output_mat_H3[[l]], df)
-  
-  #Select rural counties 
-  df <-  Output_mat[[l]][, macc, drop = FALSE]
-  Output_mat_H3[[l]] <-  cbind(Output_mat_H3[[l]], df)
-  
-  Output_mat_H3[[l]] <- Output_mat_H3[[l]][, colnames(Output_mat_H3[[l]])[order(colnames(Output_mat_H3[[l]]))]] %>% as.matrix()
-}
-
-```
-
-
-```{r}
-###Second level calc
-
-
-############ Input Needs
-  Input_mat_H3 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_H3) <- industry_levels
-
-    for (l in 1:length(Input_mat_H3)){
-      Input_mat_H3[[l]] <- (Direct_mat[[l]]  %*%  Output_mat_H3[[l]])
-    }
-
-############ Import Input Needs
-  Input_mat_imp_H3 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_imp_H3) <- industry_levels
-
-    for (l in 1:length(Input_mat_imp_H3)){
-      Input_mat_imp_H3[[l]] <- pmax(Input_mat_H3[[l]] - Output_mat_H3[[l]], 0)
-    }
-
-############ Net Exports
-  Input_mat_exp_H3 <- vector(mode='list', length=length(industry_levels))
-  names(Input_mat_exp_H3) <- industry_levels
-
-    for (l in 1:length(Input_mat_exp_H3)){
-      Input_mat_exp_H3[[l]] <- pmax(Output_mat_H3[[l]] - Input_mat_H3[[l]], 0)
-    }
-
-############ Relative Queeg specification
-  Queeg_rel_H3 <- vector(mode='list', length=length(industry_levels))
-  names(Queeg_rel_H3) <- industry_levels
-
-  for (l in 1:length(Queeg_rel_H3)){
-    Queeg_rel_H3[[l]] <-  matrix(0, nrow = ncol(Output_mat_H3[[l]]), 
-                                ncol = ncol(Output_mat_H3[[l]]) )
-    rownames(Queeg_rel_H3[[l]]) = colnames(Queeg_rel_H3[[l]]) <- colnames(Output_mat_H3[[l]])
-  }
-
-  for (l in 1:length(Queeg_rel_H3)){
-    for (i in 1:nrow(Queeg_rel_H3[[l]])){
-      for (j in 1:nrow(Queeg_rel_H3[[l]])){
-        Queeg_rel_H3[[l]][i,j] <- (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                   pmin(Input_mat_exp_H3[[l]][,i], Input_mat_imp_H3[[l]][,j])) / 
-                                   (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                                    Input_mat_exp_H3[[l]][,i])
-      }
-    }
-  }
-
-```
-
-
-
-```{r}
-
-###Third level Output Vector
-
-Output_mat_H4 <- vector(mode='list', length=length(industry_levels))
-names(Output_mat_H4) <- industry_levels
-
-CoreMatch <- Output_mat_H4
-MatchMat <- Output_mat_H4
-
-cuml_core_out <- Output_mat_H4
-perf_core_out <- Output_mat_H4 
-nomatch_core_out <- Output_mat_H4
-
-singcc <- intersect(metro, colnames(Output_mat_H3[[1]]))
-
-macc <- c(rural_extent, intersect(micro, colnames(Output_mat_H2[[1]])))
-  
-for (l in 1:length(industry_levels)){
-    CoreMatch[[l]] <- (Queeg_rel_H3[[l]][macc,  singcc] * Impede_mat[[3]][[l]][macc,  singcc]) %>% 
-                     as.data.frame() %>% filter( rowSums(.) != 0) %>% as.matrix()
-
-    MatchMat[[l]] <- sparseMatrix(i = match(rownames(CoreMatch[[l]]), rownames(CoreMatch[[l]])),
-                                  j = match(c(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]), colnames(CoreMatch[[l]])),
-                                  x = 1L,
-                                  dims = c(nrow(CoreMatch[[l]]), ncol(CoreMatch[[l]])),
-                                  dimnames = list(rownames(CoreMatch[[l]]), colnames(CoreMatch[[l]]))
-                                   ) %>% as.matrix()
-
-  #cumulative output of matched cores and non-cores 
-  cuml_core_out[[l]] <- (Output_mat_H3[[l]][, rownames(MatchMat[[l]])[order(rownames(MatchMat[[l]]))]] %*% 
-                  MatchMat[[l]][order(rownames(MatchMat[[l]])), order(colnames(MatchMat[[l]]))]) %>% 
-          .[, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]))] 
-  
-  #output of unmatched non-cores
-  perf_core_out[[l]] <- Output_mat_H3[[l]][, rownames(as.data.frame(Queeg_rel_H3[[l]][macc,  singcc]) %>% filter(rowSums(.) == 0))]
-  
-  #output of unmatched cores
-  nomatch_core_out[[l]] <- Output_mat_H3[[l]][, setdiff(colnames(Queeg_rel_H3[[l]][, singcc]), colnames(cuml_core_out[[l]]))] %>% as.data.frame()
-  colnames(nomatch_core_out[[l]]) <- setdiff(colnames(Queeg_rel_H3[[l]][, singcc]), colnames(cuml_core_out[[l]]))
-
-  Output_mat_H4[[l]] <- cbind(cuml_core_out[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(cuml_core_out[[l]]), 
-                                                                                                            colnames(perf_core_out[[l]]), 
-                                                                                                            colnames(nomatch_core_out[[l]])
-                                                                                                        ))]
-
-}
-
-
-
-```
-
-
-
-
-
-
-```{r}
-##Top absorption overlaps by core for each non-core
-
-
-shoname <-colnames(Output_mat_H2[[1]])
-shortage <- Input_mat_imp_H3
-excess <- Input_mat_exp_H3
-macc <- c(rural_extent, intersect(micro, colnames(Output_mat_H2[[1]])))
-singcc <- intersect(metro, colnames(Output_mat_H3[[1]]))
-
-  
-
-in_core <- vector(mode='list', length=length(industry_levels))
-names(in_core) <- industry_levels
-out_core <- in_core
-top_absorb <- in_core
-
-
-
-for (l in 1:length(industry_levels)){
-    in_core[[l]] <- shortage[[l]][, colnames(cuml_core_out[[l]])] %>% as.data.frame() %>% select(order(colnames(.)))
-    in_core[[l]]$industry_label <- rownames(in_core[[l]])
-    in_core[[l]] <- melt(in_core[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    out_core[[l]][[p]] <- excess[[l]][, macc][, p] %>% as.data.frame()
-    colnames(out_core[[l]][[p]]) <- c("NIE")
-    out_core[[l]][[p]]$industry_label <- rownames(out_core[[l]][[p]])
-    
-  }
-  names(out_core[[l]]) <- colnames(excess[[l]][, macc])
-}
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-    top_absorb[[l]][[p]] <- inner_join(out_core[[l]][[p]], in_core[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
-    top_absorb[[l]][[p]]$absorb <- pmin(top_absorb[[l]][[p]]$NIE, top_absorb[[l]][[p]]$NIS)
-    top_absorb[[l]][[p]]$trim <- ""
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(NIE > 1)
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0)
-    if (length(unique(top_absorb[[l]][[p]]$industry_label)) > 20){
-      top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
-      top_absorb[[l]][[p]]$trim <- "(top truncated values)"
-    }
-    top_absorb[[l]][[p]] <- top_absorb[[l]][[p]] %>% group_by(industry_label) %>% mutate(indust_count = n())
-  }
-  names(top_absorb[[l]]) <- names(macc)
-}
-
-ggtop <- out_core
-
-for (l in 1:length(industry_levels)){
-  for (p in 1:length(macc)){
-      county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% macc[p]) %>% pull(COUNTY)  
-    if  (dim(top_absorb[[l]][[p]])[1] == 0){
-       ggtop[[l]][[p]] <- c(glue("No absorbion overlap for {county}"))
-    } else {
-    trim <- top_absorb[[l]][[p]]$trim[1]
- ggtop[[l]][[p]] <- ggplot(top_absorb[[l]][[p]]) +
-     geom_col_interactive(
-                  aes(x = industry_label,
-                      y = (NIE/indust_count)),
-                      fill = "black") +
-      geom_point_interactive(
-                 aes(x = industry_label,
-                     y = (NIS),
-                     color = core_fips), 
-                     size  = 2.5) +  
-   labs(x = glue("Industry Sector {trim}"), y = "Input Value") +
-       labs(title = "Absorption Distribution Capacitance",
-            subtitle = glue("Net Input Excess: {county}"),
-            color = "Net Import Shortage") +
-       scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% colnames(cuml_core_out[[l]])) %>% pull(COUNTY)) ) +
-        theme(axis.text.x = element_text(angle=45, hjust=1)) 
-  if (isFALSE(all(top_absorb[[l]][[p]]$NIS < sd(top_absorb[[l]][[p]]$NIS)*3))){
-      if (mean(top_absorb[[l]][[p]]$NIS) > sd(top_absorb[[l]][[p]]$NIS)){
-           ggtop[[l]][[p]] <- ggtop[[l]][[p]] + facet_zoom(ylim = c(0, (mean(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)*3))))
-      } else{
-          ggtop[[l]][[p]] <- ggtop[[l]][[p]] +  facet_zoom(ylim = c(0, (median(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)/3))))
-      }
-  }
- }
-  }
-}
-
-print(ggtop[[3]]$`19083`)
-
-
-```
-
-
-Hardin county is a top exporter of plastics, organic chemicals, and mining products and matched to Linn county where among other business, Rockwell Collins is located. 
-
-
-
-```{r}
-#Map max absorption
-
-  RowMax <- vector(mode='list', length=length(industry_levels))
-  names(RowMax) <- industry_levels
-  h1m  <- RowMax
-  p <- RowMax
-  
-  qdf <- Queeg_rel_H3
-  singcc  <- singcc
-  macc <- macc
-  
-  ext <- list(Masoncity = Masoncity,
-              Burlington = Burlington,
-              Keokuk  = Keokuk,
-              Desmoines = Desmoines,
-              Ames = Ames,
-              Siouxcity = Siouxcity,
-              Omaha = Omaha,
-              Wateloo = Wateloo,
-              Cedarrrapids = Cedarrrapids,
-              Iowacity = Iowacity,
-              Davenport = Davenport)
-  
-  
-for (l in 1:length(industry_levels)){  
-  
-   RowMax[[l]] <-  rbind(
-                    cbind(place = rownames(MatchMat[[l]]), 
-                           match = colnames(MatchMat[[l]])[apply(MatchMat[[l]], 1, which.max)] 
-                           ) ,
-                     cbind(place = singcc, 
-                           match = singcc 
-                           ) %>% as.data.frame()
-                        )
-  
-  RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
-  
-  for (i in 1:nrow(RowMax[[l]])){
-   RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[3]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
-  }
-  
-  RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
-  
-  h1m[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
-  h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
-  h1m[[l]]$match[h1m[[l]]$q_value == "NA" & h1m[[l]]$place %in% macc] <- "*Self Match"
-  h1m[[l]]$q_value %<>% as.numeric() %>% round(digits = 4)
-  h1m[[l]]$ind_level <- industry_levels[[l]]
-  h1m[[l]]$lab <- h1m[[l]]$match_name
-  h1m[[l]]$lab[is.na(h1m[[l]]$q_value) & h1m[[l]]$place %in% macc] <- "*Self Match"
-  
-    for (i in 1:length(ext)){
-       h1m[[l]][h1m[[l]]$place == ext[[i]][1],]$geometry <-  TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% ext[[i]]) %>% st_union()
-    }
-
-}
-  
-  h1m_all  <- rbind(h1m[[1]],h1m[[2]],h1m[[3]])
-  
-  values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
-  
-   my_pal <- c()
-      for(m in 1:length(setdiff(unique(h1m_all$lab), c("*Self Match")))){
-        my_pal[m] =  values[m]
-      }
-  names(my_pal) <- sort(setdiff(unique(h1m_all$lab), c("*Self Match")))
-  
-  if(isTRUE("*Self Match" %in%  unique(h1m_all$lab))){
-   my_pal <- c(my_pal, "*Self Match" = "#000000")
-  }
-  
-
-  for (l in 1:length(industry_levels)){  
-  p[[l]] <- ggplot( h1m[[l]] ) +
-          geom_sf_interactive(aes(fill = lab, 
-                                  alpha = q_value, 
-                                  #alpha = 1, 
-                                  tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
-                                  data_id = place
-          ), 
-          color = NA
-          ) +
-          guides(alpha = "none") +
-          coord_sf() +
-          theme_void() +
-          labs(fill = "Cluster") +
-          scale_fill_manual(values = my_pal)
-  }
-  
-  gplot = plot_grid(p[[1]] + theme(legend.position = 'none'), 
-                    p[[2]] + theme(legend.position = 'none'), 
-                    p[[3]] + theme(legend.position = 'none'),
-                        labels = c("Sector", "Summary", "Detail"),
-                        nrow = 1,
-                        label_x = 0, label_y = .75,
-                        hjust = -0.5
-      )
-      
-      gleg = get_legend(p[[3]] +
-                          guides(color = guide_legend(nrow = 1)) +
-                          theme(legend.position = "bottom", 
-                                legend.key.size = unit(.2, "cm"))
-      )
-      
-      gall = gplot + draw_grob(gleg, x = 0, y = 0, width = 1, height = .5, scale = .5)
-      
-      g <- girafe(ggobj = gall, 
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-                       )
-      )
-      
-```
-  
-"Spatial Relative Queeg distance": $\arg \max_{l} \{(\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}) * Q^{rs}\}~ \forall ~ r,s \in l$
-```{r}
- g 
-
-```
-
 
 
 ```{r}
 
 #Produce new clustered total output matrix from matched cores
 
-for (l in 1:length(industry_levels)){  
-  Output_mat_H4[[l]] <- cbind(Output_mat_H4[[l]], Output_mat_H3[[l]][,setdiff(colnames(Output_mat_H3[[l]]), colnames(Output_mat_H4[[l]]))])
-}
+# for (l in 1:length(industry_levels)){  
+#   Output_mat_H4[[l]] <- cbind(Output_mat_H4[[l]], Output_mat_H3[[l]][,setdiff(colnames(Output_mat_H3[[l]]), colnames(Output_mat_H4[[l]]))])
+# }
 
 ```
 

@@ -140,7 +140,7 @@ log_info("Proximity Matrix complete")
 
 
 # Import and cleanup "pubdata" RUCC data
-if (!file.exists(file.path(data_dir, "RUCCData"))){
+if (!file.exists(file.path(data_dir, "RUCCDatap"))){
   RUCCDatap <- ers_rurality$get_ruc_df()
   RUCCDatap %<>% filter(RUC_YEAR=="2013")
   RUCCDatap$place <- RUCCDatap$FIPS
