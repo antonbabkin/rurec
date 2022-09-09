@@ -60,54 +60,42 @@ if (!file.exists(file.path(data_dir, "Total_mat"))){
 log_info("Total matrix complete")
 
 
-# 
-# 
-# ### Labor share
-# if (!file.exists(file.path(data_dir, "Labor_mat"))){
-#   Labor_mat <- list()
-#   
-#   ### Sector level 1-by-14 
-#   Labor_mat[[1]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[24,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15) /
-#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[23,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
-#   colnames(Labor_mat[[1]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>%  .[4,3:17] %>% as.list()
-#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
-#   Labor_mat[[1]] %<>% subset(select = (colnames(Labor_mat[[1]]) %in% match_x))
-#   
-#   ### Summary level 1-by-59 
-#   Labor_mat[[2]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[80,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71) /
-#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[79,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71)
-#   colnames(Labor_mat[[2]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>%  .[4,3:73] %>% as.list()
-#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
-#   Labor_mat[[2]] %<>% subset(select = (colnames(Labor_mat[[2]]) %in% match_x))
-#   
-#   
-#   ### Detail level 1-by-360 
-#   Labor_mat[[3]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[411,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405) /
-#                     file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[410,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
-#   colnames(Labor_mat[[3]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>%  .[3,3:407] %>% as.list()
-#   
-#   Labor_mat[[3]][,25] <- (Labor_mat[[3]][,25] + Labor_mat[[3]][,26] + Labor_mat[[3]][,27] + Labor_mat[[3]][,28] + Labor_mat[[3]][,29] + Labor_mat[[3]][,30] + Labor_mat[[3]][,31] + Labor_mat[[3]][,32] + Labor_mat[[3]][,33]+ Labor_mat[[3]][,34] + Labor_mat[[3]][,35] + Labor_mat[[3]][,36])/12
-#   for(i in 36:26){
-#     Labor_mat[[3]] <- Labor_mat[[3]][,-i]
-#   }
-#   colnames(Labor_mat[[3]])[25] = "23"
-#   match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique() 
-#   Labor_mat[[3]] %<>% subset(select = (colnames(Labor_mat[[3]]) %in% match_x))
-#   
-#   names(Labor_mat) <- industry_levels
-#   saver(Labor_mat)
-#   rm(Labor_mat, match_x, d)
-# }
-# log_info("Labor matrix complete")
-# 
 
 
+### Labor share
+if (!file.exists(file.path(data_dir, "Labor_mat"))){
+  Labor_mat <- list()
+
+  ### Sector level 1-by-14
+  Labor_mat[[1]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[24,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15) /
+                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[23,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
+  colnames(Labor_mat[[1]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>%  .[4,3:17] %>% as.list()
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique()
+  Labor_mat[[1]] %<>% subset(select = (colnames(Labor_mat[[1]]) %in% match_x))
+
+  ### Summary level 1-by-59
+  Labor_mat[[2]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[80,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71) /
+                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[79,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71)
+  colnames(Labor_mat[[2]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>%  .[4,3:73] %>% as.list()
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique()
+  Labor_mat[[2]] %<>% subset(select = (colnames(Labor_mat[[2]]) %in% match_x))
 
 
+  ### Detail level 1-by-360
+  Labor_mat[[3]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[411,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405) /
+                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[410,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
+  colnames(Labor_mat[[3]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>%  .[4,3:407] %>% as.list()
 
+  Labor_mat[[3]]  <- c(Labor_mat[[3]][1,1:25], Labor_mat[[3]][1,37:405]) %>% as.matrix() %>% t()
+  colnames(Labor_mat[[3]])[25] = "23"
+  match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique()
+  Labor_mat[[3]] %<>% subset(select = (colnames(Labor_mat[[3]]) %in% match_x))
 
-
-
+  names(Labor_mat) <- industry_levels
+  saver(Labor_mat)
+  rm(Labor_mat, match_x, d)
+}
+log_info("Labor matrix complete")
 
 
   
@@ -160,6 +148,26 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
   rm(Xpay_mat)
 }  
 log_info("Payroll matrix complete")
+
+
+
+#Total output Matrix
+if (!file.exists(file.path(data_dir, "Output_mat"))){
+  importr(Xpay_mat)
+  importr(Labor_mat)
+  Output_mat <- Xpay_mat
+  for (l in 1:length(Xpay_mat)){
+    Output_mat[[l]] <- (Xpay_mat[[l]] / matrix(t(Labor_mat[[l]]), nrow=ncol(Labor_mat[[l]]), ncol=ncol(Xpay_mat[[l]]), byrow=TRUE) ) 
+    names(Output_mat) <- industry_levels
+    saver(Output_mat)
+    rm(Output_mat)
+  }
+}
+log_info("Total output matrix complete")
+
+
+
+
 
 # ### Test that county industry data and I/O tables are compatible
 # importr(Xpay_mat)
@@ -236,6 +244,11 @@ if (!file.exists(file.path(data_dir, "Impede_mat"))){
   for (i in 1:length(D_mat)){
     Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))))
   }
+  ### hyperbolic secant function 2
+  Impede_mat[[4]] <- D_mat
+  for (i in 1:length(D_mat)){
+    Impede_mat[[4]][[i]] <-  ((2/(exp(-(D_mat[[i]]/10000000)) + exp(D_mat[[i]]/10000000))))
+  }
   saver(Impede_mat)
   rm(D_mat, Impede_mat)
 }
@@ -262,25 +275,7 @@ if (!file.exists(file.path(data_dir, "Input_mat"))){
 }
 log_info("Input Needs matrix complete")
 
-############ Relative Input Needs
-if (!file.exists(file.path(data_dir, "Input_mat_rel"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Direct_mat <- readRDS(file.path(data_dir, "Direct_mat"))
-  Input_mat <- readRDS(file.path(data_dir, "Input_mat"))
-  
-  Input_mat_rel <- vector(mode='list', length=length(Total_mat))
-  names(Input_mat_rel) <- industry_levels
-  
-    for (l in 1:length(Input_mat_rel)){
-      Input_mat_rel[[l]] <- (Input_mat[[l]]) %*% (diag(c(1/(rep(c(1), each=ncol(Direct_mat[[l]])) %*% Input_mat[[l]]))))
-      colnames(Input_mat_rel[[l]]) <- colnames(Input_mat[[l]])
-    }
 
-  saver(Input_mat_rel)
-  rm(Input_mat_rel, Total_mat, Direct_mat, Input_mat)
-}
-log_info("Relative Input Needs matrix complete")
 
 ############ Import Input Needs
 if (!file.exists(file.path(data_dir, "Input_mat_imp"))){
@@ -312,215 +307,13 @@ if (!file.exists(file.path(data_dir, "Input_mat_exp"))){
   names(Input_mat_exp) <- industry_levels
   
     for (l in 1:length(Input_mat_exp)){
-      Input_mat_exp[[l]] <- abs(pmin(Input_mat[[l]] - Xpay_mat[[l]], 0))
+      Input_mat_exp[[l]] <- pmax(Xpay_mat[[l]] - Input_mat[[l]], 0)
     }
 
   saver(Input_mat_exp)
   rm(Input_mat_exp, Total_mat, Xpay_mat, Input_mat)
 }
 log_info("Net Exports matrix complete")
-
-############ Relative Import Input Needs
-if (!file.exists(file.path(data_dir, "Input_mat_imp_rel"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_rel <- readRDS(file.path(data_dir, "Input_mat_rel"))
-  
-  Input_mat_imp_rel <- vector(mode='list', length=length(Total_mat))
-  names(Input_mat_imp_rel) <- industry_levels
-  
-    for (l in 1:length(Input_mat_imp_rel)){
-      Input_mat_imp_rel[[l]]  <- pmax(Input_mat_rel[[l]]  - Xpay_mat[[l]]  %*% (diag(c(1/(rep(c(1), each=nrow(Xpay_mat[[l]] )) %*% Xpay_mat[[l]] )))), 0)
-      colnames(Input_mat_imp_rel[[l]]) <- colnames(Input_mat[[l]])
-    }
-
-saver(Input_mat_imp_rel)
-rm(Input_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
-}
-log_info("Relative Import Input Needs matrix complete")
-
-
-############ Similarity Index
-
-if (!file.exists(file.path(data_dir, "Sim_mat"))){
-
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  
-  Sim_mat <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat) <- industry_levels
-  
-    for (l in 1:length(Sim_mat)){
-      Sim_mat[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat[[l]]) = colnames(Sim_mat[[l]]) <- colnames(Input_mat[[l]])
-    }
-  
-  for (l in 1:length(Sim_mat)){
-    for (i in 1:ncol(Xpay_mat[[l]])){
-      for (j in 1:ncol(Xpay_mat[[l]])){
-        Sim_mat[[l]][i,j]  <- norm((Input_mat[[l]][,i] - (Xpay_mat[[l]][,j])), type = "2")
-      }
-    }    
-  }
-
-
-  saver(Sim_mat)
-  rm(Sim_mat, Total_mat, Xpay_mat, Input_mat)
-}
-log_info("Similarity Index matrix complete")
-
-
-############ Relative Similarity Index
-if (!file.exists(file.path(data_dir, "Sim_mat_rel"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_rel <- readRDS(file.path(data_dir, "Input_mat_rel"))
-  
-  Sim_mat_rel <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat_rel) <- industry_levels 
-  
-    for (l in 1:length(Sim_mat_rel)){
-      Sim_mat_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat_rel[[l]]) = colnames(Sim_mat_rel[[l]]) <- colnames(Input_mat[[l]])
-    }
-  
-   for (l in 1:length(Sim_mat_rel)){
-      for (i in 1:ncol(Xpay_mat[[l]])){
-        for (j in 1:ncol(Xpay_mat[[l]])){
-          Sim_mat_rel[[l]][i,j]  <- norm((Input_mat_rel[[l]][,i] - (Xpay_mat[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Xpay_mat[[l]][,j] ))) )), type = "2")
-        }
-      }
-    }
-  
-  saver(Sim_mat_rel)
-  rm(Sim_mat_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
-}
-log_info("Relative Similarity Index matrix complete")
-
-############ Import Similarity Index
-if (!file.exists(file.path(data_dir, "Sim_mat_imp"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
-  
-  Sim_mat_imp <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat_imp) <- industry_levels
-  
-    for (l in 1:length(Sim_mat_imp)){
-      Sim_mat_imp[[l]] <- matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat_imp[[l]]) = colnames(Sim_mat_imp[[l]]) <- colnames(Input_mat[[l]])
-    }
-  
-   for (l in 1:length(Sim_mat_imp)){
-      for (i in 1:ncol(Xpay_mat[[l]])){
-        for (j in 1:ncol(Xpay_mat[[l]])){
-          Sim_mat_imp[[l]][i,j]  <- norm((Input_mat_imp[[l]][,i] - (Xpay_mat[[l]][,j])), type = "2")
-        }
-      }
-    } 
-
-  saver(Sim_mat_imp)
-  rm(Sim_mat_imp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp)
-}
-log_info("Import Similarity Index matrix complete")
-
-
-############ Import Similarity Index - Net Exports
-if (!file.exists(file.path(data_dir, "Sim_mat_exp"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
-  Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
-  
-  Sim_mat_exp <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat_exp) <- industry_levels
-  
-    for (l in 1:length(Sim_mat_exp)){
-      Sim_mat_exp[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat_exp[[l]]) = colnames(Sim_mat_exp[[l]]) <- colnames(Input_mat[[l]])
-    }
-  
-   for (l in 1:length(Sim_mat_exp)){
-      for (i in 1:ncol(Xpay_mat[[l]])){
-        for (j in 1:ncol(Xpay_mat[[l]])){
-          Sim_mat_exp[[l]][i,j]  <- norm((Input_mat_imp[[l]][,i] - (Input_mat_exp[[l]][,j])), type = "2")
-        }
-      }
-    }
-
-  saver(Sim_mat_exp)
-  rm(Sim_mat_exp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
-}
-log_info("Import Similarity Index - Net Exports matrix complete")
-
-
-############ Relative Import Similarity Index
-if (!file.exists(file.path(data_dir, "Sim_mat_imp_rel"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_imp_rel  <- readRDS(file.path(data_dir, "Input_mat_imp_rel"))
-  
-  Sim_mat_imp_rel <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat_imp_rel) <- industry_levels
-  
-    for (l in 1:length(Sim_mat_imp_rel)){
-      Sim_mat_imp_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat_imp_rel[[l]]) = colnames(Sim_mat_imp_rel[[l]]) <- colnames(Input_mat[[l]])
-    }
-  
-    for (l in 1:length(Sim_mat_imp_rel)){     
-      for (i in 1:ncol(Xpay_mat[[l]])){
-        for (j in 1:ncol(Xpay_mat[[l]])){
-          Sim_mat_imp_rel[[l]][i,j]  <- norm((Input_mat_imp_rel[[l]][,i] - (Xpay_mat[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Xpay_mat[[l]][,j] ))) )), type = "2")
-        }
-      }
-    }
-
-  saver(Sim_mat_imp_rel)
-  rm(Sim_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel)
-}
-log_info("Relative Import Similarity Index matrix complete")
-
-
-############ Relative Import Similarity Index - Net Exports
-if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
-  
-  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
-  Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
-  Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
-  Input_mat_imp_rel  <- readRDS(file.path(data_dir, "Input_mat_imp_rel"))
-  Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
-  
-  Sim_mat_exp_rel <- vector(mode='list', length=length(Total_mat))
-  names(Sim_mat_exp_rel) <- industry_levels
-  
-    for (l in 1:length(Sim_mat_exp_rel)){
-      Sim_mat_exp_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
-      rownames(Sim_mat_exp_rel[[l]]) = colnames(Sim_mat_exp_rel[[l]]) <- colnames(Input_mat[[l]])
-    }
-   for (l in 1:length(Sim_mat_exp_rel)){   
-      for (i in 1:ncol(Xpay_mat[[l]])){
-        for (j in 1:ncol(Xpay_mat[[l]])){
-          Sim_mat_exp_rel[[l]][i,j]  <- norm((Input_mat_imp_rel[[l]][,i] - (Input_mat_exp[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_exp[[l]][,j] ))) )), type = "2")
-        }
-      }
-    }
-
-  saver(Sim_mat_exp_rel)
-  rm(Sim_mat_exp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel, Input_mat_exp)
-}
-log_info("Relative Import Similarity Index - Net Exports matrix complete")
 
 
 
@@ -556,21 +349,21 @@ log_info("Queeg specification complete")
 
 ############ Relative Queeg specification
 if (!file.exists(file.path(data_dir, "Queeg_rel"))){
-
+  
   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
   Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
   Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
-
+  
   Queeg_rel <- vector(mode='list', length=length(Total_mat))
   names(Queeg_rel) <- industry_levels
-
+  
   for (l in 1:length(Queeg_rel)){
     Queeg_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
     rownames(Queeg_rel[[l]]) = colnames(Queeg_rel[[l]]) <- colnames(Input_mat[[l]])
   }
-
+  
   for (l in 1:length(Queeg_rel)){
     for (i in 1:ncol(Xpay_mat[[l]])){
       for (j in 1:ncol(Xpay_mat[[l]])){
@@ -578,28 +371,376 @@ if (!file.exists(file.path(data_dir, "Queeg_rel"))){
       }
     }
   }
-
+  
   saver(Queeg_rel)
   rm(Queeg_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
 }
 log_info("Relative Queeg specification complete")
 
 
-############ All Similarities
-if (!file.exists(file.path(data_dir, "Sim_list"))){
-  importr(Sim_mat)
-  importr(Sim_mat_rel)
-  importr(Sim_mat_imp)
-  importr(Sim_mat_exp)
-  importr(Sim_mat_imp_rel)
-  importr(Sim_mat_exp_rel)
 
-  Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
-  names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
-  saver(Sim_list)
-  rm(Sim_list, Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+# ############ Relative Input Needs
+# if (!file.exists(file.path(data_dir, "Input_mat_rel"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Direct_mat <- readRDS(file.path(data_dir, "Direct_mat"))
+#   Input_mat <- readRDS(file.path(data_dir, "Input_mat"))
+#   
+#   Input_mat_rel <- vector(mode='list', length=length(Total_mat))
+#   names(Input_mat_rel) <- industry_levels
+#   
+#     for (l in 1:length(Input_mat_rel)){
+#       Input_mat_rel[[l]] <- (Input_mat[[l]]) %*% (diag(c(1/(rep(c(1), each=ncol(Direct_mat[[l]])) %*% Input_mat[[l]]))))
+#       colnames(Input_mat_rel[[l]]) <- colnames(Input_mat[[l]])
+#     }
+# 
+#   saver(Input_mat_rel)
+#   rm(Input_mat_rel, Total_mat, Direct_mat, Input_mat)
+# }
+# log_info("Relative Input Needs matrix complete")
+
+# 
+# ############ Relative Import Input Needs
+# if (!file.exists(file.path(data_dir, "Input_mat_imp_rel"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_rel <- readRDS(file.path(data_dir, "Input_mat_rel"))
+#   
+#   Input_mat_imp_rel <- vector(mode='list', length=length(Total_mat))
+#   names(Input_mat_imp_rel) <- industry_levels
+#   
+#     for (l in 1:length(Input_mat_imp_rel)){
+#       Input_mat_imp_rel[[l]]  <- pmax(Input_mat_rel[[l]]  - Xpay_mat[[l]]  %*% (diag(c(1/(rep(c(1), each=nrow(Xpay_mat[[l]] )) %*% Xpay_mat[[l]] )))), 0)
+#       colnames(Input_mat_imp_rel[[l]]) <- colnames(Input_mat[[l]])
+#     }
+# 
+# saver(Input_mat_imp_rel)
+# rm(Input_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
+# }
+# log_info("Relative Import Input Needs matrix complete")
+
+# 
+# ############ Similarity Index
+# 
+# if (!file.exists(file.path(data_dir, "Sim_mat"))){
+# 
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   
+#   Sim_mat <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat) <- industry_levels
+#   
+#     for (l in 1:length(Sim_mat)){
+#       Sim_mat[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat[[l]]) = colnames(Sim_mat[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#   
+#   for (l in 1:length(Sim_mat)){
+#     for (i in 1:ncol(Xpay_mat[[l]])){
+#       for (j in 1:ncol(Xpay_mat[[l]])){
+#         Sim_mat[[l]][i,j]  <- norm((Input_mat[[l]][,i] - (Xpay_mat[[l]][,j])), type = "2")
+#       }
+#     }    
+#   }
+# 
+# 
+#   saver(Sim_mat)
+#   rm(Sim_mat, Total_mat, Xpay_mat, Input_mat)
+# }
+# log_info("Similarity Index matrix complete")
+# 
+# 
+# ############ Relative Similarity Index
+# if (!file.exists(file.path(data_dir, "Sim_mat_rel"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_rel <- readRDS(file.path(data_dir, "Input_mat_rel"))
+#   
+#   Sim_mat_rel <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat_rel) <- industry_levels 
+#   
+#     for (l in 1:length(Sim_mat_rel)){
+#       Sim_mat_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat_rel[[l]]) = colnames(Sim_mat_rel[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#   
+#    for (l in 1:length(Sim_mat_rel)){
+#       for (i in 1:ncol(Xpay_mat[[l]])){
+#         for (j in 1:ncol(Xpay_mat[[l]])){
+#           Sim_mat_rel[[l]][i,j]  <- norm((Input_mat_rel[[l]][,i] - (Xpay_mat[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Xpay_mat[[l]][,j] ))) )), type = "2")
+#         }
+#       }
+#     }
+#   
+#   saver(Sim_mat_rel)
+#   rm(Sim_mat_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_rel)
+# }
+# log_info("Relative Similarity Index matrix complete")
+# 
+# ############ Import Similarity Index
+# if (!file.exists(file.path(data_dir, "Sim_mat_imp"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
+#   
+#   Sim_mat_imp <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat_imp) <- industry_levels
+#   
+#     for (l in 1:length(Sim_mat_imp)){
+#       Sim_mat_imp[[l]] <- matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat_imp[[l]]) = colnames(Sim_mat_imp[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#   
+#    for (l in 1:length(Sim_mat_imp)){
+#       for (i in 1:ncol(Xpay_mat[[l]])){
+#         for (j in 1:ncol(Xpay_mat[[l]])){
+#           Sim_mat_imp[[l]][i,j]  <- norm((Input_mat_imp[[l]][,i] - (Xpay_mat[[l]][,j])), type = "2")
+#         }
+#       }
+#     } 
+# 
+#   saver(Sim_mat_imp)
+#   rm(Sim_mat_imp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp)
+# }
+# log_info("Import Similarity Index matrix complete")
+# 
+# 
+# ############ Import Similarity Index - Net Exports
+# if (!file.exists(file.path(data_dir, "Sim_mat_exp"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_imp <- readRDS(file.path(data_dir, "Input_mat_imp"))
+#   Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
+#   
+#   Sim_mat_exp <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat_exp) <- industry_levels
+#   
+#     for (l in 1:length(Sim_mat_exp)){
+#       Sim_mat_exp[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat_exp[[l]]) = colnames(Sim_mat_exp[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#   
+#    for (l in 1:length(Sim_mat_exp)){
+#       for (i in 1:ncol(Xpay_mat[[l]])){
+#         for (j in 1:ncol(Xpay_mat[[l]])){
+#           Sim_mat_exp[[l]][i,j]  <- norm((Input_mat_imp[[l]][,i] - (Input_mat_exp[[l]][,j])), type = "2")
+#         }
+#       }
+#     }
+# 
+#   saver(Sim_mat_exp)
+#   rm(Sim_mat_exp, Total_mat, Xpay_mat, Input_mat, Input_mat_imp, Input_mat_exp)
+# }
+# log_info("Import Similarity Index - Net Exports matrix complete")
+# 
+# 
+# ############ Relative Import Similarity Index
+# if (!file.exists(file.path(data_dir, "Sim_mat_imp_rel"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_imp_rel  <- readRDS(file.path(data_dir, "Input_mat_imp_rel"))
+#   
+#   Sim_mat_imp_rel <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat_imp_rel) <- industry_levels
+#   
+#     for (l in 1:length(Sim_mat_imp_rel)){
+#       Sim_mat_imp_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat_imp_rel[[l]]) = colnames(Sim_mat_imp_rel[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#   
+#     for (l in 1:length(Sim_mat_imp_rel)){     
+#       for (i in 1:ncol(Xpay_mat[[l]])){
+#         for (j in 1:ncol(Xpay_mat[[l]])){
+#           Sim_mat_imp_rel[[l]][i,j]  <- norm((Input_mat_imp_rel[[l]][,i] - (Xpay_mat[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Xpay_mat[[l]][,j] ))) )), type = "2")
+#         }
+#       }
+#     }
+# 
+#   saver(Sim_mat_imp_rel)
+#   rm(Sim_mat_imp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel)
+# }
+# log_info("Relative Import Similarity Index matrix complete")
+# 
+# 
+# ############ Relative Import Similarity Index - Net Exports
+# if (!file.exists(file.path(data_dir, "Sim_mat_exp_rel"))){
+#   
+#   Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+#   Xpay_mat <- readRDS(file.path(data_dir, "Xpay_mat"))
+#   Input_mat  <- readRDS(file.path(data_dir, "Input_mat"))
+#   Input_mat_imp_rel  <- readRDS(file.path(data_dir, "Input_mat_imp_rel"))
+#   Input_mat_exp <- readRDS(file.path(data_dir, "Input_mat_exp"))
+#   
+#   Sim_mat_exp_rel <- vector(mode='list', length=length(Total_mat))
+#   names(Sim_mat_exp_rel) <- industry_levels
+#   
+#     for (l in 1:length(Sim_mat_exp_rel)){
+#       Sim_mat_exp_rel[[l]] <-  matrix(0, nrow = ncol(Xpay_mat[[l]]), ncol = ncol(Xpay_mat[[l]]))
+#       rownames(Sim_mat_exp_rel[[l]]) = colnames(Sim_mat_exp_rel[[l]]) <- colnames(Input_mat[[l]])
+#     }
+#    for (l in 1:length(Sim_mat_exp_rel)){   
+#       for (i in 1:ncol(Xpay_mat[[l]])){
+#         for (j in 1:ncol(Xpay_mat[[l]])){
+#           Sim_mat_exp_rel[[l]][i,j]  <- norm((Input_mat_imp_rel[[l]][,i] - (Input_mat_exp[[l]][,j] * (c(1/(rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_exp[[l]][,j] ))) )), type = "2")
+#         }
+#       }
+#     }
+# 
+#   saver(Sim_mat_exp_rel)
+#   rm(Sim_mat_exp_rel, Total_mat, Xpay_mat, Input_mat, Input_mat_imp_rel, Input_mat_exp)
+# }
+# log_info("Relative Import Similarity Index - Net Exports matrix complete")
+
+# 
+# ############ All Similarities
+# if (!file.exists(file.path(data_dir, "Sim_list"))){
+#   importr(Sim_mat)
+#   importr(Sim_mat_rel)
+#   importr(Sim_mat_imp)
+#   importr(Sim_mat_exp)
+#   importr(Sim_mat_imp_rel)
+#   importr(Sim_mat_exp_rel)
+#   
+#   Sim_list <- list(Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+#   names(Sim_list) <- c("Sim_mat", "Sim_mat_rel",  "Sim_mat_imp", "Sim_mat_exp", "Sim_mat_imp_rel", "Sim_mat_exp_rel")
+#   saver(Sim_list)
+#   rm(Sim_list, Sim_mat, Sim_mat_rel, Sim_mat_imp, Sim_mat_exp, Sim_mat_imp_rel, Sim_mat_exp_rel)
+# }
+# log_info("All Similarity Indices complete")
+
+
+
+############ Input Needs
+if (!file.exists(file.path(data_dir, "Input_mato"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Direct_mat <- readRDS(file.path(data_dir, "Direct_mat"))
+  Output_mat <- readRDS(file.path(data_dir, "Output_mat"))
+  
+  Input_mato <- vector(mode='list', length=length(Total_mat))
+  names(Input_mato) <- industry_levels
+  
+  for (l in 1:length(Input_mato)){
+    Input_mato[[l]] <- (Direct_mat[[l]]  %*%  Output_mat[[l]])
+  }
+  
+  saver(Input_mato)
+  rm(Input_mato, Total_mat, Direct_mat, Output_mat)
 }
-log_info("All Similarity Indices complete")
+log_info("Input Needs matrix complete")
+
+
+
+############ Import Input Needs
+if (!file.exists(file.path(data_dir, "Input_mat_impo"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Output_mat <- readRDS(file.path(data_dir, "Output_mat"))
+  Input_mato <- readRDS(file.path(data_dir, "Input_mato"))
+  
+  Input_mat_impo <- vector(mode='list', length=length(Total_mat))
+  names(Input_mat_impo) <- industry_levels
+  
+  for (l in 1:length(Input_mat_impo)){
+    Input_mat_impo[[l]] <- pmax(Input_mato[[l]] - Output_mat[[l]], 0)
+  }
+  
+  saver(Input_mat_impo)
+  rm(Input_mat_impo, Total_mat, Output_mat, Input_mato)
+}
+log_info("Import Input Needs matrix complete")
+
+############ Net Exports 
+if (!file.exists(file.path(data_dir, "Input_mat_expo"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Output_mat <- readRDS(file.path(data_dir, "Output_mat"))
+  Input_mato <- readRDS(file.path(data_dir, "Input_mato"))
+  
+  Input_mat_expo <- vector(mode='list', length=length(Total_mat))
+  names(Input_mat_expo) <- industry_levels
+  
+  for (l in 1:length(Input_mat_expo)){
+    Input_mat_expo[[l]] <- pmax(Output_mat[[l]] - Input_mato[[l]], 0)
+  }
+  
+  saver(Input_mat_expo)
+  rm(Input_mat_expo, Total_mat, Output_mat, Input_mato)
+}
+log_info("Net Exports matrix complete")
+
+
+
+############  Queeg specification
+if (!file.exists(file.path(data_dir, "Queego"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Output_mat <- readRDS(file.path(data_dir, "Output_mat"))
+  Input_mato  <- readRDS(file.path(data_dir, "Input_mato"))
+  Input_mat_impo <- readRDS(file.path(data_dir, "Input_mat_impo"))
+  Input_mat_expo <- readRDS(file.path(data_dir, "Input_mat_expo"))
+  
+  Queego <- vector(mode='list', length=length(Total_mat))
+  names(Queego) <- industry_levels
+  
+  for (l in 1:length(Queego)){
+    Queego[[l]] <-  matrix(0, nrow = ncol(Output_mat[[l]]), ncol = ncol(Output_mat[[l]]))
+    rownames(Queego[[l]]) = colnames(Queego[[l]]) <- colnames(Input_mato[[l]])
+  }
+  
+  for (l in 1:length(Queego)){
+    for (i in 1:ncol(Output_mat[[l]])){
+      for (j in 1:ncol(Output_mat[[l]])){
+        Queego[[l]][i,j]  <- rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_expo[[l]][,i], Input_mat_impo[[l]][,j])
+      }
+    }
+  }
+  
+  saver(Queego)
+  rm(Queego, Total_mat, Output_mat, Input_mato, Input_mat_impo, Input_mat_expo)
+}
+log_info("Queeg specification complete")
+
+############ Relative Queeg specification
+if (!file.exists(file.path(data_dir, "Queeg_relo"))){
+  
+  Total_mat <- readRDS(file.path(data_dir, "Total_mat"))
+  Output_mat <- readRDS(file.path(data_dir, "Output_mat"))
+  Input_mato  <- readRDS(file.path(data_dir, "Input_mato"))
+  Input_mat_impo <- readRDS(file.path(data_dir, "Input_mat_impo"))
+  Input_mat_expo <- readRDS(file.path(data_dir, "Input_mat_expo"))
+  
+  Queeg_relo <- vector(mode='list', length=length(Total_mat))
+  names(Queeg_relo) <- industry_levels
+  
+  for (l in 1:length(Queeg_relo)){
+    Queeg_relo[[l]] <-  matrix(0, nrow = ncol(Output_mat[[l]]), ncol = ncol(Output_mat[[l]]))
+    rownames(Queeg_relo[[l]]) = colnames(Queeg_relo[[l]]) <- colnames(Input_mato[[l]])
+  }
+  
+  for (l in 1:length(Queeg_relo)){
+    for (i in 1:ncol(Output_mat[[l]])){
+      for (j in 1:ncol(Output_mat[[l]])){
+        Queeg_relo[[l]][i,j]  <- (rep(c(1), each=ncol(Total_mat[[l]])) %*% pmin(Input_mat_expo[[l]][,i], Input_mat_impo[[l]][,j]) ) /  (rep(c(1), each=ncol(Total_mat[[l]])) %*% Input_mat_expo[[l]][,i] )
+      }
+    }
+  }
+  
+  saver(Queeg_relo)
+  rm(Queeg_relo, Total_mat, Output_mat, Input_mato, Input_mat_impo, Input_mat_expo)
+}
+log_info("Relative Queeg specification complete")
 
 
 

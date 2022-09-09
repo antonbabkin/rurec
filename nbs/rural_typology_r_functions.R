@@ -367,9 +367,11 @@ cmapr <- function(specname,
       h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
       h1m[[l]]$max_value %<>% as.numeric() %>% round(digits = 3)
 
+
       p[[i]][[l]] <- ggplot( h1m[[l]] ) +
         geom_sf_interactive(aes(fill = match, 
-                                alpha = Nor, 
+                                #alpha = Nor, 
+                                alpha = 1, 
                                 tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {max_value}"), 
                                 data_id = place
         ), 
@@ -379,8 +381,8 @@ cmapr <- function(specname,
         coord_sf() +
         theme_void() +
         labs(fill = "Cluster") +
-        scale_fill_brewer(palette = "Set1",
-                          labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
+        scale_fill_manual(values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6","#a6cee3", "#000000" ), labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
+        #scale_fill_brewer(palette = "Set3", labels = (h1m[[l]]  %>% filter(place %in% unique(h1m[[l]]$match) ) %>% pull(COUNTY)) ) 
     }
   }
   assign(deparse(substitute(specname)), p, envir=.GlobalEnv)
@@ -423,6 +425,111 @@ dismapr <- function(p){
   }
 }
 
+# 
+# mapr2 <- function(qdf=qdf, singcc=singcc, macc=macc, pmvec=pmvec, ext=ext, a_shade=TRUE){
+#   
+#   RowMax <- vector(mode='list', length=length(industry_levels))
+#   names(RowMax) <- industry_levels
+#   h1m  <- RowMax
+#   p <- RowMax
+#   
+#   for (l in 1:length(industry_levels)){  
+#     
+#     RowMax[[l]] <-  rbind(
+#       as.data.frame( cbind(place = pmvec[[l]]$place, 
+#             match = pmvec[[l]]$match 
+#       ) ),
+#       as.data.frame( cbind(place = singcc, 
+#             match = singcc 
+#       ))
+#     )
+#     
+#     RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
+#     
+#     for (i in 1:nrow(RowMax[[l]])){
+#       RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[3]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
+#     }
+#     
+#     RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
+#     
+#     h1m[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
+#     h1m[[l]] %<>% mutate(match_name = h1m[[l]]$NAME[match(match, h1m[[l]]$place)])
+#     h1m[[l]]$match[h1m[[l]]$q_value == "NA" & h1m[[l]]$place %in% macc] <- "*Self Match"
+#     h1m[[l]]$q_value %<>% as.numeric() %>% round(digits = 4)
+#     h1m[[l]]$ind_level <- industry_levels[[l]]
+#     h1m[[l]]$lab <- h1m[[l]]$match_name
+#     h1m[[l]]$lab[is.na(h1m[[l]]$q_value) & h1m[[l]]$place %in% macc] <- "*Self Match"
+#     
+#     for (i in 1:length(ext)){
+#       h1m[[l]][h1m[[l]]$place == ext[[i]][1],]$geometry <-  TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% ext[[i]]) %>% st_union()
+#     }
+#     
+#     h1m[[l]]$a_shade = h1m[[l]]$q_value
+#     if(a_shade!=TRUE){
+#       h1m[[l]]$a_shade = NA
+#     } 
+#     
+#   }
+#   
+#   h1m_all  <- rbind(h1m[[1]],h1m[[2]],h1m[[3]])
+#   
+#   values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
+#   
+#   my_pal <- c()
+#   for(m in 1:length(setdiff(unique(h1m_all$lab), c("*Self Match")))){
+#     my_pal[m] =  values[m]
+#   }
+#   names(my_pal) <- sort(setdiff(unique(h1m_all$lab), c("*Self Match")))
+#   
+#   if(isTRUE("*Self Match" %in%  unique(h1m_all$lab))){
+#     my_pal <- c(my_pal, "*Self Match" = "#000000")
+#   }
+#   
+#   for (l in 1:length(industry_levels)){  
+#     p[[l]] <- ggplot( h1m[[l]] ) +
+#       geom_sf_interactive(aes(fill = lab, 
+#                               alpha =  a_shade,
+#                               tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"),
+#                               data_id = place
+#       ),
+#       color = NA
+#       ) +
+#       guides(alpha = "none") +
+#       coord_sf() +
+#       theme_void() +
+#       labs(fill = "Cluster") +
+#       scale_fill_manual(values = my_pal)
+#   }
+#   
+#   gplot = plot_grid(p[[1]] + theme(legend.position = 'none'), 
+#                     p[[2]] + theme(legend.position = 'none'), 
+#                     p[[3]] + theme(legend.position = 'none'),
+#                     labels = c("Sector", "Summary", "Detail"),
+#                     nrow = 1,
+#                     label_x = 0, label_y = .75,
+#                     hjust = -0.5
+#   )
+#   
+#   gleg = get_legend(p[[3]] +
+#                       guides(color = guide_legend(nrow = 1)) +
+#                       theme(legend.position = "bottom", 
+#                             legend.key.size = unit(.2, "cm"))
+#   )
+#   
+#   gall = gplot + draw_grob(gleg, x = 0, y = 0, width = 1, height = .5, scale = .5)
+#   
+#   g <- girafe(ggobj = gall, 
+#               options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                              opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#               )
+#   )
+#   
+#   
+# }
+# 
+# 
+
+
 
 
 
@@ -462,7 +569,385 @@ reshaper <- function(industry_data_frame, cordname){
   x$est <-  as.numeric(x$est)
   x <- x[1:6]
   assign(paste0(deparse(substitute(industry_data_frame)), "_XBEA"), x, envir=.GlobalEnv)
+}
+
+
+#Select restricted total output matrix and cluster matched cores
+trimr <- function(specname, macc, singcc, ext, industry_levels){
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){
+    if(!is.na(ext)){
+      for(i in 1:length(ext)){
+        df <- Output_mat[[l]][, ext[[i]]] %>% as.matrix()
+        df[, 1:length(ext[[i]])] <- Output_mat[[l]][, ext[[i]]] %*% rep(c(1), each=length(ext[[i]]))
+        tmat[[l]] <-  cbind(tmat[[l]], df)
+      }
+    }
+    df <-  Output_mat[[l]][, setdiff(singcc, intersect(colnames(tmat[[l]]), singcc)), drop = FALSE]
+    tmat[[l]] <-  cbind(tmat[[l]], df)
+    
+    tmat[[l]] <- tmat[[l]][, singcc] 
+    
+    df <-  Output_mat[[l]][, setdiff(macc, colnames(tmat[[l]])), drop = FALSE]
+    tmat[[l]] <-  cbind(tmat[[l]], df)
+    
+    tmat[[l]] <- tmat[[l]][, colnames(tmat[[l]])[order(colnames(tmat[[l]]))]]
   }
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+  
+}
+
+############ Input Needs
+Input_Needs <- function(specname, o_mat, industry_levels){
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){
+    tmat[[l]] <- (Direct_mat[[l]]  %*%  o_mat[[l]])
+  }
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+}
+############ Import Input Needs
+Import_Needs <- function(specname, o_mat, i_mat, industry_levels){
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){
+    tmat[[l]] <- pmax(i_mat[[l]] - o_mat[[l]], 0)
+  }
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+}
+############ Net Exports
+Export_Needs <- function(specname, o_mat, i_mat, industry_levels){
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){
+    tmat[[l]] <- pmax(o_mat[[l]] -  i_mat[[l]], 0)
+  }
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+}
+############ Relative Queeg specification
+Rel_Queeg <- function(specname, o_mat, im_mat, ex_mat, industry_levels){
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  for (l in 1:length(industry_levels)){
+    tmat[[l]] <-  matrix(0, nrow = ncol(o_mat[[l]]), 
+                         ncol = ncol(o_mat[[l]]) )
+    rownames(tmat[[l]]) = colnames(tmat[[l]]) <- colnames(o_mat[[l]])
+  }
+  
+  for (l in 1:length(industry_levels)){
+    for (i in 1:ncol(o_mat[[l]])){
+      for (j in 1:ncol(o_mat[[l]])){
+        tmat[[l]][i,j] <- (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
+                             pmin(ex_mat[[l]][,i], im_mat[[l]][,j])) / 
+          (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
+             ex_mat[[l]][,i])
+      }
+    }
+  }
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+}
+
+
+Queeg_selectr <- function(specname, CoreMatch, MatchMat, cuml_core_out, queeg_mat, imp_mat, macc, singcc, industry_levels, out_mat){      
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  
+  t2mat <- tmat
+  t3mat <- tmat
+  t4mat <- tmat
+  perf_core_out <- tmat 
+  nomatch_core_out <- tmat
+  
+  for (l in 1:length(industry_levels)){
+    #all non-zero row-total export counties
+    t2mat[[l]] <- (queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% 
+      as.data.frame() %>% filter(rowSums(.) != 0) %>% as.matrix()
+    
+    t3mat[[l]] <- sparseMatrix(i = match(rownames(t2mat[[l]]), rownames(t2mat[[l]])),
+                               j = match(c(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]), colnames(t2mat[[l]])),
+                               x = 1L,
+                               dims = c(nrow(t2mat[[l]]), ncol(t2mat[[l]])),
+                               dimnames = list(rownames(t2mat[[l]]), colnames(t2mat[[l]]))
+    ) %>% as.matrix()
+    
+    #cumulative output of matched cores and non-cores 
+    t4mat[[l]] <- (out_mat[[l]][, rownames(t3mat[[l]])[order(rownames(t3mat[[l]]))]] %*% 
+                             t3mat[[l]][order(rownames(t3mat[[l]])), order(colnames(t3mat[[l]]))]) %>% 
+      .[, sort(unique(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]))] + out_mat[[l]][, sort(unique(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]))]
+    
+    #output of unmatched non-cores
+    perf_core_out[[l]] <- out_mat[[l]][, rownames(as.data.frame(queeg_mat[[l]][macc,  singcc]) %>% filter(rowSums(.) == 0))]
+    
+    #output of unmatched cores
+    nomatch_core_out[[l]] <- out_mat[[l]][, setdiff(colnames(queeg_mat[[l]][, singcc]), colnames(t4mat[[l]]))] %>% as.data.frame()
+    
+    tmat[[l]] <- cbind(t4mat[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(t4mat[[l]]), 
+                                                                                               colnames(perf_core_out[[l]]), 
+                                                                                               colnames(nomatch_core_out[[l]])
+    ))]
+    
+  }
+  
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)  
+  assign(deparse(substitute(CoreMatch)), t2mat, envir=.GlobalEnv)
+  assign(deparse(substitute(MatchMat)), t3mat, envir=.GlobalEnv) 
+  assign(deparse(substitute(cuml_core_out)), t4mat, envir=.GlobalEnv) 
+  
+  
+}
+
+####Geographic and Economic hierarchy clustering
+hierarchr <- function(specname, mat_mat, spec_clust, qdf, ext, isolation_th){  
+  
+  RowMax <- vector(mode='list', length=length(industry_levels))
+  names(RowMax) <- industry_levels
+  
+  tmat <- vector(mode='list', length=length(industry_levels))
+  names(tmat) <- industry_levels
+  #tmat  <- RowMax
+  
+  for (l in 1:length(industry_levels)){  
+    
+    RowMax[[l]] <-  rbind(
+      cbind(place = rownames(mat_mat[[l]]), 
+            match = colnames(mat_mat[[l]])[apply(mat_mat[[l]], 1, which.max)] 
+      ) ,
+      cbind(place = spec_clust, 
+            match = spec_clust 
+      ) %>% as.data.frame()
+    )
+    
+    RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
+    
+    for (i in 1:nrow(RowMax[[l]])){
+      RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[4]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
+    }
+    
+    RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
+    
+    tmat[[l]] <- inner_join(TIGER_RUCC, RowMax[[l]], by = "place", copy = TRUE)
+    
+    if(!is.na(ext)){
+        for (i in 1:length(ext)){
+          tmat[[l]][tmat[[l]]$place == ext[[i]][1],]$geometry <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% ext[[i]]) %>% st_union()
+        }
+    }
+    
+    tmat[[l]] %<>% mutate(match_name = tmat[[l]]$NAME[match(match, tmat[[l]]$place)])
+    
+    tmat[[l]]$match_name[tmat[[l]]$q_value < isolation_th ] <- "Isolated"
+    
+    tmat[[l]] <- tmat[[l]] %>% group_by(match) %>% mutate(m_count = n())
+   # tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match]
+    
+    tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match]
+  
+    
+    tmat[[l]] <- tmat[[l]] %>% group_by(match_name) %>% mutate(m_count = n())
+    tmat[[l]]$q_value[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "NA"
+    tmat[[l]]$q_value[tmat[[l]]$q_value != "NA"] %<>% as.numeric() %>% round(digits = 4)
+    tmat[[l]]$ind_level <- industry_levels[[l]]
+    tmat[[l]]$lab <- tmat[[l]]$match_name
+    tmat[[l]]$match_name[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
+    tmat[[l]]$lab[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
+    tmat[[l]]$q_value[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- "NA"
+    # tmat[[l]]$match_name[tmat[[l]]$q_value < isolation_th ] <- "Isolated"
+    # tmat[[l]]$lab[tmat[[l]]$q_value < isolation_th] <- "Isolated"
+    # 
+    tmat[[l]]$a_value <- tmat[[l]]$q_value
+    tmat[[l]]$a_value[tmat[[l]]$lab == "Isolated"] <- "NA"
+    
+    tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
+    tmat[[l]]$lab[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
+    
+  }
+  
+  assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
+} 
+
+##### Absorption tables
+absorbr <- function(top_absorb, all_absorb, in_core, im_mat, ex_mat, impind, macc, industry_levels){
+  df_core <- vector(mode='list', length=length(industry_levels))
+  names(df_core) <- industry_levels
+  out_core <- df_core
+  
+  df_top <- df_core
+  df_all <- df_core
+  
+  for (l in 1:length(industry_levels)){
+    df_core[[l]] <- im_mat[[l]][, impind] %>% as.data.frame() %>% select(order(colnames(.)))
+    df_core[[l]]$industry_label <- rownames(df_core[[l]])
+    df_core[[l]] <- melt(df_core[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable)
+  }
+  
+  for (l in 1:length(industry_levels)){
+    for (p in 1:length(macc)){
+      out_core[[l]][[p]] <- ex_mat[[l]][, macc][, p] %>% as.data.frame()
+      colnames(out_core[[l]][[p]]) <- c("NIE")
+      out_core[[l]][[p]]$industry_label <- rownames(out_core[[l]][[p]])
+      
+    }
+    names(out_core[[l]]) <- colnames(ex_mat[[l]][, macc])
+  }
+  
+  for (l in 1:length(industry_levels)){
+    for (p in 1:length(macc)){
+      df_top[[l]][[p]] <- inner_join(out_core[[l]][[p]], df_core[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
+      df_top[[l]][[p]]$absorb <- pmin(df_top[[l]][[p]]$NIE, df_top[[l]][[p]]$NIS)
+      df_top[[l]][[p]] <- df_top[[l]][[p]] %>% group_by(core_fips) %>% mutate(ab_sum = sum(absorb))
+      df_all[[l]][[p]] <- df_top[[l]][[p]]
+      df_top[[l]][[p]]$trim <- ""
+      df_top[[l]][[p]] <- df_top[[l]][[p]] %>% filter(NIE > 1)
+      df_top[[l]][[p]] <- df_top[[l]][[p]] %>% filter(absorb > 0)
+      
+      df_top[[l]][[p]] <- df_top[[l]][[p]] %>% arrange(desc(NIE)) %>% subset( NIE %in% head(unique(NIE),5))
+      
+      if (length(unique(df_top[[l]][[p]]$industry_label)) > 20){
+        df_top[[l]][[p]] <- df_top[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
+        df_top[[l]][[p]]$trim <- "(top truncated values)"
+      }
+      df_top[[l]][[p]] <- df_top[[l]][[p]] %>% group_by(industry_label) %>% mutate(indust_count = n())
+    }
+    names(df_top[[l]]) <- names(macc)
+  }
+  
+  assign(deparse(substitute(in_core)), df_core, envir=.GlobalEnv) 
+  assign(deparse(substitute(top_absorb)), df_top, envir=.GlobalEnv) 
+  assign(deparse(substitute(all_absorb)), df_all, envir=.GlobalEnv) 
+}
+
+
+
+###Graphs of import and export absorption
+graphr <- function(specname, top_absorb, TIGER_RUCC, my_pal, macc, industry_levels){
+  
+  df <- vector(mode='list', length=length(industry_levels))
+  names(df) <- industry_levels
+  for (l in 1:length(industry_levels)){
+    df[[l]] <- vector(mode='list', length=length(macc))
+    names( df[[l]]) <- macc
+  }
+  
+  for (l in 1:length(industry_levels)){
+    for (p in 1:length(macc)){
+      county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% macc[p]) %>% pull(COUNTY)  
+      if  (dim(top_absorb[[l]][[p]])[1] == 0){
+        df[[l]][[p]] <- c(glue("No absorbion overlap for {county}"))
+      } else {
+        trim <- top_absorb[[l]][[p]]$trim[1]
+        df[[l]][[p]] <- ggplot(top_absorb[[l]][[p]]) +
+          geom_col_interactive(
+            aes(x = industry_label,
+                y = (NIE/indust_count),
+                tooltip = glue("NIE: {round(NIE)}")
+            ),
+            fill = "black") +
+          geom_point_interactive(
+            aes(x = industry_label,
+                y = (NIS),
+                color = core_fips,
+                tooltip = glue("NIS: {round(NIS)}") 
+            ), 
+            size  = 3.5) +  
+          labs(x = glue("Industry Sector {trim}"), y = "Input Value") +
+          theme_bw() +
+          labs(title = "Absorption Distribution Capacitance",
+               subtitle = glue("Net Input Excess: {county}"),
+               color = "Net Import Shortage:") +
+          #scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% colnames(cuml_core_out[[l]])) %>% pull(COUNTY)) ) +
+          scale_color_manual(values = c(my_pal[as.vector(unique(in_core[[l]]$core_fips))]),
+                             labels = paste0(TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% as.vector(unique(in_core[[l]]$core_fips))) %>% pull(COUNTY), ":\n Absorption ",
+                                             top_absorb[[l]][[p]] %>% arrange(core_fips) %>%  .$ab_sum  %>%  unique() %>% round(), "\n") ) +
+          theme(axis.text.x = element_text(angle=45, hjust=1),
+                legend.position = "top", 
+                legend.key.size = unit(.2, "cm")) 
+        # if (isFALSE(all(top_absorb[[l]][[p]]$NIS < sd(top_absorb[[l]][[p]]$NIS)*3))){
+        #     if (mean(top_absorb[[l]][[p]]$NIS) > sd(top_absorb[[l]][[p]]$NIS)){
+        #          df[[l]][[p]] <- df[[l]][[p]] + facet_zoom(ylim = c(0, (mean(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)*3))))
+        #     } else{
+        #         df[[l]][[p]] <- df[[l]][[p]] +  facet_zoom(ylim = c(0, (median(top_absorb[[l]][[p]]$NIS) + (sd(top_absorb[[l]][[p]]$NIS)/3))))
+        #     }
+        # }
+      }
+    }
+  }
+  assign(deparse(substitute(specname)), df, envir=.GlobalEnv)
+}
+
+
+
+
+
+
+
+####Custom color/county pallet 
+cus_pal_maps <- function(specname, values, placenames){
+  df <- c()
+  for(m in 1:length(setdiff(unique(placenames), c("Isolated")))){
+    df[m] =  values[m]
+  }
+  names(df) <- sort(setdiff(unique(placenames), c("Isolated")))
+  if(isTRUE("Isolated" %in%  unique(placenames))){
+    df <- c(df, "Isolated" = "#000000")
+  }
+  assign(deparse(substitute(specname)), df, envir=.GlobalEnv) 
+}
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+mapr2 <- function(specname, shade, hatch, hm, my_pal){
+  df <- vector(mode='list', length=length(industry_levels))
+  names(df) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){  
+    df[[l]] <- ggplot( hm[[l]] ) +
+      { if(isFALSE(shade))
+        geom_sf_interactive(aes(fill = lab, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) }+ 
+      { if(isTRUE(shade))
+        geom_sf_interactive(aes(fill = lab, 
+                                alpha = a_value, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) }+ 
+      { if(isTRUE(hatch))
+        geom_sf_pattern(data = filter(hm[[l]], place %in% unique(hm[[l]]$match)) ,
+                        aes(fill = lab
+                        ), pattern = 'crosshatch',
+                        pattern_density = 0.01, 
+                        pattern_spacing = 0.03,
+                        pattern_fill    = 'black',
+                        pattern_colour  = 'black'
+        )}+ 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      labs(fill = "Cluster",
+           caption = paste0(isolation_th*100,"% Isolation Threshold")) +
+      scale_fill_manual(values = my_pal)
+  }
+  assign(deparse(substitute(specname)), df, envir=.GlobalEnv)     
+} 
+
+
+
+
+
+
+
+
+
 
 
 # S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries ----
