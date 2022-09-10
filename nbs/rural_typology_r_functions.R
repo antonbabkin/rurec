@@ -604,11 +604,15 @@ Input_Needs <- function(specname, o_mat, industry_levels){
   tmat <- vector(mode='list', length=length(industry_levels))
   names(tmat) <- industry_levels
   
-  for (l in 1:length(industry_levels)){
-    tmat[[l]] <- (Direct_mat[[l]]  %*%  o_mat[[l]])
+  for (l in industry_levels) {
+    o <- o_mat[[l]]
+    industries <- rownames(o)
+    d <- Direct_mat[[l]][industries, industries]
+    tmat[[l]] <- d %*% o
   }
   assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
 }
+
 ############ Import Input Needs
 Import_Needs <- function(specname, o_mat, i_mat, industry_levels){
   tmat <- vector(mode='list', length=length(industry_levels))
@@ -619,6 +623,7 @@ Import_Needs <- function(specname, o_mat, i_mat, industry_levels){
   }
   assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
 }
+
 ############ Net Exports
 Export_Needs <- function(specname, o_mat, i_mat, industry_levels){
   tmat <- vector(mode='list', length=length(industry_levels))
@@ -629,23 +634,26 @@ Export_Needs <- function(specname, o_mat, i_mat, industry_levels){
   }
   assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
 }
+
 ############ Relative Queeg specification
 Rel_Queeg <- function(specname, o_mat, im_mat, ex_mat, industry_levels){
   tmat <- vector(mode='list', length=length(industry_levels))
   names(tmat) <- industry_levels
-  for (l in 1:length(industry_levels)){
+  for (l in industry_levels){
     tmat[[l]] <-  matrix(0, nrow = ncol(o_mat[[l]]), 
                          ncol = ncol(o_mat[[l]]) )
     rownames(tmat[[l]]) = colnames(tmat[[l]]) <- colnames(o_mat[[l]])
   }
   
-  for (l in 1:length(industry_levels)){
-    for (i in 1:ncol(o_mat[[l]])){
-      for (j in 1:ncol(o_mat[[l]])){
-        tmat[[l]][i,j] <- (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-                             pmin(ex_mat[[l]][,i], im_mat[[l]][,j])) / 
-          (rep(c(1), each=ncol(Direct_mat[[l]])) %*% 
-             ex_mat[[l]][,i])
+  for (l in industry_levels){
+    o <- o_mat[[l]]
+    industries <- rownames(o)
+    d <- Direct_mat[[l]][industries, industries]
+    for (i in 1:ncol(o)){
+      for (j in 1:ncol(o)){
+        tmat[[l]][i,j] <- 
+          (rep(c(1), each=ncol(d)) %*% pmin(ex_mat[[l]][,i], im_mat[[l]][,j])) /
+          (rep(c(1), each=ncol(d)) %*% ex_mat[[l]][,i])
       }
     }
   }
