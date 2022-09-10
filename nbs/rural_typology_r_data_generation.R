@@ -60,42 +60,53 @@ if (!file.exists(file.path(data_dir, "Total_mat"))){
 log_info("Total matrix complete")
 
 
-
-
 ### Labor share
-if (!file.exists(file.path(data_dir, "Labor_mat"))){
-  Labor_mat <- list()
-
-  ### Sector level 1-by-14
-  Labor_mat[[1]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[24,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15) /
-                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>% .[23,3:17] %>% unlist() %>% as.numeric() %>% matrix(ncol = 15)
-  colnames(Labor_mat[[1]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_SECT"]] %>% .[["2020"]] %>%  .[4,3:17] %>% as.list()
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA") %>% readRDS() %>% .$indcode %>% unique()
-  Labor_mat[[1]] %<>% subset(select = (colnames(Labor_mat[[1]]) %in% match_x))
-
-  ### Summary level 1-by-59
-  Labor_mat[[2]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[80,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71) /
-                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>% .[79,3:73] %>% unlist() %>% as.numeric() %>% matrix(ncol = 71)
-  colnames(Labor_mat[[2]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_1997-2020_Sum"]] %>% .[["2020"]] %>%  .[4,3:73] %>% as.list()
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA") %>% readRDS() %>% .$indcode %>% unique()
-  Labor_mat[[2]] %<>% subset(select = (colnames(Labor_mat[[2]]) %in% match_x))
-
-
-  ### Detail level 1-by-360
-  Labor_mat[[3]] <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[411,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405) /
-                    file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>% .[410,3:407] %>% unlist() %>% as.numeric() %>% matrix(ncol = 405)
-  colnames(Labor_mat[[3]]) <- file.path(data_dir, "IO_tables") %>% readRDS() %>% .[["Use_SUT_Framework_2007_2012_DET"]] %>% .[["2012"]] %>%  .[4,3:407] %>% as.list()
-
-  Labor_mat[[3]]  <- c(Labor_mat[[3]][1,1:25], Labor_mat[[3]][1,37:405]) %>% as.matrix() %>% t()
-  colnames(Labor_mat[[3]])[25] = "23"
-  match_x <- file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA") %>% readRDS() %>% .$indcode %>% unique()
-  Labor_mat[[3]] %<>% subset(select = (colnames(Labor_mat[[3]]) %in% match_x))
-
-  names(Labor_mat) <- industry_levels
-  saver(Labor_mat)
-  rm(Labor_mat, match_x, d)
+if (file.exists(file.path(data_dir, "Labor_mat"))) {
+  log_info("Labor matrix already exists")
+} else {
+  local({
+    Labor_mat <- list()
+    
+    ### Sector level
+    io_table <- readRDS(file.path(data_dir, "IO_tables"))[["Use_SUT_Framework_1997-2020_SECT"]][["2020"]]
+    df <- io_table[6:31, 3:17]
+    df[] <- lapply(df, as.numeric)
+    colnames(df) <- unlist(io_table[4, 3:17])
+    rownames(df) <- unlist(io_table[6:31, 2])
+    labor_share <- df["Compensation of employees", ] / df["Total industry output (basic prices)", ]
+    Labor_mat[[1]] <- matrix(labor_share, dimnames = list(colnames(df), "labor_share"))
+    
+    ### Summary level
+    io_table <- readRDS(file.path(data_dir, "IO_tables"))[["Use_SUT_Framework_1997-2020_Sum"]][["2020"]]
+    df <- io_table[6:87, 3:73]
+    df[] <- lapply(df, as.numeric)
+    colnames(df) <- unlist(io_table[4, 3:73])
+    rownames(df) <- unlist(io_table[6:87, 2])
+    labor_share <- df["Compensation of employees", ] / df["Total industry output (basic prices)", ]
+    Labor_mat[[2]] <- matrix(labor_share, dimnames = list(colnames(df), "labor_share"))
+    
+    ### Detail level
+    io_table <- readRDS(file.path(data_dir, "IO_tables"))[["Use_SUT_Framework_2007_2012_DET"]][["2012"]]
+    df <- io_table[5:418, 3:407]
+    df[] <- lapply(df, as.numeric)
+    colnames(df) <- unlist(io_table[4, 3:407])
+    rownames(df) <- unlist(io_table[5:418, 2])
+    # add up all construction columns together
+    cols_constr_left <- 1:24
+    cols_constr <- 25:36
+    cols_constr_right <- 37:405
+    df <- cbind(df[, cols_constr_left], rowSums(df[, cols_constr], na.rm=TRUE), df[, cols_constr_right])
+    colnames(df)[25] <- "23"
+    labor_share <- df["Compensation of employees", ] / df["Total industry output (basic value)", ]
+    Labor_mat[[3]] <- matrix(labor_share, dimnames = list(colnames(df), "labor_share"))
+    
+    
+    names(Labor_mat) <- industry_levels
+    saver(Labor_mat)
+  })
+  log_info("Labor matrix complete")
 }
-log_info("Labor matrix complete")
+
 
 
   
@@ -151,21 +162,56 @@ log_info("Payroll matrix complete")
 
 
 
-#Total output Matrix
-if (!file.exists(file.path(data_dir, "Output_mat"))){
-  importr(Xpay_mat)
-  importr(Labor_mat)
-  Output_mat <- Xpay_mat
-  for (l in 1:length(Xpay_mat)){
-    Output_mat[[l]] <- (Xpay_mat[[l]] / matrix(t(Labor_mat[[l]]), nrow=ncol(Labor_mat[[l]]), ncol=ncol(Xpay_mat[[l]]), byrow=TRUE) ) 
-    names(Output_mat) <- industry_levels
+#Total output Matrix in thousands of dollars
+if (file.exists(file.path(data_dir, "Output_mat"))) {
+  log_info("Total output matrix already exists")
+} else {
+  
+  local({
+    
+    importr(Xpay_mat)
+    importr(Labor_mat)
+    
+    # prepare farm sales
+    farm_sales_file <- file.path(find_rstudio_root_file(), "data", "nass", "agcensus_sales_by_bea_v220909.csv")
+    df <- read.csv(farm_sales_file, colClasses = "character")
+    df$SALES <- df$SALES %>% as.numeric / 1000
+    df <- df %>% filter(AGG_LEVEL_DESC == "COUNTY") %>% select(!AGG_LEVEL_DESC)
+    df <- reshape(df, direction = "wide", idvar = "STCTY", timevar = "BEA_INDUSTRY_DETAIL")
+    colnames(df) <- gsub("SALES.", "", colnames(df))
+    farm_sales <- df
+    farm_ind_detail <- colnames(farm_sales)[-c(1)]
+
+    Output_mat <- list()
+    for (l in names(Xpay_mat)) {
+      payroll <- Xpay_mat[[l]]
+      # labor shares only for industries present in payroll table
+      labor_share <- Labor_mat[[l]][rownames(payroll), ] %>% unlist
+      output <- apply(payroll, 2, function (x) {x / labor_share})
+      output <- t(output) %>% as.data.frame()
+      output$STCTY <- rownames(output)
+      output <- left_join(output, farm_sales, by="STCTY")
+      
+      if (l == "Sector") {
+        output[["11"]] <- rowSums(output[, c("11", farm_ind_detail)], na.rm=T)
+        output <- output %>% select(!c(farm_ind_detail))
+      } else if (l == "Summary") {
+        output[["111CA"]] <- rowSums(output[, c(farm_ind_detail)], na.rm=T)
+        output <- output %>% select(!c(farm_ind_detail)) %>% select("111CA", everything())
+      } else if (l == "Detail") {
+        output <- output %>% select(farm_ind_detail, everything())
+      }
+      
+      rownames(output) <- output$STCTY
+      output$STCTY <- NULL
+      output <- t(output)
+      Output_mat[[l]] <- output
+    }
     saver(Output_mat)
-    rm(Output_mat)
-  }
+  })
+  rm(Xpay_mat, Labor_mat)
+  log_info("Total output matrix complete")
 }
-log_info("Total output matrix complete")
-
-
 
 
 
