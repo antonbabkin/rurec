@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.13.7
+    jupytext_version: 1.14.0
 kernelspec:
   display_name: Python 3 (ipykernel)
   language: python
@@ -25,10 +25,13 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import pyarrow
+import pyarrow.dataset
 
 from rurec import rurality
 from rurec.pubdata import geography, cbp, bds, naics, population, ers_rurality
 from rurec.reseng.nbd import Nbd
+from rurec.reseng.util import download_file
 nbd = Nbd('rurec')
 ```
 
@@ -52,15 +55,6 @@ def get_deflator():
     # normalize latest year = 1
     d['deflator'] /= d['deflator'].iloc[-1]
     return d
-```
-
-```{code-cell} ipython3
----
-jupyter:
-  outputs_hidden: true
-tags: []
----
-get_deflator().set_index('year').plot(grid=True)
 ```
 
 # Rurality definition
@@ -451,4 +445,321 @@ d.plot()
 d = df.query('_merge == "both" and year == 2019').copy()
 d['bds/cbp'] = d['est_bds'] / d['est_cbp']
 d['bds/cbp'].describe()
+```
+
+# Growth vs dynamism
+
+```{code-cell} ipython3
+import altair as alt
+import statsmodels.formula.api as smf
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('cty').rename(columns=str.upper).query('not CTY.isin(["998", "999"])')
+
+df['ESTABS_CHURN_RATE'] = df['ESTABS_ENTRY_RATE'] + df['ESTABS_EXIT_RATE']
+df['ESTABS_DENOM'] = 0.5 * (df['ESTABS'] + df.groupby(['ST', 'CTY'])['ESTABS'].shift())
+
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = rurality.get_cbsa_delin_df(2003)\
+    .rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})\
+    [['ST', 'CTY', 'METRO_MICRO']]
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+df['METRO_MICRO'] = df['METRO_MICRO'].fillna('noncore')
+df['METRO'] = df['METRO_MICRO'].replace({'micro': 'nonmetro', 'noncore': 'nonmetro'})
+```
+
+Estab growth and churn both decline over time. Both lower in nonmetro than in metro.
+
+```{code-cell} ipython3
+:tags: []
+
+t = df.groupby(['YEAR', 'METRO'])[['ESTABS', 'ESTABS_ENTRY', 'ESTABS_EXIT']].sum()
+t['ESTABS_TM1'] = t.groupby('METRO')['ESTABS'].shift()
+t['ESTABS_GR'] = 2 * (t['ESTABS_ENTRY'] - t['ESTABS_EXIT']) / (t['ESTABS'] + t['ESTABS_TM1']) * 100
+t['ESTABS_CHURN_RATE'] = 2 * (t['ESTABS_ENTRY'] + t['ESTABS_EXIT']) / (t['ESTABS'] + t['ESTABS_TM1']) * 100
+t = t.unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+pfit, pval = np.polynomial.polynomial.polyfit, np.polynomial.polynomial.polyval
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+
+a = t['ESTABS_GR'].plot(ax=ax[0], title='Establishment growth rate')
+tr = t['ESTABS_GR'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+tr.plot(ax=ax[0], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+a.legend(handles=a.lines[:2])
+
+a = t['ESTABS_CHURN_RATE'].plot(ax=ax[1], title='Establishment churn rate')
+tr = t['ESTABS_CHURN_RATE'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
+tr.plot(ax=ax[1], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+a.legend(handles=a.lines[:2]);
+```
+
+Create a 3-year moving average for every county to smooth variation.
+
+```{code-cell} ipython3
+:tags: []
+
+d = df[['YEAR', 'ST', 'CTY', 'METRO', 'ESTABS', 'ESTABS_ENTRY', 'ESTABS_EXIT']].copy()
+d['ESTABS_DENOM'] = df.eval('ESTABS + (ESTABS_EXIT - ESTABS_ENTRY) / 2')
+d = d.set_index('YEAR').groupby(['ST', 'CTY', 'METRO']).rolling(3).mean().dropna()
+d['ESTABS_CHURN_RATE'] = d.eval('(ESTABS_ENTRY + ESTABS_EXIT) / ESTABS_DENOM * 100')
+
+d['ESTABS_TP10'] = d.groupby(['ST', 'CTY'])['ESTABS'].shift(-10)
+d['ESTABS_GR10'] = d.eval('2 * (ESTABS_TP10 - ESTABS) / (ESTABS_TP10 + ESTABS) * 100')
+df_rol = d
+d.groupby('METRO')['ESTABS_GR10'].describe()
+```
+
+Making sure than smothing worked fine.
+
+```{code-cell} ipython3
+:tags: []
+
+t = d.groupby(['YEAR', 'METRO'])[['ESTABS_ENTRY', 'ESTABS_EXIT', 'ESTABS_DENOM']].sum()
+t = t.eval('(ESTABS_ENTRY + ESTABS_EXIT) / ESTABS_DENOM * 100').unstack()
+t.plot(title='Estab churn rate (3-year moving average)');
+```
+
+Positive association between growth and dynamism also holds in the cross-section of counties, although this relationship is weaker in rural areas. 1 p.p. increase in churn corresponds to 2 p.p. increase in growth rate over the subsequent ten year period in metropolitan counties, while only 1.1 p.p. higher growth rate in nonmetropolitan.
+
+```{code-cell} ipython3
+:tags: []
+
+y = range(1996, 2006)
+d = df_rol.query('YEAR.isin(@y)').reset_index().copy()
+d['YEAR'] = d['YEAR'].astype('category')
+
+m = smf.wls('ESTABS_GR10 ~ ESTABS_CHURN_RATE*METRO + YEAR', d, weights=d['ESTABS'])
+r = m.fit()
+# r.summary()
+
+xdomain = [10, 30]
+ydomain = [-40, 40]
+
+dp = pd.DataFrame([
+    [m, c] 
+    for m in ['metro', 'nonmetro']
+    for c in xdomain
+], columns=['METRO', 'ESTABS_CHURN_RATE'])
+dp['YEAR'] = 2000
+dp['ESTABS_GR10'] = r.predict(dp)
+
+
+scatter = alt.Chart(d.sample(3000)).mark_circle(size=20).encode(
+    x=alt.X('ESTABS_CHURN_RATE', scale=alt.Scale(domain=xdomain)),
+    y=alt.Y('ESTABS_GR10', scale=alt.Scale(domain=ydomain)),
+    color='METRO',
+    tooltip=['ST', 'CTY', 'ESTABS', 'ESTABS_ENTRY',
+       'ESTABS_EXIT', 'ESTABS_DENOM', 'ESTABS_CHURN_RATE', 'ESTABS_TP10',
+       'ESTABS_GR10'],
+)
+
+reg_lines = alt.Chart(dp).encode(x='ESTABS_CHURN_RATE', y='ESTABS_GR10', color='METRO').mark_line()
+
+(scatter + reg_lines).interactive().properties(width=600, height=400)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+r.summary()
+```
+
+# Wage
+
+## CBP
+
+```{code-cell} ipython3
+:tags: []
+
+df = cbp.get_parquet('county', ['fipstate', 'fipscty', 'year', 'emp', 'ap'], [('industry', '==', '-')])
+df = df.rename(columns=str.upper).rename(columns={'FIPSTATE': 'ST', 'FIPSCTY': 'CTY'})
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = get_deflator().rename(columns=str.upper)
+df = df.merge(d, 'left', 'YEAR')
+df['AP'] /= df['DEFLATOR']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+tb = {}
+for r in ['RURAL_2000', 'RURAL_2010']:
+    t = df.groupby(['YEAR', r])[['EMP', 'AP']].sum()
+    t = t['AP'] / t['EMP']
+    t = t.unstack() * 1000
+    tb[r] = (t[True] / t[False])
+tb = pd.concat(tb, axis=1, names=['OMB rurality revision'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+t.rename(columns={True: 'rural', False: 'urban'}).plot(ax=ax[0], title='Mean real wage, $2021\nCBP', grid=True);
+tb.plot(ax=ax[1], legend=True, grid=True, title='Rural-to-urban mean wage ratio\nCBP');
+```
+
+## QCEW
+
+### construction
+
+[Data files](https://www.bls.gov/cew/downloadable-data-files.htm) |
+[CSV layout](https://www.bls.gov/cew/about-data/downloadable-file-layouts/annual/naics-based-annual-layout.htm)
+
+```{code-cell} ipython3
+:tags: []
+
+def get_qcew_src(y):
+    url = f'https://data.bls.gov/cew/data/files/{y}/csv/{y}_annual_singlefile.zip'
+    src_dir = nbd.root / 'data/source/qcew'
+    f = download_file(url, src_dir)
+    return f
+```
+
+```{code-cell} ipython3
+:tags: []
+
+for y in range(1990, 2022):
+    print(y, end=' ')
+    get_qcew_src(y)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+def build_qcew(y):
+    pq_dir = nbd.root / 'data/qcew.pq'
+    path = pq_dir / f'{y}/part.pq'
+
+    src = get_qcew_src(y)
+
+    cols = {
+        'area_fips': str, 
+        'agglvl_code': str, 
+        'annual_avg_estabs': 'int64',
+        'annual_avg_emplvl': 'int64', 
+        'total_annual_wages': 'int64', 
+        'taxable_annual_wages': 'int64',
+        'annual_contributions': 'int64', 
+        'annual_avg_wkly_wage': 'int64', 
+        'avg_annual_pay': 'int64'
+    }
+    df = pd.read_csv(src, usecols=cols.keys(), dtype=cols)
+    df = df.query('agglvl_code == "70"')
+    del df['agglvl_code']
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path, 'pyarrow', index=False)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+for y in range(1990, 2022):
+    print(y, end=' ')
+    build_qcew(y)
+```
+
+```{code-cell} ipython3
+:tags: [nbd-module]
+
+def get_qcew_df(cols=None, filters=None):
+    path = nbd.root / 'data/qcew.pq'
+    part = pyarrow.dataset.partitioning(field_names=['year'])
+    return pd.read_parquet(path, 'pyarrow', columns=cols, filters=filters,
+                           partitioning=part)
+```
+
+### validation
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(['area_fips', 'year', 'annual_avg_emplvl', 'total_annual_wages'],
+                 [('year', '==', 2020)])
+assert not df['area_fips'].duplicated().any()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(filters=[('area_fips', '==', '01001')])
+df['st'] = df['area_fips'].str[:2]
+df['cty'] = df['area_fips'].str[2:]
+df = df.rename(columns={'annual_avg_emplvl': 'emp', 'total_annual_wages': 'ap', 'avg_annual_pay': 'wage_qcew'})
+df = df[['st', 'cty', 'year', 'emp', 'ap', 'wage_qcew']]
+df = df.rename(columns=str.upper)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = cbp.get_parquet('county', ['fipstate', 'fipscty', 'year', 'emp', 'ap'], [('industry', '==', '-'), ('fipstate', '==', '01'), ('fipscty', '==', '001')])
+d = d.rename(columns=str.upper).rename(columns={'FIPSTATE': 'ST', 'FIPSCTY': 'CTY'})
+df = df.merge(d, 'inner', ['ST', 'CTY', 'YEAR'], suffixes=('_QCEW', '_CBP'))
+```
+
+```{code-cell} ipython3
+df['AP_CBP'] *= 1000
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.set_index('YEAR')[['EMP_QCEW', 'EMP_CBP']].plot()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.set_index('YEAR')[['AP_QCEW', 'AP_CBP']].plot()
+```
+
+### urban-rural wage
+
+```{code-cell} ipython3
+:tags: []
+
+df = get_qcew_df(['area_fips', 'year', 'annual_avg_emplvl', 'total_annual_wages']).rename(columns=str.upper)
+df['ST'] = df['AREA_FIPS'].str[:2]
+df['CTY'] = df['AREA_FIPS'].str[2:]
+
+d = get_county_rurality().rename(columns={'STATE_CODE': 'ST', 'COUNTY_CODE': 'CTY'})
+df = df.merge(d, 'left', ['ST', 'CTY'])
+
+d = get_deflator().rename(columns=str.upper)
+df = df.merge(d, 'left', 'YEAR')
+df['TOTAL_ANNUAL_WAGES'] /= df['DEFLATOR']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+tb = {}
+for r in ['RURAL_2000', 'RURAL_2010']:
+    t = df.groupby(['YEAR', r])[['ANNUAL_AVG_EMPLVL', 'TOTAL_ANNUAL_WAGES']].sum()
+    t = t['TOTAL_ANNUAL_WAGES'] / t['ANNUAL_AVG_EMPLVL']
+    t = t.unstack()
+    tb[r] = (t[True] / t[False])
+tb = pd.concat(tb, axis=1, names=['OMB rurality revision'])
+```
+
+```{code-cell} ipython3
+:tags: []
+
+fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+t.rename(columns={True: 'rural', False: 'urban'}).plot(ax=ax[0], title='Mean real wage, $2021\nQCEW', grid=True);
+tb.plot(ax=ax[1], legend=True, grid=True, title='Rural-to-urban mean wage ratio\nQCEW');
 ```

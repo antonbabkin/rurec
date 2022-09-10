@@ -29,9 +29,97 @@ from rurec.pubdata import bds
 from rurec import rurality
 ```
 
++++ {"tags": []}
+
 # OMB metro
 
 ```{code-cell} ipython3
+:tags: []
+
+def rural_cbsa():
+    df = geography.get_county_df(2010, False).rename(columns={'CODE': 'STCTY'})[['STCTY']]
+
+    d = rurality.get_cbsa_delin_df(2003).query('METRO_MICRO == "metro"')
+    d['STCTY'] = d['STATE_CODE'] + d['COUNTY_CODE']
+    df['RURAL_2000'] = ~df['STCTY'].isin(d['STCTY'])
+
+    d = rurality.get_cbsa_delin_df(2013).query('METRO_MICRO == "metro"')
+    d['STCTY'] = d['STATE_CODE'] + d['COUNTY_CODE']
+    df['RURAL_2010'] = ~df['STCTY'].isin(d['STCTY'])
+
+    df.loc[df['RURAL_2000'] & df['RURAL_2010'], 'RURAL_CHNG'] = 'R'
+    df.loc[df['RURAL_2000'] & ~df['RURAL_2010'], 'RURAL_CHNG'] = 'FR'
+    df.loc[~df['RURAL_2000'] & df['RURAL_2010'], 'RURAL_CHNG'] = 'FU'
+    df.loc[~df['RURAL_2000'] & ~df['RURAL_2010'], 'RURAL_CHNG'] = 'U'
+    return df
+```
+
+## Map of R/FR/FU/U.
+
+```{code-cell} ipython3
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+df = geography.get_county_df(2010).rename(columns={'CODE': 'STCTY'})
+df = df.merge(rural_cbsa(), 'left', 'STCTY')
+df = df.merge(geography.get_state_df(False).rename(columns={'CODE': 'STATE_CODE'}), 'left', 'STATE_CODE')
+df['RURAL_CHNG'] = df['RURAL_CHNG'].map({
+    'R': 'Rural', 'FR': 'Formerly rural', 'FU': 'Formerly urban', 'U': 'Urban'
+})
+df.query('CONTIGUOUS').plot(column='RURAL_CHNG', legend=True, figsize=(24, 10));
+```
+
+```{code-cell} ipython3
+---
+jupyter:
+  outputs_hidden: true
+tags: []
+---
+df.query('ABBR == "WI"').explore(tiles=None, column='RURAL_CHNG', legend=True)
+```
+
+## Dynamics of est and emp
+
+```{code-cell} ipython3
+:tags: []
+
+df = bds.get_df('cty')\
+    .rename(columns=str.upper)\
+    .query('YEAR.between(2000, 2019)')
+df['STCTY'] = df['ST'] + df['CTY']
+df = df.merge(rural_cbsa(), 'left', 'STCTY')
+
+t = df.query('RURAL_CHNG != "FU"').groupby(['YEAR', 'RURAL_CHNG'])[['ESTABS', 'EMP']].sum()
+t = t.stack().unstack([2, 1])
+t = t.apply(lambda r: r / t.loc[2000, :], 1)
+t
+```
+
+```{code-cell} ipython3
+:tags: []
+
+t1 = t['ESTABS']
+t1.index = t1.index.astype(str)
+t1.columns = ['Formerly Rural', 'Rural', 'Urban']
+t1.plot(figsize=(12, 8), grid=True, title='Growth in the number of establishments (2000 = 1)');
+```
+
+```{code-cell} ipython3
+:tags: []
+
+t1 = t['EMP']
+t1.index = t1.index.astype(str)
+t1.columns = ['Formerly Rural', 'Rural', 'Urban']
+t1.plot(figsize=(12, 8), grid=True, title='Growth in total employment (2000 = 1)');
+```
+
+## BDS in 2002 vs 2012
+
+```{code-cell} ipython3
+:tags: []
+
 df = bds.get_df('cty')\
     .rename(columns=str.upper)\
     .query('YEAR.isin([2002, 2012])')
@@ -62,15 +150,25 @@ df.groupby('YEAR')['RURAL_CHNG'].value_counts().unstack()
 ```
 
 ```{code-cell} ipython3
+df['RURAL_CHNG'] = df['RURAL_CHNG'].replace('FU', 'R')
+```
+
+```{code-cell} ipython3
+:tags: []
+
 t0 = df.groupby(['YEAR', 'RURAL_CHNG'])[['FIRMS', 'ESTABS', 'EMP']].sum().unstack('YEAR').astype(int)
 t0
 ```
 
 ```{code-cell} ipython3
+:tags: []
+
 t0.apply(lambda r: r / t0.sum(), 1)
 ```
 
 ```{code-cell} ipython3
+:tags: []
+
 t = t0.stack(0)
 t = t[2012] / t[2002]
 t.unstack()
@@ -295,10 +393,4 @@ d.loc[d['RURAL_CHNG_2010'].isna() & (d['RND_DRAW'] < d['RURAL_CHNG_THRSH_2010_FU
 d.loc[d['RURAL_CHNG_2010'].isna() & (d['RND_DRAW'] < d['RURAL_CHNG_THRSH_2010_FR']), 'RURAL_CHNG_2010'] = 'FR'
 d.loc[d['RURAL_CHNG_2010'].isna(), 'RURAL_CHNG_2010'] = 'U'
 d['RURAL_CHNG_2010'].value_counts(True)
-```
-
-```{code-cell} ipython3
-:tags: []
-
-thrsh_2010
 ```
