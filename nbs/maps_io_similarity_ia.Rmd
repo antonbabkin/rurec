@@ -73,7 +73,7 @@ importr(Direct_mat)
 
 # importr(Total_mat)
 # importr(Xpay_mat)
-# #importr(D_mat)
+importr(D_mat)
 
 industry_levels  <-  c("Sector", "Summary", "Detail")
 
@@ -256,6 +256,64 @@ Keokuk  <- c("19111",
 
 
 ```{r}
+cbsa  <-  data.frame("CBSA" = c("Des Moines-West Des Moines, IA MSA",
+"Newton, IA μSA",
+"Pella, IA μSA",
+"Cedar Rapids, IA MSA",
+"Davenport-Moline-Rock Island, IA-IL MSA",
+"Waterloo-Cedar Falls, IA MSA",
+"Iowa City, IA MSA",
+"Omaha-Council Bluffs, NE-IA MSA",
+"Ames, IA MSA",
+"Sioux City, IA-NE-SD MSA",
+"Dubuque, IA MSA",
+"Muscatine, IA μSA",
+"Mason City, IA μSA",
+"Clinton, IA μSA",
+"Burlington, IA-IL μSA",
+"Marshalltown, IA μSA",
+"Fort Dodge, IA μSA",
+"Fort Madison-Keokuk, IA-MO μSA",
+"Ottumwa, IA μSA",
+"Oskaloosa, IA μSA",
+"Storm Lake, IA μSA",
+"Spirit Lake, IA μSA",
+"Spencer, IA μSA",
+"Carroll, IA μSA"))
+
+cbsa  <- data.frame(cbsa, "NAME"= c("Polk",
+  "Jasper",
+  "Marion",
+  "Linn",
+  "Scott",
+  "Black Hawk",
+  "Johnson",
+  "Pottawattamie",
+  "Story",
+  "Woodbury",
+  "Dubuque",
+  "Muscatine",
+  "Cerro Gordo",
+  "Clinton",
+  "Des Moines",
+  "Marshall",
+  "Webster",
+  "Lee",
+  "Wapello",
+  "Mahaska",
+  "Buena Vista",
+  "Dickinson",
+  "Clay",
+  "Carroll"))
+
+```
+
+
+
+```{r}
+
+isolation_th=.05
+
 
 #Produce new clustered total output matrix from matched cores
 
@@ -307,7 +365,12 @@ singcc <- colnames(Queeg_rel_H1[[3]])
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, th_iso=th_iso, nomatch_core_out=nomatch_core_out, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, th_iso=th_iso, nomatch_core_out=nomatch_core_out, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
 ```
 
 
@@ -316,7 +379,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
 im_mat=Input_mat_imp_H1
 ex_mat=Input_mat_exp_H1
 #impind <- colnames(CoreMatch[[l]])
-impind <- c("19113", "19103", "19021")
+impind <- c("19193", "19153", "19111")
 macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE)
 
 absorbr(top_absorb=top_absorb, all_absorb=all_absorb, in_core=in_core, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, impind=impind, macc=macc, industry_levels=industry_levels)
@@ -338,6 +401,8 @@ absorbr(top_absorb=top_absorb, all_absorb=all_absorb, in_core=in_core, im_mat=In
 graphr(specname=ggtop, top_absorb=top_absorb, TIGER_RUCC=TIGER_RUCC, my_pal=my_pal_graph, macc=macc, industry_levels=industry_levels)
 
 
+
+
 ```
 
 
@@ -348,7 +413,7 @@ graphr(specname=ggtop, top_absorb=top_absorb, TIGER_RUCC=TIGER_RUCC, my_pal=my_p
   mat_mat <- MatchMat
   spec_clust  <- th_iso
   qdf <- Queeg_rel_H1
-  isolation_th <- .05
+  isolation_th <- isolation_th
   # ext <- list(Masoncity = Masoncity,
   #             Burlington = Burlington,
   #             Keokuk  = Keokuk,
@@ -364,19 +429,44 @@ graphr(specname=ggtop, top_absorb=top_absorb, TIGER_RUCC=TIGER_RUCC, my_pal=my_p
  ext <- NA
   
   
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
 
 #####Custom colors 
  values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
- placenames = h1m[[3]]$lab
+ placenames = h1m[[3]]$cnt_place
  #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
  
 cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
  
+#c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
+
+ #c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+
+#c("#ffffb3",  "#fccde5",  "#80b1d3")
+
+#c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+
+my_pal_map  <- c("Black Hawk" = "#8dd3c7", 
+                "Buena Vista" = "#fb8072", 
+                "Dallas" = "#bebada", 
+                "Lee" = "#ffffb3", 
+                "Linn"  = "#b3de69",  
+                "Polk" = "#fccde5", 
+                "Pottawattamie" = "#fdb462", 
+                "Sioux" = "#e5c494",
+                "Woodbury" = "#80b1d3",
+                "ECA Isolated" = "#A9A9A9",
+                "Isolated" = "#000000")
+
+
 
 ####Mapping Economic and Spatial cluster matching with isolation
-  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+maprCNT(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
       
+
+
+
 ```
 
 
@@ -423,19 +513,11 @@ Note: maps or even metrics do not show what is. We do have  have actual inter-in
 
 
 
-Consider Audubon IA, a small rural county with a total population of 5,635 in the west central part of the state. 38% of its excess production matches with Dallas County, which is part of West Des Moines and is the fastest growing county in Iowa and one of the fastest growing in the country. 
 
-Most of the strength of this interconnectedness is driven by:
-
-550000 (Management of Companies and Enterprises), 
-
-811100 (Automotive Mechanical and Electrical Repair and Maintenance),  
-
-and 811300 (Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance).
 
 ```{r}
 #print(ggtop[[3]]$`19009`)
-girafe(ggobj =ggtop[[3]]$`19009`,
+girafe(ggobj =ggtop[[3]]$`19161`,
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
                        ))
@@ -444,18 +526,10 @@ girafe(ggobj =ggtop[[3]]$`19009`,
 
 
 
-Consider Adair County IA, a small rural county with a total population of 7,496 in the south-west of the state. *A priori* one might assume based on geographical distance alone that Adair is best connected with either Des Moines or Omaha. However, 20% of its excess production matches with Buena Vista County, where the Tyson meat and poultry processing plant happens to be located. 
-
-Their interconnectedness is driven by absorption of:  
-484000 (Truck Transportation), 
-
-811300 (Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance), 
-
-and 541940 (Veterinary Services).
 
 ```{r}
 #print(ggtop[[3]]$`19001`)
-girafe(ggobj =ggtop[[3]]$`19001`,
+girafe(ggobj =ggtop[[3]]$`19061`,
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
                        ))
@@ -467,7 +541,7 @@ On the other hand, consider the rural Clayton County with a population of 16,998
 
 ```{r}
 #print(ggtop[[3]]$`19043`)
-girafe(ggobj =ggtop[[3]]$`19043`,
+girafe(ggobj =ggtop[[3]]$`19197`,
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;")
                        ))
@@ -479,7 +553,6 @@ girafe(ggobj =ggtop[[3]]$`19043`,
 
 All counties can match to all counties, and no clusters (e.g., MSAs) are prespecified.
 
-If maximum "connectedness" is below 5% a county is isolated. 
 
 If a county is matched with another because it has the maximum relative absorption of all possible net input shortage counties, then it is a cluster core. 
   
@@ -576,7 +649,15 @@ singcc <- colnames(Queeg_rel_H1[[3]])
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+
+
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
 ```
 
 
@@ -586,7 +667,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   mat_mat <- MatchMat
   spec_clust  <- th_iso
   qdf <- Queeg_rel_H1
-  isolation_th <- .05
+  isolation_th <- isolation_th
   ext <- list(Masoncity = Masoncity,
               Burlington = Burlington,
               Keokuk  = Keokuk,
@@ -601,7 +682,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   #ext <- NA
   
   
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
 
 #####Custom colors 
  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
@@ -621,14 +702,13 @@ cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
 All counties/clusters can match to all counties/clusters.
 
-If "connectedness" is below 5% a county is isolated. 
 
 ```{r}
-girafe(ggobj = p[[3]], 
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-                       )
-      )
+# girafe(ggobj = p[[3]], 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
 ```
 
 
@@ -711,7 +791,10 @@ singcc <- union(setdiff(union(micro, metro), unlist(ext)), shoname)
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
 ```
 
 
@@ -728,7 +811,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
     }
 
   qdf <- Queeg_rel_H1
-  isolation_th <- .05
+  isolation_th <- isolation_th
   ext <- list(Masoncity = Masoncity,
               Burlington = Burlington,
               Keokuk  = Keokuk,
@@ -745,7 +828,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
 
 
 
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]],  cbsa=cbsa) 
 
 #####Custom colors 
  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
@@ -765,14 +848,14 @@ cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
 All counties/clusters can match to only CBSAs.
 
-If "connectedness" is below 5% a county is isolated. 
+
 
 ```{r}
-girafe(ggobj = p[[3]], 
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-                       )
-      )
+# girafe(ggobj = p[[3]], 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
 ```
 
 
@@ -856,7 +939,10 @@ singcc <- union(setdiff(metro, unlist(ext)), intersect(shoname, metro))
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
 ```
 
 
@@ -875,7 +961,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
     }
 
   qdf <- Queeg_rel_H1
-  isolation_th <- .05
+  isolation_th <- isolation_th
   ext <- list(Masoncity = Masoncity,
               Burlington = Burlington,
               Keokuk  = Keokuk,
@@ -890,7 +976,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   #ext <- NA
   
   
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
 
 #####Custom colors 
  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
@@ -910,23 +996,15 @@ cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
 All counties/clusters can match only to Metro Stat Areas.
 
-If "connectedness" is below 5% a county is isolated. 
+
 
 ```{r}
-girafe(ggobj = p[[3]], 
-                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-                       )
-      )
+# girafe(ggobj = p[[3]], 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
 ```
-
-
-
-
-
-
-
-
 
 
 
@@ -937,9 +1015,10 @@ girafe(ggobj = p[[3]],
 
 ### Hierarchical
 
-
-
 ```{r, warning=FALSE}
+
+isolation_th=.05
+
 
 #Produce new clustered total output matrix from matched cores
 
@@ -963,9 +1042,8 @@ shoname <- sapply(ext, function(x) x[1])
 #All non-metro, non-micro counties
 macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
 
-#All metro and micro that are   (not) the representative core county
+#All metro and micro that are the representative core county
 singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
-
 
 
 trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels, o_mat=Output_mat)
@@ -1011,7 +1089,10 @@ singcc <- colnames(Queeg_rel_H1[[3]])
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
 
 
 
@@ -1025,7 +1106,7 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   mat_mat <- MatchMat
   spec_clust  <- th_iso
   qdf <- Queeg_rel_H1
-  isolation_th <- .05
+  isolation_th <- isolation_th
   ext <- list(Masoncity = Masoncity,
               Burlington = Burlington,
               Keokuk  = Keokuk,
@@ -1040,20 +1121,35 @@ Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   #ext <- NA
   
   
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
 
 #####Custom colors 
  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
 values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
- placenames = h1m[[3]]$lab
+ placenames = (h1m[[3]]$lab)
  #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
  
 cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "ECA Isolated" = "#A9A9A9")
  
 
 ####Mapping Economic and Spatial cluster matching with isolation
   mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
-       
+  
+
+  
+  
 ```
 
 
@@ -1061,7 +1157,7 @@ cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
 All counties/clusters can match to all counties/clusters.
 
-If "connectedness" is below 5% a county is isolated. 
+
 
 ```{r}
 
@@ -1081,9 +1177,18 @@ girafe(ggobj = p[[3]],
 ```{r}
 
 ####Mapping ECAs
- placenames = h1m[[3]]$eca
-cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
- 
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+
+
     maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
 
 girafe(ggobj = p[[3]], 
@@ -1096,32 +1201,32 @@ girafe(ggobj = p[[3]],
 
 
 
+
+
 ```{r}
 
 
-
-
 ###All previously isolated counties
-macc <- h1m[[3]]$place[h1m[[3]]$eca == "Isolated"]
+macc <- h1m[[3]]$place[h1m[[3]]$h2eca == "Isolated"]
 
 
 ###All new ECA clusters
-tdf <-  data.frame(place = c(h1m[[3]]$place[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$eca) , "Isolated"))]), 
-                   NAME = c(h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$eca) , "Isolated"))]))
-  
-  
+tdf <-  data.frame(place = c(h1m[[3]]$place[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]),
+                   NAME = c(h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]))
+
+
 #Each new core cluster
-df <- vector(mode='list', length=length(setdiff(unique(h1m[[3]]$eca) , "Isolated")))
-  names(df) <- h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$eca) , "Isolated"))]
-  
+df <- vector(mode='list', length=length(setdiff(unique(h1m[[3]]$h2eca) , "Isolated")))
+  names(df) <- h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]
+
 for(i in 1:length(df)){
   df[[i]] <- c(tdf[i,1])
 }
 
 for(i in 1:length(df)){
-  df[[i]] <- c(df[[i]],  setdiff(h1m[[3]]$place[h1m[[3]]$eca %in% names(df[i])], df[[i]]))
+  df[[i]] <- c(df[[i]],  setdiff(h1m[[3]]$place[h1m[[3]]$h2eca %in% names(df[i])], df[[i]]))
 }
-  
+
 
 ext <- df
 #shoname <- sapply(df, function(x) x[1])
@@ -1140,18 +1245,78 @@ trimr(specname=Output_mat_H3, macc=macc, singcc=singcc, ext=ext, industry_levels
 
 ```{r}
 ###First level calc
+# 
+# ############ Input Needs
+# Input_Needs(specname=Input_mat_H2, o_mat=Output_mat_H3, industry_levels=industry_levels)
+# 
+# ############ Import Input Needs
+# Import_Needs(specname=Input_mat_imp_H2, o_mat=Output_mat_H3, i_mat=Input_mat_H2,  industry_levels=industry_levels)
+# 
+# ############ Net Exports
+# Export_Needs(specname=Input_mat_exp_H2, o_mat=Output_mat_H3, i_mat=Input_mat_H2,  industry_levels=industry_levels)
+# 
+# ############ Relative Queeg specification
+# Rel_Queeg(specname=Queeg_rel_H2, o_mat=Output_mat_H3, im_mat=Input_mat_imp_H2, ex_mat=Input_mat_exp_H2, industry_levels=industry_levels)
+
 
 ############ Input Needs
-Input_Needs(specname=Input_mat_H2, o_mat=Output_mat_H3, industry_levels=industry_levels)
+
+  Input_mat_H2 <- vector(mode='list', length=length(industry_levels))
+  names(Input_mat_H2) <- industry_levels
+  
+  for (l in 3) {
+    o <- Output_mat_H3[[l]]
+    industries <- rownames(o)
+    d <- Direct_mat[[l]][industries, industries]
+    Input_mat_H2[[l]] <- d %*% o
+  }
+
 
 ############ Import Input Needs
-Import_Needs(specname=Input_mat_imp_H2, o_mat=Output_mat_H3, i_mat=Input_mat_H2,  industry_levels=industry_levels)
+
+  Input_mat_imp_H2 <- vector(mode='list', length=length(industry_levels))
+  names(Input_mat_imp_H2) <- industry_levels
+  
+  for (l in 3){
+    Input_mat_imp_H2[[l]] <- pmax(Input_mat_H2[[l]] - Output_mat_H3[[l]], 0)
+  }
+
 
 ############ Net Exports
-Export_Needs(specname=Input_mat_exp_H2, o_mat=Output_mat_H3, i_mat=Input_mat_H2,  industry_levels=industry_levels)
+
+  Input_mat_exp_H2 <- vector(mode='list', length=length(industry_levels))
+  names(Input_mat_exp_H2) <- industry_levels
+  
+  for (l in 3){
+    Input_mat_exp_H2[[l]] <- pmax(Output_mat_H3[[l]] -  Input_mat_H2[[l]], 0)
+  }
+
 
 ############ Relative Queeg specification
-Rel_Queeg(specname=Queeg_rel_H2, o_mat=Output_mat_H3, im_mat=Input_mat_imp_H2, ex_mat=Input_mat_exp_H2, industry_levels=industry_levels)
+
+  Queeg_rel_H2 <- vector(mode='list', length=length(industry_levels))
+  names(Queeg_rel_H2) <- industry_levels
+  for (l in 3){
+    Queeg_rel_H2[[l]] <-  matrix(0, nrow = ncol(Output_mat_H3[[l]]), 
+                         ncol = ncol(Output_mat_H3[[l]]) )
+    rownames(Queeg_rel_H2[[l]]) = colnames(Queeg_rel_H2[[l]]) <- colnames(Output_mat_H3[[l]])
+  }
+  
+  for (l in 3){
+    o <- Output_mat_H3[[l]]
+    industries <- rownames(o)
+    d <- Direct_mat[[l]][industries, industries]
+    for (i in 1:ncol(o)){
+      for (j in 1:ncol(o)){
+        Queeg_rel_H2[[l]][i,j] <- 
+          (rep(c(1), each=ncol(d)) %*% pmin(Input_mat_exp_H2[[l]][,i], Input_mat_imp_H2[[l]][,j])) /
+          (rep(c(1), each=ncol(d)) %*% Input_mat_exp_H2[[l]][,i])
+      }
+    }
+  }
+
+
+
 
 ```
 
@@ -1176,21 +1341,105 @@ singcc <- colnames(Queeg_rel_H2[[3]])
 #total industry output by county matrix
 out_mat <- Output_mat_H1
 
-Queeg_selectr(specname=Output_mat_H4, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H2, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H3, isolation_th=0.05)
+#Isolation threshold
+isolation_th=isolation_th
+
+# Queeg_selectr(specname=Output_mat_H4, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H2, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H3, isolation_th=isolation_th)
+
+
+
+  Output_mat_H4 <- vector(mode='list', length=length(industry_levels))
+  names(Output_mat_H4) <- industry_levels
+  
+  CoreMatch <- Output_mat_H4
+  MatchMat <- Output_mat_H4
+  cuml_core_out <- Output_mat_H4
+  perf_core_out <- Output_mat_H4 
+  nomatch_core_out <- Output_mat_H4
+  th_iso <- Output_mat_H4
+  
+  for (l in 3){
+    l<<-l
+    #all non-zero row-total export counties
+    CoreMatch[[l]] <- (queeg_mat[[l]][macc, singcc] * Impede_mat[[4]][[l]][macc, singcc])  
+    CoreMatch[[l]] %<>% .[apply(., 1, function(x){!all(x<isolation_th)}), ,drop = FALSE]
+    
+    if(length(CoreMatch[[l]]) >0 ){
+      #CoreMatch[[l]] %<>% as.matrix()
+    MatchMat[[l]] <- sparseMatrix(i = match(rownames(CoreMatch[[l]]), rownames(CoreMatch[[l]])),
+                               j = match(c(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)]), colnames(CoreMatch[[l]])),
+                               x = 1L,
+                               dims = c(nrow(CoreMatch[[l]]), ncol(CoreMatch[[l]])),
+                               dimnames = list(rownames(CoreMatch[[l]]), colnames(CoreMatch[[l]]))
+    ) %>% as.matrix()
+    
+    #cumulative output of matched cores and non-cores 
+    cuml_core_out[[l]] <- (out_mat[[l]][, rownames(MatchMat[[l]])[order(rownames(MatchMat[[l]]))],  drop = FALSE] %*% 
+                             MatchMat[[l]][order(rownames(MatchMat[[l]])), order(colnames(MatchMat[[l]])), drop = FALSE]) %>% 
+      .[, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)])), drop = FALSE] + out_mat[[l]][, sort(unique(colnames(CoreMatch[[l]])[apply(CoreMatch[[l]], 1, which.max)])), drop = FALSE]
+    
+    }else{ cuml_core_out[[l]] =  NA}
+    
+    #output of unmatched cores
+    perf_core_out[[l]] <- as.data.frame(queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% .[apply(., 1, function(x){all(x<isolation_th)}),]  %>% rownames() %>% setdiff(., colnames(cuml_core_out[[l]])) %>% out_mat[[l]][, .]
+    
+    perf_core_out[[l]] <- (queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc, singcc]) 
+    perf_core_out[[l]] %<>% .[apply(., 1, function(x){all(x<isolation_th)}),]  %>% rownames() %>% setdiff(., colnames(cuml_core_out[[l]])) %>% out_mat[[l]][, .]
+    
+    
+    #output of unmatched noncores
+    nomatch_core_out[[l]] <- union(colnames(cuml_core_out[[l]]), colnames(perf_core_out[[l]])) %>% setdiff(colnames(queeg_mat[[l]][, singcc]), .) %>% out_mat[[l]][,.] 
+      
+    th_iso[[l]] <- as.data.frame(queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% .[apply(., 1, function(x){all(x<isolation_th)}),]  %>% rownames() %>% out_mat[[l]][,.]
+    
+    Output_mat_H4[[l]] <- cbind(cuml_core_out[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(cuml_core_out[[l]]), 
+                                                                                               colnames(perf_core_out[[l]]), 
+                                                                                               colnames(nomatch_core_out[[l]])
+    ))]
+    
+  }
+  
+
+
+
+
+
 ```
 
 
 
 ```{r, warning=FALSE}
 
+
+###All new ECA clusters
+tdf <-  data.frame(place = c(h1m[[3]]$place[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]),
+                   NAME = c(h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]))
+
+
+#Each new core cluster
+df <- vector(mode='list', length=length(setdiff(unique(h1m[[3]]$h2eca) , "Isolated")))
+  names(df) <- h1m[[3]]$NAME[h1m[[3]]$NAME %in% (setdiff(unique(h1m[[3]]$h2eca) , "Isolated"))]
+
+for(i in 1:length(df)){
+  df[[i]] <- c(tdf[i,1])
+}
+
+for(i in 1:length(df)){
+  df[[i]] <- c(df[[i]],  setdiff(h1m[[3]]$place[h1m[[3]]$h2eca %in% names(df[i])], df[[i]]))
+}
+
+
+ext <- df
+
+
 ####Economic and Spatial cluster matching with isolation 
   mat_mat <- MatchMat
   spec_clust  <- th_iso
   qdf <- Queeg_rel_H2
-  isolation_th <- .05
+  isolation_th <- isolation_th
   
   
-  macc <- h1m[[3]]$place[h1m[[3]]$eca == "Isolated"]
+  macc <- h1m[[3]]$place[h1m[[3]]$h2eca == "Isolated"]
   
   #All metro and micro clusters
   df <- list("Cerro Gordo" = Masoncity,
@@ -1205,44 +1454,60 @@ Queeg_selectr(specname=Output_mat_H4, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
               "Johnson" = Iowacity,
               "Scott" = Davenport)
   
+  # 
+  # 
+  # 
+  # #############BAD Brute FORCE
   
-  
-  
-  #############BAD Brute FORCE
+
   
   n <- df[setdiff(names(df), names(ext))][sapply(df[setdiff(names(df), names(ext))], function(x) x[1]) %in% unlist(ext)]
+ 
+  # #     # #vis
+  #     for(i in 1:length(ext)){
+  #          print(unlist(ext[i]) %in% unlist(n))
+  #     }
+  # 
+  #         test <- c()
+  #       for (i in 1:length(ext)){
+  #         test[i] <- any(unlist(ext[i]) %in% unlist(n))
+  #       }
+  # 
+  #         # #vis
+  #        ext[names(ext[test])]
+
+       
+  #           ext$Johnson <- union(unlist(ext$Johnson), unlist(n$`Des Moines`))  
+  #           ext$Johnson <- union(unlist(ext$Johnson), unlist(n$Woodbury))  
+  #           ext$Pottawattamie <- union(unlist(ext$Pottawattamie), unlist(n$Lee))  
+         
+          # ##10% isolation
+          #     ext$`Buena Vista` <- union(unlist(ext$`Buena Vista`), unlist(n$`Cerro Gordo`))  
+          #     ext$`Buena Vista` <- union(unlist(ext$`Buena Vista`), unlist(n$`Des Moines`))  
+          #     ext$Woodbury <- union(unlist(ext$Woodbury), unlist(n$Story))  
+          #     
+              
   
-      # #vis
-      # for(i in 1:length(ext)){
-      #      print(unlist(ext[i]) %in% unlist(n))
-      # }
-  
-          test <- c()
-        for (i in 1:length(ext)){
-          test[i] <- any(unlist(ext[i]) %in% unlist(n))
-        }
+         # ##5% isolation
+              ext$`Buena Vista` <- union(unlist(ext$`Buena Vista`), unlist(n$`Cerro Gordo`))  
+              ext$`Buena Vista` <- union(unlist(ext$`Buena Vista`), unlist(n$`Des Moines`)) 
+              ext$Pottawattamie <- union(unlist(ext$Pottawattamie), unlist(n$Scott)) 
+              ext$Woodbury <- union(unlist(ext$Woodbury), unlist(n$Story)) 
           
-          # #vis
-          # ext[names(ext[test])]
-          # 
-        
-            ext$Johnson <- union(unlist(ext$Johnson), unlist(n$`Des Moines`))  
-            ext$Johnson <- union(unlist(ext$Johnson), unlist(n$Woodbury))  
-            ext$Pottawattamie <- union(unlist(ext$Pottawattamie), unlist(n$Lee))  
-  
-                  ##All old clusters overlap with newly clusted CSAs
-                  
-                    # t <- vector(mode='list', length=length(setdiff(names(df), names(ext))) )
-                    #     names(t) <- setdiff(names(df), names(ext))
-                    # for (i in 1:length(t) ) {
-                    #    t[[i]] <- union(unlist(ext[intersect(names(df), names(ext))][i]), 
-                    #                    unlist(df[intersect(names(df), names(ext))][i]))
-                    #    names(t[i]) <- df[i]
-                    # }
-                        
-    ###############  
-  
-  
+          
+  # 
+  #                 ##All old clusters overlap with newly clusted CSAs
+  #                 
+  #                   # t <- vector(mode='list', length=length(setdiff(names(df), names(ext))) )
+  #                   #     names(t) <- setdiff(names(df), names(ext))
+  #                   # for (i in 1:length(t) ) {
+  #                   #    t[[i]] <- union(unlist(ext[intersect(names(df), names(ext))][i]), 
+  #                   #                    unlist(df[intersect(names(df), names(ext))][i]))
+  #                   #    names(t[i]) <- df[i]
+  #                   # }
+  #                       
+  #   ###############  
+  # 
   
   ##All overlapping new clusters and old 
   t <- vector(mode='list', length=length(intersect(names(df), names(ext))) )
@@ -1260,14 +1525,18 @@ Queeg_selectr(specname=Output_mat_H4, CoreMatch=CoreMatch, MatchMat=MatchMat, cu
   ##All new clusters that do and do not overlap with old clusters 
   m <- c(t , k)
   
+  
+  #All old clusters  that are isolated
+  o <- df[setdiff(names(df), union(names(n), names(ext)))]
+  
   ##All clusters
-  exta <- m
+  exta <- c(m , o)
   
   
   
   
   
-hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=exta, isolation_th=isolation_th, imp_mat=Impede_mat[[4]]) 
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=exta, isolation_th=isolation_th, imp_mat=Impede_mat[[4]],  cbsa=cbsa) 
 
 #####Custom colors 
  #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
@@ -1276,6 +1545,16 @@ values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#f
  #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
  
 cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+
+
+my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                 "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462", 
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                 "ECA Isolated" = "#A9A9A9",
+                 "Isolated" = "#000000")
  
 
 ####Mapping Economic and Spatial cluster matching with isolation
@@ -1287,7 +1566,7 @@ cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
 **Level 2 Natural Matching**
 
-If "connectedness" is below 5% a county is isolated. 
+
 
 ```{r}
 girafe(ggobj = p[[3]],
@@ -1306,8 +1585,10 @@ girafe(ggobj = p[[3]],
 ```{r}
 
 ####Mapping ECAs
- placenames = h1m[[3]]$eca
-cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",  
+                 "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462", 
+                  "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                 "Isolated" = "#000000")
  
     maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
 
@@ -1322,7 +1603,1479 @@ girafe(ggobj = p[[3]],
 
 
 
-### ALT
+### Impedance Effects
+
+
+**Level 1 Natural Matching**
+
+All counties/clusters can match to all counties/clusters.
+
+```{r, warning=FALSE}
+
+isolation_th=.05
+
+
+#Produce new clustered total output matrix from matched cores
+
+
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+
+#All metro and micro core county representative
+shoname <- sapply(ext, function(x) x[1])
+
+#All non-metro, non-micro counties
+macc <- grep("^19", rownames(TIGER_RUCC), value=TRUE) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#All metro and micro that are the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
+
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels, o_mat=Output_mat)
+
+```
+
+
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{7}$ 
+
+(Minimal spatial effect - used in all previous maps)
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$lab)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{6}$ 
+
+Note changes for Monona County, Marshal County, and the Fort Madison-Keokuk, IA-MO μSA
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[3]]
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$lab)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{5}$ 
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <- ((2/(exp(-(D_mat[[i]]/100000)) + exp(D_mat[[i]]/100000))))
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$lab)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Dodge, IA μSA"  = "#66c2a5",
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+**Hyperbolic Secant Function**
+
+$Q^{rs} = 2/(e^{-d^{rs}c} + e^{d^{rs}c})$ where scalar $c = 10^{4}$ 
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <- ((2/(exp(-(D_mat[[i]]/10000)) + exp(D_mat[[i]]/10000))))
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+my_pal_map  <- c("Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{7}$ 
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <- (exp(-(D_mat[[i]]/10000000)) )
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{6}$ 
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <- (exp(-(D_mat[[i]]/1000000)) )
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+  my_pal_map  <- c( "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                  "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+**Exponential Decay Function**
+
+$Q^{rs} = e^{-d^{rs}c}$ where scalar $c = 10^{5}$ 
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <- (exp(-(D_mat[[i]]/100000)) )
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Dodge, IA μSA"  = "#66c2a5",
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+
+
+**Inverse Thousandth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/1000}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/1000})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+# comp_pal  <- c( "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7", 
+#                   "Storm Lake, IA μSA" = "#fb8072", 
+#                 "Dallas" = "#bebada", 
+#                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3", 
+#                "Iowa City, IA MSA" = "#ffd92f",
+#                   "Cedar Rapids, IA MSA"  = "#b3de69",  
+#                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+#                   "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462", 
+#                   "Sioux" = "#e5c494",
+#                   "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+#                     "Fort Dodge, IA μSA"  = "#66c2a5"
+#                   "ECA Isolated" = "#A9A9A9",
+#                   "Isolated" = "#000000")
+
+#
+  
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+**Inverse Hundredth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/100}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/100})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+  
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                  "Sioux" = "#e5c494",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+
+**Inverse Twentieth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/20}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/20})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+
+ 
+  my_pal_map  <- c("Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                   "Iowa City, IA MSA" = "#ffd92f",
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+**Inverse Tenth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/10}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/10})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+ my_pal_map  <- c("Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+**Inverse Eighth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/8}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/8})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+ my_pal_map  <- c("Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+**Inverse Seventh Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/7}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/7})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+ my_pal_map  <- c("Des Moines-West Des Moines, IA MSA" = "#fccde5", 
+                  "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+
+**Inverse Sixth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/6}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/6})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+ my_pal_map  <- c("Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072", 
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7", 
+                  "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
+
+
+
+
+
+
+**Inverse Fifth Root Function**
+
+$Q^{rs} = 1/(d^{rs})^{1/5}$
+
+```{r, warning=FALSE}
+#Produce new clustered total output matrix from matched cores
+
+#geographical impedance (used here for breaking ties)
+
+  df <- D_mat
+  for (i in 1:length(D_mat)){
+    df[[i]] <-  ((1/(D_mat[[i]]^{1/5})))
+    diag(df[[i]]) <- 1
+  }
+
+imp_mat <- df
+
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport)
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=imp_mat, cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$eca)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+
+
+my_pal_map  <- c("Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                   "Isolated" = "#000000")
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
 
 
 
@@ -1331,9 +3084,15 @@ girafe(ggobj = p[[3]],
 
 
 
+### notes
 
 
-### NOTES
+Two absorb the one,
+
+the supply chain scales upward-
+
+in isolation 
+
 
 Note: Corner Cases.
 Story county has a maximum total absorption with Johnson along with 15 other counties 
@@ -1359,11 +3118,7 @@ In addition, since BuenaVista, Carrol, and Johnson are themselves cluster cores,
 
 
 In this 2-stage analysis, the counties of Iowa are first matched internally. 
-Metro counties in areas with a population of under a 1 million serve as first-order cores which all other counties are matched based on their capacitance.  
-
-
 Note: this matching asks the question: Where is the greatest industry development opportunity for all rural counties among the Iowa Micropolitan Statistical Areas group of places, ignoring all other market opportunities in and out of state?
-
 Next we ask: Where is the greatest industry development opportunity for all rural counties and Iowa Micropolitan Statistical Areas among the Iowa Metropolitan Statistical Areas group of places, ignoring all other market opportunities out of state? 
 
 
