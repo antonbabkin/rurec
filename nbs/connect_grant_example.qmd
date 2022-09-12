@@ -1,0 +1,208 @@
+---
+title: "connect_grant_examples"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+editor: visual
+---
+
+```{r packages and libraries, include = FALSE}
+
+# Load packages
+
+library(tidyr)
+library(geosphere)
+
+
+```
+
+## Example
+
+```{r}
+##From Direct to Total 
+
+Industry_Count <- 3
+Toy_Direct_mat <-  matrix(c(0.429,  0.014, 0.086, 
+                            0.08,  0.56, 0.24,
+                            0.016,  0.392, 0.568), nrow = Industry_Count, byrow = TRUE)
+
+rownames(Toy_Direct_mat) = colnames(Toy_Direct_mat) <- c("Oil", "Wheat", "Bread")
+
+Toy_Total_mat <-  solve(diag(ncol(Toy_Direct_mat)) - Toy_Direct_mat)
+
+```
+
+```{r}
+##From Total to Direct 
+
+# Industry_Count <- 3
+# Toy_Total_mat <-  matrix(c(1.350,  0.448, 0.624, 
+#                             0.329,  1.622, 0.992,
+#                             0.325,  0.226, 1.327), nrow = Industry_Count, byrow = TRUE)
+# 
+# rownames(Toy_Total_mat) = colnames(Toy_Total_mat) <- c("Oil", "Wheat", "Bread")
+# 
+# 
+# Toy_Direct_mat <-  diag(ncol(Toy_Total_mat)) - solve(Toy_Total_mat)
+
+```
+
+"National Total Requirements Table" (BEA): $\mathbf{L} = [l_{ij}]$
+
+```{r}
+Toy_Total_mat %>% round(2)
+```
+
+"National Direct Requirements Table": $\mathbf{A} = \mathbf{I} - (\mathbf{L})^{-1}$
+
+```{r}
+Toy_Direct_mat %>% round(3)
+
+```
+
+"Industry-by-Location Output Table (from CBP or LBD)": $\mathbf{X} = [x^{r}_{i}]$
+
+```{r}
+Region_Count <- 3
+
+Toy_X_mat <-  matrix(c(0, 30, 40, 
+                       100, 20,  30,
+                       100, 15,  75), nrow = Industry_Count, byrow = TRUE)
+
+rownames(Toy_X_mat) <- c("Oil", "Wheat", "Bread")
+colnames(Toy_X_mat) <- c("Albany", "Brown", "Cook")
+
+Toy_X_mat
+```
+
+"Input Needs Table": $\mathbf{A}\mathbf{x}^{r}$
+
+```{r}
+Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
+Toy_Input_mat  %>% round(2)
+```
+
+"Net Import Shortage Table": $\max \{\mathbf{A}\mathbf{x}^{r} - \mathbf{x}^{r} , 0\}$
+
+```{r}
+Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
+Toy_Input_mat_imp  %>% round(2)
+```
+
+"Net Input Excess Table": $\max \{ \mathbf{x}^{r} - \mathbf{A}\mathbf{x}^{r}, 0\}$
+
+```{r}
+Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
+Toy_Input_mat_exp  %>% round(2)
+```
+
+Absorption matrix: $\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$
+
+```{r}
+
+Toy_Absorb <- vector(mode='list', length=ncol(Toy_X_mat))
+  names(Toy_Absorb) <- colnames(Toy_X_mat)
+
+for (i in 1:ncol(Toy_X_mat)){
+Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Absorb[[i]])  <- rownames(Toy_X_mat)
+   colnames(Toy_Absorb[[i]]) <- colnames(Toy_X_mat)
+}
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Absorb[[i]][,j]  <-   pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])  %>% round(2)
+    }
+  }
+
+Toy_Absorb  
+
+```
+
+"Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+
+Toy_Queeg<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Queeg) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Queeg[i,j]  <-  rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])
+    }
+  }
+
+
+colnames(Toy_Queeg) <- c("Albany", "Brown", "Cook")
+Toy_Queeg  %>% round(2)
+
+```
+
+
+"Relative Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / \text{NIE}^{r} \}~ \forall ~ r,s \in l$
+
+```{r}
+
+Toy_Queeg_R<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Queeg_R) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Queeg_R[i,j]  <-  (rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])) /
+                                    (rep(c(1), each=ncol(Toy_Total_mat)) %*% Toy_Input_mat_exp[,i] )
+        
+
+    }
+  }
+
+
+colnames(Toy_Queeg_R) <- c("Albany", "Brown", "Cook")
+Toy_Queeg_R  %>% round(2)
+
+```
+
+
+"Impedance matrix": $e^{-d^{rs}}$
+
+```{r}
+Toy_Lat <- c(42.3, 44.49, 41.84 )
+Toy_Lon <- c(-89.04, -88.03, -87.77)
+Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))/1000000
+colnames(Toy_Dist_mat) = rownames(Toy_Dist_mat) <-  c("Albany", "Brown", "Cook")
+
+#Toy_Q <- (1/(Toy_Dist_mat)^2)
+Toy_Q <- exp(-Toy_Dist_mat)
+
+Toy_Q  %>% round(3)
+```
+
+"Spatial Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} Q^{rs}\}~ \forall ~ r,s \in l$
+
+```{r}
+(Toy_Queeg * Toy_Q ) %>% round(2)
+
+```
+
+
+"Spatial Relative Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / \text{NIE}^{r} \}~ \forall ~ r,s \in l$
+
+```{r}
+
+(Toy_Queeg_R * Toy_Q ) %>% round(2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
