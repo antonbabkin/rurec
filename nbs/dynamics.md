@@ -25,6 +25,7 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import pyarrow
 import pyarrow.dataset
 
@@ -450,6 +451,8 @@ d['bds/cbp'].describe()
 # Growth vs dynamism
 
 ```{code-cell} ipython3
+:tags: []
+
 import altair as alt
 import statsmodels.formula.api as smf
 ```
@@ -492,14 +495,15 @@ t = t.unstack()
 pfit, pval = np.polynomial.polynomial.polyfit, np.polynomial.polynomial.polyval
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
-a = t['ESTABS_GR'].plot(ax=ax[0], title='Establishment growth rate')
+c = ('#222', '#999')
+a = t['ESTABS_GR'].plot(ax=ax[0], color=c, title='Establishment growth rate')
 tr = t['ESTABS_GR'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
-tr.plot(ax=ax[0], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+tr.plot(ax=ax[0], ls=':', color=c, grid=True)
 a.legend(handles=a.lines[:2])
 
-a = t['ESTABS_CHURN_RATE'].plot(ax=ax[1], title='Establishment churn rate')
+a = t['ESTABS_CHURN_RATE'].plot(ax=ax[1], color=c, title='Establishment churn rate')
 tr = t['ESTABS_CHURN_RATE'].dropna().apply(lambda c: pval(c.index, pfit(c.index, c, 1)))
-tr.plot(ax=ax[1], ls=':', color=[l.get_color() for l in a.lines], grid=True)
+tr.plot(ax=ax[1], ls=':', color=c, grid=True)
 a.legend(handles=a.lines[:2]);
 ```
 
@@ -568,10 +572,167 @@ reg_lines = alt.Chart(dp).encode(x='ESTABS_CHURN_RATE', y='ESTABS_GR10', color='
 (scatter + reg_lines).interactive().properties(width=600, height=400)
 ```
 
+Same figure manually styled for reports.
+
 ```{code-cell} ipython3
 :tags: []
 
-r.summary()
+ds = d.sample(3000).copy()
+
+fig, ax = plt.subplots(figsize=(8, 6))
+
+c = ('#80b1d3', '#fccde5')
+ds['COLOR'] = ds['METRO'].map({'metro': c[0], 'nonmetro': c[1]})
+ax.scatter(ds['ESTABS_CHURN_RATE'], ds['ESTABS_GR10'], s=7, c=ds['COLOR'])
+
+d_ = dp.query('METRO == "metro"')
+ax.plot(d_['ESTABS_CHURN_RATE'], d_['ESTABS_GR10'], c=c[0], label='metro')
+d_ = dp.query('METRO == "nonmetro"')
+ax.plot(d_['ESTABS_CHURN_RATE'], d_['ESTABS_GR10'], c=c[1], label='nonmetro')
+
+ax.set_xlabel('Establishment churn rate', {'size': 15})
+ax.set_xlim(10, 30)
+ax.set_xticks(range(10, 31, 5))
+ax.set_ylabel('Establishment 10-year growth rate', {'size': 15})
+ax.set_ylim(-40, 40)
+ax.set_yticks(range(-40, 41, 20))
+ax.legend(fontsize=12);
+```
+
+## LBD + RUCA
+
+```{code-cell} ipython3
+:tags: []
+
+disc_file_path = nbd.root / 'data/rdc/20220816.xlsx'
+df = pd.read_excel(disc_file_path, 'size', index_col=[0, 1, 2, 3, 4])
+df = df.reset_index('rural')
+df['rural'] = df['rural'].astype(pd.CategoricalDtype(['R', 'FR', 'U'], ordered=True))
+df = df.set_index('rural', append=True)
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# estabs
+d = df.query('rurality == "ruca"').copy()
+d = d.groupby(['rurality', 'year', 'rural', 'entry', 'exit'])['size lbdnum'].sum().unstack(['entry', 'exit'])
+d.columns = d.columns.map({(1, 0): 'bir', (0, 0): 'cont', (0, 1): 'dea'})
+
+d['x1'] = d.eval('cont + bir')
+d['x0'] = d.eval('cont + dea')
+d['dx'] = d.eval('x1 - x0')
+d['xa'] = d.eval('(x0 + x1) / 2')
+d['gr'] = d.eval('dx / xa')
+d['churn'] = d.eval('(bir + dea) / xa')
+
+d = d[['gr', 'churn']]
+d.columns = ['Estab growth rate', 'Estab churn rate']
+d.index = d.index.droplevel('rurality')
+t_est = d
+d = d.stack().unstack('rural')
+d.style.format('{:.1%}')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# employment
+d = df.copy()
+d = d.query('rurality == "ruca"').copy()
+d = d.groupby(['year', 'rural'])[['sum emp', 'sum emp_d']].sum()
+d['x1'] = d['sum emp']
+d['dx'] = d['sum emp_d']
+d['x0'] = d.eval('x1 - dx')
+d['xa'] = d.eval('(x0 + x1) / 2')
+d['gr'] = d.eval('dx / xa')
+
+d = d['gr']
+d.name = 'Emp growth rate'
+t_emp = d
+d.unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# payroll
+d = df.copy()
+d = d.query('rurality == "ruca"').copy()
+d = d.groupby(['year', 'rural'])[['sum pay', 'sum pay_d']].sum()
+d['x1'] = d['sum pay']
+d['dx'] = d['sum pay_d']
+d['x0'] = d.eval('x1 - dx')
+d['xa'] = d.eval('(x0 + x1) / 2')
+d['gr'] = d.eval('dx / xa')
+
+d = d['gr']
+d.name = 'Payroll growth rate'
+t_pay = d
+d.unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# wage
+d = df.copy()
+d = d.query('rurality == "ruca"').copy()
+d = d.groupby(['year', 'rural'])[['sum pay', 'sum pay_d', 'sum emp', 'sum emp_d']].sum()
+
+d['e1'] = d['sum emp']
+d['de'] = d['sum emp_d']
+d['e0'] = d.eval('e1 - de')
+
+d['p1'] = d['sum pay']
+d['dp'] = d['sum pay_d']
+d['p0'] = d.eval('p1 - dp')
+
+d['x1'] = d.eval('p1 / e1')
+d['x0'] = d.eval('p0 / e0')
+
+d['dx'] = d.eval('x1 - x0')
+d['xa'] = d.eval('(x0 + x1) / 2')
+d['gr'] = d.eval('dx / xa')
+
+d = d['gr']
+d.name = 'Wage growth rate'
+t_wage = d
+d.unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# estab averages
+d = df.copy()
+d = d.query('rurality == "ruca" and exit == 0')
+d = d.groupby(['year', 'rural'])[['size lbdnum', 'sum emp', 'sum pay']].sum()
+d['avg emp'] = d['sum emp'] / d['size lbdnum']
+d['avg pay'] = d['sum pay'] / d['size lbdnum'] * 1000
+d['avg wage'] = d['sum pay'] / d['sum emp'] * 1000
+
+d = d[['avg emp', 'avg pay', 'avg wage']]
+# d['avg emp'] = d['avg emp'].round(1)
+
+d = d.stack().unstack('rural')
+d.style.format('{:,.1f}')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# combined growth-churn table
+t = pd.concat([t_est, t_emp, t_pay, t_wage], axis=1)
+t = t.stack().unstack(['rural'])
+t.columns = t.columns.rename_categories({'R': 'rural', 'FR': 'formerly rural', 'U': 'urban'})
+t = t.unstack('year')
+t.columns.names = [None, None]
+t = t.sort_index(axis=1)
+t.index = [x[:-5] for x in t.index]
+t *= 100
+t.style.format('{:.1f}')
 ```
 
 # Wage

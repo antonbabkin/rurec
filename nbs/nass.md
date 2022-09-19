@@ -61,6 +61,8 @@ d[['SECTOR', 'SUMMARY', 'U_SUMMARY', 'DETAIL', 'DESCRIPTION', 'NAICS_CODE', 'NAI
 
 +++
 
+# Aggregate farm sales
+
 Census of agriculture comes as one giant text file. First need to find rows that correspond to Volume 1, Chapter 2, Table 2: "Market Value of Agricultural Products Sold Including Food Marketing Practices and Value-Added Products".
 
 ```{code-cell} ipython3
@@ -180,6 +182,8 @@ df.head()
 df.to_csv('../data/nass/agcensus_sales_by_bea.csv', index=False)
 ```
 
+# Validate farm sales
+
 To validate sales numbers computed from the NASS ag census, we compare national totals with what is reported by BEA.
 The match is not perfect, but not too bad either.
 
@@ -222,11 +226,4 @@ d = d.merge(d1, 'left', 'DETAIL')
 ax = d.set_index('DETAIL')[['NASS_SALES', 'BEA_TOTAL_USE']].dropna()\
     .plot(kind='bar', figsize=(12, 4), rot=0,
           title='Output by BEA detail industry within "111CA: Farms"')
-```
-
-```{code-cell} ipython3
-:tags: []
-
-#| column: body-outset
-d[['SECTOR', 'SUMMARY', 'U_SUMMARY', 'DETAIL', 'DESCRIPTION', 'NASS_SALES', 'BEA_TOTAL_USE']].fillna('')
 ```
