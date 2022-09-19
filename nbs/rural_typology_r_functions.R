@@ -573,31 +573,33 @@ reshaper <- function(industry_data_frame, cordname){
 
 
 #Select restricted total output matrix and cluster matched cores
-trimr <- function(specname, macc, singcc, ext, industry_levels){
+trimr <- function(specname, macc, singcc, ext, industry_levels, o_mat){
   tmat <- vector(mode='list', length=length(industry_levels))
   names(tmat) <- industry_levels
   
   for (l in 1:length(industry_levels)){
     if(!is.na(ext)){
       for(i in 1:length(ext)){
-        df <- Output_mat[[l]][, ext[[i]]] %>% as.matrix()
-        df[, 1:length(ext[[i]])] <- Output_mat[[l]][, ext[[i]]] %*% rep(c(1), each=length(ext[[i]]))
+        df <- o_mat[[l]][, ext[[i]]] %>% as.matrix()
+        df[, 1:length(ext[[i]])] <- as.matrix(o_mat[[l]][, ext[[i]]]) %*% rep(c(1), each=length(ext[[i]]))
         tmat[[l]] <-  cbind(tmat[[l]], df)
       }
     }
-    df <-  Output_mat[[l]][, setdiff(singcc, intersect(colnames(tmat[[l]]), singcc)), drop = FALSE]
+    df <-  o_mat[[l]][, setdiff(singcc, intersect(colnames(tmat[[l]]), singcc)), drop = FALSE]
     tmat[[l]] <-  cbind(tmat[[l]], df)
     
     tmat[[l]] <- tmat[[l]][, singcc] 
     
-    df <-  Output_mat[[l]][, setdiff(macc, colnames(tmat[[l]])), drop = FALSE]
+    df <-  o_mat[[l]][, setdiff(macc, colnames(tmat[[l]])), drop = FALSE]
     tmat[[l]] <-  cbind(tmat[[l]], df)
     
-    tmat[[l]] <- tmat[[l]][, colnames(tmat[[l]])[order(colnames(tmat[[l]]))]]
+    tmat[[l]] <- tmat[[l]][, colnames(tmat[[l]])[order(colnames(tmat[[l]]))]] %>% as.matrix()
   }
   assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
   
 }
+
+
 
 ############ Input Needs
 Input_Needs <- function(specname, o_mat, industry_levels){
@@ -661,20 +663,21 @@ Rel_Queeg <- function(specname, o_mat, im_mat, ex_mat, industry_levels){
 }
 
 
-Queeg_selectr <- function(specname, CoreMatch, MatchMat, cuml_core_out, queeg_mat, imp_mat, macc, singcc, industry_levels, out_mat){      
+Queeg_selectr <- function(specname, CoreMatch, MatchMat, cuml_core_out, perf_core_out, nomatch_core_out, th_iso, queeg_mat, imp_mat, macc, singcc, industry_levels, out_mat, isolation_th){      
   tmat <- vector(mode='list', length=length(industry_levels))
   names(tmat) <- industry_levels
   
   t2mat <- tmat
   t3mat <- tmat
   t4mat <- tmat
-  perf_core_out <- tmat 
-  nomatch_core_out <- tmat
+  t5mat <- tmat 
+  t6mat <- tmat
+  t7mat <- tmat
   
   for (l in 1:length(industry_levels)){
     #all non-zero row-total export counties
     t2mat[[l]] <- (queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% 
-      as.data.frame() %>% filter(rowSums(.) != 0) %>% as.matrix()
+      as.data.frame() %>% filter(rowSums(.) != 0) %>% as.matrix() %>% .[apply(., 1, function(x){!all(x<isolation_th)}),]
     
     t3mat[[l]] <- sparseMatrix(i = match(rownames(t2mat[[l]]), rownames(t2mat[[l]])),
                                j = match(c(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]), colnames(t2mat[[l]])),
@@ -688,15 +691,17 @@ Queeg_selectr <- function(specname, CoreMatch, MatchMat, cuml_core_out, queeg_ma
                              t3mat[[l]][order(rownames(t3mat[[l]])), order(colnames(t3mat[[l]]))]) %>% 
       .[, sort(unique(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]))] + out_mat[[l]][, sort(unique(colnames(t2mat[[l]])[apply(t2mat[[l]], 1, which.max)]))]
     
-    #output of unmatched non-cores
-    perf_core_out[[l]] <- out_mat[[l]][, rownames(as.data.frame(queeg_mat[[l]][macc,  singcc]) %>% filter(rowSums(.) == 0))]
+    #output of unmatched cores
+    t5mat[[l]] <- as.data.frame(queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% .[apply(., 1, function(x){all(x<isolation_th)}),]  %>% rownames() %>% setdiff(., colnames(t4mat[[l]])) %>% out_mat[[l]][, .]
     
     #output of unmatched cores
-    nomatch_core_out[[l]] <- out_mat[[l]][, setdiff(colnames(queeg_mat[[l]][, singcc]), colnames(t4mat[[l]]))] %>% as.data.frame()
+    t6mat[[l]] <- union(colnames(t4mat[[l]]), colnames(t5mat[[l]])) %>% setdiff(colnames(queeg_mat[[l]][, singcc]), .) %>% out_mat[[l]][,.]  %>% as.data.frame()
+      
+    t7mat[[l]] <- as.data.frame(queeg_mat[[l]][macc, singcc] * imp_mat[[l]][macc,  singcc]) %>% .[apply(., 1, function(x){all(x<isolation_th)}),]  %>% rownames() %>% out_mat[[l]][,.]  %>% as.data.frame()
     
-    tmat[[l]] <- cbind(t4mat[[l]], perf_core_out[[l]], nomatch_core_out[[l]]) %>% .[, sort(c(colnames(t4mat[[l]]), 
-                                                                                               colnames(perf_core_out[[l]]), 
-                                                                                               colnames(nomatch_core_out[[l]])
+    tmat[[l]] <- cbind(t4mat[[l]], t5mat[[l]], t6mat[[l]]) %>% .[, sort(c(colnames(t4mat[[l]]), 
+                                                                                               colnames(t5mat[[l]]), 
+                                                                                               colnames(t6mat[[l]])
     ))]
     
   }
@@ -705,12 +710,14 @@ Queeg_selectr <- function(specname, CoreMatch, MatchMat, cuml_core_out, queeg_ma
   assign(deparse(substitute(CoreMatch)), t2mat, envir=.GlobalEnv)
   assign(deparse(substitute(MatchMat)), t3mat, envir=.GlobalEnv) 
   assign(deparse(substitute(cuml_core_out)), t4mat, envir=.GlobalEnv) 
-  
+  assign(deparse(substitute(perf_core_out)), t5mat, envir=.GlobalEnv) 
+  assign(deparse(substitute(nomatch_core_out)), t6mat, envir=.GlobalEnv) 
+  assign(deparse(substitute(th_iso)), t7mat, envir=.GlobalEnv) 
   
 }
 
 ####Geographic and Economic hierarchy clustering
-hierarchr <- function(specname, mat_mat, spec_clust, qdf, ext, isolation_th){  
+hierarchr <- function(specname, mat_mat, spec_clust, qdf, ext, isolation_th, imp_mat){  
   
   RowMax <- vector(mode='list', length=length(industry_levels))
   names(RowMax) <- industry_levels
@@ -719,21 +726,32 @@ hierarchr <- function(specname, mat_mat, spec_clust, qdf, ext, isolation_th){
   names(tmat) <- industry_levels
   #tmat  <- RowMax
   
-  for (l in 1:length(industry_levels)){  
+  for (l in 3){ 
+    #for (l in 1:length(industry_levels)){  
     
+    if(!is.null(spec_clust)){
     RowMax[[l]] <-  rbind(
       cbind(place = rownames(mat_mat[[l]]), 
             match = colnames(mat_mat[[l]])[apply(mat_mat[[l]], 1, which.max)] 
       ) ,
-      cbind(place = spec_clust, 
-            match = spec_clust 
+      cbind(place = colnames(spec_clust[[l]]), 
+            match = colnames(spec_clust[[l]]) 
       ) %>% as.data.frame()
     )
-    
+    } else {
+      RowMax[[l]] <-  rbind(
+        cbind(place = rownames(mat_mat[[l]]), 
+              match = colnames(mat_mat[[l]])[apply(mat_mat[[l]], 1, which.max)] 
+        ) ,
+        cbind(place = spec_clust, 
+              match = spec_clust 
+        ) %>% as.data.frame()
+      ) 
+  }
     RowMax[[l]] <- RowMax[[l]][order(RowMax[[l]]$place),] 
     
     for (i in 1:nrow(RowMax[[l]])){
-      RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * Impede_mat[[4]][[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
+      RowMax[[l]]$q_value[i] <- (qdf[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]] * imp_mat[[l]][RowMax[[l]]$place[i], RowMax[[l]]$match[i]])
     }
     
     RowMax[[l]]$q_value[RowMax[[l]]$q_value == 0] <- "NA"
@@ -747,32 +765,38 @@ hierarchr <- function(specname, mat_mat, spec_clust, qdf, ext, isolation_th){
     }
     
     tmat[[l]] %<>% mutate(match_name = tmat[[l]]$NAME[match(match, tmat[[l]]$place)])
+    tmat[[l]]$match_name[tmat[[l]]$q_value == "NA" ] <- "Isolated"
     
-    tmat[[l]]$match_name[tmat[[l]]$q_value < isolation_th ] <- "Isolated"
+    tmat[[l]]$match_name[tmat[[l]]$NAME %in% unique(tmat[[l]]$match_name) & tmat[[l]]$match_name == "Isolated"] <- "ECA Isolated"
     
     tmat[[l]] <- tmat[[l]] %>% group_by(match) %>% mutate(m_count = n())
-   # tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match]
+       #tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1] & tmat[[l]]$place %in% tmat[[l]]$match]
     
-    tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match]
+    #tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match ] <- tmat[[l]]$NAME[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$match_name == "Isolated"] & tmat[[l]]$place %in% tmat[[l]]$match]
   
     
-    tmat[[l]] <- tmat[[l]] %>% group_by(match_name) %>% mutate(m_count = n())
-    tmat[[l]]$q_value[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "NA"
+    #tmat[[l]] <- tmat[[l]] %>% group_by(match_name) %>% mutate(m_count = n())
+    #tmat[[l]]$q_value[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "NA"
     tmat[[l]]$q_value[tmat[[l]]$q_value != "NA"] %<>% as.numeric() %>% round(digits = 4)
     tmat[[l]]$ind_level <- industry_levels[[l]]
     tmat[[l]]$lab <- tmat[[l]]$match_name
-    tmat[[l]]$match_name[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
-    tmat[[l]]$lab[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
-    tmat[[l]]$q_value[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- "NA"
-    # tmat[[l]]$match_name[tmat[[l]]$q_value < isolation_th ] <- "Isolated"
-    # tmat[[l]]$lab[tmat[[l]]$q_value < isolation_th] <- "Isolated"
-    # 
+    #tmat[[l]]$match_name[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
+    #tmat[[l]]$lab[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- tmat[[l]]$NAME[tmat[[l]]$place %in% unique(tmat[[l]]$match)]
+    #tmat[[l]]$q_value[tmat[[l]]$place %in% unique(tmat[[l]]$match)] <- "NA"
+      # tmat[[l]]$match_name[tmat[[l]]$q_value < isolation_th ] <- "Isolated"
+      # tmat[[l]]$lab[tmat[[l]]$q_value < isolation_th] <- "Isolated"
+      
     tmat[[l]]$a_value <- tmat[[l]]$q_value
-    tmat[[l]]$a_value[tmat[[l]]$lab == "Isolated"] <- "NA"
-    
-    tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
-    tmat[[l]]$lab[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
-    
+    # tmat[[l]]$a_value[tmat[[l]]$lab == "Isolated"] <- "NA"
+    # 
+    # tmat[[l]]$match_name[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
+    # tmat[[l]]$lab[tmat[[l]]$place %in% tmat[[l]]$place[tmat[[l]]$m_count == 1]] <- "Isolated"
+
+    tmat[[l]]$eca <- tmat[[l]]$lab
+    tmat[[l]]$eca[tmat[[l]]$NAME %in% unique(tmat[[l]]$lab)] <- tmat[[l]]$NAME[tmat[[l]]$NAME %in% unique(tmat[[l]]$lab)]
+    if(isTRUE(tmat[[l]]$NAME %in% unique(tmat[[l]]$match_name) & tmat[[l]]$match_name == "Isolated")){
+       tmat[[l]]$eca[tmat[[l]]$lab == "ECA Isolated"] <- tmat[[l]]$NAME[tmat[[l]]$lab == "ECA Isolated"]
+    }
   }
   
   assign(deparse(substitute(specname)), tmat, envir=.GlobalEnv)
@@ -891,17 +915,18 @@ graphr <- function(specname, top_absorb, TIGER_RUCC, my_pal, macc, industry_leve
 
 
 
-
-
 ####Custom color/county pallet 
 cus_pal_maps <- function(specname, values, placenames){
   df <- c()
-  for(m in 1:length(setdiff(unique(placenames), c("Isolated")))){
+  for(m in 1:length(setdiff(unique(placenames), c("Isolated", "ECA Isolated")))){
     df[m] =  values[m]
   }
-  names(df) <- sort(setdiff(unique(placenames), c("Isolated")))
-  if(isTRUE("Isolated" %in%  unique(placenames))){
+  names(df) <- sort(setdiff(unique(placenames), c("Isolated", "ECA Isolated")))
+  if(isTRUE("Isolated" %in%  unique(placenames) )){
     df <- c(df, "Isolated" = "#000000")
+  }
+  if(isTRUE("ECA Isolated" %in%  unique(placenames))){
+    df <- c(df, "ECA Isolated" = "#A9A9A9")
   }
   assign(deparse(substitute(specname)), df, envir=.GlobalEnv) 
 }
@@ -948,6 +973,48 @@ mapr2 <- function(specname, shade, hatch, hm, my_pal){
   assign(deparse(substitute(specname)), df, envir=.GlobalEnv)     
 } 
 
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+maprECA <- function(specname, shade, hatch, hm, my_pal){
+  df <- vector(mode='list', length=length(industry_levels))
+  names(df) <- industry_levels
+  
+  for (l in 1:length(industry_levels)){  
+    df[[l]] <- ggplot( hm[[l]] ) +
+      { if(isFALSE(shade))
+        geom_sf_interactive(aes(fill = eca, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) }+ 
+      { if(isTRUE(shade))
+        geom_sf_interactive(aes(fill = eca, 
+                                alpha = a_value, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {match_name}\nValue: {q_value}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) }+ 
+      { if(isTRUE(hatch))
+        geom_sf_pattern(data = filter(hm[[l]], place %in% unique(hm[[l]]$match)) ,
+                        aes(fill = eca
+                        ), pattern = 'crosshatch',
+                        pattern_density = 0.01, 
+                        pattern_spacing = 0.03,
+                        pattern_fill    = 'black',
+                        pattern_colour  = 'black'
+        )}+ 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      labs(fill = "Cluster",
+           caption = paste0(isolation_th*100,"% Isolation Threshold")) +
+      scale_fill_manual(values = my_pal)
+  }
+  assign(deparse(substitute(specname)), df, envir=.GlobalEnv)     
+} 
 
 
 
