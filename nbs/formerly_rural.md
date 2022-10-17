@@ -22,7 +22,7 @@ Classification of areas into three groups: rural (R), formerly rural (FR) and ur
 import numpy as np
 import pandas as pd
 
-from rurec.pubdata import geography
+from rurec.pubdata import geography, population
 from rurec.pubdata import ers_rurality
 from rurec.pubdata import naics
 from rurec.pubdata import bds
@@ -52,6 +52,28 @@ def rural_cbsa():
     df.loc[~df['RURAL_2000'] & df['RURAL_2010'], 'RURAL_CHNG'] = 'FU'
     df.loc[~df['RURAL_2000'] & ~df['RURAL_2010'], 'RURAL_CHNG'] = 'U'
     return df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# counties
+df = rural_cbsa()
+d = df.groupby(['RURAL_2000', 'RURAL_2010']).size()
+d.unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# population shares
+df = rural_cbsa()
+d = population.get_df().rename(columns=str.upper).query('YEAR == 2005')
+d['STCTY'] = d['ST'] + d['CTY']
+df = df.merge(d[['STCTY', 'POP']])
+d = df.groupby(['RURAL_2000', 'RURAL_2010'])['POP'].sum()
+d /= d.sum() / 100
+d.unstack().round(1)
 ```
 
 ## Map of R/FR/FU/U.
@@ -256,6 +278,36 @@ m = d.explore(m=m, name='UA 2010', column='UATYP')
 
 folium.LayerControl(collapsed=False).add_to(m)
 m
+```
+
+# OMB vs RUCA
+
+```{code-cell} ipython3
+:tags: []
+
+df = ers_rurality.get_ruca_df().rename(columns={'FIPS': 'TRACT'})
+df['RUCA_CODE'] = df['RUCA_CODE'].astype(float).astype(int).astype(str)
+df['RURAL_RUCA'] = df['RUCA_CODE'].isin(['1', '2', '3']).map({True: 'u', False: 'r'})
+df['STCTY'] = df['TRACT'].str[:5]
+df = df.merge(rural_cbsa(), 'left', 'STCTY')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# number of tracts
+d = df.query('YEAR == 2010')
+d.groupby(['RURAL_2010', 'RURAL_RUCA']).size().unstack()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# number of tracts
+d = df.query('YEAR == 2010')
+d = d.groupby(['RURAL_2010', 'RURAL_RUCA'])['POPULATION'].sum()
+d /= d.sum() / 100
+d.unstack().round(1).iloc[:, [1,0]]
 ```
 
 +++ {"tags": []}
