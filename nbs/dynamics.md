@@ -58,6 +58,12 @@ def get_deflator():
     return d
 ```
 
+```{code-cell} ipython3
+:tags: []
+
+get_deflator()
+```
+
 # Rurality definition
 
 County based OMB CBSA. Rural = nonmetro.
@@ -923,4 +929,326 @@ tb = pd.concat(tb, axis=1, names=['OMB rurality revision'])
 fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 t.rename(columns={True: 'rural', False: 'urban'}).plot(ax=ax[0], title='Mean real wage, $2021\nQCEW', grid=True);
 tb.plot(ax=ax[1], legend=True, grid=True, title='Rural-to-urban mean wage ratio\nQCEW');
+```
+
+# farm vs 115 labor
+
++++
+
+Farm **hired** labor expenses: download ag census extract from [QuickStats](https://quickstats.nass.usda.gov).
+
+Select: CENSUS, ECONOMICS, EXPENSES, LABOR, "LABOR, HIRED - EXPENSE, MEASURED IN $", TOTAL, COUNTY.  
+5 years (1997 - 2017), 15357 rows.
+
+```{code-cell} ipython3
+:tags: []
+
+y0, y1 = 2007, 2017
+
+df = pd.read_csv(nbd.root / 'data/source/agcensus/00FEBD20-D894-3CE4-BA56-3275DB9D7A3B.csv', 
+                 dtype=str,
+                 usecols=['Year', 'State ANSI', 'County ANSI', 'Value'])
+df = df.rename(columns=str.upper).rename(columns={'STATE ANSI': 'ST', 'COUNTY ANSI': 'CTY', 'VALUE': 'HIRED_LABOR_EXPENSE'})
+df['YEAR'] = df['YEAR'].astype('int16')
+df['HIRED_LABOR_EXPENSE'] = pd.to_numeric(df['HIRED_LABOR_EXPENSE'].str.replace(',', ''), 'coerce')
+df['STCTY'] = df['ST'] + df['CTY']
+df = df.query('CTY.notna() and (YEAR == @y0 or YEAR == @y1)')
+df = df.set_index(['STCTY', 'YEAR'])['HIRED_LABOR_EXPENSE'].unstack('YEAR')
+df['FARM_LABOR_AVG'] = (df[y0] + df[y1]) / 2
+df['FARM_LABOR_GR'] = (df[y1] - df[y0]) / df['FARM_LABOR_AVG']
+df_farm = df
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# validate 1151 size in QCEW by county
+cols = {
+    'agglvl_code': str,
+    'industry_code': str,
+    'annual_avg_estabs': 'int64',
+}
+d = pd.read_csv(get_qcew_src(y), usecols=cols.keys(), dtype=cols)
+d = d.query('agglvl_code == "76" and industry_code == "1151"')
+x = d['annual_avg_estabs'].sum()
+print(x, x > 10_000)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# many zero wages: must be suppression, because our LBD results only include payroll-positive estabs.
+cols = {
+    'area_fips': str, 
+    'agglvl_code': str,
+    'industry_code': str,
+    'annual_avg_estabs': 'int64',
+    'annual_avg_emplvl': 'int64', 
+    'total_annual_wages': 'int64',
+}
+d = pd.read_csv(get_qcew_src(2017), usecols=cols.keys(), dtype=cols)
+d = d.query('agglvl_code == "75" and industry_code == "115"')
+pd.crosstab(d['annual_avg_estabs'] > 0, d['total_annual_wages'] > 0)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# California has many more positive wage counties
+# may be because ag workers are covered by unemployment insurance...
+d1 = d[d['area_fips'].str[:2] == '06']
+pd.crosstab(d1['annual_avg_estabs'] > 0, d1['total_annual_wages'] > 0)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# ...or maybe just because CA counties are big. counties with 1-2 estabs also have zero wage.
+d1.sort_values('annual_avg_estabs').head(15)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d1 = d[d['area_fips'].str[:2] == '04']
+pd.crosstab(d1['annual_avg_estabs'] > 0, d1['total_annual_wages'] > 0)
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = {}
+for y in [y0, y1]:
+    cols = {
+        'area_fips': str, 
+        'agglvl_code': str,
+        'industry_code': str,
+        'annual_avg_estabs': 'int64',
+        'annual_avg_emplvl': 'int64', 
+        'total_annual_wages': 'int64',
+    }
+    d = pd.read_csv(get_qcew_src(y), usecols=cols.keys(), dtype=cols)
+    d = d.query('agglvl_code == "75" and industry_code == "115"')
+    d = d.rename(columns=str.upper).rename(columns={'AREA_FIPS': 'STCTY'})
+    d = d.set_index('STCTY')['TOTAL_ANNUAL_WAGES']
+    # de-duplicate counties. need to review why they appear
+    d = d.groupby('STCTY').max()
+    df[y] = d
+df = pd.concat(df, axis=1)
+df['PAY_115_AVG'] = (df[y0] + df[y1]) / 2
+df['PAY_115_GR'] = (df[y1] - df[y0]) / df['PAY_115_AVG']
+df_115 = df
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = pd.concat([df_farm[['FARM_LABOR_AVG', 'FARM_LABOR_GR']], df_115[['PAY_115_AVG', 'PAY_115_GR']]], axis=1)
+pd.crosstab(df['FARM_LABOR_GR'].notna(), df['PAY_115_GR'].notna())
+```
+
+```{code-cell} ipython3
+:tags: []
+
+import statsmodels.formula.api as smf
+
+ax = df.plot.scatter(x='PAY_115_GR', y='FARM_LABOR_GR', figsize=(12, 8))
+
+
+df_reg = df.copy()
+
+m = smf.wls('FARM_LABOR_GR ~ PAY_115_GR', df_reg, weights=df_reg['FARM_LABOR_AVG'])
+r = m.fit()
+dp = pd.DataFrame([[-2], [2]], columns=['PAY_115_GR'])
+dp['FARM_LABOR_GR'] = r.predict(dp)
+p0 = r.params['PAY_115_GR']
+ax.plot(dp['PAY_115_GR'], dp['FARM_LABOR_GR'], color='red', label=f'All slope = {p0:.3f}')
+
+df_reg = df[df['PAY_115_GR'].between(-2, 2, 'neither')].copy()
+m = smf.wls('FARM_LABOR_GR ~ PAY_115_GR', df_reg, weights=df_reg['FARM_LABOR_AVG'])
+r = m.fit()
+dp = pd.DataFrame([[-2], [2]], columns=['PAY_115_GR'])
+dp['FARM_LABOR_GR'] = r.predict(dp)
+p1 = r.params['PAY_115_GR']
+ax.plot(dp['PAY_115_GR'], dp['FARM_LABOR_GR'], color='blue', label=f'Cont slope = {p1:.3f}')
+
+
+ax.legend()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+# California
+df_reg = df[df.index.str[:2] == '06'].copy()
+
+ax = df_reg.plot.scatter(x='PAY_115_GR', y='FARM_LABOR_GR', figsize=(12, 8))
+
+
+m = smf.wls('FARM_LABOR_GR ~ PAY_115_GR', df_reg, weights=df_reg['FARM_LABOR_AVG'])
+r = m.fit()
+dp = pd.DataFrame([[-2], [2]], columns=['PAY_115_GR'])
+dp['FARM_LABOR_GR'] = r.predict(dp)
+p0 = r.params['PAY_115_GR']
+ax.plot(dp['PAY_115_GR'], dp['FARM_LABOR_GR'], color='red', label=f'All slope = {p0:.3f}')
+
+ax.legend();
+```
+
+## contract labor
+
+Farm contract labor expenses: download ag census extract from [QuickStats](https://quickstats.nass.usda.gov).
+
+Select: CENSUS, ECONOMICS, EXPENSES, LABOR, "LABOR, CONTRACT - EXPENSE, MEASURED IN $", TOTAL, COUNTY.  
+5 years (1997 - 2017), 15256 rows.
+
+```{code-cell} ipython3
+:tags: []
+
+y = 2012
+
+df = pd.read_csv(nbd.root / 'data/source/agcensus/3B379C7A-0814-3E9F-B7B3-31E16E23BC2A.csv', 
+                 dtype=str,
+                 usecols=['Year', 'State ANSI', 'County ANSI', 'Value'])
+df = df.rename(columns=str.upper).rename(columns={'STATE ANSI': 'ST', 'COUNTY ANSI': 'CTY', 'VALUE': 'CONTRACT_LABOR_EXPENSE'})
+df['YEAR'] = df['YEAR'].astype('int16')
+df['CONTRACT_LABOR_EXPENSE'] = pd.to_numeric(df['CONTRACT_LABOR_EXPENSE'].str.replace(',', ''), 'coerce')
+df['STCTY'] = df['ST'] + df['CTY']
+df = df.query('CTY.notna() and YEAR == @y')
+df_farm = df
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+cols = {
+    'area_fips': str, 
+    'agglvl_code': str,
+    'industry_code': str,
+    'annual_avg_estabs': 'int64',
+    'annual_avg_emplvl': 'int64', 
+    'total_annual_wages': 'int64',
+}
+df = pd.read_csv(get_qcew_src(y), usecols=cols.keys(), dtype=cols)
+df = df.query('agglvl_code == "75" and industry_code == "115"')
+df = df.rename(columns=str.upper).rename(columns={'AREA_FIPS': 'STCTY', 'TOTAL_ANNUAL_WAGES': 'PAY_115'})
+df = df[['STCTY', 'PAY_115']]
+# de-dup
+df = df.groupby('STCTY')['PAY_115'].max().reset_index()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df_115 = df
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = df_farm.merge(df_115, 'left', 'STCTY')
+```
+
+### contract vs 115
+
+```{code-cell} ipython3
+:tags: []
+
+ax = df.plot.scatter(x='PAY_115', y='CONTRACT_LABOR_EXPENSE')
+ax.set_xscale('log')
+ax.set_yscale('log')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df['LABOR_PROD'] = df['CONTRACT_LABOR_EXPENSE'] / df['PAY_115']
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df[df['LABOR_PROD'].between(0, 100)]['LABOR_PROD'].describe()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+'MEASUREMENT OF AGGREGATE AND INDUSTRY-LEVEL PRODUCTIVITY GROWTH'.capitalize()
+```
+
+### diff vs diff
+
+```{code-cell} ipython3
+:tags: []
+
+df = {}
+for y in [y0, y1]:
+    cols = {
+        'area_fips': str, 
+        'agglvl_code': str,
+        'industry_code': str,
+        'annual_avg_estabs': 'int64',
+        'annual_avg_emplvl': 'int64', 
+        'total_annual_wages': 'int64',
+    }
+    d = pd.read_csv(get_qcew_src(y), usecols=cols.keys(), dtype=cols)
+    d = d.query('agglvl_code == "75" and industry_code == "115"')
+    d = d.rename(columns=str.upper).rename(columns={'AREA_FIPS': 'STCTY'})
+    d = d.set_index('STCTY')['TOTAL_ANNUAL_WAGES']
+    # de-duplicate counties. need to review why they appear
+    d = d.groupby('STCTY').max()
+    df[y] = d
+df = pd.concat(df, axis=1)
+df['PAY_115_AVG'] = (df[y0] + df[y1]) / 2
+df['PAY_115_D'] = (df[y1] - df[y0])
+df['PAY_115_GR'] = df['PAY_115_D'] / df['PAY_115_AVG']
+df_115 = df
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+y0, y1 = 2007, 2017
+
+df = pd.read_csv(nbd.root / 'data/source/agcensus/3B379C7A-0814-3E9F-B7B3-31E16E23BC2A.csv', 
+                 dtype=str,
+                 usecols=['Year', 'State ANSI', 'County ANSI', 'Value'])
+df = df.rename(columns=str.upper).rename(columns={'STATE ANSI': 'ST', 'COUNTY ANSI': 'CTY', 'VALUE': 'CONTRACT_LABOR_EXPENSE'})
+df['YEAR'] = df['YEAR'].astype('int16')
+df['CONTRACT_LABOR_EXPENSE'] = pd.to_numeric(df['CONTRACT_LABOR_EXPENSE'].str.replace(',', ''), 'coerce')
+df['STCTY'] = df['ST'] + df['CTY']
+df = df.query('CTY.notna() and (YEAR == @y0 or YEAR == @y1)')
+df = df.set_index(['STCTY', 'YEAR'])['CONTRACT_LABOR_EXPENSE'].unstack('YEAR')
+df['FARM_LABOR_AVG'] = (df[y0] + df[y1]) / 2
+df['FARM_LABOR_D'] = (df[y1] - df[y0])
+df_farm = df
+df.head()
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df = pd.concat([df_farm[['FARM_LABOR_AVG', 'FARM_LABOR_D']], df_115[['PAY_115_AVG', 'PAY_115_D']]], axis=1)
+pd.crosstab(df['FARM_LABOR_D'].notna(), df['PAY_115_D'].notna())
+```
+
+```{code-cell} ipython3
+:tags: []
+
+d = df.query('FARM_LABOR_D < 0.5e8 and PAY_115_D < .5e8')
+ax = d.plot.scatter('FARM_LABOR_D', 'PAY_115_D')
+ax.plot([-4e7, 4e7], [-4e7, 4e7])
+# ax.set_xscale('log')
+# ax.set_yscale('log')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+df.corr()
 ```
