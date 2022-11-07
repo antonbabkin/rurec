@@ -51,20 +51,20 @@ Toy_Total_mat <-  solve(diag(ncol(Toy_Direct_mat)) - Toy_Direct_mat)
 
 ```
 
-"National Total Requirements Table" (BEA): $\mathbf{L} = [l_{ij}]$
+"National Industry-by-Industry Total Requirements Table" (BEA): $\mathbf{T}$
 
 ```{r}
 Toy_Total_mat %>% round(2)
 ```
 
-"National Direct Requirements Table": $\mathbf{A} = \mathbf{I} - (\mathbf{L})^{-1}$
+"National Industry-by-Industry Direct Requirements Table": $\mathbf{D} = \mathbf{I} - (\mathbf{T})^{-1}$
 
 ```{r}
 Toy_Direct_mat %>% round(3)
 
 ```
 
-"Industry-by-Location Output Table (from CBP or LBD)": $\mathbf{X} = [x^{r}_{i}]$
+"Industry-by-County Output Table" (CBP): $\mathbf{Y}$
 
 ```{r}
 Region_Count <- 3
@@ -79,28 +79,28 @@ colnames(Toy_X_mat) <- c("Albany", "Brown", "Cook")
 Toy_X_mat
 ```
 
-"Input Needs Table": $\mathbf{A}\mathbf{x}^{r}$
+"Industry-by-County Input Needs Table": $\mathbf{D}\mathbf{Y}$
 
 ```{r}
 Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
 Toy_Input_mat  %>% round(2)
 ```
 
-"Net Import Shortage Table": $\max \{\mathbf{A}\mathbf{x}^{r} - \mathbf{x}^{r} , 0\}$
+"Net Input Demand Table": $\max \{\mathbf{D}\mathbf{Y} - \mathbf{Y} , 0\}$
 
 ```{r}
 Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
 Toy_Input_mat_imp  %>% round(2)
 ```
 
-"Net Input Excess Table": $\max \{ \mathbf{x}^{r} - \mathbf{A}\mathbf{x}^{r}, 0\}$
+"Net Input Supply Table": $\max \{ \mathbf{Y} - \mathbf{D}\mathbf{Y}, 0\}$
 
 ```{r}
 Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
 Toy_Input_mat_exp  %>% round(2)
 ```
 
-Absorption matrix: $\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$
+County $r$ Absorption matrix: $\mathbf{A}^{r} = \min\{\text{NIE}^{r}, \textbf{NIS} \}$
 
 ```{r}
 
@@ -123,7 +123,7 @@ Toy_Absorb
 
 ```
 
-"Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+"Total Absorption matrix": $\mathbf{A} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \}~ \forall ~ r$
 
 ```{r}
 
@@ -142,8 +142,7 @@ Toy_Queeg  %>% round(2)
 
 ```
 
-
-"Relative Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / \text{NIE}^{r} \}~ \forall ~ r,s \in l$
+"Normalized Absorption Shares": $\mathbf{\alpha} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \} / \text{NIE}^{r} ~ \forall ~ r$
 
 ```{r}
 
@@ -165,8 +164,7 @@ Toy_Queeg_R  %>% round(2)
 
 ```
 
-
-"Impedance matrix": $e^{-d^{rs}}$
+"Geographical Impedance matrix": $\mathbf{Q} = e^{-d^{rs}}$
 
 ```{r}
 Toy_Lat <- c(42.3, 44.49, 41.84 )
@@ -180,15 +178,14 @@ Toy_Q <- exp(-Toy_Dist_mat)
 Toy_Q  %>% round(3)
 ```
 
-"Spatial Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} Q^{rs}\}~ \forall ~ r,s \in l$
+"Spatial Absorption matrix": $\mathbf{AQ}$
 
 ```{r}
 (Toy_Queeg * Toy_Q ) %>% round(2)
 
 ```
 
-
-"Spatial Relative Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} / \text{NIE}^{r} \}~ \forall ~ r,s \in l$
+"Spatial Normalized Absorption Shares": $\mathbf{\alpha Q}$
 
 ```{r}
 
@@ -196,13 +193,9 @@ Toy_Q  %>% round(3)
 
 ```
 
+"Connectedness Classification"
+```{r}
+(data.frame(County = colnames((Toy_Queeg_R * Toy_Q )), Match = colnames((Toy_Queeg_R * Toy_Q ))[apply((Toy_Queeg_R * Toy_Q ), 1, which.max)]))
 
-
-
-
-
-
-
-
-
+```
 
