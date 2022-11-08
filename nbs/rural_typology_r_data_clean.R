@@ -13,10 +13,13 @@ log_info("Define data clean start")
 
 # Connect and parse code from another file 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_import.R"))
+### To substitute once all data is centralized in pubdata 
+#source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
+# Define data directory path
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
-# Import and cleanup "pubdata" County Business Patterns data
+# Import and cleanup pubdata County Business Patterns data
 if (!file.exists(file.path(data_dir, "CBP_2019p"))){
   CBP_2019p <- cbp$get_df("county", 2019L)
   CBP_2019p %<>% rename(NAICS = industry)
@@ -105,6 +108,9 @@ if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA"))){
 }
 log_info("Sector level CBP/BEA crosswalk complete")
 
+### Test example of censoring/noise-infusion data loss
+# sum(CBP_2019p_Concord_Detail_XBEA$ap) / sum(filter(CBP_2019p, NAICS == '-')$ap)
+# sum(CBP_2019p_Concord_Detail_XBEA$emp) / sum(filter(CBP_2019p, NAICS == '-')$emp)
 
 # Import and cleanup "pubdata" TIGER data
 if (!file.exists(file.path(data_dir, "TIGERDatap"))){
@@ -116,6 +122,9 @@ if (!file.exists(file.path(data_dir, "TIGERDatap"))){
   rm(TIGERDatap) 
 }
 log_info("Import 'pubdata' TIGER complete")
+
+### Test example of missing CBP coverage 
+# setdiff(unique(TIGERDatap$place), unique(CBP_2019p_Concord_Detail_XBEA$place) )
 
 
 # Produce  Distance  Matrix
@@ -139,7 +148,7 @@ log_info("Proximity Matrix complete")
 
 
 
-# Import and cleanup "pubdata" RUCC data
+# Import and cleanup pubdata RUCC data
 if (!file.exists(file.path(data_dir, "RUCCDatap"))){
   RUCCDatap <- ers_rurality$get_ruc_df()
   RUCCDatap %<>% filter(RUC_YEAR=="2013")
@@ -153,7 +162,7 @@ log_info("Import 'pubdata' RUCC complete")
 # TIGER  and RUCC
 if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
   TIGER_RUCC <- inner_join(readRDS(file.path(data_dir, "TIGERDatap")), readRDS(file.path(data_dir, "RUCCDatap")), by = "place")
-  ### Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515")
+  ### Note: Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515")
   ##setdiff(TIGERDatap$place, RUCCDatap$place)
   ##setdiff(RUCCDatap$place, TIGERDatap$place)
   TIGER_RUCC <- TIGER_RUCC[order(TIGER_RUCC$place), ]
