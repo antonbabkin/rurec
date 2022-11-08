@@ -66,6 +66,14 @@ importr(Queeg)
 importr(Queeg_rel)
 importr(Input_mat_exp)
 importr(Input_mat_imp)
+importr(Queego)
+importr(Queeg_relo)
+
+Queeg_list <- list(Queeg, Queeg_rel)
+names(Queeg_list) <- c("Queeg",  "Queeg_rel")
+
+Queeg_listo <- list(Queego, Queeg_relo)
+names(Queeg_listo) <- c("Queego",  "Queeg_relo")
 
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
@@ -105,9 +113,10 @@ In  practice, we derive a national-level, industry-by-industry direct requiremen
 First, we specify the place specific *input needs vector* as: 
 $$\mathbf{Ax^{r}}$$
 In addition, we define the *net import shortage vector* as: 
-$$\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$$  
+$$\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$$ 
+
 Similarly, we define the *net input excess vector* as: 
-$$\text{NIS}^{r} = \max \{\mathbf{Ax^{r}} - \mathbf{x^{r}}, 0\}$$
+$$\text{NIE}^{r} = \max \{\mathbf{x^{r} - \mathbf{Ax^{r}}}, 0\}$$
 
 **Cross location industry compatibility**
 
@@ -154,8 +163,7 @@ all_extent <- c(rural_extent, primary_extent) %>% as.vector()
 
 industry_levels  <-  c("Sector", "Summary", "Detail")
 
-Queeg_list <- list(Queeg, Queeg_rel)
-names(Queeg_list) <- c("Queeg",  "Queeg_rel")
+
 
 
 ```
@@ -222,36 +230,113 @@ names(test_industry) <- industry_levels
 
 for (l in 1:length(Total_mat)){
     primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
-    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
-    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+    #primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+    primary_c[[l]]$industry_label <- rownames(primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
 }
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
     test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
-    colnames( test_industry[[l]][[p]]) <- c("value")
-    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+    colnames( test_industry[[l]][[p]]) <- c("NIE")
+    test_industry[[l]][[p]]$industry_label <- rownames(test_industry[[l]][[p]])
+    #test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+    
   }
   names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
 }
 
 ggbase <- test_industry
+ggtop <- ggbase
+```
+
+```{r}
+
+df <- vector(mode='list', length=length(Total_mat))
+names(df) <- industry_levels
+
+test <- vector(mode='list', length=length(Total_mat))
+names(test) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    df[[l]][[p]] <- inner_join(test_industry[[l]][[p]], primary_c[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
+    df[[l]][[p]]$absorb <- pmin(df[[l]][[p]]$NIE, df[[l]][[p]]$NIS)
+    test[[l]][[p]] <- df[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
+  }
+}
+
+
+for (l in 3){
+  for (p in 1:length(rural_extent)){
+    county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+     ggtop[[l]][[p]] <- ggplot(test[[l]][[p]]) +
+      geom_col_interactive(aes(x = industry_label,
+                               y = (NIE)),
+                               fill = "grey") +
+ 
+      geom_point_interactive(
+                 aes(x = industry_label,
+                     y = (NIS),
+                     color = core_fips), 
+                     size  = 3.5) +
+      labs(x = "Industry Sector", y = "Input Value") +
+      scale_y_continuous() +
+       labs(title = "Absorption Distribution Capacitance",
+            subtitle = glue("Net Input Excess: {county}"),
+            color = "Net Import Shortage") +
+
+       scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+       theme_minimal() +
+        theme(axis.text.x = element_text(angle=45, hjust=1))
+    }
+}
+
+print(ggtop[[3]]$`55027`)
+
+
+
 ```
 
 
 ```{r}
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(rural_extent)){
+#     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+#       geom_col_interactive(aes(x = industry,
+#                                y = (value)),
+#                                fill = "grey") +
+#       geom_point_interactive(data = filter(primary_c[[l]], value != 0),
+#                  aes(x = industry,
+#                      y = (value),
+#                      color = variable), 
+#                      size  = 3.5) +
+#       labs(x = "Industry Sector", y = "Input Value") +
+#       scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
+#       scale_y_continuous() +
+#        labs(title = "Absorption Distribution Capacitance",
+#             subtitle = glue("Net Input Excess: {county}"),
+#             color = "Net Import Shortage") +
+#        scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+#        theme_minimal()
+#     }
+# }
+
+
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-      geom_col_interactive(aes(x = industry,
-                               y = (value)),
+      geom_col_interactive(aes(x = industry_label,
+                               y = (NIE)),
                                fill = "grey") +
-      geom_point_interactive(data = filter(primary_c[[l]], value != 0),
-                 aes(x = industry,
-                     y = (value),
-                     color = variable), 
+      geom_point_interactive(data = primary_c[[l]],
+                 aes(x = industry_label,
+                     y = (NIS),
+                     color = core_fips), 
                      size  = 3.5) +
       labs(x = "Industry Sector", y = "Input Value") +
       scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
@@ -266,7 +351,8 @@ for (l in 1:length(Total_mat)){
 
 
 
-print(ggbase[[1]]$`55027`)
+
+#print(ggbase[[1]]$`55027`)
 
 ```
 
@@ -304,6 +390,44 @@ WI_Queeg_Plots_XINT[[2]]
 ```{r}
 rm(WI_Queeg_Plots, WI_Queeg_Plots_XINT) %>% suppressWarnings()
 ```
+
+
+Location specific total output vector specified by annual industry payroll is now adjusted for labor share quotient
+
+```{r queego maps}
+
+if (!file.exists(file.path(data_dir, "WI_Queego_Plots_XINT"))){
+  if (!exists("WI_Queego_Plots")){
+    cmapr(WI_Queego_Plots,  list_of_sim_specifications = Queeg_listo)
+  }
+  if (!exists("WI_Queego_Plots_XINT")){
+    dismapr(WI_Queego_Plots)
+  }
+  saver(WI_Queego_Plots_XINT)
+} else {
+  importr(WI_Queego_Plots_XINT)
+}
+
+```
+
+"Queeg distance": $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queego_Plots_XINT[[1]] 
+```
+
+"Relative Queeg distance":  $\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}/\mathbf{i'}\text{NIE}^{r}\}~ \forall ~ r,s \in l$
+
+```{r}
+WI_Queego_Plots_XINT[[2]] 
+```
+
+```{r}
+rm(WI_Queego_Plots, WI_Queego_Plots_XINT) %>% suppressWarnings()
+```
+
+
+
 
 Note: Alpha shading is not consistent *between* categories only within.  
 
@@ -518,23 +642,47 @@ WI_Test_Sens_XINT[[11]]
 
 ### WI Hierarchical
 
-In this 2-stage analysis, the counties of Wisconsin are first matched internally. Metro counties in areas with a population of 1 million or more (RUC  Code: 1) serve as first-order cores which all other counties are matched based on their capacitance.  
+In this 2-stage analysis, the counties of Wisconsin are first matched internally. Metro counties in areas with a population of under a 1 million serve as first-order cores which all other counties are matched based on their capacitance.  
 We then perform a second analysis where all Wisconsin counties are matched to Cook and Hennepin counties based on their capacitance.
 Finally, we perform a second-level hierarchical analysis where clusters and non-matched counties from the first-level internal matching for Wisconsin are then matched to Cook and Hennepin counties based on their capacitance.
 
 
 
 ```{r hierarchical extent}
-rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
-                grep("55059", ., value=TRUE, invert = TRUE) %>% 
-                grep("55079", ., value=TRUE, invert = TRUE) %>% 
-                grep("55089", ., value=TRUE, invert = TRUE) %>%
-                grep("55093", ., value=TRUE, invert = TRUE) %>%
-                grep("55109", ., value=TRUE, invert = TRUE) %>%
-                grep("55131", ., value=TRUE, invert = TRUE) %>%
-                grep("55133", ., value=TRUE, invert = TRUE) 
+# rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+#                 grep("55059", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55079", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55089", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55093", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55109", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55131", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55133", ., value=TRUE, invert = TRUE) 
+# 
+# primary_extent <- c("55059", "55079", "55089", "55093", "55109", "55131", "55133")
+# names(primary_extent) <- primary_extent
 
-primary_extent <- c("55059", "55079", "55089", "55093", "55109", "55131", "55133")
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("55009", ., value=TRUE, invert = TRUE) %>% 
+                  grep("55025", ., value=TRUE, invert = TRUE) %>%
+                  grep("55031", ., value=TRUE, invert = TRUE) %>%
+                grep("55035", ., value=TRUE, invert = TRUE) %>%
+                grep("55039", ., value=TRUE, invert = TRUE) %>%
+                grep("55059", ., value=TRUE, invert = TRUE) %>%
+                grep("55063", ., value=TRUE, invert = TRUE) %>% 
+                grep("55073", ., value=TRUE, invert = TRUE) %>%
+                  grep("55079", ., value=TRUE, invert = TRUE) %>%
+                grep("55087", ., value=TRUE, invert = TRUE) %>% 
+                  grep("55089", ., value=TRUE, invert = TRUE) %>% 
+                grep("55105", ., value=TRUE, invert = TRUE) %>% 
+                grep("55117", ., value=TRUE, invert = TRUE) %>%
+                  grep("55131", ., value=TRUE, invert = TRUE) %>% 
+                  grep("55133", ., value=TRUE, invert = TRUE) %>% 
+                grep("55139", ., value=TRUE, invert = TRUE)
+
+  
+hold_extent <- c("55025", "55031", "55079", "55089", "55131", "55133")
+
+primary_extent <- c("55009","55035", "55039", "55059", "55063","55073", "55087", "55105", "55117", "55139")
 names(primary_extent) <- primary_extent
 
 all_extent <- c(rural_extent, primary_extent) %>% as.vector()
@@ -543,8 +691,8 @@ all_extent <- c(rural_extent, primary_extent) %>% as.vector()
 
 
 
-```{r}
 
+```{r}
 primary_c <- vector(mode='list', length=length(Total_mat))
 names(primary_c) <- industry_levels
 
@@ -553,48 +701,123 @@ names(test_industry) <- industry_levels
 
 for (l in 1:length(Total_mat)){
     primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
-    primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
-    primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+    #primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+    primary_c[[l]]$industry_label <- rownames(primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
 }
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
     test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
-    colnames( test_industry[[l]][[p]]) <- c("value")
-    test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+    colnames( test_industry[[l]][[p]]) <- c("NIE")
+    test_industry[[l]][[p]]$industry_label <- rownames(test_industry[[l]][[p]])
+    #test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+    
   }
   names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
 }
 
 ggbase <- test_industry
-```
+ggtop <- test_industry
 
 
-```{r}
+df <- vector(mode='list', length=length(Total_mat))
+names(df) <- industry_levels
+
+test <- vector(mode='list', length=length(Total_mat))
+names(test) <- industry_levels
 
 for (l in 1:length(Total_mat)){
   for (p in 1:length(rural_extent)){
+    df[[l]][[p]] <- inner_join(test_industry[[l]][[p]], primary_c[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
+    df[[l]][[p]]$absorb <- pmin(df[[l]][[p]]$NIE, df[[l]][[p]]$NIS)
+    test[[l]][[p]] <- df[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
+  }
+}
+
+
+for (l in 3){
+  for (p in 1:length(rural_extent)){
     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
-     ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-      geom_col_interactive(aes(x = industry,
-                               y = (value)),
+     ggtop[[l]][[p]] <- ggplot(test[[l]][[p]]) +
+      geom_col_interactive(aes(x = industry_label,
+                               y = (NIE)),
                                fill = "grey") +
-      geom_point_interactive(data = filter(primary_c[[l]], value != 0),
-                 aes(x = industry,
-                     y = (value),
-                     color = variable), 
+ 
+      geom_point_interactive(
+                 aes(x = industry_label,
+                     y = (NIS),
+                     color = core_fips), 
                      size  = 3.5) +
       labs(x = "Industry Sector", y = "Input Value") +
-      scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
       scale_y_continuous() +
        labs(title = "Absorption Distribution Capacitance",
             subtitle = glue("Net Input Excess: {county}"),
             color = "Net Import Shortage") +
-       scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
-       theme_minimal()
+
+       scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+       theme_minimal() +
+        theme(axis.text.x = element_text(angle=45, hjust=1))
     }
 }
 
+print(ggtop[[3]]$`55043`)
+
+
+```
+
+
+
+
+
+```{r}
+# 
+# primary_c <- vector(mode='list', length=length(Total_mat))
+# names(primary_c) <- industry_levels
+# 
+# test_industry <- vector(mode='list', length=length(Total_mat))
+# names(test_industry) <- industry_levels
+# 
+# for (l in 1:length(Total_mat)){
+#     primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
+#     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
+#     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
+# }
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(rural_extent)){
+#     test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
+#     colnames( test_industry[[l]][[p]]) <- c("value")
+#     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
+#   }
+#   names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
+# }
+# 
+# ggbase <- test_industry
+# 
+# for (l in 1:length(Total_mat)){
+#   for (p in 1:length(rural_extent)){
+#     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
+#       geom_col_interactive(aes(x = industry,
+#                                y = (value)),
+#                                fill = "grey") +
+#       geom_point_interactive(data = filter(primary_c[[l]], value != 0),
+#                  aes(x = industry,
+#                      y = (value),
+#                      color = variable), 
+#                      size  = 3.5) +
+#       labs(x = "Industry Sector", y = "Input Value") +
+#       scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
+#       scale_y_continuous() +
+#        labs(title = "Absorption Distribution Capacitance",
+#             subtitle = glue("Net Input Excess: {county}"),
+#             color = "Net Import Shortage") +
+#        scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+#        theme_minimal()
+#     }
+# }
+# 
 
 
 #print(ggbase[[1]]$`55027`)
@@ -684,10 +907,25 @@ colnames(Pmatch) = rownames(Pmatch) <- primary_extent
     ```
 
 
+
+
+
+
+
+
+
+
+
+
 ```{r}
+
+
+
     
-L2_extent <- c("17031","27053")
+L2_extent <- c("27053", "55025", "55031", "55079", "55089", "55131", "55133")
   
+
+
 for (l in 1:length(Xpay_mat)){
 
     Xpay_mat_H1[[l]] <- cbind(Xpay_mat[[l]][, all_extent[order(all_extent)]] %*% 
@@ -779,6 +1017,9 @@ shortage <- H2_con
   }
 
 
+
+
+
 ############  Queeg specification
 if (!file.exists(file.path(data_dir, "Queeg_H1"))){
   
@@ -842,9 +1083,52 @@ if (!file.exists(file.path(data_dir, "Queeg_rel_H1"))){
 
 ```{r second stage matching}
 
-rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) 
 
-primary_extent <- L2_extent
+
+# rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE) %>%
+#                 grep("55009", ., value=TRUE, invert = TRUE) %>% 
+#                   grep("55025", ., value=TRUE, invert = TRUE) %>%
+#                   grep("55031", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55035", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55039", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55059", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55063", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55073", ., value=TRUE, invert = TRUE) %>%
+#                   grep("55079", ., value=TRUE, invert = TRUE) %>%
+#                 grep("55087", ., value=TRUE, invert = TRUE) %>% 
+#                   grep("55089", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55105", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55117", ., value=TRUE, invert = TRUE) %>%
+#                   grep("55131", ., value=TRUE, invert = TRUE) %>% 
+#                   grep("55133", ., value=TRUE, invert = TRUE) %>% 
+#                 grep("55139", ., value=TRUE, invert = TRUE)
+# 
+#   
+# hold_extent <- c("55025", "55031", "55079", "55089", "55131", "55133")
+# 
+# primary_extent <- c("55009","55035", "55039", "55059", "55063","55073", "55087", "55105", "55117", "55139")
+# names(primary_extent) <- primary_extent
+# 
+# all_extent <- c(rural_extent, primary_extent) %>% as.vector()
+# 
+#     
+# L2_extent <- c("17031","27053", "55025", "55031", "55079", "55089", "55131", "55133")
+#   
+# 
+# 
+
+
+
+
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE)  %>%
+                  grep("55025", ., value=TRUE, invert = TRUE) %>%
+                  grep("55031", ., value=TRUE, invert = TRUE) %>%
+                  grep("55079", ., value=TRUE, invert = TRUE) %>%
+                  grep("55089", ., value=TRUE, invert = TRUE) %>%
+                  grep("55131", ., value=TRUE, invert = TRUE) %>% 
+                  grep("55133", ., value=TRUE, invert = TRUE)
+
+primary_extent <- c("17031","27053", "55025", "55079")
 
 all_extent <- c(rural_extent, primary_extent) %>% as.vector()
 
@@ -890,6 +1174,21 @@ rm(WI_Queeg_Plots_C2, WI_Queeg_Plots_C2_XINT) %>% suppressWarnings()
 
 ```{r}
 
+
+
+
+
+rural_extent <- grep("^55", rownames(TIGER_RUCC), value=TRUE)  %>%
+                  grep("55025", ., value=TRUE, invert = TRUE) %>%
+                  grep("55031", ., value=TRUE, invert = TRUE) %>%
+                  grep("55079", ., value=TRUE, invert = TRUE) 
+
+primary_extent <- c("27053", "55025", "55079")
+
+all_extent <- c(rural_extent, primary_extent) %>% as.vector()
+
+
+
 importr(Queeg_H1)
 importr(Queeg_rel_H1)
 
@@ -930,6 +1229,82 @@ rm(WI_Queeg_Plots_H2, WI_Queeg_Plots_H2_XINT) %>% suppressWarnings()
 
 
 
+
+```{r}
+# 
+# importr(Input_mat_imp)
+# importr(Input_mat_exp)
+
+
+primary_c <- vector(mode='list', length=length(Total_mat))
+names(primary_c) <- industry_levels
+
+test_industry <- vector(mode='list', length=length(Total_mat))
+names(test_industry) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+    primary_c[[l]] <- Input_mat_imp[[l]][, primary_extent] %>% as.data.frame() %>% select(order(colnames(.)))
+    primary_c[[l]]$industry_label <- rownames(primary_c[[l]])
+    primary_c[[l]] <- melt(primary_c[[l]], id = "industry_label") %>% rename(NIS = value, core_fips = variable) 
+}
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
+    colnames( test_industry[[l]][[p]]) <- c("NIE")
+    test_industry[[l]][[p]]$industry_label <- rownames(test_industry[[l]][[p]])
+  }
+  names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
+}
+
+ggbase <- test_industry
+ggtop <- test_industry
+
+
+df <- vector(mode='list', length=length(Total_mat))
+names(df) <- industry_levels
+
+test <- vector(mode='list', length=length(Total_mat))
+names(test) <- industry_levels
+
+for (l in 1:length(Total_mat)){
+  for (p in 1:length(rural_extent)){
+    df[[l]][[p]] <- inner_join(test_industry[[l]][[p]], primary_c[[l]], by = "industry_label") %>% arrange(core_fips, industry_label) 
+    df[[l]][[p]]$absorb <- pmin(df[[l]][[p]]$NIE, df[[l]][[p]]$NIS)
+    test[[l]][[p]] <- df[[l]][[p]] %>% filter(absorb > 0) %>% group_by(core_fips) %>% slice_max(order_by = absorb, n = 7) %>% arrange(core_fips)
+  }
+}
+
+
+for (l in 3){
+  for (p in 1:length(rural_extent)){
+    county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
+     ggtop[[l]][[p]] <- ggplot(test[[l]][[p]]) +
+      geom_col_interactive(aes(x = industry_label,
+                               y = (NIE)),
+                               fill = "grey") +
+ 
+      geom_point_interactive(
+                 aes(x = industry_label,
+                     y = (NIS),
+                     color = core_fips), 
+                     size  = 3.5) +
+      labs(x = "Industry Sector", y = "Input Value") +
+      scale_y_continuous() +
+       labs(title = "Absorption Distribution Capacitance",
+            subtitle = glue("Net Input Excess: {county}"),
+            color = "Net Import Shortage") +
+
+       scale_colour_brewer(palette = "Set3", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
+       theme_minimal() +
+        theme(axis.text.x = element_text(angle=45, hjust=1))
+    }
+}
+
+print(ggtop[[3]]$`55043`)
+
+
+```
 
 
 
@@ -976,66 +1351,8 @@ rm(WI_Queeg_Plots_H2, WI_Queeg_Plots_H2_XINT) %>% suppressWarnings()
 
 
 
-```{r}
-# 
-# primary_c <- vector(mode='list', length=length(Total_mat))
-# names(primary_c) <- industry_levels
-# 
-# test_industry <- vector(mode='list', length=length(Total_mat))
-# names(test_industry) <- industry_levels
-# 
-# for (l in 1:length(Total_mat)){
-#     primary_c[[l]] <- Input_mat_imp[[l]][, names(primary_extent)] %>% as.data.frame() %>% select(order(colnames(.)))
-#     primary_c[[l]] <- cbind(industry = seq_along(primary_c[[l]][,1]), primary_c[[l]])
-#     primary_c[[l]] <- melt(primary_c[[l]], id = "industry")
-# }
-# 
-# for (l in 1:length(Total_mat)){
-#   for (p in 1:length(rural_extent)){
-#     test_industry[[l]][[p]] <- Input_mat_exp[[l]][, rural_extent][, p] %>% as.data.frame()
-#     colnames( test_industry[[l]][[p]]) <- c("value")
-#     test_industry[[l]][[p]] <- cbind(industry = seq_along(test_industry[[l]][[p]][,1]),  test_industry[[l]][[p]])
-#   }
-#   names( test_industry[[l]]) <- colnames(Input_mat_exp[[l]][, rural_extent])
-# }
-# 
-# ggbase <- test_industry
-```
-
-
-```{r}
-# 
-# for (l in 1:length(Total_mat)){
-#   for (p in 1:length(rural_extent)){
-#     county <- TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% rural_extent[p]) %>% pull(COUNTY)
-#      ggbase[[l]][[p]] <- ggplot(as.data.frame(test_industry[[l]][[p]])) +
-#       geom_col_interactive(aes(x = industry,
-#                                y = (value)),
-#                                fill = "grey") +
-#       geom_point_interactive(data = filter(primary_c[[l]], value != 0),
-#                  aes(x = industry,
-#                      y = (value),
-#                      color = variable), 
-#                      size  = 3.5) +
-#       labs(x = "Industry Sector", y = "Input Value") +
-#       scale_x_discrete(limits = factor(1:dim(Input_mat_exp[[l]])[1]), labels = c(rownames(Input_mat_exp[[l]]))) +
-#       scale_y_continuous() +
-#        labs(title = "Absorption Distribution Capacitance",
-#             subtitle = glue("Net Input Excess: {county}"),
-#             color = "Net Import Shortage") +
-#        scale_colour_brewer(palette = "Set1", labels = (TIGER_RUCC %>% filter(TIGER_RUCC$FIPS %in% primary_extent) %>% pull(COUNTY)) ) +
-#        theme_minimal()
-#     }
-# }
-# 
-# 
-# 
-# print(ggbase[[1]]$`55027`)
-
-```
-
-
 Note: two-level hierarchy is not the same as two-stage matching
+
 
 
 
