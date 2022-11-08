@@ -24,3 +24,11 @@ census_api_key.txt
 *.html
 *_files/
 .Rproj.user
+
+# symbolic links to packages: OS dependent, created on init
+nbs/rurec
+rurec/reseng
+rurec/pubdata
+rurec/infogroup
+data/pubdata
+
