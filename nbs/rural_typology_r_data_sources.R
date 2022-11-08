@@ -56,6 +56,7 @@ log_info("QCEW 2020 download complete")
 
 
 
+
 # Download and unzip Census county TIGER  data.
 data_zipr(
   ZipURL = "https://www2.census.gov/geo/tiger/TIGER2021/COUNTY/tl_2021_us_county.zip",
@@ -90,6 +91,14 @@ data_getr(
   DestDir = data_dir
 )
 log_info("Urban Influence Codes download complete")
+
+# Download County/CBSA crosswalk
+data_getr(
+  FileURL = "https://www.bls.gov/cew/classifications/areas/qcew-county-msa-csa-crosswalk-xlsx.xlsx",
+  DestDir = data_dir
+)
+log_info("County/CBSA crosswalk download complete")
+
 
 # Revert to previously set timeout
 options(timeout = download_timeout_old)

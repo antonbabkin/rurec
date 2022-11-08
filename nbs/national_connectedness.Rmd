@@ -1,0 +1,254 @@
+
+---
+title: "Nationwide Connectedness"
+author: "Austin Sandler"
+date: "2022-10-31"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+
+```{r preamble, include = FALSE}
+
+############ Note: When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+library(tidyr)
+library(Matrix)
+library(dplyr)
+
+############ To add in future for more capabilities
+# library(reshape2)
+# library(ggplot2)
+# library(ggiraph)
+# library(glue)
+# library(magrittr)
+# library(ggforce)
+# library(cowplot)
+# library(tibble)
+# library(sf)
+# library(ggpattern)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+```
+
+```{r load data, include=FALSE}
+
+############ Define data directory path
+data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
+
+############ Load previously generated datafiles
+if (file.exists(file.path(data_dir, "TIGER_RUCC")) & 
+    file.exists(file.path(data_dir, "Output_mat")) & 
+    file.exists(file.path(data_dir, "Direct_mat"))  
+    ){
+  importr(TIGER_RUCC)
+  importr(Output_mat)
+  importr(Direct_mat)
+} else {
+  source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_generation.R"))
+}
+
+
+### To add in future for spatial distance, neighbors, and impedance capabilities
+#importr(Impede_mat)
+#importr(D_mat)
+
+
+### To solve: why some counties in Alaska have NA values in Output matrix?
+
+```
+
+
+This document maps various topological similarity index relationships.
+
+
+```{r tidy output matrix, include=FALSE}
+
+############ Remove counties not in TIGER
+Output_mat <- lapply(Output_mat, function(x){x[, colnames(x) %in% c(unique(TIGER_RUCC$place))]})
+
+############ Remove counties in AK and HI
+for (l in names(Output_mat)){
+  Output_mat[[l]] <- Output_mat[[l]][, colnames(Output_mat[[l]]) %in% c(filter(TIGER_RUCC, !STATE_CODE %in% c("02", "15"))$place)]
+}
+
+############ Remove NAs  
+for (l in names(Output_mat)){
+  Output_mat[[l]][is.na(Output_mat[[l]])] = 0
+}
+
+```
+
+
+
+
+```{r first level connectedness}
+
+############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of input needs: DY
+Input_mat <- mapply(industry_input, Direct_mat, Output_mat)
+
+############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of net input demand: NID
+NID_mat <- mapply(net_input_demand, Output_mat, Input_mat)
+
+############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of net input supply: NIS
+NIS_mat <- mapply(net_input_supply, Output_mat, Input_mat)
+
+############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of stacked absorption shares: A 
+############ Note: file is cached because process time can be lengthy
+if (file.exists(file.path(data_dir, "SAS_mat"))){
+ importr(SAS_mat)
+} else {
+  SAS_mat <- mapply(stacked_absorption_share, NIS_mat, NID_mat)
+  saver(SAS_mat)
+}
+
+############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of normalized absorption shares: alpha 
+NAS_mat <- mapply(normalized_absorption_share, SAS_mat, NIS_mat)
+
+############ For each industry specificity level (sector, summary, detail), derive the row-wise absorption potential maximum and matching county of normalized absorption shares
+Connectedness_table <- lapply(NAS_mat, absorption_maximum_match, threshold = .05) 
+
+############ Test for non-singular row-wise absorption potential maximum 
+mapply(absorption_max_check, Connectedness_table, names(Connectedness_table))
+
+```
+
+```{r first level spatial agglomeration}
+
+############ Refine TIGER and RUCC data to keep only the pertinent variables
+Space_data <- select(TIGER_RUCC, place, NAME, STATE_CODE, COUNTY_CODE, FIPS, STATE, COUNTY, RUC_CODE, POPULATION, geometry, center)
+
+############ For each industry specificity level (sector, summary, detail), join spatial and other location specific information to ECA classification data tables
+Spatial_Connected_table <- lapply(Connectedness_table, join_space_with_connectedness, Space_data)
+
+############ For each industry specificity level (sector, summary, detail), spatial union together each ECA member in a cluster
+############ Note: file is cached because process time can be lengthy
+if (file.exists(file.path(data_dir, "Spatial_Clustered_data"))){
+ importr(Spatial_Clustered_data)
+} else {
+  Spatial_Clustered_data <- lapply(Spatial_Connected_table, spatial_cluster, list_names = names(Spatial_Connected_table))
+  saver(Spatial_Clustered_data)
+}
+
+```
+
+
+```{r first level economic agglomeration}
+
+############ For each industry specificity level (sector, summary, detail), aggregate economic industry output of each ECA member in a cluster keeping only non-source places as ECA core unit labels
+Output_mat2 <- mapply(aggregate_industry_output, Output_mat, Connectedness_table)
+
+```
+
+
+
+
+```{r second level connectedness, eval = FALSE}
+
+############ Single operation stacked function for a connectedness table from an output matrix and direct requirements matrix WITH multiple industry specificity levels
+Connectedness_table2 <- direct_connectedness(Direct_mat, Output_mat2, threshold = .05)
+
+############ Test for non-singular row-wise absorption potential maximum 
+mapply(absorption_max_check, Connectedness_table2, names(Connectedness_table2))
+
+```
+
+```{r second level spatial agglomeration, eval = FALSE}
+
+############ For each industry specificity level (sector, summary, detail), join spatial and other location specific information to ECA classification data tables
+Spatial_Connected_table2 <- lapply(Connectedness_table2, join_space_with_connectedness, Space_data)
+
+############ For each industry specificity level (sector, summary, detail), spatial union together each ECA member in a cluster
+Spatial_Clustered_data2 <- lapply(Spatial_Connected_table2, spatial_cluster)
+
+```
+
+```{r second level economic agglomeration, eval = FALSE}
+
+############ For each industry specificity level (sector, summary, detail), Aggregate economic industry output of each ECA member in a cluster keeping only non-source places as ECA core unit labels
+Output_mat3 <- mapply(aggregate_industry_output, Output_mat2, Connectedness_table2)
+
+```
+
+
+
+
+```{r n level economic agglomeration}
+
+############ For each industry specificity level (sector, summary, detail), aggregate economic industry output of each ECA member in a cluster keeping only non-source places as ECA core unit labels and iterate over all possible consecutive clusters
+############ Note: file is cached because process time can be lengthy
+if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) & 
+    file.exists(file.path(data_dir, "Hierarchical_Spatial_Cluster_table")) &
+    file.exists(file.path(data_dir, "Hierarchical_Output_mat")) ){
+ importr(Hierarchical_Connectedness_table)
+ importr(Hierarchical_Spatial_Cluster_table)
+ importr(Hierarchical_Output_mat)
+} else {
+  Hierarchical_Connectedness_table <- list()
+  Hierarchical_Spatial_Cluster_table <- list()
+  Hierarchical_Output_mat <- list()
+  #sd <- list()
+  for(i in names(Direct_mat)){
+    #sd[[i]] <- Space_data
+      df <- one_hierarchical_connectedness(Direct_mat[[i]], Output_mat[[i]], Space_data,  threshold = .05) 
+      Hierarchical_Connectedness_table[[i]] <- df[1] %>% unlist(recursive = FALSE, use.names = FALSE)
+      Hierarchical_Spatial_Cluster_table[[i]] <- df[2] %>% unlist(recursive = FALSE, use.names = FALSE)
+      Hierarchical_Output_mat[[i]] <- df[3] %>% unlist(recursive = FALSE, use.names = FALSE)
+      rm(df)
+  }
+  saver(Hierarchical_Connectedness_table)
+  saver(Hierarchical_Spatial_Cluster_table)
+  saver(Hierarchical_Output_mat)
+}
+
+```
+
+```{r}
+
+
+```
+
+
+
+```{r , eval = FALSE}
+
+# ggplot(Spatial_Clustered_data$Sector) +
+#   geom_sf()
+# 
+# ggplot(filter(Spatial_Connected_data$Sector, place=="01033")) +
+#   geom_sf()
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
