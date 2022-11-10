@@ -111,8 +111,17 @@ geography.get_state_df(scale='20m').query('CONTIGUOUS').plot()
 ```
 
 ```{code-cell} ipython3
-from rurec import rurality
-rurality.get_cbsa_delin_df(2020).query('CBSA_TITLE == "Madison, WI"')
+:tags: []
+
+from rurec.pubdata import geography_cbsa
+geography_cbsa.get_cbsa_delin_df(2020).query('CBSA_TITLE == "Madison, WI"')
+```
+
+```{code-cell} ipython3
+:tags: []
+
+from rurec.pubdata import bea_io
+bea_io.get_naics_df().head()
 ```
 
 +++ {"tags": []}
