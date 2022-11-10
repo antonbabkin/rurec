@@ -1303,7 +1303,156 @@ Suppose we still only have national level Input-Output tables (consisting of Mak
 
 As before, we can derive a national-level, industry-by-industry direct requirements matrix, $\mathbf{A^{n}}$, from the national-level, industry-by-industry total requirements matrix, $\mathbf{L^{n}}$, using $\mathbf{A^{n}} = \mathbf{I} - (\mathbf{L^{n}})^{-1}$. Furthermore, we can construct the location specific total output vector, $\mathbf{x^{r}}$ from a payroll and labor share quotient. As  a first pass assume unit labor share, such that location specific industry payroll is equivalent to location specific total output. 
 
+
+
+
 Suppose these tables are given by:
+
+```{r}
+
+Industry_Count <- 3
+Toy_Direct_mat <-  matrix(c(0.15,  0.20, 0.25, 
+                            0.05,  0.30, 0.50,
+                            0.20,  0.07, 0.10), nrow = Industry_Count, byrow = TRUE)
+
+rownames(Toy_Direct_mat) = colnames(Toy_Direct_mat) <- c("Oil", "Wheat", "Bread")
+
+Toy_Direct_mat
+
+```
+
+```{r}
+Toy_Total_mat <-  solve(diag(ncol(Toy_Direct_mat)) - Toy_Direct_mat)
+
+Toy_Total_mat %>% round(3)
+
+```
+
+
+"Industry-by-Location Payroll Table": 
+  
+```{r}
+Region_Count <- 3
+
+Toy_X_mat <-  matrix(c(65, 30, 35, 
+                       99, 20,  25,
+                       40, 15,  75), nrow = Industry_Count, byrow = TRUE)
+
+rownames(Toy_X_mat) <- c("Oil", "Wheat", "Bread")
+colnames(Toy_X_mat) <- c("Albany", "Brown", "Cook")
+
+Toy_X_mat
+```
+
+"Input Needs Table": $\mathbf{AX}$
+
+```{r}
+Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
+Toy_Input_mat  %>% round(2)
+```
+
+"Net Import Shortage Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
+
+```{r}
+Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
+Toy_Input_mat_imp  %>% round(2)
+```
+
+"Net Input Excess  Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
+
+```{r}
+Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
+Toy_Input_mat_exp  %>% round(2)
+```
+
+
+
+
+Absorption  matrix: $\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$
+
+```{r}
+
+Toy_Absorb <- vector(mode='list', length=ncol(Toy_X_mat))
+  names(Toy_Absorb) <- colnames(Toy_X_mat)
+
+for (i in 1:ncol(Toy_X_mat)){
+Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Absorb[[i]])  <- rownames(Toy_X_mat)
+   colnames(Toy_Absorb[[i]]) <- colnames(Toy_X_mat)
+}
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Absorb[[i]][,j]  <-   pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])  %>% round(2)
+    }
+  }
+
+Toy_Absorb  
+
+```
+
+"Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+
+Toy_Queeg<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Queeg) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Queeg[i,j]  <-  rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])
+    }
+  }
+
+
+colnames(Toy_Queeg) <- c("Albany", "Brown", "Cook")
+Toy_Queeg  %>% round(2)
+
+```
+
+
+Impedance matrix 
+
+```{r}
+Toy_Lat <- c(42.3, 44.49, 41.84 )
+Toy_Lon <- c(-89.04, -88.03, -87.77)
+Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))/1000000
+colnames(Toy_Dist_mat) = rownames(Toy_Dist_mat) <-  c("Albany", "Brown", "Cook")
+
+#Toy_Q <- (1/(Toy_Dist_mat)^2)
+Toy_Q <- exp(-Toy_Dist_mat)
+
+Toy_Q  %>% round(3)
+```
+
+
+"Spatial Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} Q^{rs}\}~ \forall ~ r,s \in l$
+
+```{r}
+
+
+(Toy_Queeg * Toy_Q ) %>% round(2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 "National Total Requirements Table": $\mathbf{L}$
 
@@ -1375,7 +1524,7 @@ Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
 Toy_Input_mat_imp  %>% round(2)
 ```
 
-"Net Input Excess  Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
+"Net Input Excess Table":  $\max \{\mathbf{AX}  - \mathbf{X}, 0\}$ 
 
 ```{r}
 Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
@@ -1391,11 +1540,34 @@ Toy_Input_mat_imp_rel  %>% round(4)
 
 ```
 
-"Queeg distance": $\mathbf{i'} \min \{\max \{\mathbf{X} - \mathbf{AX, 0\}, \max \{\mathbf{AX}} - \mathbf{X}, 0\} \} $
+Absorption  matrix: $\min\{\text{NIE}^{r}, \text{NIS}^{s} \}$
 
 ```{r}
 
-diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))
+Toy_Absorb <- vector(mode='list', length=ncol(Toy_X_mat))
+  names(Toy_Absorb) <- colnames(Toy_X_mat)
+
+for (i in 1:ncol(Toy_X_mat)){
+Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(Toy_Absorb[[i]])  <- rownames(Toy_X_mat)
+   colnames(Toy_Absorb[[i]]) <- colnames(Toy_X_mat)
+}
+
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+        Toy_Absorb[[i]][,j]  <-   pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])  %>% round(2)
+    }
+  }
+
+Toy_Absorb  
+
+```
+
+"Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \}\}~ \forall ~ r,s \in l$
+
+```{r}
+
+#diag(as.vector(Toy_Transactions_mat %*% rep(c(1), each=ncol(Toy_Transactions_mat))))
 
 Toy_Queeg<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
  rownames(Toy_Queeg) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
@@ -1411,6 +1583,19 @@ colnames(Toy_Queeg) <- c("AllElse", "Brown", "Cook", "Dane")
 Toy_Queeg  %>% round(4)
 
 ```
+
+"Spatial Queeg distance":$\arg \max_{l} \{\mathbf{i'}\min\{\text{NIE}^{r}, \text{NIS}^{s} \} Q^{rs}\}~ \forall ~ r,s \in l$
+
+```{r}
+
+Toy_Queeg * Toy_Q
+
+```
+
+
+
+
+
 
 
 
@@ -1565,7 +1750,7 @@ Toy_Q  %>% round(4)
 "Spatial Relative Import Similarity Index": $\Vert \max\{\mathbf{Ax^{r}}(\mathbf{iAx^{r}})^{-1} - \mathbf{x^{r}}(\mathbf{ix^{r}})^{-1}, 0\} - \mathbf{x^{s}}(\mathbf{ix^{s}})^{-1} \Vert_{2} / Q^{rs} ~ \forall ~ r,s \in l$
 
 ```{r}
-(Toy_sim_imp_rel  / Toy_Q) %>% round(4)
+(Toy_sim_imp_rel / Toy_Q) %>% round(4)
 ```
 
 For any given location-by-location Similarity Index matrix specification, the minimum "distance" by row is said to be the most compatible trading partner.

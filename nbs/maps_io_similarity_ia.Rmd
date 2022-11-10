@@ -324,6 +324,9 @@ industry_levels <-industry_levels
 
 trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=NA, industry_levels=industry_levels, o_mat=Output_mat)
 
+##View a counties output by industry
+##View(Output_mat_H1[[3]][,"19001", drop = FALSE])
+
 ```
 
 
@@ -2385,19 +2388,7 @@ values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#f
  
 cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
 
-# comp_pal  <- c( "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7", 
-#                   "Storm Lake, IA μSA" = "#fb8072", 
-#                 "Dallas" = "#bebada", 
-#                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3", 
-#                "Iowa City, IA MSA" = "#ffd92f",
-#                   "Cedar Rapids, IA MSA"  = "#b3de69",  
-#                   "Des Moines-West Des Moines, IA MSA" = "#fccde5", 
-#                   "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462", 
-#                   "Sioux" = "#e5c494",
-#                   "Sioux City, IA-NE-SD MSA" = "#80b1d3",
-#                     "Fort Dodge, IA μSA"  = "#66c2a5"
-#                   "ECA Isolated" = "#A9A9A9",
-#                   "Isolated" = "#000000")
+
 
 #
   
@@ -3080,6 +3071,603 @@ girafe(ggobj = p[[3]],
 
 
 
+### Multistate
+
+
+```{r}
+#Specify regional extent and possible (MSA) clusters
+
+metro <- c("19193", 
+           "19085",
+           "19155",
+           "19129",
+           "19121",
+           "19181",
+           "19077",
+           "19049",
+           "19153",
+           "19099",
+           "19015",
+           "19169",
+           "19017",
+           "19075",
+           "19013",
+           "19061",
+           "19011",
+           "19113",
+           "19105",
+           "19103",
+           "19183",
+           "19163",
+"31025",
+"31043",
+"31051",
+"31055",
+"31079",
+"31081",
+"31093",
+"31109",
+"31121",
+"31153",
+"31155",
+"31159",
+"31177")
+
+
+micro <- c("19059", 
+           "19041",
+           "19021",
+           "19027",
+           "19187",
+           "19195",
+           "19033",
+           "19127",
+           "19125",
+           "19123",
+           "19179",
+           "19101",
+           "19045",
+           "19139",
+           "19057",
+           "19111",
+"31001",
+"31019",
+"31047",
+"31053",
+"31067",
+"31073",
+"31099",
+"31111",
+"31113",
+"31119",
+"31139",
+"31141",
+"31157",
+"31165",
+"31167" )
+
+               
+
+Desmoines <- c("19153",
+               "19121",
+               "19181",
+               "19077",
+               "19049",
+               "19099")
+
+Ames <- c("19169",
+          "19015")
+
+Siouxcity <- c("19193",
+               "46127",
+               "31043",
+               "31051")
+
+Omaha  <- c("19155",
+            "19085",
+            "19129",
+            "31177",
+            "31055",
+            "31153",
+            "31025",
+            "31155")
+
+Wateloo <- c("19013",
+             "19017",
+             "19075")
+
+Cedarrrapids <- c("19113",
+                  "19011",
+                  "19105")
+
+Iowacity <-  c("19103",
+               "19183")
+
+Davenport <- c("19163",
+               "17161",
+               "17073",
+               "17131")
+
+Masoncity <- c("19033",
+               "19195")
+
+Burlington <- c("19057",
+                "17071")
+
+Keokuk  <- c("19111",
+             "17067",
+             "29045")
+
+Lincon <- c("31109","31159")
+Grandisland <- c("31079","31121","31093")
+Kearney <- c("31019", "31099")
+Norfolk <- c("31119", "31139", "31167")
+Scottsbluff <- c("31157", "31165")
+Northplatte <- c("31111", "31113")
+Laxington <- c("31047", "31073")
+
+
+
+
+```
+
+
+```{r}
+cbsa  <-  data.frame("CBSA" = c("Des Moines-West Des Moines, IA MSA",
+"Newton, IA μSA",
+"Pella, IA μSA",
+"Cedar Rapids, IA MSA",
+"Davenport-Moline-Rock Island, IA-IL MSA",
+"Waterloo-Cedar Falls, IA MSA",
+"Iowa City, IA MSA",
+"Omaha-Council Bluffs, NE-IA MSA",
+"Ames, IA MSA",
+"Sioux City, IA-NE-SD MSA",
+"Dubuque, IA MSA",
+"Muscatine, IA μSA",
+"Mason City, IA μSA",
+"Clinton, IA μSA",
+"Burlington, IA-IL μSA",
+"Marshalltown, IA μSA",
+"Fort Dodge, IA μSA",
+"Fort Madison-Keokuk, IA-MO μSA",
+"Ottumwa, IA μSA",
+"Oskaloosa, IA μSA",
+"Storm Lake, IA μSA",
+"Spirit Lake, IA μSA",
+"Spencer, IA μSA",
+"Carroll, IA μSA"))
+
+cbsa  <- data.frame(cbsa, "NAME"= c("Polk",
+  "Jasper",
+  "Marion",
+  "Linn",
+  "Scott",
+  "Black Hawk",
+  "Johnson",
+  "Pottawattamie",
+  "Story",
+  "Woodbury",
+  "Dubuque",
+  "Muscatine",
+  "Cerro Gordo",
+  "Clinton",
+  "Des Moines",
+  "Marshall",
+  "Webster",
+  "Lee",
+  "Wapello",
+  "Mahaska",
+  "Buena Vista",
+  "Dickinson",
+  "Clay",
+  "Carroll"))
+
+
+df  <-  data.frame("CBSA" = c("CBSA" = c("Fremont, NE μSA",
+"Lincoln, NE MSA",
+"Beatrice, NE μSA",
+"Grand Island, NE MSA",
+"Kearney, NE μSA",
+"Norfolk, NE μSA",
+"Scottsbluff, NE μSA",
+"North Platte, NE μSA",
+"Columbus, NE μSA",
+"Hastings, NE μSA",
+"Lexington, NE μSA")))
+
+
+df  <- data.frame(df, "NAME"= c("NAME" = c("Dodge",
+"Lancaster", 
+"Gage", 
+"Hall",
+"Buffalo", 
+"Madison",
+"Scotts Bluff", 
+"Lincoln", 
+"Platte", 
+"Adams", 
+"Dawson")))
+
+cbsa  <- rbind(cbsa, df)
+
+```
+
+
+
+```{r}
+
+isolation_th=.05
+
+
+#Produce new clustered total output matrix from matched cores
+
+macc <- c(grep("^19", rownames(TIGER_RUCC), value=TRUE),
+              grep("^31", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("31007", ., value=TRUE, invert = TRUE) %>%
+                grep("31117", ., value=TRUE, invert = TRUE) %>%
+                grep("31085", ., value=TRUE, invert = TRUE) %>%
+                grep("31103", ., value=TRUE, invert = TRUE))
+singcc <- c(grep("^19", rownames(TIGER_RUCC), value=TRUE),
+              grep("^31", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("31007", ., value=TRUE, invert = TRUE) %>%
+                grep("31117", ., value=TRUE, invert = TRUE) %>%
+                grep("31085", ., value=TRUE, invert = TRUE) %>%
+                grep("31103", ., value=TRUE, invert = TRUE))
+ext <- NA
+industry_levels <-industry_levels
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=NA, industry_levels=industry_levels, o_mat=Output_mat)
+
+```
+
+
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r}
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, th_iso=th_iso, nomatch_core_out=nomatch_core_out, queeg_mat=Queeg_rel_H1, imp_mat=imp_mat, macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+```
+
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+  # ext <- list(Masoncity = Masoncity,
+  #             Burlington = Burlington,
+  #             Keokuk  = Keokuk,
+  #             Desmoines = Desmoines,
+  #             Ames = Ames,
+  #             Siouxcity = Siouxcity,
+  #             Omaha = Omaha,
+  #             Wateloo = Wateloo,
+  #             Cedarrrapids = Cedarrrapids,
+  #             Iowacity = Iowacity,
+  #             Davenport = Davenport)
+  #macc <- colnames(Queeg_rel_H1[[3]])
+ ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#e31a1c",  "#1f78b4",  "#33a02c", "#ff7f00", "#6a3d9a", "#ffff99",  "#b15928", "#fb9a99",  "#b2df8a", "#fdbf6f",  "#cab2d6", "#a6cee3",  "#1b9e77",  "#d95f02",  "#7570b3",  "#e7298a", "#66a61e", "#e6ab02", "#8dd3c7", "#ffffb3",  "#bebada", "#fb8072", "#80b1d3")
+ placenames = h1m[[3]]$cnt_place
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+ 
+
+
+# my_pal_map  <- c("Black Hawk" = "#8dd3c7", 
+#                 "Buena Vista" = "#fb8072", 
+#                 "Dallas" = "#bebada", 
+#                 "Lee" = "#ffffb3", 
+#                 "Linn"  = "#b3de69",  
+#                 "Polk" = "#fccde5", 
+#                 "Pottawattamie" = "#fdb462", 
+#                 "Sioux" = "#e5c494",
+#                 "Woodbury" = "#80b1d3",
+#                 "ECA Isolated" = "#A9A9A9",
+#                 "Isolated" = "#000000")
+
+
+
+####Mapping Economic and Spatial cluster matching with isolation
+  
+maprCNT(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+      
+
+
+
+```
+
+```{r}
+# girafe(ggobj = p[[3]], 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
+```
+
+
+
+
+
+
+
+
+
+```{r, warning=FALSE}
+
+isolation_th=.05
+
+
+#Produce new clustered total output matrix from matched cores
+
+
+#All metro and micro clusters
+  ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport,
+Lincon=Lincon, 
+Grandisland=Grandisland,
+Kearney=Kearney, 
+Norfolk=Norfolk, 
+Scottsbluff=Scottsbluff, 
+Northplatte=Northplatte, 
+Laxington=Laxington )
+
+#All metro and micro core county representative
+shoname <- sapply(ext, function(x) x[1])
+
+#All non-metro, non-micro counties
+macc <- c(grep("^19", rownames(TIGER_RUCC), value=TRUE),
+              grep("^31", rownames(TIGER_RUCC), value=TRUE) %>%
+                grep("31007", ., value=TRUE, invert = TRUE) %>%
+                grep("31117", ., value=TRUE, invert = TRUE) %>%
+                grep("31085", ., value=TRUE, invert = TRUE) %>%
+                grep("31103", ., value=TRUE, invert = TRUE)) %>% setdiff(., metro) %>% setdiff(., micro)
+
+#All metro and micro that are the representative core county
+singcc <- setdiff(union(micro, metro), setdiff(unlist(ext), shoname)) 
+
+
+trimr(specname=Output_mat_H1, macc=macc, singcc=singcc, ext=ext, industry_levels=industry_levels, o_mat=Output_mat)
+
+
+```
+
+
+```{r}
+###First level calc
+
+############ Input Needs
+Input_Needs(specname=Input_mat_H1, o_mat=Output_mat_H1, industry_levels=industry_levels)
+
+############ Import Input Needs
+Import_Needs(specname=Input_mat_imp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Net Exports
+Export_Needs(specname=Input_mat_exp_H1, o_mat=Output_mat_H1, i_mat=Input_mat_H1,  industry_levels=industry_levels)
+
+############ Relative Queeg specification
+Rel_Queeg(specname=Queeg_rel_H1, o_mat=Output_mat_H1, im_mat=Input_mat_imp_H1, ex_mat=Input_mat_exp_H1, industry_levels=industry_levels)
+
+```
+
+
+
+```{r}
+#Produce new clustered total output matrix from matched cores
+
+###Second level Output Vector
+#county by county absorption matrix
+queeg_mat <- Queeg_rel_H1
+
+#geographical impedance (used here for breaking ties)
+imp_mat <- Impede_mat[[4]]
+
+#exporting "row" counties
+macc <- colnames(Queeg_rel_H1[[3]])
+
+#importing "column" counties
+singcc <- colnames(Queeg_rel_H1[[3]])
+
+#total industry output by county matrix
+out_mat <- Output_mat_H1
+
+#Isolation threshold
+isolation_th=isolation_th
+
+Queeg_selectr(specname=Output_mat_H2, CoreMatch=CoreMatch, MatchMat=MatchMat, cuml_core_out=cuml_core_out, perf_core_out=perf_core_out, nomatch_core_out=nomatch_core_out, th_iso=th_iso, queeg_mat=Queeg_rel_H1, imp_mat=Impede_mat[[4]], macc=macc, singcc=singcc, industry_levels=industry_levels, out_mat=Output_mat_H1, isolation_th=isolation_th)
+
+
+
+```
+
+
+
+```{r, warning=FALSE}
+
+####Economic and Spatial cluster matching with isolation 
+  mat_mat <- MatchMat
+  spec_clust  <- th_iso
+  qdf <- Queeg_rel_H1
+  isolation_th <- isolation_th
+ext <- list(Masoncity = Masoncity,
+              Burlington = Burlington,
+              Keokuk  = Keokuk,
+              Desmoines = Desmoines,
+              Ames = Ames,
+              Siouxcity = Siouxcity,
+              Omaha = Omaha,
+              Wateloo = Wateloo,
+              Cedarrrapids = Cedarrrapids,
+              Iowacity = Iowacity,
+              Davenport = Davenport,
+Lincon=Lincon, 
+Grandisland=Grandisland,
+Kearney=Kearney, 
+Norfolk=Norfolk, 
+Scottsbluff=Scottsbluff, 
+Northplatte=Northplatte, 
+Laxington=Laxington )
+  #ext <- NA
+  
+  
+hierarchr(specname=h1m, mat_mat=mat_mat, spec_clust=spec_clust, qdf=qdf, ext=ext, isolation_th=isolation_th, imp_mat=Impede_mat[[4]], cbsa=cbsa) 
+
+#####Custom colors 
+ #values = c("#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#fccde5",  "#80b1d3", "#fdb462", "#b3de69")
+values = c("#8dd3c7", "#ffffb3", "#e5c494", "#ffd92f", "#bebada", "#fb8072", "#fccde5", "#fdb462", "#b3de69", "#66c2a5", "#fc8d62", "#8da0cb", "#e78ac3", "#a6d854")
+ placenames = (h1m[[3]]$lab)
+ #placenames = (rbind(h1m[[1]],h1m[[2]],h1m[[3]]))$lab
+ 
+cus_pal_maps(specname = my_pal_map, values=values, placenames=placenames)
+# comp_pal  <- c( "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7", 
+#                   "Storm Lake, IA μSA" = "#fb8072", 
+#                 "Dallas" = "#bebada", 
+#                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3", 
+#                 "Fremont, NE μSA" = "#8da0cb",
+#                "Iowa City, IA MSA" = "#ffd92f",
+#                   "Cedar Rapids, IA MSA"  = "#b3de69",  
+#                   "Des Moines-West Des Moines, IA MSA" = "#fccde5",
+#                   "Kearney, NE μSA"  =   "#fc8d62",
+#                   "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462", 
+#                   "Sioux" = "#e5c494",
+#                   "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+#                     "Fort Dodge, IA μSA"  = "#66c2a5"
+#                   "ECA Isolated" = "#A9A9A9",
+#                    "Davenport-Moline-Rock Island, IA-IL MSA" = "#e78ac3",
+#                   "Isolated" = "#000000")
+
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                    "Davenport-Moline-Rock Island, IA-IL MSA" = "#e78ac3",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5",
+                   "Fort Dodge, IA μSA"  = "#66c2a5",
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Fremont, NE μSA" = "#8da0cb",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                       "Kearney, NE μSA"  =   "#fc8d62",
+                 "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux" = "#e5c494",
+                "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7",
+                   "ECA Isolated" = "#A9A9A9")
+ 
+
+####Mapping Economic and Spatial cluster matching with isolation
+  mapr2(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+  
+
+  
+  
+```
+
+
+**Level 1 Natural Matching**
+
+All counties/clusters can match to all counties/clusters.
+
+
+
+```{r}
+
+#####Mapping Natural Matches
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+```
+
+
+
+**Level 1 ECA's**
+
+```{r}
+
+####Mapping ECAs
+
+  my_pal_map  <- c("Cedar Rapids, IA MSA"  = "#b3de69",
+                   "Davenport-Moline-Rock Island, IA-IL MSA" = "#e78ac3",
+                   "Des Moines-West Des Moines, IA MSA" = "#fccde5",
+                   "Fort Dodge, IA μSA"  = "#66c2a5",
+                   "Fort Madison-Keokuk, IA-MO μSA" = "#ffffb3",
+                   "Fremont, NE μSA" = "#8da0cb",
+                   "Iowa City, IA MSA" = "#ffd92f",
+                       "Kearney, NE μSA"  =   "#fc8d62",
+                 "Omaha-Council Bluffs, NE-IA MSA" = "#fdb462",
+                 "Sioux" = "#e5c494",
+                "Sioux City, IA-NE-SD MSA" = "#80b1d3",
+                  "Storm Lake, IA μSA" = "#fb8072",
+                 "Waterloo-Cedar Falls, IA MSA" = "#8dd3c7")
+
+
+    maprECA(specname=p, shade=FALSE, hatch=FALSE, hm=h1m, my_pal=my_pal_map)
+
+girafe(ggobj = p[[3]], 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+```
 
 
 
@@ -3131,6 +3719,25 @@ Next we ask: Where is the greatest industry development opportunity for all rura
 #   Output_mat_H4[[l]] <- cbind(Output_mat_H4[[l]], Output_mat_H3[[l]][,setdiff(colnames(Output_mat_H3[[l]]), colnames(Output_mat_H4[[l]]))])
 # }
 
+
+
+
+##df <- left_join(h1m$Detail, cbsa, by = "NAME")
+df <- h1m$Detail
+df <- select(df, -c(H3, place, q_value, lab, cnt_place, m_count, h2eca, RUC_CODE_DESCRIPTION))
+
+df <- relocate(df, match, .after = center)
+
+df <- rename(df, match_cbsa_name = match_name)
+df <- rename(df, norm_absorption_alpha = a_value)
+df <- rename(df, level1_eca = eca)
+
+df <- select(df, -c(match))
+df <- as.data.frame(df)
+iowaska <- df
+saver(iowaska)
+iowaska <- select(iowaska, -c(geometry, center))
+write.csv(iowaska, "iowaska.csv")
 ```
 
 
