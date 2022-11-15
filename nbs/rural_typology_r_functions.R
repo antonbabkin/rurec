@@ -8,22 +8,32 @@ library(openxlsx)
 library(rlog)
 library(reticulate)
 
+library(tidyr)
+library(tools)
+
+library(magrittr)
+library(sf)
+
+library(dplyr)
+library(geosphere)
+library(spdep)
+
+
+
+
 # Display start time
 log_info("Define functions start")
-
 
 # Load conda environment "rurec"
 use_condaenv('rurec')
 
 # Import pubdata Python modules
-bds <- import("rurec.pubdata.bds")
 bea_io <- import("rurec.pubdata.bea_io")
 cbp <- import("rurec.pubdata.cbp")
 ers_rurality <- import("rurec.pubdata.ers_rurality")
 geography <- import("rurec.pubdata.geography")
 naics <- import("rurec.pubdata.naics")
-population <- import("rurec.pubdata.population")
-
+geography_cbsa <- import("rurec.pubdata.geography_cbsa")
 
 
 # Function to download  data
@@ -173,7 +183,9 @@ dismapr <- function(p){
 
 
 #Function add NAICS to BEA codes  
-concordr <- function(cordname, econpath = "CBP_2019p", filepath = file.path("data", "robjs")){
+concordr <- function(cordname, 
+                     econpath, 
+                     filepath = file.path("data", "robjs")){
   econ <- file.path(find_rstudio_root_file(), filepath, econpath) %>% readRDS()
   cord <- file.path(find_rstudio_root_file(), filepath, cordname) %>% readRDS()
   x <- left_join(econ, cord, by = "NAICS") 
@@ -210,8 +222,21 @@ reshaper <- function(industry_data_frame, cordname){
   assign(paste0(deparse(substitute(industry_data_frame)), "_XBEA"), x, envir=.GlobalEnv)
 }
 
-
-
+#Function extract county-level industry output data and reshape to industry-by-county matrix
+reshape_output_long_wide <- function(data_file, 
+                                     industry_code = "indcode", 
+                                     place = "place", 
+                                     industry_county_output = "ap"){
+  df <- data_file %>% .[, c(industry_code, place, industry_county_output)] 
+  df <- reshape(df,
+                idvar = industry_code, 
+                v.names = industry_county_output, 
+                varying = unique(df[[place]]), 
+                timevar = place, 
+                new.row.names = unique(df[[industry_code]]),
+                direction = "wide")
+  df <- df %>% subset(select = -c(1)) %>% as.matrix()
+}
 
 
 ############ Industry Input Needs 
