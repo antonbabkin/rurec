@@ -122,6 +122,18 @@ if (!file.exists(file.path(data_dir, "CBP_Concord_Sector_XBEA"))){
 }
 log_info("Sector level CBP/BEA crosswalk complete")
 
+# Generate full economic industry/county list consolidating NAICS to BEA codes at the all levels 
+if (!file.exists(file.path(data_dir, "CBP_Concord_XBEA"))){
+  CBP_Concord_XBEA <- list()
+  CBP_Concord_XBEA[["Sector"]] <- file.path(data_dir, "CBP_Concord_Sector_XBEA") %>% readRDS()
+  CBP_Concord_XBEA[["Summary"]] <- file.path(data_dir, "CBP_Concord_Summary_XBEA") %>% readRDS()
+  CBP_Concord_XBEA[["Detail"]] <- file.path(data_dir, "CBP_Concord_Detail_XBEA") %>% readRDS()
+  saver(CBP_Concord_XBEA)
+  rm(CBP_Concord_XBEA)
+}
+log_info("Sector level CBP/BEA crosswalk complete")
+
+
 ### Test example of censoring/noise-infusion data loss
 # sum(CBP_Concord_Detail_XBEA$ap) / sum(filter(CBP, NAICS == '-')$ap)
 # sum(CBP_Concord_Detail_XBEA$emp) / sum(filter(CBP, NAICS == '-')$emp)
@@ -189,10 +201,9 @@ if (file.exists(file.path(data_dir, "Total_mat"))) {
   log_info("Total requirements matrix already exists")
 } else {
   local({
-    importr(TR_matp)
     Total_mat <- list()
     for (i in c("Sector", "Summary", "Detail")){
-      df <- TR_matp[[i]] %>% .[1:ncol(.), ] %>% as.matrix()
+      df <-   file.path(data_dir, "TR_matp")  %>% readRDS() %>% .[[i]] %>% .[1:ncol(.), ] %>% as.matrix()
       rownames(df) <- colnames(df)
       Total_mat[[i]] <- df
     }
@@ -212,7 +223,6 @@ if (file.exists(file.path(data_dir, "Total_mat"))) {
     colnames(tmat)[25] <- rownames(tmat)[25] <- "23"
     Total_mat$Detail <- tmat
     saver(Total_mat)
-    rm(TR_matp)
   })
   log_info("Total requirements matrix complete")
 }
@@ -223,10 +233,9 @@ if (file.exists(file.path(data_dir, "Labor_mat"))) {
   log_info("Labor matrix already exists")
 } else {
   local({
-    importr(SUT_matp)
     Labor_mat <- list()
     for (i in c("Sector", "Summary")){
-      df <- SUT_matp[[i]] %>% as.matrix()
+      df <- file.path(data_dir, "SUT_matp")  %>% readRDS() %>% .[[i]] %>% as.matrix()
       Labor_mat[[i]] <- df["V001", , drop = FALSE]/df["T018", , drop = FALSE]
       rownames( Labor_mat[[i]] ) <- "labor_share"
     }
@@ -234,7 +243,7 @@ if (file.exists(file.path(data_dir, "Labor_mat"))) {
     ### Detail level
     # Collapse ambiguous industry 23* codes
     # add up all construction columns together
-    df <- SUT_matp[["Detail"]] %>% as.matrix()
+    df <- file.path(data_dir, "SUT_matp")  %>% readRDS() %>% .[["Detail"]] %>% as.matrix()
     l <- 1:24
     c <- 25:36
     r <- 37:405
@@ -253,7 +262,7 @@ if (!file.exists(file.path(data_dir, "Xpay_mat"))){
   importr(CBP_Concord_XBEA)
   Xpay_mat <- lapply(CBP_Concord_XBEA, reshape_output_long_wide)
   saver(Xpay_mat)
-  rm(Xpay_mat)
+  rm(Xpay_mat, CBP_Concord_XBEA)
 }  
 log_info("Payroll matrix complete")
 
@@ -268,11 +277,11 @@ if (file.exists(file.path(data_dir, "Output_mat"))) {
     importr(Labor_mat)
     
     # prepare farm sales
-    
     ### Note: only temporary until pubdata.agcensus.md complete 
-    download.file(url="https://drive.google.com/download&id=1gDufjSB3vXaloBtlYOjfo8IuSTgebpT3", 
-                  destfile=file.path(find_rstudio_root_file(), "data", "nass", "agcensus_sales_by_bea_v220909.csv"))
-    farm_sales_file <- file.path(find_rstudio_root_file(), "data", "nass", "agcensus_sales_by_bea_v220909.csv")
+    ###download file from agcensus_sales_by_bea_v220909.csv google sharedrive rurec/Data (https://drive.google.com/file/d/1gDufjSB3vXaloBtlYOjfo8IuSTgebpT3/view?usp=share_link)
+    download.file(url="https://drive.google.com/uc?export=download&id=1gDufjSB3vXaloBtlYOjfo8IuSTgebpT3", 
+                  destfile=file.path(find_rstudio_root_file(), "data", "agcensus_sales_by_bea_v220909.csv"))
+    farm_sales_file <- file.path(find_rstudio_root_file(), "data", "agcensus_sales_by_bea_v220909.csv")
     
     df <- read.csv(farm_sales_file, colClasses = "character")
     df$SALES <- df$SALES %>% as.numeric / 1000
@@ -286,7 +295,7 @@ if (file.exists(file.path(data_dir, "Output_mat"))) {
     for (l in names(Xpay_mat)) {
       payroll <- Xpay_mat[[l]]
       # labor shares only for industries present in payroll table
-      labor_share <- Labor_mat[[l]][rownames(payroll), ] %>% unlist
+      labor_share <- Labor_mat[[l]][, rownames(payroll)] %>% unlist()
       output <- apply(payroll, 2, function (x) {x / labor_share})
       output <- t(output) %>% as.data.frame()
       output$STCTY <- rownames(output)
@@ -309,7 +318,7 @@ if (file.exists(file.path(data_dir, "Output_mat"))) {
     }
     saver(Output_mat)
   })
-  rm(Xpay_mat, Labor_mat)
+  rm(Xpay_mat, Labor_mat, farm_ind_detail, farm_sales_file, labor_share)
   log_info("Total output matrix complete")
 }
 
@@ -360,7 +369,7 @@ log_info("Direct requirements matrix complete")
 
 
 # Remove clutter
-rm(data_dir, i, j, l) %>% suppressWarnings()
+rm(data_dir, l) %>% suppressWarnings()
 
 
 # Display end time
