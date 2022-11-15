@@ -229,7 +229,7 @@ if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) &
 
 
 
-```{r , eval = FALSE}
+```{r display maps, eval = FALSE}
 
 # ggplot(Spatial_Clustered_data$Sector) +
 #   geom_sf()

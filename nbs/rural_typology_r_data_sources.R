@@ -26,7 +26,7 @@ options(timeout = 300)
 # Download and unzip BEA IO data.
 data_zipr(
   ZipURL = "https://apps.bea.gov/industry/iTables%20Static%20Files/AllTablesSUP.zip",
-  DestDir = data_dir
+  DestDir = file.path(data_dir, "AllTablesSUP")
 )
 log_info("BEA IO data download complete")
 

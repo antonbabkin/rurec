@@ -1,12 +1,5 @@
 # Clean imported outside data
 
-# Load and attach necessary packages
-library(rprojroot)
-library(dplyr)
-library(geosphere)
-library(spdep)
-library(rlog)
-library(reticulate)
 
 # Display start time
 log_info("Define data clean start")
@@ -19,14 +12,37 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data_import.
 # Define data directory path
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
 
+# Import and cleanup pubdata Industry by Industry Total Requirements tables
+if (!file.exists(file.path(data_dir, "TR_matp"))){
+  TR_matp <- list()
+  TR_matp[["Sector"]] <- bea_io$get_ixi(2020L, "sec")
+  TR_matp[["Summary"]] <- bea_io$get_ixi(2020L, "sum")
+  TR_matp[["Detail"]] <- bea_io$get_ixi(2012L, "det")
+  saver(TR_matp)
+  rm(TR_matp) 
+}
+log_info("Import 'pubdata' TR matrix complete")
+
+# Import and cleanup pubdata BEA Use tables
+if (!file.exists(file.path(data_dir, "SUT_matp"))){
+  SUT_matp <- list()
+  SUT_matp[["Sector"]] <- bea_io$get_use(2020L, "sec")
+  SUT_matp[["Summary"]] <- bea_io$get_use(2020L, "sum")
+  SUT_matp[["Detail"]] <- bea_io$get_use(2012L, "det")
+  saver(SUT_matp)
+  rm(SUT_matp) 
+}
+log_info("Import 'pubdata' SUT matrix complete")
+
+
 # Import and cleanup pubdata County Business Patterns data
-if (!file.exists(file.path(data_dir, "CBP_2019p"))){
-  CBP_2019p <- cbp$get_df("county", 2019L)
-  CBP_2019p %<>% rename(NAICS = industry)
-  CBP_2019p$place <- paste0(CBP_2019p$fipstate, CBP_2019p$fipscty)
-  CBP_2019p %<>% select(fipstate, fipscty, place, NAICS, emp, qp1, ap, est)
-  saver(CBP_2019p)
-  rm(CBP_2019p) 
+if (!file.exists(file.path(data_dir, "CBP"))){
+  CBP <- cbp$get_df("county", 2019L)
+  CBP %<>% rename(NAICS = industry)
+  CBP$place <- paste0(CBP$fipstate, CBP$fipscty)
+  CBP %<>% select(fipstate, fipscty, place, NAICS, emp, qp1, ap, est)
+  saver(CBP)
+  rm(CBP) 
 }
 log_info("Import 'pubdata' CBP complete")
 
@@ -80,37 +96,55 @@ if (!file.exists(file.path(data_dir, "sec_cord"))){
   rm(sec_cord)
 }
 
-
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the detail level 
-if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Detail_XBEA"))){
-  CBP_2019p_Concord_Detail <- concordr("det_cord")
-  reshaper(CBP_2019p_Concord_Detail, "det_cord")
-  saver(CBP_2019p_Concord_Detail_XBEA)
-  rm(CBP_2019p_Concord_Detail_XBEA, CBP_2019p_Concord_Detail)
+if (!file.exists(file.path(data_dir, "CBP_Concord_Detail_XBEA"))){
+  CBP_Concord_Detail <- concordr("det_cord", "CBP")
+  reshaper(CBP_Concord_Detail, "det_cord")
+  saver(CBP_Concord_Detail_XBEA)
+  rm(CBP_Concord_Detail_XBEA, CBP_Concord_Detail)
 }
 log_info("Detail level CBP/BEA crosswalk complete")
 
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the Summary level 
-if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Summary_XBEA"))){
-  CBP_2019p_Concord_Summary <- concordr("sum_cord")
-  reshaper(CBP_2019p_Concord_Summary, "sum_cord")
-  saver(CBP_2019p_Concord_Summary_XBEA)
-  rm(CBP_2019p_Concord_Summary_XBEA, CBP_2019p_Concord_Summary)
+if (!file.exists(file.path(data_dir, "CBP_Concord_Summary_XBEA"))){
+  CBP_Concord_Summary <- concordr("sum_cord", "CBP")
+  reshaper(CBP_Concord_Summary, "sum_cord")
+  saver(CBP_Concord_Summary_XBEA)
+  rm(CBP_Concord_Summary_XBEA, CBP_Concord_Summary)
 }
 log_info("Summary level CBP/BEA crosswalk complete")
 
 # Generate full economic industry/county table consolidating NAICS to BEA codes at the Sector level 
-if (!file.exists(file.path(data_dir, "CBP_2019p_Concord_Sector_XBEA"))){
-  CBP_2019p_Concord_Sector <- concordr("sec_cord")
-  reshaper(CBP_2019p_Concord_Sector, "sec_cord")
-  saver(CBP_2019p_Concord_Sector_XBEA)
-  rm(CBP_2019p_Concord_Sector_XBEA, CBP_2019p_Concord_Sector)
+if (!file.exists(file.path(data_dir, "CBP_Concord_Sector_XBEA"))){
+  CBP_Concord_Sector <- concordr("sec_cord", "CBP")
+  reshaper(CBP_Concord_Sector, "sec_cord")
+  saver(CBP_Concord_Sector_XBEA)
+  rm(CBP_Concord_Sector_XBEA, CBP_Concord_Sector)
 }
 log_info("Sector level CBP/BEA crosswalk complete")
 
+
+# Generate full economic industry/county table consolidating NAICS to BEA codes at all levels
+if (!file.exists(file.path(data_dir, "CBP_Concord_XBEA"))){
+
+  importr(CBP_Concord_Sector_XBEA)
+  importr(CBP_Concord_Summary_XBEA)
+  importr(CBP_Concord_Detail_XBEA)
+  CBP_Concord_XBEA <- list()
+  CBP_Concord_XBEA[["Sector"]] <- CBP_Concord_Sector_XBEA
+  CBP_Concord_XBEA[["Summary"]] <- CBP_Concord_Summary_XBEA
+  CBP_Concord_XBEA[["Detail"]] <- CBP_Concord_Detail_XBEA
+  saver(CBP_Concord_XBEA)
+  rm(CBP_Concord_XBEA, CBP_Concord_Sector_XBEA, CBP_Concord_Summary_XBEA, CBP_Concord_Detail_XBEA)
+}
+log_info("CBP/BEA crosswalk complete")
+
+
+
+
 ### Test example of censoring/noise-infusion data loss
-# sum(CBP_2019p_Concord_Detail_XBEA$ap) / sum(filter(CBP_2019p, NAICS == '-')$ap)
-# sum(CBP_2019p_Concord_Detail_XBEA$emp) / sum(filter(CBP_2019p, NAICS == '-')$emp)
+# sum(CBP_Concord_Detail_XBEA$ap) / sum(filter(CBP, NAICS == '-')$ap)
+# sum(CBP_Concord_Detail_XBEA$emp) / sum(filter(CBP, NAICS == '-')$emp)
 
 # Import and cleanup "pubdata" TIGER data
 if (!file.exists(file.path(data_dir, "TIGERDatap"))){
@@ -124,7 +158,7 @@ if (!file.exists(file.path(data_dir, "TIGERDatap"))){
 log_info("Import 'pubdata' TIGER complete")
 
 ### Test example of missing CBP coverage 
-# setdiff(unique(TIGERDatap$place), unique(CBP_2019p_Concord_Detail_XBEA$place) )
+# setdiff(unique(TIGERDatap$place), unique(CBP_Concord_Detail_XBEA$place) )
 
 
 # Produce  Distance  Matrix
@@ -136,7 +170,6 @@ rm(Dist_mat)
 }
 log_info("Distance Matrix complete")
 
-
 ## Produce Proximity  Matrix
 if (!file.exists(file.path(data_dir, "Prox_mat"))){
   Prox_mat <-  file.path(data_dir, "TIGERDatap") %>% readRDS() %>% poly2nb(queen = TRUE) %>% nb2mat(style = "B", zero.policy = TRUE)
@@ -145,8 +178,6 @@ saver(Prox_mat)
 rm(Prox_mat)
 }
 log_info("Proximity Matrix complete")
-
-
 
 # Import and cleanup pubdata RUCC data
 if (!file.exists(file.path(data_dir, "RUCCDatap"))){
@@ -157,7 +188,6 @@ if (!file.exists(file.path(data_dir, "RUCCDatap"))){
   rm(RUCCDatap) 
 }
 log_info("Import 'pubdata' RUCC complete")
-
 
 # TIGER  and RUCC
 if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
@@ -172,8 +202,6 @@ saver(TIGER_RUCC)
 rm(TIGER_RUCC)
 }
 log_info("TIGER/RUCC merge complete")
-
-
 
 # Remove clutter
 rm(data_dir) 
