@@ -318,7 +318,7 @@ if (file.exists(file.path(data_dir, "Output_mat"))) {
     }
     saver(Output_mat)
   })
-  rm(Xpay_mat, Labor_mat, farm_ind_detail, farm_sales_file, labor_share)
+  rm(Xpay_mat, Labor_mat)
   log_info("Total output matrix complete")
 }
 

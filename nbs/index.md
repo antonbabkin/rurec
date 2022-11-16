@@ -36,8 +36,7 @@ Run code in this section when you start working with the project.
 It will create symbolic links necessary for file discovery within project directory structure.
 If project is used as a library, importing code must call the `init()` function.
 
-```{code-cell} ipython3
-:tags: [nbd-module]
++++ {"tags": ["nbd-module"]}
 
 import os
 import importlib
@@ -90,7 +89,6 @@ def _recreate_dir_symlink(link, targ, root):
     link_res = link.resolve()
     assert link_res.is_dir()
     print(f'  symlink: "{link.relative_to(root)}" -> "{link_res.relative_to(root)}"')
-```
 
 +++ {"tags": ["nbd-docs"]}
 
@@ -138,19 +136,19 @@ bea_io.get_naics_df().head()
     
 - Next navigate to the desired script or notebook using the Files tab (bottom right window in R), or File in computer tool bar (left top most), or ⌘O.  
     - For more on the relationships of project scripts and notebooks located in the /nbs folder see the *repo_structure* [schematic](https://docs.google.com/drawings/d/1z4iLABHF8wnfhSumAU7tXr68zDFd4wUfL8vclrVioBs/edit). 
-    - As a rule simple .R scripts will generate function, download raw data, and import, clean, and generate new data products. Whereas, .Rmd and .qmd notebooks will provide a narative with accompanying visualizations into a human readible and self contained .html output. 
+    - As a rule simple .R scripts will generate functions and generate new data products. Whereas, .Rmd and .qmd notebooks will provide a narative with accompanying visualizations into a human readible and self contained .html output. 
         - The script <rural_typology_r_functions.R> is a repository for user generated functions used by all other project files.  
-        - The script <rural_typology_r_data_sources.R> downloads all outside data used in the project. 
-        - The script <rural_typology_r_data_import.R> imports all downloaded data used in the project as R data objects.
-        - The script <rural_typology_r_data_clean.R> cleans and reshapes imported data used in the project.
-        - The script <rural_typology_r_data_generation.R> generates new data products (e.g., similarity index specifications) used in the project.       
+        - The script <rural_typology_r_data.R> downloads and imports all outside data from pubdata used in the project. 
+     
         
         - The notebook <io_for_dummies.Rmd> is a reference page for all things Input-Output related. 
-        - The notebook <toy_stoy.Rmd> is a testing ground for Toy model specifications with numerical examples. 
-        - The notebook <maps_io_similarity_wi.Rmd> is an attempt at mapping the various topological similarity index relationships for Wisconsin counties. 
-        - The notebook <maps_io_similarity_national.qmd> is an attempt at mapping the various topological similarity index relationships at the national level. 
+        - The notebook <national_connectedness.Rmd> generates hierarchical absorption matrices and spatial aglomeration data products. 
+        - The notebook <connect_grant_example.qmd> a step by step toy example of the economic connectedness calculation process. 
+        
+        - The notebook <toy_stoy.Rmd> is depreciated. (a testing ground for Toy model specifications with numerical examples) 
+        - The notebook <maps_io_similarity_ia.Rmd> is depreciated. (maps the various topological similarity index relationships for Iowa counties and Nebraska)
+       
     - All data and generated R objects are stored in the /data and the /data/robjs files respectively. 
-    - To get a clear reset of all data and generated objects simply delete the /data folder.
 
 +++
 
