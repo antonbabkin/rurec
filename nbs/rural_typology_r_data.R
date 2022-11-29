@@ -1,10 +1,13 @@
 # Clean imported outside data and generate new data products
 
-# Display start time
-log_info("Define data start")
+# Load and attach necessary packages
+library(rprojroot)
 
 # Connect and parse code from "functions" file 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+# Display start time
+log_info("Define data start")
 
 # Turn Off Scientific Notation 
 options(scipen = 999)

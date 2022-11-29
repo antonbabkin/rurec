@@ -65,6 +65,9 @@ if (file.exists(file.path(data_dir, "TIGER_RUCC")) &
   importr(Direct_mat)
 } else {
   source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+  importr(TIGER_RUCC)
+  importr(Output_mat)
+  importr(Direct_mat)
 }
 
 
