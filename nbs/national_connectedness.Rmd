@@ -35,9 +35,9 @@ library(dplyr)
 
 ############ To add in future for more capabilities
 # library(reshape2)
-# library(ggplot2)
-# library(ggiraph)
-# library(glue)
+ library(ggplot2)
+ library(ggiraph)
+ library(glue)
 # library(magrittr)
 # library(ggforce)
 # library(cowplot)
@@ -69,7 +69,6 @@ if (file.exists(file.path(data_dir, "TIGER_RUCC")) &
   importr(Output_mat)
   importr(Direct_mat)
 }
-
 
 ### To add in future for spatial distance, neighbors, and impedance capabilities
 #importr(Impede_mat)
@@ -241,6 +240,27 @@ if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) &
 #   geom_sf()
 
 
+df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
+
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = max_absorption_alpha, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {max_absorption_alpha}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      labs(fill = "Max Absorption",
+           caption = paste0(5,"% Isolation Threshold"))
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
 
 
 

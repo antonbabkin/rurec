@@ -180,11 +180,8 @@ dismapr <- function(p){
   }
 }
 
-
-
-
 # Call up and clean TIGER data
-tiger <- function(year,
+call_tiger <- function(year,
                   scale = c("500k", "20m", "5m"),
                   geometry = TRUE){
   scale <- match.arg(scale)
@@ -200,7 +197,7 @@ tiger <- function(year,
 # Produce Distance  Matrix
 dist_mat <- function(year,
                      scale = c("500k", "20m", "5m")){
-  t <- tiger(year, scale)
+  t <- call_tiger(year, scale)
   df <- t$center %>% 
     as_Spatial() %>% 
     distm()
@@ -208,10 +205,10 @@ dist_mat <- function(year,
   return(df)
 }
 
-# Produce Proximity  Matrix
-prox_mat <- function(year,
-                     scale = c("500k", "20m", "5m"),
-                     queen = TRUE){
+# Produce Border Proximity  Matrix
+bprox_mat <- function(year,
+                      scale = c("500k", "20m", "5m"),
+                      queen = TRUE){
   t <- tiger(year, scale)
   df <- t$geometry %>% 
     poly2nb(queen = queen) %>%
@@ -220,9 +217,46 @@ prox_mat <- function(year,
   return(df)
 }
 
+# Produce Distance Proximity Matrix
+dprox_mat <- function(year,
+                      scale = c("500k", "20m", "5m"),
+                      boundary_limit){
+  df <- dist_mat(year, scale)
+  df[df<boundary_limit & df>0] <- 1
+  df[df>boundary_limit] <- 0
+  return(df)
+}
+
+# Produce inverse power distance decay impedance matrix
+power_impedance_mat <- function(year,
+                      scale = c("500k", "20m", "5m"),
+                      decay_power = 2){
+  df <- dist_mat(year, scale)
+  df <- (1/(df)^decay_power)
+  return(df)
+}
+
+# Produce exponential distance decay impedance matrix
+expo_impedance_mat <- function(year,
+                      scale = c("500k", "20m", "5m"),
+                      decay_constant = 10000){
+  df <- dist_mat(year, scale)
+  df <- exp(-(df/decay_constant)) 
+  return(df)
+}
+
+# Produce  hyperbolic secant distance decay impedance matrix
+hyper_impedance_mat <- function(year,
+                               scale = c("500k", "20m", "5m"),
+                               decay_constant = 1000000){
+  df <- dist_mat(year, scale)
+  df <- ((2/(exp(-(df/decay_constant)) + exp(df/decay_constant))))
+  return(df)
+}
+
 
 # Call up and clean RUCC data
-rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
+call_rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
   ryear <- match.arg(ryear)
   df <- ers_rurality$get_ruc_df()
   df <- df %>% filter(RUC_YEAR==ryear)
@@ -233,10 +267,9 @@ rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
 # Produce TIGER and RUCC table
 tiger_rucc <- function(year,
                        scale = c("500k", "20m", "5m"),
-                       queen = TRUE,
                        ryear = c("2013", "2003", "1993", "1983", "1974")){
-  t <- tiger(year, scale)
-  r <- rucc(ryear)
+  t <- call_tiger(year, scale)
+  r <- call_rucc(ryear)
   df <- inner_join(t, r, by = "place")
   df <- df[order(df$place), ]
   #rownames(df) <- df$place
@@ -327,8 +360,8 @@ industry_output_by_place <- function(year,
 
 
 ############ Call and clean pubdata BEA IO Use table
-use_table <- function(year,
-                      ilevel = c("det", "sum", "sec")){
+call_use_table <- function(year,
+                           ilevel = c("det", "sum", "sec")){
   
   ilevel <- match.arg(ilevel)
   
@@ -346,7 +379,7 @@ use_table <- function(year,
 labor_share <- function(year,
                         ilevel = c("det", "sum", "sec")){
   ilevel <- match.arg(ilevel)
-  df <- use_table(year, ilevel) %>% as.matrix()
+  df <- call_use_table(year, ilevel) %>% as.matrix()
   
   if (ilevel == "det"){
     # Collapse ambiguous detail level industry 23* codes
@@ -415,14 +448,15 @@ total_output <- function (year,
 }
 
 
+
 ############ Derive clean Output Matrix 
-output <- function (year,
-                    ilevel = c("det", "sum", "sec"),
-                    scale = c("county", "state", "us"),
-                    output_metric = c("ap", "emp", "qp1", "est"),
-                    data_dir = file.path("data", "robjs"),
-                    labor_share_year = year,
-                    tiger_year = year){
+total_output_tidy <- function (year,
+                                ilevel = c("det", "sum", "sec"),
+                                scale = c("county", "state", "us"),
+                                output_metric = c("ap", "emp", "qp1", "est"),
+                                data_dir = file.path("data", "robjs"),
+                                labor_share_year = year,
+                                tiger_year = year){
   
   df <- total_output(year = year, 
                      ilevel = ilevel,
@@ -442,8 +476,8 @@ output <- function (year,
 
 
 ############ Call and clean the total requirements matrix 
-call_total <- function(year,
-                       ilevel = c("det", "sum", "sec")){
+call_total_requirements <- function(year,
+                                    ilevel = c("det", "sum", "sec")){
   ilevel <- match.arg(ilevel)
   if(ilevel == "det"){
     x <- year %in% c("2007", "2012")
@@ -473,7 +507,7 @@ call_total <- function(year,
 direct_requirements <- function(year,
                                 ilevel = c("det", "sum", "sec")){
   options(scipen=999)
-  df <- call_total(year, ilevel)
+  df <- call_total_requirements(year, ilevel)
   df <- diag(ncol(df)) - solve(df)
   return(df)
 }
@@ -555,11 +589,15 @@ normalized_absorption_share <- function(sas_matrix,
 
 ############ Row-wise Absorption Potential Maximum and Match
 absorption_maximum_match <- function(absorption_matrix, 
-                                     threshold=.05){
-  a <- absorption_matrix
+                                     threshold = .05, 
+                                     impedance = NULL){
+  if(is.null(impedance)){
+    a <- absorption_matrix
+  } else {
+    a <- absorption_matrix * impedance[colnames(absorption_matrix), rownames(absorption_matrix)]
+  }
   df <-  cbind(place = rownames(a), 
-               match = colnames(a)[apply(a, 1, which.max)], 
-               #match = colnames(a)[max.col(a, ties.method = "first")],
+               match = colnames(a)[apply(a, 1, which.max)],
                max_absorption_alpha = apply(a, 1, max), 
                second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])}), 
                absorption_alpha_gini = apply(a, 1, Gini),
@@ -656,20 +694,52 @@ connectedness <- function (cbp_year,
                            labor_share_year = cbp_year,
                            tiger_year = cbp_year,
                            bea_year = cbp_year,
-                           threshold = .05){
+                           threshold = .05,
+                           impedance = NULL){
   
-  o <- output(year = cbp_year,
-              ilevel = ilevel,
-              scale = scale,
-              output_metric = output_metric,
-              data_dir = data_dir,
-              labor_share_year = labor_share_year,
-              tiger_year = tiger_year)
+  o <- total_output_tidy(year = cbp_year,
+                         ilevel = ilevel,
+                         scale = scale,
+                         output_metric = output_metric,
+                         data_dir = data_dir,
+                         labor_share_year = labor_share_year,
+                         tiger_year = tiger_year)
   d <- direct_requirements(year = bea_year, 
                            ilevel = ilevel)
   i <- industry_input(d, o)
   s <- stacked_absorption_share(net_input_supply(o, i), net_input_demand(o, i))
-  df <- absorption_maximum_match(normalized_absorption_share(s, net_input_supply(o, i)), threshold = threshold)
+  n <- normalized_absorption_share(s, net_input_supply(o, i))
+  
+  df <- absorption_maximum_match(n, threshold = threshold, impedance = impedance)
+  
+  return(df)
+}
+
+
+############ Call connectedness for any available year and industry scale with spatial component
+spatial_connectedness <- function (cbp_year,
+                                   ilevel = c("det", "sum", "sec"),
+                                   scale = c("county", "state", "us"),
+                                   output_metric = c("ap", "emp", "qp1", "est"),
+                                   data_dir = file.path("data", "robjs"),
+                                   labor_share_year = cbp_year,
+                                   tiger_year = cbp_year,
+                                   bea_year = cbp_year,
+                                   threshold = .05,
+                                   impedance = NULL){
+  c <- connectedness(cbp_year = cbp_year,
+                     ilevel = ilevel,
+                     scale = scale,
+                     output_metric = output_metric,
+                     data_dir = data_dir,
+                     labor_share_year = labor_share_year,
+                     tiger_year = tiger_year,
+                     bea_year = bea_year,
+                     threshold = threshold,
+                     impedance = impedance)
+  s <- tiger_rucc(tiger_year) %>% 
+        select(place, NAME, STATE_CODE, COUNTY_CODE, FIPS, STATE, COUNTY, RUC_CODE, POPULATION, geometry, center)
+  df <- join_space_with_connectedness(c, s)
   return(df)
 }
 
@@ -692,6 +762,40 @@ spatial_cluster <- function(spatial_connectedness_table,
 }
 
 
+
+############ Call spatial connectedness for any available year and industry scale aggregating eca clusters across space
+cluster_spatial_connectedness <- function (cbp_year,
+                                           ilevel = c("det", "sum", "sec"),
+                                           scale = c("county", "state", "us"),
+                                           output_metric = c("ap", "emp", "qp1", "est"),
+                                           data_dir = file.path("data", "robjs"),
+                                           labor_share_year = cbp_year,
+                                           tiger_year = cbp_year,
+                                           bea_year = cbp_year,
+                                           threshold = .05,
+                                           impedance = NULL,
+                                           list_names = NULL){
+  df <- spatial_connectedness(cbp_year = cbp_year,
+                              ilevel = ilevel,
+                              scale = scale,
+                              output_metric = output_metric,
+                              data_dir = data_dir,
+                              labor_share_year = labor_share_year,
+                              tiger_year = tiger_year,
+                              bea_year = bea_year,
+                              threshold = threshold,
+                              impedance = impedance)
+  x <- df$eca_membership %>% unique() %>% .[order(.)]
+  for (i in x){
+    print(paste(list_names, "start cluster: ", i, which(i == x), "of", length(x), Sys.time()))
+    df[df$place == i,]$geometry <- df %>% filter(df$eca_membership == i) %>% st_union()
+    print(paste(list_names, "  end cluster: ", i, which(i == x), "of", length(x), Sys.time()))
+  }
+  df <- df %>% .[.$place %in% .$eca_membership, ]
+  return(df)
+}
+
+
 ############ Aggregate economic industry output of each ECA member in a cluster, keep all non source places as ECA core unit label
 aggregate_industry_output <- function(industry_output_matrix, 
                                       connectedness_table,
@@ -709,7 +813,7 @@ aggregate_industry_output <- function(industry_output_matrix,
 }
 
 
-############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matricies from a base single output matrix and single direct requirements matrix
+############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
 one_hierarchical_connectedness <- function(direct_mat, 
                                            output_mat, 
                                            space_mat,
@@ -745,7 +849,10 @@ one_hierarchical_connectedness <- function(direct_mat,
 
 
 
-##### To respecify: absorbr, graphr, cus_pal_maps, mapr2, maprCNT, maprECA
+
+################################### 
+################################### 
+################################### To respecify: absorbr, graphr, cus_pal_maps, mapr2, maprCNT, maprECA
 
 ##### Absorption tables
 absorbr <- function(top_absorb, all_absorb, in_core, im_mat, ex_mat, impind, macc, industry_levels){

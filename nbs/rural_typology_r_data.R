@@ -131,6 +131,7 @@ if (file.exists(file.path(data_dir, "farm_sales"))) {
 log_info("farms sales download complete")
 
 
+
 #### Total Output Matrix in thousands of dollars
 if (!file.exists(file.path(data_dir, "Output_mat"))){
   Output_mat <- list()
@@ -142,7 +143,7 @@ if (!file.exists(file.path(data_dir, "Output_mat"))){
 }
 log_info("Total Output Matrix complete")
 
-#### Direct requirements matrices (Technical Coefficients) 
+#### Direct requirements matrices (Technical Coefficients)
 if (!file.exists(file.path(data_dir, "Direct_mat"))){
   Direct_mat <- list()
   Direct_mat[["Sector"]] <- direct_requirements("2020", "sec")
@@ -152,27 +153,6 @@ if (!file.exists(file.path(data_dir, "Direct_mat"))){
   rm(Direct_mat)
 }
 log_info("Direct Requirements Matrix complete")
-
-
-### Test of missing CBP coverage in Census coverage
-# setdiff(unique(tiger("2020")$place), unique(place_industry_economy_long("2012", "det_cord")$place) )
-
-# Import and cleanup pubdata RUCC data
-if (!file.exists(file.path(data_dir, "RUCCDatap"))){
-  RUCCDatap <- ers_rurality$get_ruc_df()
-  RUCCDatap %<>% filter(RUC_YEAR=="2013")
-  RUCCDatap$place <- RUCCDatap$FIPS
-  saver(RUCCDatap)
-  rm(RUCCDatap) 
-}
-log_info("Import 'pubdata' RUCC complete")
-
-
-### Test of nonoverlapping TIGER and RUCC coverage
-##setdiff(tiger("2020")$place, rucc()$place)
-##setdiff(rucc()$place, tiger("2020")$place)
-### Note: Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515") for 2020
-
 
 # TIGER  and RUCC
 if (!file.exists(file.path(data_dir, "TIGER_RUCC"))){
@@ -185,37 +165,15 @@ log_info("TIGER/RUCC merge complete")
 
 
 
+### Test of missing CBP coverage in Census coverage
+# setdiff(unique(tiger("2020")$place), unique(place_industry_economy_long("2012", "det_cord")$place) )
 
-# ###Note: Get impedance to work with Dist_mat and develop more flexible functionality
-# #Specify spatial impedance structure
-# if (!file.exists(file.path(data_dir, "Impede_mat"))){
-#   importr(D_mat) 
-#   Impede_mat <- vector(mode='list', length = 3)
-#   
-#   ### inverse square function
-#   Impede_mat[[1]] <- D_mat
-#   for (i in 1:length(D_mat)){
-#     Impede_mat[[1]][[i]] <- ((1/(D_mat[[i]])^2))
-#   }
-#   ### exponential decay function
-#   Impede_mat[[2]] <- D_mat
-#   for (i in 1:length(D_mat)){
-#     Impede_mat[[2]][[i]] <- (exp(-(D_mat[[i]]/10000)) )
-#   }
-#   ### hyperbolic secant function
-#   Impede_mat[[3]] <- D_mat
-#   for (i in 1:length(D_mat)){
-#     Impede_mat[[3]][[i]] <-  ((2/(exp(-(D_mat[[i]]/1000000)) + exp(D_mat[[i]]/1000000))))
-#   }
-#   ### hyperbolic secant function 2
-#   Impede_mat[[4]] <- D_mat
-#   for (i in 1:length(D_mat)){
-#     Impede_mat[[4]][[i]] <-  ((2/(exp(-(D_mat[[i]]/10000000)) + exp(D_mat[[i]]/10000000))))
-#   }
-#   saver(Impede_mat)
-#   rm(D_mat, Impede_mat)
-# }
-# log_info("Spatial impedance structure complete")
+
+### Test of nonoverlapping TIGER and RUCC coverage
+#setdiff(tiger("2020")$place, rucc()$place)
+#setdiff(rucc()$place, tiger("2020")$place)
+## Note: Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515") for 2020
+
 
 
 # Remove clutter
