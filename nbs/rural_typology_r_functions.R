@@ -18,6 +18,7 @@ library(dplyr)
 library(geosphere)
 library(spdep)
 
+library(DescTools)
 
 
 
@@ -182,13 +183,95 @@ dismapr <- function(p){
 
 
 
-#Function add NAICS to BEA codes  
-concordr <- function(cordname, 
-                     econpath, 
-                     filepath = file.path("data", "robjs")){
-  econ <- file.path(find_rstudio_root_file(), filepath, econpath) %>% readRDS()
-  cord <- file.path(find_rstudio_root_file(), filepath, cordname) %>% readRDS()
-  x <- left_join(econ, cord, by = "NAICS") 
+# Call up and clean TIGER data
+tiger <- function(year,
+                  scale = c("500k", "20m", "5m"),
+                  geometry = TRUE){
+  scale <- match.arg(scale)
+  df <- geography$get_county_df(strtoi(year), 
+                                geometry, 
+                                scale)
+  df %<>% rename(place = CODE)
+  df$center <- st_centroid(df$geometry)
+  df %<>% arrange(place)
+  return(df)
+}
+
+# Produce Distance  Matrix
+dist_mat <- function(year,
+                     scale = c("500k", "20m", "5m")){
+  t <- tiger(year, scale)
+  df <- t$center %>% 
+    as_Spatial() %>% 
+    distm()
+  rownames(df) = colnames(df) <- t$place
+  return(df)
+}
+
+# Produce Proximity  Matrix
+prox_mat <- function(year,
+                     scale = c("500k", "20m", "5m"),
+                     queen = TRUE){
+  t <- tiger(year, scale)
+  df <- t$geometry %>% 
+    poly2nb(queen = queen) %>%
+    nb2mat(style = "B", zero.policy = TRUE)
+  rownames(df) = colnames(df) <- t$place
+  return(df)
+}
+
+
+# Call up and clean RUCC data
+rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
+  ryear <- match.arg(ryear)
+  df <- ers_rurality$get_ruc_df()
+  df <- df %>% filter(RUC_YEAR==ryear)
+  df$place <- df$FIPS
+  return(df)
+}
+
+# Produce TIGER and RUCC table
+tiger_rucc <- function(year,
+                       scale = c("500k", "20m", "5m"),
+                       queen = TRUE,
+                       ryear = c("2013", "2003", "1993", "1983", "1974")){
+  t <- tiger(year, scale)
+  r <- rucc(ryear)
+  df <- inner_join(t, r, by = "place")
+  df <- df[order(df$place), ]
+  #rownames(df) <- df$place
+  return(df)
+}
+
+
+
+
+# Call up and clean CBP
+call_cbp <- function(year,
+                     scale = c("county", "state", "us")){
+  scale <- match.arg(scale)
+  df <- cbp$get_df(scale, strtoi(year))
+  df %<>% rename(NAICS = industry)
+  df$place <- paste0(df$fipstate, df$fipscty)
+  df %<>% select(fipstate, fipscty, place, NAICS, emp, qp1, ap, est)
+  return(df)
+}
+
+
+
+#Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
+place_industry_economy_long <- function(year,
+                                        ilevel_concord = c("det_cord", "sum_cord", "sec_cord"), 
+                                        scale = c("county", "state", "us"),
+                                        data_dir = file.path("data", "robjs")){
+  ilevel_concord <- match.arg(ilevel_concord)
+  ## Check industry level concordance exists
+  concord <- file.path(find_rstudio_root_file(), data_dir, ilevel_concord)
+  stopifnot("industry level concordance does not exist" = file.exists(concord) == TRUE) 
+  
+  c <- readRDS(concord)
+  cbp <- call_cbp(year, scale)
+  x <- left_join(cbp, c, by = "NAICS") 
   x <- x %>%
     filter(.[9] != "NULL") %>%
     group_by(place, .[9]) %>%
@@ -196,51 +279,209 @@ concordr <- function(cordname,
     as.data.frame()
   x <- x %>%
     group_by(place) %>%
-    arrange(factor(x[[2]], levels = unique(readRDS(file.path(data_dir, cordname))[[1]])), .by_group = TRUE) %>%
+    arrange(factor(x[[2]], levels = unique(c[[1]])), .by_group = TRUE) %>%
     as.data.frame()
-  return(x)
-}
-
-
-#Function to generate full economic industry/county table 
-reshaper <- function(industry_data_frame, cordname){ 
-  x <- reshape(industry_data_frame, idvar = names(industry_data_frame[2]), timevar = "place", direction = "wide") %>% 
+  df <- reshape(x, idvar = names(x[2]), timevar = "place", direction = "wide") %>% 
     suppressWarnings()
-  x <- x %>% arrange(factor(x[[1]], levels = unique(readRDS(file.path(data_dir, cordname))[[1]])), .by_group = TRUE)
-  rownames(x) <- x[,1]
-  x[is.na(x)] <- 0
-  colnames(x)[1] <- "indcode"
-  x <- x %>% reshape(idvar = "place", varying = c(colnames(x)[-1]), direction = "long")
-  rownames(x) <- 1:nrow(x)
-  names(x)[names(x)=="time"] <- "place"
-  x$place <- x$place  %>% formatC(width = 5, format = "d", flag = "0")
-  x$emp <-  as.numeric(x$emp)
-  x$qp1 <-  as.numeric(x$qp1)
-  x$ap <-  as.numeric(x$ap)
-  x$est <-  as.numeric(x$est)
-  x <- x[1:6]
-  assign(paste0(deparse(substitute(industry_data_frame)), "_XBEA"), x, envir=.GlobalEnv)
+  df <- df %>% arrange(factor(df[[1]], levels = unique(c[[1]])), .by_group = TRUE)
+  rownames(df) <- df[,1]
+  df[is.na(df)] <- 0
+  colnames(df)[1] <- "indcode"
+  df <- df %>% reshape(idvar = "place", varying = c(colnames(df)[-1]), direction = "long")
+  rownames(df) <- 1:nrow(df)
+  names(df)[names(df)=="time"] <- "place"
+  df$place <- df$place  %>% formatC(width = 5, format = "d", flag = "0")
+  df$emp <-  as.numeric(df$emp)
+  df$qp1 <-  as.numeric(df$qp1)
+  df$ap <-  as.numeric(df$ap)
+  df$est <-  as.numeric(df$est)
+  df <- df[1:6]
+  return(df)
 }
 
-#Function extract county-level industry output data and reshape to industry-by-county matrix
-reshape_output_long_wide <- function(data_file, 
-                                     industry_code = "indcode", 
-                                     place = "place", 
-                                     industry_county_output = "ap"){
-  df <- data_file %>% .[, c(industry_code, place, industry_county_output)] 
+#Generate industry output ("ap", "emp", "qp1", or "est") by location (county) from CBP in terms of BEA industry codes ("det_cord", "sum_cord", or "sec_cord") for any available year
+industry_output_by_place <- function(year,
+                                     ilevel_concord = c("det_cord", "sum_cord", "sec_cord"), 
+                                     scale = c("county", "state", "us"),
+                                     data_dir = file.path("data", "robjs"), 
+                                     output_metric = c("ap", "emp", "qp1", "est")){
+  output_metric <- match.arg(output_metric)
+  df <- place_industry_economy_long(year = year, 
+                                    ilevel_concord = ilevel_concord, 
+                                    scale = scale, 
+                                    data_dir = data_dir) %>% 
+    .[, c("indcode", "place", output_metric)] 
+  
   df <- reshape(df,
-                idvar = industry_code, 
-                v.names = industry_county_output, 
-                varying = unique(df[[place]]), 
-                timevar = place, 
-                new.row.names = unique(df[[industry_code]]),
+                idvar = "indcode",
+                v.names = output_metric,
+                varying = unique(df[["place"]]),
+                timevar = "place",
+                new.row.names = unique(df[["indcode"]]),
                 direction = "wide")
   df <- df %>% subset(select = -c(1)) %>% as.matrix()
+  return(df)
 }
+
+
+
+
+############ Call and clean pubdata BEA IO Use table
+use_table <- function(year,
+                      ilevel = c("det", "sum", "sec")){
+  
+  ilevel <- match.arg(ilevel)
+  
+  if(ilevel == "det"){
+    x <- year %in% c("2007", "2012")
+    stopifnot("BEA detail level tables only exist for years 2007 and 2012" = x == TRUE)
+  }
+  
+  df <- bea_io$get_use(strtoi(year), ilevel) %>% as.matrix()
+  return(df)
+}
+
+
+############ Derive the industry labor shares by year and scale
+labor_share <- function(year,
+                        ilevel = c("det", "sum", "sec")){
+  ilevel <- match.arg(ilevel)
+  df <- use_table(year, ilevel) %>% as.matrix()
+  
+  if (ilevel == "det"){
+    # Collapse ambiguous detail level industry 23* codes
+    # adding up all construction columns together
+    l <- 1:24
+    c <- 25:36
+    r <- 37:405
+    df <- cbind(df[, l], rowSums(df[, c], na.rm = TRUE), df[, r])
+    colnames(df)[25] <- "23"
+    df <- df["V00100", , drop = FALSE]/df["T018", , drop = FALSE] %>% as.matrix()
+  } else {
+    df <- df["V001", , drop = FALSE]/df["T018", , drop = FALSE] %>% as.matrix()
+  }
+  rownames(df) <- "labor_share"
+  return(df)
+}
+
+
+
+
+############ Derive the Total Output Matrix (in thousands of dollars)
+total_output <- function (year,
+                          ilevel = c("det", "sum", "sec"),
+                          scale = c("county", "state", "us"),
+                          output_metric = c("ap", "emp", "qp1", "est"),
+                          data_dir = file.path("data", "robjs"),
+                          labor_share_year = year){
+  
+  ## Check farms sales exists
+  f <- file.path(find_rstudio_root_file(), data_dir, "farm_sales")
+  stopifnot("farm sales data do not exist" = file.exists(f) == TRUE) 
+  
+  farm_sales <- readRDS(f)
+  fn <- colnames(farm_sales)[-c(1)]
+  
+  ilevel <- match.arg(ilevel)
+  scale <- match.arg(scale)
+  output_metric <- match.arg(output_metric)
+  ilevel_concord <- paste0(ilevel, "_cord")
+  
+  
+  iout <- industry_output_by_place(year, 
+                                   ilevel_concord = ilevel_concord, 
+                                   scale = scale,
+                                   data_dir = data_dir, 
+                                   output_metric = output_metric)
+  ls <- labor_share(labor_share_year, ilevel) %>% .[, rownames(iout)] %>% unlist()
+  
+  df <- apply(iout, 2, function (x) {x / ls})
+  df <- t(df) %>% as.data.frame()
+  df$STCTY <- rownames(df)
+  df <- left_join(df, farm_sales, by = "STCTY")
+  if (ilevel == "sec") {
+    df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
+    df <- df %>% select(!c(fn))
+  } else if (ilevel == "sum") {
+    df[["111CA"]] <- rowSums(df[, c(fn)], na.rm = T)
+    df <- df %>% select(!c(fn)) %>% select("111CA", everything())
+  } else if (ilevel == "det") {
+    df <- df %>% select(fn, everything())
+  }
+  rownames(df) <- df$STCTY
+  df$STCTY <- NULL
+  df <- t(df)
+  return(df)
+}
+
+
+############ Derive clean Output Matrix 
+output <- function (year,
+                    ilevel = c("det", "sum", "sec"),
+                    scale = c("county", "state", "us"),
+                    output_metric = c("ap", "emp", "qp1", "est"),
+                    data_dir = file.path("data", "robjs"),
+                    labor_share_year = year,
+                    tiger_year = year){
+  
+  df <- total_output(year = year, 
+                     ilevel = ilevel,
+                     scale = scale,
+                     output_metric = output_metric,
+                     data_dir = data_dir,
+                     labor_share_year = labor_share_year)
+  t <- tiger_rucc(tiger_year)
+  
+  
+  df <- df[, colnames(df) %in% c(unique(t$place))]
+  df <- df[, colnames(df) %in% c(filter(t, !STATE_CODE %in% c("02", "15"))$place)]
+  df[is.na(df)] = 0
+  df <- df[, colSums(df != 0) > 0]
+  return(df)
+}
+
+
+############ Call and clean the total requirements matrix 
+call_total <- function(year,
+                       ilevel = c("det", "sum", "sec")){
+  ilevel <- match.arg(ilevel)
+  if(ilevel == "det"){
+    x <- year %in% c("2007", "2012")
+    stopifnot("BEA detail level tables only exist for years 2007 and 2012" = x == TRUE)
+  }
+  
+  df <- bea_io$get_ixi(year, ilevel) %>% 
+    .[1:ncol(.), ] %>% 
+    as.matrix()
+  rownames(df) <- colnames(df)
+  
+  # Collapse ambiguous industry 23* codes at detail level
+  if(ilevel == "det"){ 
+    d <- sum(df[25:36, 25:36]) / 12
+    df[, 25] <- rowMeans(df[, 25:36])
+    df <- df[, -c(26:36)]
+    df[25, ] <- colMeans(df[25:36, ])
+    df <- df[-c(26:36), ]
+    df[25, 25] <- d
+    colnames(df)[25] <- rownames(df)[25] <- "23"
+  }
+  
+  return(df)
+}
+
+############ Derive the direct requirements matrix (Technical Coefficients) 
+direct_requirements <- function(year,
+                                ilevel = c("det", "sum", "sec")){
+  options(scipen=999)
+  df <- call_total(year, ilevel)
+  df <- diag(ncol(df)) - solve(df)
+  return(df)
+}
+
 
 
 ############ Industry Input Needs 
-### For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of input needs DY
+### Derive the industry-by-county matrix of input needs DY
 industry_input <- function(technical_coefficients_matrix, 
                            industry_output_matrix){
   
@@ -256,7 +497,7 @@ industry_input <- function(technical_coefficients_matrix,
 }
 
 ############ Net Input Demand
-### For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of net input demand 
+### Derive the industry-by-county matrix of net input demand 
 net_input_demand <- function(industry_output_matrix, 
                              industry_input_matrix){
     i <- industry_input_matrix
@@ -265,7 +506,7 @@ net_input_demand <- function(industry_output_matrix,
 }
 
 ############ Net Input Supply
-### derive the industry-by-county matrix of net input supply 
+### Derive the industry-by-county matrix of net input supply 
 net_input_supply <- function(industry_output_matrix, 
                              industry_input_matrix){
     i <- industry_input_matrix
@@ -318,11 +559,20 @@ absorption_maximum_match <- function(absorption_matrix,
   a <- absorption_matrix
   df <-  cbind(place = rownames(a), 
                match = colnames(a)[apply(a, 1, which.max)], 
+               #match = colnames(a)[max.col(a, ties.method = "first")],
                max_absorption_alpha = apply(a, 1, max), 
-               second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])})
-               ) %>% as.data.frame()
-  df$max_absorption_alpha <- as.numeric(df$max_absorption)
-  df$second_max_absorption_alpha <- as.numeric(df$second_max_absorption)
+               second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])}), 
+               absorption_alpha_gini = apply(a, 1, Gini),
+               absorption_alpha_total = apply(a, 1, sum),
+               absorption_alpha_mean = apply(a, 1, mean),
+               absorption_alpha_sd = apply(a, 1, sd)
+  ) %>% as.data.frame()
+  df$max_absorption_alpha <- as.numeric(df$max_absorption_alpha)
+  df$second_max_absorption_alpha <- as.numeric(df$second_max_absorption_alpha)
+  df$absorption_alpha_gini <- as.numeric(df$absorption_alpha_gini)
+  df$absorption_alpha_total <- as.numeric(df$absorption_alpha_total)
+  df$absorption_alpha_mean <- as.numeric(df$absorption_alpha_mean)
+  df$absorption_alpha_sd <- as.numeric(df$absorption_alpha_sd)
   
   ### cluster_class reevaluates the maximum absorption match to account for an isolation threshold and ECA isolated corner cases (i.e., no one imports your excess so you are isolated, but you are max import sink for someone else)
   df$cluster_class <- df$match
@@ -349,8 +599,18 @@ absorption_maximum_match <- function(absorption_matrix,
   df <- df%>% group_by(eca_membership) %>% mutate(cluster_members_count = n())
   
   ### keep only the pertinent variables 
-  df <- df %>% select(place, max_absorption_alpha, second_max_absorption_alpha, cluster_category, eca_membership, cluster_members_count)
+  df <- df %>% select(place, 
+                      max_absorption_alpha, 
+                      second_max_absorption_alpha, 
+                      absorption_alpha_gini, 
+                      absorption_alpha_total, 
+                      absorption_alpha_mean, 
+                      absorption_alpha_sd, 
+                      cluster_category, 
+                      eca_membership, 
+                      cluster_members_count)
 }
+
 
 
 ############ Test for non-singular row-wise absorption potential maximums 
@@ -386,6 +646,32 @@ one_direct_connect <- function(technical_coefficients_matrix, industry_output_ma
   df <- absorption_maximum_match(normalized_absorption_share(stacked_absorption_share(net_input_supply(io, industry_input(tc, io)), net_input_demand(io, industry_input(tc, io))), net_input_supply(io, industry_input(tc, io))), threshold)  
 }
 
+
+############ Call connectedness for any available year and industry scale
+connectedness <- function (cbp_year,
+                           ilevel = c("det", "sum", "sec"),
+                           scale = c("county", "state", "us"),
+                           output_metric = c("ap", "emp", "qp1", "est"),
+                           data_dir = file.path("data", "robjs"),
+                           labor_share_year = cbp_year,
+                           tiger_year = cbp_year,
+                           bea_year = cbp_year,
+                           threshold = .05){
+  
+  o <- output(year = cbp_year,
+              ilevel = ilevel,
+              scale = scale,
+              output_metric = output_metric,
+              data_dir = data_dir,
+              labor_share_year = labor_share_year,
+              tiger_year = tiger_year)
+  d <- direct_requirements(year = bea_year, 
+                           ilevel = ilevel)
+  i <- industry_input(d, o)
+  s <- stacked_absorption_share(net_input_supply(o, i), net_input_demand(o, i))
+  df <- absorption_maximum_match(normalized_absorption_share(s, net_input_supply(o, i)), threshold = threshold)
+  return(df)
+}
 
 
 ############ Spatial union each ECA member in a cluster
