@@ -36,7 +36,8 @@ Run code in this section when you start working with the project.
 It will create symbolic links necessary for file discovery within project directory structure.
 If project is used as a library, importing code must call the `init()` function.
 
-+++ {"tags": ["nbd-module"]}
+```{code-cell} ipython3
+:tags: [nbd-module]
 
 import os
 import importlib
@@ -89,6 +90,7 @@ def _recreate_dir_symlink(link, targ, root):
     link_res = link.resolve()
     assert link_res.is_dir()
     print(f'  symlink: "{link.relative_to(root)}" -> "{link_res.relative_to(root)}"')
+```
 
 +++ {"tags": ["nbd-docs"]}
 
@@ -122,6 +124,13 @@ from rurec.pubdata import bea_io
 bea_io.get_naics_df().head()
 ```
 
+```{code-cell} ipython3
+:tags: []
+
+from rurec import ag_output
+ag_output.get_farm_sales_by_bea_detail(2017, 'national')
+```
+
 +++ {"tags": []}
 
 # Reproduction: rurec.Rproj
@@ -148,7 +157,7 @@ bea_io.get_naics_df().head()
         - The notebook <toy_stoy.Rmd> is depreciated. (a testing ground for Toy model specifications with numerical examples) 
         - The notebook <maps_io_similarity_ia.Rmd> is depreciated. (maps the various topological similarity index relationships for Iowa counties and Nebraska)
        
-    - All data and generated R objects are stored in the /data and the /data/robjs files respectively. 
+    - All data and generated R objects are stored in the /data and the /data/robjs files respectively.
 
 +++
 
