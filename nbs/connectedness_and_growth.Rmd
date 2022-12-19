@@ -1,0 +1,162 @@
+---
+title: "Connectedness and economic growth"
+---
+
+```{r preamble}
+options(scipen=3)
+
+library(tidyverse)
+library(ggplot2)
+
+bds <- reticulate::import("rurec.pubdata.bds")
+cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
+geography <- reticulate::import("rurec.pubdata.geography")
+
+data_dir = file.path(rprojroot::find_rstudio_root_file(), "data", "robjs")
+
+
+```
+
+Prepare absorption share for all counties by running [notebook](national_connectedness.Rmd) up to `Connectedness_table <-` line, then `saver(Connectedness_table)`.
+
+```{r}
+y <- 2021L
+d1 <- bea_io$get_sup(y, 'sec', TRUE)[1:15, ] %>%
+  as_tibble(rownames = "commodity") %>%
+  rename(output = `Total Commodity Output`) %>%
+  mutate(output_share = output / sum(.$output)) %>%
+  select(commodity, output, output_share)
+
+d2 <- bea_io$get_use(y, 'sec', TRUE)[1:15, ] %>%
+  as_tibble(rownames = "commodity") %>%
+  rename(use = `Total use of products`, intermed = `Total Intermediate`) %>%
+  mutate(intermed_share = intermed / use) %>%
+  select(commodity, intermed, use, intermed_share)
+
+inner_join(d1, d2)
+```
+
+
+```{r data}
+
+# load BDS county data
+df <- bds$get_df("cty") %>%
+  filter(year > 2014) %>%
+  mutate(stcty = str_c(st, cty)) %>%
+  select(year, stcty, estabs, emp) %>%
+  rename(est = estabs) %>%
+  arrange(stcty, year)
+
+# add absorption shares
+d <- readRDS(file.path(data_dir, "Connectedness_table"))$Detail %>%
+  ungroup %>%
+  rename(stcty = place) %>%
+  select(stcty, max_absorption_alpha, second_max_absorption_alpha)
+df <- inner_join(df, d, by = "stcty")
+
+# add rural status
+d <- cbsa$get_cbsa_delin_df(2017) %>%
+  rename_with(str_to_lower) %>%
+  mutate(stcty = str_c(state_code, county_code)) %>%
+  select(stcty, metro_micro)
+df <- left_join(df, d, by = "stcty") %>% mutate(rural = (metro_micro != "metro") %>% replace_na(TRUE))
+
+
+
+# ag share of output
+d <- readRDS(file.path(data_dir, "Output_mat"))$Sector %>% t
+stcty <- rownames(d)
+d %<>% as_tibble
+d$ag_share <- d[["11"]] / rowSums(d)
+d$stcty <- stcty
+d %<>% select(stcty, ag_share)
+df <- left_join(df, d, by = "stcty")
+
+# growth rates
+df %<>% group_by(stcty) %>% 
+  mutate(
+    est_gr = 2 * (est - lag(est, 4)) / (est + lag(est, 4)),
+    emp_gr = 2 * (emp - lag(emp, 4)) / (emp + lag(emp, 4))
+  ) %>% 
+  ungroup
+df %<>% drop_na(emp_gr)
+
+df
+
+```
+
+
+Visual relationship between max absorption and growth rate.
+
+```{r viz}
+
+d <- df %>% drop_na(emp_gr)
+
+# rural have less growth and more absorption
+d %>% group_by(rural) %>% summarise(n(), mean(emp_gr), mean(max_absorption_alpha))
+
+# negative slope
+ggplot(d, mapping = aes(max_absorption_alpha, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# also in rural subset
+ggplot(d %>% filter(rural), mapping = aes(max_absorption_alpha, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+
+```
+
+
+```{r reg}
+# negative coef in rural sample
+m <- lm(emp_gr ~ max_absorption_alpha, data = filter(df, rural))
+summary(m)
+
+# smaller magnitude when weighted
+m <- lm(emp_gr ~ max_absorption_alpha, data = filter(df, rural), weights = emp)
+summary(m)
+
+# including non-metro counties with interaction: 
+# no significant difference between metro and non-metro
+m <- lm(emp_gr ~ max_absorption_alpha * rural, data = df, weights = emp)
+summary(m)
+
+# adding ag share
+# careful! emp measure does not include farms
+m <- lm(emp_gr ~ max_absorption_alpha * rural + max_absorption_alpha * ag_share, data = df, weights = emp)
+summary(m)
+
+```
+
+
+```{r}
+df %<>% cbind(margins::dydx(df, m, "max_absorption_alpha"))
+
+# marginal effect in Wisconsin counties
+d <- geography$get_county_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  rename(stcty = code, cty_name = name) %>%
+  select(stcty, cty_name)
+
+dydx_wi <- df %>% ungroup %>%
+  filter(str_sub(stcty, 1, 2) == "55") %>%
+  left_join(d, by = "stcty") %>%
+  select(cty_name, rural, emp, emp_gr, ag_share, max_absorption_alpha, dydx_max_absorption_alpha) %>%
+  arrange(dydx_max_absorption_alpha)
+
+dydx_wi %>%
+  filter(rural) %>%
+  {rbind(head(., 5), tail(., 5))} %>%
+  mutate_if(is.numeric, round, digits = 3)
+
+ggplot(dydx_wi, 
+       aes(ag_share, max_absorption_alpha, colour = dydx_max_absorption_alpha, shape = rural)
+       ) +
+  geom_point() +
+  labs(title = "Marginal effect of max_absorption_alpha in WI counties")
+
+
+```
+
