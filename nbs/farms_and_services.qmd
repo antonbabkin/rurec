@@ -1,0 +1,1116 @@
+---
+title: "Farms and services"
+format:
+  html:
+    toc: true
+    code-fold: true
+    df-print: paged
+execute:
+  cache: true
+---
+
+```{r}
+#| cache: false
+#| echo: false
+#| output: false
+library(tidyverse)
+library(ggiraph)
+library(ggpp)
+library(glue)
+
+library(reticulate)
+reticulate::use_condaenv("rurec")
+geography <- reticulate::import("rurec.pubdata.geography")
+```
+
+
+```{python}
+#| cache: false
+#| echo: false
+#| output: false
+import pandas as pd
+
+from rurec.pubdata import agcensus, geography
+
+```
+
+# Land use
+
+```{python}
+# top categories of land, as reported in Ag Census Table 8
+short_desc_land = ['FARM OPERATIONS - ACRES OPERATED', 'AG LAND, CROPLAND - ACRES', 'AG LAND, WOODLAND - ACRES', 'AG LAND, PASTURELAND, (EXCL CROPLAND & WOODLAND) - ACRES', 'AG LAND, (EXCL CROPLAND & PASTURELAND & WOODLAND) - ACRES']
+
+# verify that these selected entries add up to total land in farms
+df = agcensus.get_df([2017], ['SHORT_DESC', 'VALUE'],
+                     [('AGG_LEVEL_DESC', 'in', ['NATIONAL']),
+                      ('DOMAIN_DESC', '==', 'TOTAL'),
+                      ('SHORT_DESC', 'in', short_desc_land)])
+d = dict(df.values)
+assert d['FARM OPERATIONS - ACRES OPERATED'] == sum(d[x] for x in short_desc_land[1:])
+
+# calculate distribution of land use shares by state
+df = agcensus.get_df([2017], ['STATE_FIPS_CODE', 'SHORT_DESC', 'VALUE'],
+                     [('AGG_LEVEL_DESC', 'in', ['NATIONAL', 'STATE']),
+                      ('DOMAIN_DESC', '==', 'TOTAL'),
+                      ('SHORT_DESC', 'in', short_desc_land)])
+df = df.rename(columns=str.lower)
+land_labels = {
+  'FARM OPERATIONS - ACRES OPERATED': 'land in farms',
+  'AG LAND, CROPLAND - ACRES': 'cropland',
+  'AG LAND, WOODLAND - ACRES': 'woodland',
+  'AG LAND, PASTURELAND, (EXCL CROPLAND & WOODLAND) - ACRES': 'pastureland',
+  'AG LAND, (EXCL CROPLAND & PASTURELAND & WOODLAND) - ACRES': 'other land'
+}
+df['farm_land_cat'] = df['short_desc'].map(land_labels)
+df = df.merge(geography.get_state_df(geometry=False)[['CODE', 'NAME']], 'left', left_on='state_fips_code', right_on='CODE')\
+  .rename(columns={'NAME': 'state'})
+df['farm_land_pct'] = df.groupby('state_fips_code').apply(
+  lambda d: 100 * d['value'] / d.loc[d['farm_land_cat'] == 'land in farms',  'value'].values[0]
+  ).droplevel('state_fips_code')
+  
+df_farm_land_by_state = df
+
+```
+
+```{r}
+d <- py$df_farm_land_by_state %>% filter(farm_land_cat != "land in farms")
+ggplot(filter(d, state_fips_code != "99"), aes(farm_land_cat, farm_land_pct)) +
+  geom_boxplot(aes(group = farm_land_cat)) +
+  geom_point(data = filter(d, state_fips_code == "99"), color="red") +
+  coord_flip()
+```
+
+
+# Top commodities
+
+
+
+Get list of sales reported in Ag Census publication (Table 2) and verify that group items add up to total on national level.
+
+```{python}
+#| eval: false
+short_desc_sales = [
+'COMMODITY TOTALS',
+    'CROP TOTALS',
+        'GRAIN',
+            'CORN',
+            'WHEAT',
+            'SOYBEANS',
+            'SORGHUM',
+            'BARLEY',
+            'RICE',
+            'GRAIN, OTHER',
+        'TOBACCO',
+        'COTTON, LINT & SEED',
+        'VEGETABLE TOTALS, INCL SEEDS & TRANSPLANTS, IN THE OPEN',
+        'FRUIT & TREE NUT TOTALS',
+            'FRUIT & TREE NUT TOTALS, (EXCL BERRIES)',
+            'BERRY TOTALS',
+        'HORTICULTURE TOTALS, (EXCL CUT TREES & VEGETABLE SEEDS & TRANSPLANTS)',
+        'CUT CHRISTMAS TREES & SHORT TERM WOODY CROPS',
+            'CUT CHRISTMAS TREES',
+            'SHORT TERM WOODY CROPS',
+        'FIELD CROPS, OTHER, INCL HAY',
+            'MAPLE SYRUP',
+    'ANIMAL TOTALS, INCL PRODUCTS',
+        'POULTRY TOTALS, INCL EGGS',
+        'CATTLE, INCL CALVES',
+        'MILK', 
+        'HOGS',
+        'SHEEP & GOATS TOTALS, INCL WOOL & MOHAIR & MILK',
+        'EQUINE, (HORSES & PONIES) & (MULES & BURROS & DONKEYS)',
+        'AQUACULTURE TOTALS',
+        'SPECIALTY ANIMAL TOTALS, (EXCL EQUINE)',
+]
+
+df = agcensus.get_df([2017], ['SHORT_DESC', 'VALUE'],
+                     [('AGG_LEVEL_DESC', '==', 'NATIONAL'),
+                      ('DOMAIN_DESC', '==', 'TOTAL'),
+                      ('STATISTICCAT_DESC', 'in', ['SALES', 'SALES & DISTRIBUTION']),
+                      ('UNIT_DESC', '==', '$')])
+# remove " - SALES, MEASURED IN $"
+df['SHORT_DESC'] = df['SHORT_DESC'].str.split(' - ', expand=True)[0]
+
+d = dict(df.values)
+# exactly equal
+assert d['COMMODITY TOTALS'] == d['CROP TOTALS'] + d['ANIMAL TOTALS, INCL PRODUCTS']
+# almost equal: rounding error
+assert abs(d['CROP TOTALS'] 
+  - d['GRAIN'] 
+  - d['TOBACCO'] 
+  - d['COTTON, LINT & SEED'] 
+  - d['VEGETABLE TOTALS, INCL SEEDS & TRANSPLANTS, IN THE OPEN']
+  - d['FRUIT & TREE NUT TOTALS']
+  - d['HORTICULTURE TOTALS, (EXCL CUT TREES & VEGETABLE SEEDS & TRANSPLANTS)']
+  - d['CUT CHRISTMAS TREES & SHORT TERM WOODY CROPS']
+  - d['FIELD CROPS, OTHER, INCL HAY']) == 1000
+# exactly equal
+assert (d['ANIMAL TOTALS, INCL PRODUCTS']
+  - d['POULTRY TOTALS, INCL EGGS']
+  - d['CATTLE, INCL CALVES']
+  - d['MILK']
+  - d['HOGS']
+  - d['SHEEP & GOATS TOTALS, INCL WOOL & MOHAIR & MILK']
+  - d['EQUINE, (HORSES & PONIES) & (MULES & BURROS & DONKEYS)']
+  - d['AQUACULTURE TOTALS']
+  - d['SPECIALTY ANIMAL TOTALS, (EXCL EQUINE)']) == 0
+# almost equal: rounding error
+assert abs(d['GRAIN']
+  - d['CORN']
+  - d['WHEAT']
+  - d['SOYBEANS']
+  - d['SORGHUM']
+  - d['BARLEY']
+  - d['RICE']
+  - d['GRAIN, OTHER']) == 1000
+```
+
+Compute commodity shares at national and state level.
+
+```{python}
+# sales add up to total
+sales_partition = [
+# 'COMMODITY TOTALS',
+    # 'CROP TOTALS',
+        # 'GRAIN',
+            'CORN',
+            'WHEAT',
+            'SOYBEANS',
+            'SORGHUM',
+            'BARLEY',
+            'RICE',
+            'GRAIN, OTHER',
+        'TOBACCO',
+        'COTTON, LINT & SEED',
+        'VEGETABLE TOTALS, INCL SEEDS & TRANSPLANTS, IN THE OPEN',
+        'FRUIT & TREE NUT TOTALS',
+            # 'FRUIT & TREE NUT TOTALS, (EXCL BERRIES)',
+            # 'BERRY TOTALS',
+        'HORTICULTURE TOTALS, (EXCL CUT TREES & VEGETABLE SEEDS & TRANSPLANTS)',
+        'CUT CHRISTMAS TREES & SHORT TERM WOODY CROPS',
+            # 'CUT CHRISTMAS TREES',
+            # 'SHORT TERM WOODY CROPS',
+        'FIELD CROPS, OTHER, INCL HAY',
+            # 'MAPLE SYRUP',
+    # 'ANIMAL TOTALS, INCL PRODUCTS',
+        'POULTRY TOTALS, INCL EGGS',
+        'CATTLE, INCL CALVES',
+        'MILK', 
+        'HOGS',
+        'SHEEP & GOATS TOTALS, INCL WOOL & MOHAIR & MILK',
+        'EQUINE, (HORSES & PONIES) & (MULES & BURROS & DONKEYS)',
+        'AQUACULTURE TOTALS',
+        'SPECIALTY ANIMAL TOTALS, (EXCL EQUINE)',
+]
+
+df = agcensus.get_df([2017], ['STATE_FIPS_CODE', 'SHORT_DESC', 'VALUE'],
+                     [('AGG_LEVEL_DESC', 'in', ['NATIONAL', 'STATE']),
+                      ('DOMAIN_DESC', '==', 'TOTAL'),
+                      ('STATISTICCAT_DESC', 'in', ['SALES', 'SALES & DISTRIBUTION']),
+                      ('UNIT_DESC', '==', '$')])
+df = df.rename(columns={'STATE_FIPS_CODE': 'ST'})
+# remove " - SALES, MEASURED IN $"
+df['SHORT_DESC'] = df['SHORT_DESC'].str.split(' - ', expand=True)[0]
+df['VALUE'] = df['VALUE'].fillna(0)
+df = df.query('SHORT_DESC.isin(@sales_partition)').copy()
+
+df['SALES_PCT'] = df.groupby('ST')['VALUE'].transform(lambda x: x / x.sum() * 100)
+
+# shorter names
+df['COMMODITY'] = df['SHORT_DESC'].replace({
+  'COTTON, LINT & SEED': 'COTTON',
+  'VEGETABLE TOTALS, INCL SEEDS & TRANSPLANTS, IN THE OPEN': 'VEGETABLE',
+  'FRUIT & TREE NUT TOTALS': 'FRUIT & NUT',
+  'HORTICULTURE TOTALS, (EXCL CUT TREES & VEGETABLE SEEDS & TRANSPLANTS)': 'HORTICULTURE',
+  'CUT CHRISTMAS TREES & SHORT TERM WOODY CROPS': 'TREES & WOODY',
+  'FIELD CROPS, OTHER, INCL HAY': 'FIELD CROPS, OTHER',
+  'POULTRY TOTALS, INCL EGGS': 'POULTRY',
+  'CATTLE, INCL CALVES': 'CATTLE',
+  'SHEEP & GOATS TOTALS, INCL WOOL & MOHAIR & MILK': 'SHEEP & GOAT',
+  'EQUINE, (HORSES & PONIES) & (MULES & BURROS & DONKEYS)': 'EQUINE',
+  'AQUACULTURE TOTALS': 'AQUACULTURE',
+  'SPECIALTY ANIMAL TOTALS, (EXCL EQUINE)': 'SPECIALTY ANIMAL',
+})
+
+
+sales_pct = df.set_index(['ST', 'COMMODITY'])[['SALES_PCT']].unstack().fillna(0).stack().reset_index()
+
+```
+
+The box plot below shows distribution of commodity sales shares by state.
+Red dots show national shares.
+Commodities with median share above 1% are:
+CATTLE, MILK, CORN, HORTICULTURE, POULTRY, "FIELD CROPS, OTHER", VEGETABLE and SOYBEANS.
+These top commodities (with exception of the "other" group) will be used to compute commodity shares at county level.
+
+```{r}
+d <- geography$get_state_df(geometry = FALSE) %>%
+  rename(ST = CODE, STATE = NAME) %>%
+  select(ST, STATE)
+df <- left_join(py$sales_pct, d, by = "ST")
+
+# outlier.tooltip only works with vertical bars, hence coord_flip()
+p <- ggplot(df %>% filter(ST != "99"), aes(COMMODITY, SALES_PCT)) + 
+  geom_boxplot_interactive(aes(group = COMMODITY, outlier.tooltip = STATE)) +
+  geom_point(data = filter(py$sales_pct, ST == "99"), color = "red") +
+  coord_flip()
+girafe(ggobj = p)
+
+```
+
+
+```{r}
+py$sales_pct %>% 
+  filter(ST != "99") %>%
+  group_by(COMMODITY) %>%
+  summarise(mean = mean(SALES_PCT), med = median(SALES_PCT)) %>%
+  arrange(desc(med))
+```
+
+# Prepare analysis dataset
+
+## todo: deflate nominal $s
+
+```{python}
+#| output: false
+#| cache: false
+def set_zero_value(d):
+  mask = (d['value_f'] == '(Z)')
+  d.loc[mask, 'value'] = 0
+  print(f'Set values to zero in {sum(mask):,d} (Z) records.')
+  del d['value_f']
+
+years = [2002, 2007, 2012, 2017]
+
+# total number of farms
+df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                     [
+                       ('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==', 'TOTAL'),
+                       ('SHORT_DESC', '==', 'FARM OPERATIONS - NUMBER OF OPERATIONS'),
+                      ]).rename(columns=str.lower)
+set_zero_value(df)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+assert not df[['year', 'stcty']].duplicated().any()
+
+farm_data = df[['year', 'stcty', 'value']].rename(columns={'value': 'farm_count'})
+
+
+# total acres
+# mean acres
+# median acres
+# cropland acres and share
+# pastureland acres and share
+# woodland acres and share
+# other land acres and share
+items_to_cols = {
+  'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
+  'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION': 'land_mean',
+  'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION, MEDIAN': 'land_med',
+  'AG LAND, CROPLAND - ACRES': 'land_crop',
+  'AG LAND, PASTURELAND, (EXCL CROPLAND & WOODLAND) - ACRES': 'land_pasture',
+  'AG LAND, WOODLAND - ACRES': 'land_wood',
+  'AG LAND, (EXCL CROPLAND & PASTURELAND & WOODLAND) - ACRES': 'land_other'
+}
+df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==', 'TOTAL'),
+                       ('SHORT_DESC', 'in', list(items_to_cols)),
+                      ]).rename(columns=str.lower)
+set_zero_value(df)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+df['item'] = df['short_desc'].map(items_to_cols)
+d = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
+farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+
+# total sales
+# mean sales
+# share of farms with crop sales
+# share of farms with animal sales
+# share of crop sales
+# share of animal sales
+
+items_to_cols = {
+  'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
+  'COMMODITY TOTALS - SALES, MEASURED IN $ / OPERATION': 'sales_mean',
+  'CROP TOTALS - OPERATIONS WITH SALES': 'farm_count_sales_crop',
+  'CROP TOTALS - SALES, MEASURED IN $': 'sales_crop',
+  'ANIMAL TOTALS, INCL PRODUCTS - OPERATIONS WITH SALES': 'farm_count_sales_animal',
+  'ANIMAL TOTALS, INCL PRODUCTS - SALES, MEASURED IN $': 'sales_animal'
+}
+df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==', 'TOTAL'),
+                       ('SHORT_DESC', 'in', list(items_to_cols)),
+                      ]).rename(columns=str.lower)
+set_zero_value(df)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+df['item'] = df['short_desc'].map(items_to_cols)
+d = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
+farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+
+```
+
+
+# County descriptive statistics
+
+Figures throughout this section are an overlay of a boxplot (quartiles, range and outliers) and violin plot (density), with red dot showing mean.
+
+```{r}
+distribution_plot <- function(tbl, var, round_digit = 0, gr_var = "year") {
+  tbl <- tbl %>% drop_na(all_of(c(var, gr_var)))
+  
+  stats <- tbl %>%
+    group_by(.data[[gr_var]]) %>%
+    summarize(across(all_of(var), list(
+      mean = mean, 
+      q1 = ~quantile(.x, 0.25),
+      med = median,
+      q3 = ~quantile(.x, 0.75)
+      ))) %>%
+     rename_with(~ str_remove(.x, glue('{var}_'))) %>%
+     mutate(across(everything(), round, round_digit))
+  
+  ggplot(tbl) +
+    geom_density(aes(.data[[var]], color = factor(.data[[gr_var]]))) +
+    annotate("table_npc", npcx = 0, npcy = 1, label=stats)
+}
+
+compute_stats <- function(df, var, gr_var = "year") {
+  stats <- df %>%
+  group_by(.data[[gr_var]]) %>%
+  summarize(
+    n = n(),
+    na_pct = mean(is.na(.data[[var]])) * 100,
+    mean = mean(.data[[var]], na.rm = TRUE),
+    min = min(.data[[var]], na.rm = TRUE),
+    p5 = quantile(.data[[var]], 0.05, na.rm = TRUE),
+    p25 = quantile(.data[[var]], 0.25, na.rm = TRUE),
+    med = median(.data[[var]], na.rm = TRUE),
+    p75 = quantile(.data[[var]], 0.75, na.rm = TRUE),
+    p95 = quantile(.data[[var]], 0.95, na.rm = TRUE),
+    max = max(.data[[var]], na.rm = TRUE)
+    )
+  stats
+}
+
+
+```
+
+## Total number of farm operations
+
+```{r farm_count}
+
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "farm_count") %>%
+  mutate(
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(c(n, mean:max), formatC, digits = 0, format = "d", big.mark = ",")
+    )
+print(t)
+
+ggplot(d, aes(farm_count, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of number of farm operations
+
+```{r farm_count_gr}
+
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(farm_count_gr = 100 * 2 * (farm_count - lag(farm_count)) / (farm_count + lag(farm_count))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "farm_count_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f")
+    )
+print(t)
+
+ggplot(d, aes(farm_count_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-50, 50)) +
+  theme_minimal()
+
+```
+
+## Total land in farms, acres
+
+```{r land_tot}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_tot") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 0, format = "d", big.mark = ","))
+print(t)
+
+ggplot(d, aes(land_tot, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of total land in farms
+
+```{r land_tot_gr}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_tot_gr = 100 * 2 * (land_tot - lag(land_tot)) / (land_tot + lag(land_tot))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_tot_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f")
+    )
+print(t)
+
+ggplot(d, aes(land_tot_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-50, 50)) +
+  theme_minimal()
+```
+
+## Mean farm land size
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_mean) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_mean") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 0, format = "d", big.mark = ","))
+print(t)
+
+ggplot(d, aes(land_mean, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of mean farm land size
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_mean) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_mean_gr = 100 * 2 * (land_mean - lag(land_mean)) / (land_mean + lag(land_mean))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_mean_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_mean_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-50, 50)) +
+  theme_minimal()
+```
+
+
+
+## Median farm size
+
+```{r land_med}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_med) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_med") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 0, format = "d", big.mark = ","))
+print(t)
+
+ggplot(d, aes(land_med, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of median farm size
+
+```{r land_med_gr}
+d <- py$farm_data %>% 
+  select(year, stcty, land_med) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_med_gr = 100 * 2 * (land_med - lag(land_med)) / (land_med + lag(land_med))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_med_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_med_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-50, 50)) +
+  theme_minimal()
+```
+
+
+## Cropland share
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_crop) %>%
+  mutate(land_crop_pct = 100 * land_crop / land_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_crop_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_crop_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of cropland share
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_crop) %>%
+  mutate(land_crop_pct = 100 * land_crop / land_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_crop_pct_gr = land_crop_pct - lag(land_crop_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_crop_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_crop_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-25, 25)) +
+  theme_minimal()
+```
+
+
+## Pastureland share
+
+Permanent pastureland only, excluding pastured cropland and woodland.
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_pasture) %>%
+  mutate(land_pasture_pct = 100 * land_pasture / land_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_pasture_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_pasture_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of pastureland share
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_pasture) %>%
+  mutate(land_pasture_pct = 100 * land_pasture / land_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_pasture_pct_gr = land_pasture_pct - lag(land_pasture_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_pasture_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_pasture_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-15, 15)) +
+  theme_minimal()
+```
+
+
+## Woodland share
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_wood) %>%
+  mutate(land_wood_pct = 100 * land_wood / land_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_wood_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_wood_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of woodland share
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_wood) %>%
+  mutate(land_wood_pct = 100 * land_wood / land_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_wood_pct_gr = land_wood_pct - lag(land_wood_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_wood_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_wood_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-10, 10)) +
+  theme_minimal()
+```
+
+
+## Other land share
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_other) %>%
+  mutate(land_other_pct = 100 * land_other / land_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_other_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_other_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 25)) +
+  theme_minimal()
+```
+
+Growth of other land share
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot, land_other) %>%
+  mutate(land_other_pct = 100 * land_other / land_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_other_pct_gr = land_other_pct - lag(land_other_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_other_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(land_other_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-10, 10)) +
+  theme_minimal()
+```
+
+
+## Total sales, $1000s
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot) %>%
+  mutate(sales_tot = sales_tot / 1000) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_tot") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 0, format = "d", big.mark = ","))
+print(t)
+
+ggplot(d, aes(sales_tot, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of total sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_tot_gr = 100 * 2 * (sales_tot - lag(sales_tot)) / (sales_tot + lag(sales_tot))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_tot_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f")
+    )
+print(t)
+
+ggplot(d, aes(sales_tot_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-100, 100)) +
+  theme_minimal()
+```
+
+## Mean sales, $s
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, sales_mean) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_mean") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 0, format = "d", big.mark = ","))
+print(t)
+
+ggplot(d, aes(sales_mean, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  scale_x_log10() +
+  theme_minimal()
+```
+
+Growth rate of mean sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, sales_mean) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_mean_gr = 100 * 2 * (sales_mean - lag(sales_mean)) / (sales_mean + lag(sales_mean))) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_mean_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f")
+    )
+print(t)
+
+ggplot(d, aes(sales_mean_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-100, 100)) +
+  theme_minimal()
+```
+
+## Share of farms with crop sales
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count, farm_count_sales_crop) %>%
+  mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_farm_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_farm_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of share of farms with crop sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count, farm_count_sales_crop) %>%
+  mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_crop_farm_pct_gr = sales_crop_farm_pct - lag(sales_crop_farm_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_farm_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_farm_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-20, 20)) +
+  theme_minimal()
+```
+
+
+## Share of farms with animal sales
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count, farm_count_sales_animal) %>%
+  mutate(sales_crop_animal_pct = 100 * farm_count_sales_animal / farm_count) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_animal_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_animal_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of share of farms with animal sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, farm_count, farm_count_sales_animal) %>%
+  mutate(sales_animal_farm_pct = 100 * farm_count_sales_animal / farm_count) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_animal_farm_pct_gr = sales_animal_farm_pct - lag(sales_animal_farm_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_animal_farm_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_animal_farm_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-20, 20)) +
+  theme_minimal()
+```
+## Share of crop sales
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot, sales_crop) %>%
+  mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of share of crop sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot, sales_crop) %>%
+  mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_crop_pct_gr = sales_crop_pct - lag(sales_crop_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-25, 25)) +
+  theme_minimal()
+```
+
+## Share of animal sales
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot, sales_animal) %>%
+  mutate(sales_animal_pct = 100 * sales_animal / sales_tot) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_animal_pct") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_animal_pct, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 100)) +
+  theme_minimal()
+```
+
+Growth of share of crop sales
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot, sales_crop) %>%
+  mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_crop_pct_gr = sales_crop_pct - lag(sales_crop_pct)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_crop_pct_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 2, format = "f"),
+    across(mean:max, formatC, digits = 1, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_crop_pct_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-25, 25)) +
+  theme_minimal()
+```
+
