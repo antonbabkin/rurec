@@ -1,10 +1,12 @@
 ---
 title: "Farms and services"
+bibliography: ../references.bib
 format:
   html:
     toc: true
     code-fold: true
     df-print: paged
+    embed-resources: true
 execute:
   cache: true
 ---
@@ -28,13 +30,26 @@ geography <- reticulate::import("rurec.pubdata.geography")
 #| cache: false
 #| echo: false
 #| output: false
+
+import io
+
+import numpy as np
 import pandas as pd
 
 from rurec.pubdata import agcensus, geography
 
+def set_zero_value(d, drop_flag=True):
+  mask = (d['value_f'] == '(Z)')
+  d.loc[mask, 'value'] = 0
+  print(f'Set values to zero in {sum(mask):,d} (Z) records.')
+  if drop_flag: del d['value_f']
+
+
 ```
 
-# Land use
+# Overview of variables
+
+## Land use
 
 ```{python}
 # top categories of land, as reported in Ag Census Table 8
@@ -81,7 +96,7 @@ ggplot(filter(d, state_fips_code != "99"), aes(farm_land_cat, farm_land_pct)) +
 ```
 
 
-# Top commodities
+## Top commodities
 
 
 
@@ -267,18 +282,168 @@ py$sales_pct %>%
   arrange(desc(med))
 ```
 
+
+
+## Farm concentration
+
+Census of agriculture provides binned data aggregates for several different measures of farm size, which can be used to estimate measures of market concentration.
+The following relevant binned data are available at a county level.
+
+- Size of total farm land (number of farms and total acres).
+- Acres harvested (number of farms and acres).
+- Acres harvested by total farm land bin (number of farms and acres).
+- Acres irrigated by total farm land bin (number of farms and acres).
+- Total sales (number of farms and sales).
+- Specified animal inventory (number of farms and number of animals).
+- Specified animal sales (number of farms and number sold).
+- Specified crops harvested (number of farms by acres bin).
+
+
+Herfindahl–Hirschman Index (HHI) is a measure of the size of firms in relation to the industry they are in and is an indicator of the amount of competition among them. When individual entity data are available, index is calculated from shares $s_i$ of each entity $i = 1, ..., N$:
+
+$$HHI = \sum_{i=1}^N(s_i)^2$$
+
+Share $s_i$ is typically the market share of sales, but any other size measure $x_i$ can also be used, and the share is $s_i = \frac{x_i}{\sum_{i=1}^Nx_i}$.
+
+
+Without access to underlying microdata, some form of approximation can be derived from publicly available aggregated binned data.
+
+Let $j = 1, ..., K$ denote aggregation bins bounded by $(x_L^j,x_U^j)$.
+$n_j$ is the number of entities in bin $j$.
+$X_j = \sum_{i, x_L^j < x_i < x_U^j}^N x_i$ is the total size of all entities in bin $j$.
+Then exact HHI can be expressed as:
+
+$$
+HHI
+  = \frac{\sum_{i=1}^N(x_i)^2}{\left(\sum_{i=1}^N x_i\right)^2}
+  = \frac{\sum_{j=1}^K  \sum_{i, x_L^j < x_i < x_U^j}^N x_i^2}{\left(\sum_{i=1}^N x_i\right)^2}
+  = \frac{\sum_{j=1}^K X_j^2 \frac{\sum_{i, x_L^j < x_i < x_U^j}^N x_i^2}{X_j^2}}{\left(\sum_{j=1}^K X_j\right)^2}
+  = \frac{\sum_{j=1}^K X_j^2 HHI_j}{\left(\sum_{j=1}^K X_j\right)^2}
+  = \sum_{j=1}^K S_j^2 HHI_j
+$$
+
+where $HHI_j$ is the HHI calculated within bin $j$, and $S_j$ is the share of the bin in the total size.
+
+When $S_j$ can be calculated from public data, we only need to approximate $HHI_j$ which by definition is bounded by $\frac{1}{n_j}$ and $1$.
+The widest bounds for HHI can then be calculated as
+
+$$
+HHI^L = \sum_{j=1}^K \frac{1}{n_j} S_j^2
+$$
+and
+$$
+HHI^U = \sum_{j=1}^K S_j^2
+$$
+
+$HHI^L$ implies that all entities within each bin have the same size (perfectly equal shares), and $HHI^U$ implies that there is only one entity in each bin.
+
+Different methods exist to estimate tighter bounds by utilizing information about bins and making assumptions about distribution within bin.
+For example, if there are $n_j = 2$ entities in bin $j$ bounded by $[1, 2]$, and total size $X_j = 3$, then the highest concentration is attained when sizes of the two entities are $1$ and $2$.
+This implies $HHI_j = \frac{1^2 + 2^2}{3^2} = 5/9$, which is a tighter upper bound for bin $j$ than $HHI_j = 1$.
+
+A simple "rule of thumb" [@cowell_estimation_1982] suggests weighted average $HHI = \frac{1}{3} HHI^L + \frac{2}{3} HHI^H$. @avila_concentration_2013 review different existing approximation methods.
+
+Another practical issue is that at a county level, values of some bins in smaller counties are often suppressed to protect data confidentiality.
+Some form of imputation is required, from taking simple middle point of bin bounds to assuming and calibrating within bin distribution.
+
+```{python}
+#| cache: false
+def calculate_binned_hhi(d, cat_col, count_col, size_col):
+  total_size = d[size_col].sum()
+  size_by_cat = d[size_col].values
+  count_by_cat = d[count_col].values
+  upper = (size_by_cat**2).sum() / total_size**2
+  lower = (size_by_cat**2 / count_by_cat).sum() / total_size**2
+  thumb = 1/3*lower + 2/3*upper
+  return pd.Series({
+    'lower': lower,
+    'thumb': thumb,
+    'upper': upper
+  })
+
+```
+
+
+```{python}
+items_to_cols = {
+  'COMMODITY TOTALS - OPERATIONS WITH SALES': 'farm_count',
+  'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
+}
+df = agcensus.get_df([2017], ['STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
+                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==','FARM SALES'),
+                       ('SHORT_DESC', 'in', list(items_to_cols)),
+                      ]).rename(columns=str.lower)
+set_zero_value(df, False)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+df['item'] = df['short_desc'].map(items_to_cols)
+
+
+# (full label, short label, imputation value)
+# not including categories from other, more aggregated sales tables, such as "FARM SALES: (100,000 OR MORE $)"
+sales_cats = [
+  ('FARM SALES: (LESS THAN 1,000 $)', 'LESS THAN 1,000', 500), 
+  ('FARM SALES: (1,000 TO 2,499 $)', '1,000 TO 2,499', 1750),
+  ('FARM SALES: (2,500 TO 4,999 $)', '2,500 TO 4,999', 3750),
+  ('FARM SALES: (5,000 TO 9,999 $)', '5,000 TO 9,999', 7500),
+  ('FARM SALES: (10,000 TO 19,999 $)', '10,000 TO 19,999', 15000),
+  ('FARM SALES: (20,000 TO 24,999 $)', '20,000 TO 24,999', 22500),
+  ('FARM SALES: (25,000 TO 39,999 $)', '25,000 TO 39,999', 32500),
+  ('FARM SALES: (40,000 TO 49,999 $)', '40,000 TO 49,999', 45000),
+  ('FARM SALES: (50,000 TO 99,999 $)', '50,000 TO 99,999', 75000),
+  ('FARM SALES: (100,000 TO 249,999 $)', '100,000 TO 249,999', 175000),
+  ('FARM SALES: (250,000 TO 499,999 $)', '250,000 TO 499,999', 375000),
+  ('FARM SALES: (500,000 OR MORE $)', '500,000 OR MORE', 750000),
+]
+df['sales_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in sales_cats})
+
+d = df.dropna(subset=['sales_cat']).set_index(['stcty', 'sales_cat', 'item'])['value'].unstack().reset_index()
+# impute missing values as bin middle * number of farms in bin
+d.loc[d['sales_tot'].isna(), 'sales_tot'] = d['sales_cat'].map({x[1]: x[2] for x in sales_cats}) * d['farm_count']
+df_sales_by_cat = d
+
+
+# test calculation with known result
+d = pd.read_csv(io.StringIO('''
+cat,count,size
+A,3,10
+B,2,20
+C,1,30
+'''))
+assert np.allclose(
+  calculate_binned_hhi(d, 'cat', 'count', 'size'), 
+  [0.31481481, 0.36419753, 0.38888889])
+
+
+d = df_sales_by_cat.groupby('stcty').apply(calculate_binned_hhi, 'sales_cat', 'farm_count', 'sales_tot')
+d = d.reset_index().rename(columns={'index': 'stcty'})
+df_hhi = d
+
+```
+
+The box-plot below shows distribution of HHI of total farm sales in 2017 across counties, estimated with three different methods: lower bound, upper bound and the $1/3$ rule of thumb.
+It is clear from the plot that variation is substantial, and it may be worth spending time to get the most accurate approximation that is possible with available data.
+
+```{r}
+d <- py$df_hhi %>%
+  pivot_longer(!stcty, names_to = "hhi_type", values_to = "hhi_value")
+
+ggplot(d, aes(hhi_value, hhi_type)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  theme_minimal()
+```
+
+
+
 # Prepare analysis dataset
 
-## todo: deflate nominal $s
+
 
 ```{python}
 #| output: false
 #| cache: false
-def set_zero_value(d):
-  mask = (d['value_f'] == '(Z)')
-  d.loc[mask, 'value'] = 0
-  print(f'Set values to zero in {sum(mask):,d} (Z) records.')
-  del d['value_f']
 
 years = [2002, 2007, 2012, 2017]
 
@@ -294,8 +459,16 @@ df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
 assert not df[['year', 'stcty']].duplicated().any()
 
 farm_data = df[['year', 'stcty', 'value']].rename(columns={'value': 'farm_count'})
+```
 
+## Farm land
+Total farm land can be broken down into cropland, pastureland, woodland and other.
+Under this classification, pastureland does not include pastured parts of cropland and woodland.
+Cropland can be either harvested, used for pasture or other (mainly idle).
 
+```{python}
+#| output: false
+#| cache: false
 # total acres
 # mean acres
 # median acres
@@ -322,7 +495,15 @@ df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
 df['item'] = df['short_desc'].map(items_to_cols)
 d = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
 farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+```
 
+## Sales
+
+### todo: deflate nominal $s
+
+```{python}
+#| output: false
+#| cache: false
 # total sales
 # mean sales
 # share of farms with crop sales
@@ -352,30 +533,128 @@ farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
 ```
 
 
+## Concentration
+
+### total land
+
+```{python}
+#| output: false
+#| cache: false
+
+items_to_cols = {
+  'FARM OPERATIONS - NUMBER OF OPERATIONS': 'farm_count',
+  'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
+}
+df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
+                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==', 'AREA OPERATED'),
+                       ('SHORT_DESC', 'in', list(items_to_cols)),
+                      ]).rename(columns=str.lower)
+set_zero_value(df, False)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+df['item'] = df['short_desc'].map(items_to_cols)
+
+# (full label, short label, imputation value)
+land_cats = [
+  ('AREA OPERATED: (1.0 TO 9.9 ACRES)', '1.0 TO 9.9 ACRES', 5.5),
+  ('AREA OPERATED: (10.0 TO 49.9 ACRES)', '10.0 TO 49.9 ACRES', 30),
+  ('AREA OPERATED: (50.0 TO 69.9 ACRES)', '50.0 TO 69.9 ACRES', 60),
+  ('AREA OPERATED: (70.0 TO 99.9 ACRES)', '70.0 TO 99.9 ACRES', 85),
+  ('AREA OPERATED: (100 TO 139 ACRES)', '100 TO 139 ACRES', 120),
+  ('AREA OPERATED: (140 TO 179 ACRES)', '140 TO 179 ACRES', 160),
+  ('AREA OPERATED: (180 TO 219 ACRES)', '180 TO 219 ACRES', 200),
+  ('AREA OPERATED: (220 TO 259 ACRES)', '220 TO 259 ACRES', 240),
+  ('AREA OPERATED: (260 TO 499 ACRES)', '260 TO 499 ACRES', 380),
+  ('AREA OPERATED: (500 TO 999 ACRES)', '500 TO 999 ACRES', 750),
+  ('AREA OPERATED: (1,000 TO 1,999 ACRES)', '1,000 TO 1,999 ACRES', 1500),
+  ('AREA OPERATED: (2,000 OR MORE ACRES)', '2,000 OR MORE ACRES', 3000),
+  #('AREA OPERATED: (50 TO 179 ACRES)', '50 TO 179 ACRES', ),
+  #('AREA OPERATED: (180 TO 499 ACRES)', '180 TO 499 ACRES', ),
+  #('AREA OPERATED: (1,000 OR MORE ACRES)', '1,000 OR MORE ACRES', ),
+]
+df['land_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in land_cats})
+
+# impute missing values as bin middle * number of farms in bin
+d = df.dropna(subset=['land_cat']).set_index(['year', 'stcty', 'land_cat', 'item'])['value'].unstack().reset_index()
+d.loc[d['land_tot'].isna(), 'land_tot'] = d['land_cat'].map({x[1]: x[2] for x in land_cats}) * d['farm_count']
+df_by_cat = d
+
+d = df_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'land_cat', 'farm_count', 'land_tot')
+d = d[['thumb']].reset_index().rename(columns={'thumb': 'land_tot_hhi'})
+farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+```
+
+
+
+### total sales
+
+```{python}
+#| output: false
+#| cache: false
+
+items_to_cols = {
+  'COMMODITY TOTALS - OPERATIONS WITH SALES': 'farm_count',
+  'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
+}
+df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
+                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                       ('DOMAIN_DESC', '==', 'FARM SALES'),
+                       ('SHORT_DESC', 'in', list(items_to_cols)),
+                      ]).rename(columns=str.lower)
+set_zero_value(df, False)
+df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+df['item'] = df['short_desc'].map(items_to_cols)
+
+# (full label, short label, imputation value)
+sales_cats = [
+  ('FARM SALES: (LESS THAN 1,000 $)', 'LESS THAN 1,000', 500), 
+  ('FARM SALES: (1,000 TO 2,499 $)', '1,000 TO 2,499', 1750),
+  ('FARM SALES: (2,500 TO 4,999 $)', '2,500 TO 4,999', 3750),
+  ('FARM SALES: (5,000 TO 9,999 $)', '5,000 TO 9,999', 7500),
+  ('FARM SALES: (10,000 TO 19,999 $)', '10,000 TO 19,999', 15000),
+  ('FARM SALES: (20,000 TO 24,999 $)', '20,000 TO 24,999', 22500),
+  ('FARM SALES: (25,000 TO 39,999 $)', '25,000 TO 39,999', 32500),
+  ('FARM SALES: (40,000 TO 49,999 $)', '40,000 TO 49,999', 45000),
+  ('FARM SALES: (50,000 TO 99,999 $)', '50,000 TO 99,999', 75000),
+  ('FARM SALES: (100,000 TO 249,999 $)', '100,000 TO 249,999', 175000),
+  ('FARM SALES: (250,000 TO 499,999 $)', '250,000 TO 499,999', 375000),
+  ('FARM SALES: (500,000 OR MORE $)', '500,000 OR MORE', 750000),
+]
+df['sales_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in sales_cats})
+
+# impute missing values as bin middle * number of farms in bin
+d = df.dropna(subset=['sales_cat']).set_index(['year', 'stcty', 'sales_cat', 'item'])['value'].unstack().reset_index()
+d.loc[d['sales_tot'].isna(), 'sales_tot'] = d['sales_cat'].map({x[1]: x[2] for x in sales_cats}) * d['farm_count']
+df_sales_by_cat = d
+
+d = df_sales_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'sales_cat', 'farm_count', 'sales_tot')
+d = d[['thumb']].reset_index().rename(columns={'thumb': 'sales_tot_hhi'})
+farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+```
+
+
+
+
+
 # County descriptive statistics
 
 Figures throughout this section are an overlay of a boxplot (quartiles, range and outliers) and violin plot (density), with red dot showing mean.
 
-```{r}
-distribution_plot <- function(tbl, var, round_digit = 0, gr_var = "year") {
-  tbl <- tbl %>% drop_na(all_of(c(var, gr_var)))
-  
-  stats <- tbl %>%
-    group_by(.data[[gr_var]]) %>%
-    summarize(across(all_of(var), list(
-      mean = mean, 
-      q1 = ~quantile(.x, 0.25),
-      med = median,
-      q3 = ~quantile(.x, 0.75)
-      ))) %>%
-     rename_with(~ str_remove(.x, glue('{var}_'))) %>%
-     mutate(across(everything(), round, round_digit))
-  
-  ggplot(tbl) +
-    geom_density(aes(.data[[var]], color = factor(.data[[gr_var]]))) +
-    annotate("table_npc", npcx = 0, npcy = 1, label=stats)
-}
+Summary of notable observations. These describe average county trends, not national totals.
 
+- Number of farms went up 2002-2007, but was declining since.
+- Total farm land is declining.
+- Mean farm size is decreasing 2002-2007, then increasing. Median is decreasing.
+- Concentration measured by HHI is higher in total sales than in total land.
+- HHI is steadily increasing both in sales and in land.
+- Growth rate of sales is positive, but slowing down from positive to negative.
+- Shares of crop and animal sales are close to 50%, both in number of farms selling and sales value.
+- Over time, crops are taking larger share of sales.
+- On the other hand, cropland share is declining and pastureland share grows.
+
+
+
+```{r}
 compute_stats <- function(df, var, gr_var = "year") {
   stats <- df %>%
   group_by(.data[[gr_var]]) %>%
@@ -1012,6 +1291,7 @@ ggplot(d, aes(sales_animal_farm_pct_gr, year)) +
   coord_trans(xlim = c(-20, 20)) +
   theme_minimal()
 ```
+
 ## Share of crop sales
 
 ```{r}
@@ -1087,7 +1367,7 @@ ggplot(d, aes(sales_animal_pct, year)) +
   theme_minimal()
 ```
 
-Growth of share of crop sales
+Growth of share of animal sales
 
 ```{r}
 d <- py$farm_data %>% 
@@ -1111,6 +1391,107 @@ ggplot(d, aes(sales_crop_pct_gr, year)) +
   geom_boxplot(na.rm = TRUE, alpha = 0.5) +
   stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
   coord_trans(xlim = c(-25, 25)) +
+  theme_minimal()
+```
+
+
+## Total farm land HHI
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot_hhi) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_tot_hhi") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 3, format = "f"))
+print(t)
+
+ggplot(d, aes(land_tot_hhi, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 1)) +
+  theme_minimal()
+```
+
+Growth of total farm land HHI
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, land_tot_hhi) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(land_tot_hhi_gr = land_tot_hhi - lag(land_tot_hhi)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "land_tot_hhi_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 3, format = "f"))
+print(t)
+
+ggplot(d, aes(land_tot_hhi_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-0.1, 0.1)) +
+  theme_minimal()
+```
+
+
+
+## Total sales HHI
+
+```{r}
+
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot_hhi) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_tot_hhi") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 3, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_tot_hhi, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(0, 1)) +
+  theme_minimal()
+```
+
+Growth of total sales HHI
+
+```{r}
+d <- py$farm_data %>% 
+  select(year, stcty, sales_tot_hhi) %>%
+  group_by(stcty) %>%
+  arrange(stcty, year) %>%
+  mutate(sales_tot_hhi_gr = sales_tot_hhi - lag(sales_tot_hhi)) %>%
+  filter(year > 2002) %>%
+  mutate(year = factor(year))
+
+t <- compute_stats(d, "sales_tot_hhi_gr") %>%
+  mutate(
+    n = formatC(n, format = "d", big.mark = ","),
+    na_pct = formatC(na_pct, digits = 1, format = "f"),
+    across(mean:max, formatC, digits = 3, format = "f"))
+print(t)
+
+ggplot(d, aes(sales_tot_hhi_gr, year)) +
+  geom_violin(color = "blue", na.rm = TRUE) +
+  geom_boxplot(na.rm = TRUE, alpha = 0.5) +
+  stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
+  coord_trans(xlim = c(-0.5, 0.5)) +
   theme_minimal()
 ```
 
