@@ -35,7 +35,7 @@ ers_rurality <- import("rurec.pubdata.ers_rurality")
 geography <- import("rurec.pubdata.geography")
 naics <- import("rurec.pubdata.naics")
 geography_cbsa <- import("rurec.pubdata.geography_cbsa")
-
+ag_output <- import("rurec.ag_output")
 
 # Function to download  data
 data_getr <- function(FileURL,
@@ -245,7 +245,7 @@ expo_impedance_mat <- function(year,
   return(df)
 }
 
-# Produce  hyperbolic secant distance decay impedance matrix
+# Produce hyperbolic secant distance decay impedance matrix
 hyper_impedance_mat <- function(year,
                                scale = c("500k", "20m", "5m"),
                                decay_constant = 1000000){
@@ -253,7 +253,6 @@ hyper_impedance_mat <- function(year,
   df <- ((2/(exp(-(df/decay_constant)) + exp(df/decay_constant))))
   return(df)
 }
-
 
 # Call up and clean RUCC data
 call_rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
@@ -275,9 +274,6 @@ tiger_rucc <- function(year,
   #rownames(df) <- df$place
   return(df)
 }
-
-
-
 
 # Call up and clean CBP
 call_cbp <- function(year,
@@ -398,7 +394,18 @@ labor_share <- function(year,
 }
 
 
-
+# Call up and clean Ag Output data
+call_agoutput <- function(ag_year = c("2017", "2012", "2007", "2002"), 
+                          geo_level = c("county", "state", "national")){
+  ag_year <- match.arg(ag_year)
+  geo_level <- match.arg(geo_level)
+  df <- ag_output$get_farm_sales_by_bea_detail(strtoi(ag_year), geo_level)
+  place <- c(place = rownames(df))
+  df <- sapply(df, function(x)x/1000) %>% as.data.frame()
+  df <- cbind(place, df)
+  rownames(df) <- 1:nrow(df)
+  return(df)
+}
 
 ############ Derive the Total Output Matrix (in thousands of dollars)
 total_output <- function (year,
@@ -406,13 +413,14 @@ total_output <- function (year,
                           scale = c("county", "state", "us"),
                           output_metric = c("ap", "emp", "qp1", "est"),
                           data_dir = file.path("data", "robjs"),
-                          labor_share_year = year){
+                          labor_share_year = year,
+                          ag_year = c("2017", "2012", "2007", "2002"), 
+                          geo_level = c("county", "state", "national")){
   
-  ## Check farms sales exists
-  f <- file.path(find_rstudio_root_file(), data_dir, "farm_sales")
-  stopifnot("farm sales data do not exist" = file.exists(f) == TRUE) 
+  a <- strtoi(match.arg(ag_year))
+  if(strtoi(year) != a){cat("Warning: CBP Output year [",year,"] not the same as Ag Output year [",a,"]" )}
   
-  farm_sales <- readRDS(f)
+  farm_sales <- call_agoutput(ag_year, geo_level)
   fn <- colnames(farm_sales)[-c(1)]
   
   ilevel <- match.arg(ilevel)
@@ -430,8 +438,8 @@ total_output <- function (year,
   
   df <- apply(iout, 2, function (x) {x / ls})
   df <- t(df) %>% as.data.frame()
-  df$STCTY <- rownames(df)
-  df <- left_join(df, farm_sales, by = "STCTY")
+  df$place <- rownames(df)
+  df <- left_join(df, farm_sales, by = "place")
   if (ilevel == "sec") {
     df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
     df <- df %>% select(!c(fn))
@@ -441,8 +449,8 @@ total_output <- function (year,
   } else if (ilevel == "det") {
     df <- df %>% select(fn, everything())
   }
-  rownames(df) <- df$STCTY
-  df$STCTY <- NULL
+  rownames(df) <- df$place
+  df$place <- NULL
   df <- t(df)
   return(df)
 }

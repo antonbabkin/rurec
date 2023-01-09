@@ -110,34 +110,12 @@ if (!file.exists(file.path(data_dir, "sec_cord"))){
 
 
 
-### Download and clean farmssales data 
-  ### Note: only temporary until pubdata.agcensus.md complete 
-  ###download file from agcensus_sales_by_bea_v220909.csv google sharedrive rurec/Data (https://drive.google.com/file/d/1gDufjSB3vXaloBtlYOjfo8IuSTgebpT3/view?usp=share_link)
-if (file.exists(file.path(data_dir, "farm_sales"))) {
-  log_info("farm_sales table already exists")
-} else {
-    download.file(url="https://drive.google.com/uc?export=download&id=1gDufjSB3vXaloBtlYOjfo8IuSTgebpT3", 
-                  destfile=file.path(find_rstudio_root_file(), "data", "agcensus_sales_by_bea_v220909.csv"))
-    farm_sales_file <- file.path(find_rstudio_root_file(), "data", "agcensus_sales_by_bea_v220909.csv")
-    
-    df <- read.csv(farm_sales_file, colClasses = "character")
-    df$SALES <- df$SALES %>% as.numeric / 1000
-    df <- df %>% filter(AGG_LEVEL_DESC == "COUNTY") %>% select(!AGG_LEVEL_DESC)
-    df <- reshape(df, direction = "wide", idvar = "STCTY", timevar = "BEA_INDUSTRY_DETAIL")
-    colnames(df) <- gsub("SALES.", "", colnames(df))
-    farm_sales <- df
-   saver(farm_sales)
-}
-log_info("farms sales download complete")
-
-
-
 #### Total Output Matrix in thousands of dollars
 if (!file.exists(file.path(data_dir, "Output_mat"))){
   Output_mat <- list()
   Output_mat[["Sector"]] <- total_output("2020", "sec")
   Output_mat[["Summary"]] <- total_output("2020", "sum")
-  Output_mat[["Detail"]] <- total_output("2012", "det", labor_share_year = "2012")
+  Output_mat[["Detail"]] <- total_output("2012", "det", labor_share_year = "2012", ag_year = "2012")
   saver(Output_mat)
   rm(Output_mat)
 }
