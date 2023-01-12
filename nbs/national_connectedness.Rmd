@@ -38,6 +38,7 @@ library(dplyr)
  library(ggplot2)
  library(ggiraph)
  library(glue)
+ library(RColorBrewer)
 # library(magrittr)
 # library(ggforce)
 # library(cowplot)
@@ -46,7 +47,8 @@ library(dplyr)
 # library(ggpattern)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+#source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
 
 ```
 
@@ -240,6 +242,29 @@ if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) &
 #   geom_sf()
 
 
+# 
+# g <- ggplot(df) +
+#         geom_sf_interactive(aes(fill = absorption_alpha_gini, 
+#                                 tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {max_absorption_alpha}"), 
+#                                 data_id = place
+#         ), 
+#         color = NA
+#         ) + 
+#       guides(alpha = "none") +
+#       coord_sf() +
+#       theme_void() +
+#       scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+#       labs(fill = "Absorption Gini",
+#            caption = paste0(5,"% Isolation Threshold"))
+# 
+# girafe(ggobj = g, 
+#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+#                        )
+#       )
+
+
+
 df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
 
 
@@ -267,11 +292,106 @@ girafe(ggobj = g,
 ```
 
 
+Normalized Max Absorption, Detail level, 2012 CBP and farm sales data, 
+``` {r}
+
+df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", normalized = TRUE, ag_year = "2012")
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = (max_absorption_alpha), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {max_absorption_alpha}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = "Max Absorption",
+           caption = paste0(5,"% Isolation Threshold"))
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+```
+
+
+Mahoning County, Ohio export excess connectedness to the nation
+``` {r}
+
+
+cp <- "39099"
+df <- place_centric_connect(central_place = cp,
+                      cbp_year = "2012",
+                      ag_year = "2012",
+                      ilevel = "det",
+                      tiger_year = "2020",
+                      export_focused = TRUE)
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = (round(central_place, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(central_place, 5)}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      geom_sf_interactive(data = df[df$place==cp,], fill = "#8b0000", color = NA) +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = glue("{df[df$place==cp,]$COUNTY}, {df[df$place==cp,]$STATE} Absorption"))
+
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
 
 
 
+```
 
 
 
+Mahoning County, Ohio import needs connectedness to the nation
+``` {r}
+
+cp <- "39099"
+df <- place_centric_connect(central_place = cp,
+                      cbp_year = "2012",
+                      ag_year = "2012",
+                      ilevel = "det",
+                      tiger_year = "2020",
+                      export_focused = FALSE)
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = (round(central_place, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(central_place, 5)}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      geom_sf_interactive(data = df[df$place==cp,], fill = "#8b0000", color = NA) +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = glue("{df[df$place==cp,]$COUNTY}, {df[df$place==cp,]$STATE} Absorption"))
+
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
 
 
