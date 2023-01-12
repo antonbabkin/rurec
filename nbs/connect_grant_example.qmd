@@ -199,3 +199,117 @@ Toy_Q  %>% round(3)
 
 ```
 
+
+```{r}
+#Direct Requirements
+D = Toy_Direct_mat
+D
+#Total Industry Output by region
+Y = Toy_X_mat
+Y
+#National Total Output
+Yi = as.matrix(rowSums(Toy_X_mat))
+Yi
+#National Intermediate Output
+DYi = Toy_Direct_mat %*% as.matrix(rowSums(Toy_X_mat)) 
+DYi
+#National Final Demand 
+Fd = as.matrix(rowSums(Toy_X_mat)) - Toy_Direct_mat %*% as.matrix(rowSums(Toy_X_mat)) 
+Fd
+#Intermediate Output by region
+DY = Toy_Direct_mat %*% Toy_X_mat
+DY
+#National Intermediate Inputs 
+YhD = rowSums(diag(rowSums(Toy_X_mat)) %*% t(Toy_Direct_mat))
+YhD
+#National Transactions Matrix 
+Z = Toy_Direct_mat %*% diag(rowSums(Toy_X_mat))
+Z
+#National Value Added 
+V = as.matrix(rowSums(Toy_X_mat)) - colSums(Toy_Direct_mat %*% diag(rowSums(Toy_X_mat)))
+V 
+
+
+#import needs by region: Necessary level of regional total output that needs to be imported to be able to produce the observed level of regional total output (assuming no cross hauling)
+pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)
+
+#exports (excess) by region: Available level of total output by region that can be exported to other regions
+pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)
+
+# Percentage that a regions available exports can satisfy the import needs of another region on per industry basis
+ExportPotentialAbsorptionPercentage <- vector(mode='list', length=ncol(Toy_X_mat))
+  names(ExportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
+for (i in 1:ncol(Toy_X_mat)){
+ExportPotentialAbsorptionPercentage[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(ExportPotentialAbsorptionPercentage[[i]])  <- rownames(Toy_X_mat)
+   colnames(ExportPotentialAbsorptionPercentage[[i]]) <- colnames(Toy_X_mat)
+}
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+          ExportPotentialAbsorptionPercentage[[i]][,j]  <- pmin(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)[,i], pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,j])  /  pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,j] * 100 %>% round(2)
+    }
+  }
+ExportPotentialAbsorptionPercentage
+
+# Percentage that a regions overall available exports can satisfy the overall import needs of another region
+AverageExportPotentialAbsorptionPercentage <-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(AverageExportPotentialAbsorptionPercentage) = colnames(AverageExportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+        AverageExportPotentialAbsorptionPercentage[i,]  <-  ExportPotentialAbsorptionPercentage[[i]] %>% colMeans(na.rm = TRUE)
+  }
+ AverageExportPotentialAbsorptionPercentage
+
+# Percentage that a regions import needs are satisfy by the available exports of another region on per industry basis
+ImportPotentialAbsorptionPercentage <- vector(mode='list', length=ncol(Toy_X_mat))
+  names(ImportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
+for (i in 1:ncol(Toy_X_mat)){
+ImportPotentialAbsorptionPercentage[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(ImportPotentialAbsorptionPercentage[[i]])  <- rownames(Toy_X_mat)
+   colnames(ImportPotentialAbsorptionPercentage[[i]]) <- colnames(Toy_X_mat)
+}
+  for (i in 1:ncol(Toy_X_mat)){
+    for (j in 1:ncol(Toy_X_mat)){
+          ImportPotentialAbsorptionPercentage[[i]][,j]  <- pmin(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)[,j], pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,i])  /  pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,i] * 100 %>% round(2)
+    }
+  }
+ImportPotentialAbsorptionPercentage
+
+# Percentage that a regions overall import needs are satisfy by the overall available exports of another region
+AverageImportPotentialAbsorptionPercentage <-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
+ rownames(AverageImportPotentialAbsorptionPercentage) = colnames(AverageImportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
+
+  for (i in 1:ncol(Toy_X_mat)){
+        AverageImportPotentialAbsorptionPercentage[i,]  <-  ImportPotentialAbsorptionPercentage[[i]] %>% colMeans(na.rm = TRUE)
+  }
+AverageImportPotentialAbsorptionPercentage
+
+# Import susceptive (receptiveness, selectivity) (100 most to zero least)
+df <- AverageImportPotentialAbsorptionPercentage
+df[df == 0] <- NA
+rowMeans(df, na.rm=TRUE)
+
+# Export accommodating (compliant, adaptability) (100 most to zero least)
+df <- AverageExportPotentialAbsorptionPercentage
+df[df == 0] <- NA
+rowMeans(df, na.rm=TRUE)
+
+
+
+#Total Output Available as exports across all regions
+as.matrix(rowSums(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)))
+
+#Total Output Needed as imports across all regions
+as.matrix(rowSums(pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)))
+
+#Net Exports of Total Output (equal to national final demand)
+as.matrix(rowSums(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0))) - as.matrix(rowSums(pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)))
+
+
+
+
+
+```
+
+
+
