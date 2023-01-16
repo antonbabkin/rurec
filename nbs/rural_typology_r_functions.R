@@ -834,19 +834,18 @@ cluster_spatial_connectedness <- function (cbp_year,
 
 ############ Place-centric connectedness
 place_centric_connect <- function(central_place,
-                            cbp_year,
-                            export_focused = TRUE, 
-                            ilevel = c("det", "sum", "sec"),
-                            scale = c("county", "state", "us"),
-                            output_metric = c("ap", "emp", "qp1", "est"),
-                            data_dir = file.path("data", "robjs"),
-                            labor_share_year = bea_year,
-                            tiger_year = cbp_year,
-                            bea_year = cbp_year,
-                            impedance = NULL, 
-                            normalized = TRUE,
-                            ag_year = c("2017", "2012", "2007", "2002"), 
-                            geo_level = c("county", "state", "national")){
+                                  cbp_year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  scale = c("county", "state", "us"),
+                                  output_metric = c("ap", "emp", "qp1", "est"),
+                                  data_dir = file.path("data", "robjs"),
+                                  labor_share_year = bea_year,
+                                  tiger_year = cbp_year,
+                                  bea_year = cbp_year,
+                                  impedance = NULL, 
+                                  normalized = TRUE,
+                                  ag_year = c("2017", "2012", "2007", "2002"), 
+                                  geo_level = c("county", "state", "national")){
   
   o <- total_output_tidy(year = cbp_year,
                          ilevel = ilevel,
@@ -874,17 +873,18 @@ place_centric_connect <- function(central_place,
     a <- n * impedance[colnames(n), rownames(n)]
   }
   
-  if(isTRUE(export_focused)){
-    a <- a[central_place, , drop=FALSE] %>% t() %>% as.data.frame()
-  } else {
-    a <- a[, central_place, drop=FALSE] %>% as.data.frame()
-  }
-  colnames(a) <- "central_place"
-  a$place <- rownames(a)
+  b <- cbind(export_absorption = c(t(a[central_place, , drop=FALSE])),
+             import_absorption = c(a[, central_place , drop=FALSE]),
+             place = rownames(a))
   
   t <- tiger_rucc(tiger_year)
   
-  df <- join_space_with_connectedness(a, t)
+  df <- join_space_with_connectedness(b, t)
+  
+  df$export_absorption <- as.numeric(df$export_absorption)
+  df$import_absorption <- as.numeric(df$import_absorption)
+  
+  return(df)
   
 }
 

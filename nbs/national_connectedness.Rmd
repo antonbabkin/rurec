@@ -235,35 +235,6 @@ if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) &
 
 ```{r display maps, eval = FALSE}
 
-# ggplot(Spatial_Clustered_data$Sector) +
-#   geom_sf()
-# 
-# ggplot(filter(Spatial_Connected_data$Sector, place=="01033")) +
-#   geom_sf()
-
-
-# 
-# g <- ggplot(df) +
-#         geom_sf_interactive(aes(fill = absorption_alpha_gini, 
-#                                 tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {max_absorption_alpha}"), 
-#                                 data_id = place
-#         ), 
-#         color = NA
-#         ) + 
-#       guides(alpha = "none") +
-#       coord_sf() +
-#       theme_void() +
-#       scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
-#       labs(fill = "Absorption Gini",
-#            caption = paste0(5,"% Isolation Threshold"))
-# 
-# girafe(ggobj = g, 
-#                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
-#                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
-#                        )
-#       )
-
-
 
 df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
 
@@ -292,18 +263,30 @@ girafe(ggobj = g,
 ```
 
 
-Normalized Max Absorption, Detail level, 2012 CBP and farm sales data, 
-``` {r}
+Various topological similarity index relationship examples.
 
-df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", normalized = TRUE, ag_year = "2012")
+
+Normalized Max Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+```{r}
+print(Sys.time())
+df <- spatial_connectedness(cbp_year = "2012", 
+                            ilevel = "det", 
+                            bea_year = "2012",
+                            labor_share_year = "2012",
+                            tiger_year = "2013", 
+                            ag_year = "2012",
+                            threshold = .05,
+                            impedance = NULL, 
+                            normalized = TRUE)
+print(Sys.time())
+
+
 
 g <- ggplot(df) +
-        geom_sf_interactive(aes(fill = (max_absorption_alpha), 
-                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {max_absorption_alpha}"), 
-                                data_id = place
-        ), 
-        color = NA
-        ) + 
+        geom_sf_interactive(aes(fill = max_absorption_alpha, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(max_absorption_alpha, 5)}"), 
+                                data_id = place), 
+        color = NA) + 
       guides(alpha = "none") +
       coord_sf() +
       theme_void() +
@@ -317,24 +300,126 @@ girafe(ggobj = g,
                        )
       )
 
+
+
 ```
 
 
-Mahoning County, Ohio export excess connectedness to the nation
-``` {r}
 
+Non-normalized Max Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+```{r}
+print(Sys.time())
+df <- spatial_connectedness(cbp_year = "2012", 
+                            ilevel = "det", 
+                            bea_year = "2012",
+                            labor_share_year = "2012",
+                            tiger_year = "2013", 
+                            ag_year = "2012",
+                            threshold = .05,
+                            impedance = NULL, 
+                            normalized = FALSE)
+print(Sys.time())
+
+
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = max_absorption_alpha, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(max_absorption_alpha, 5)}"), 
+                                data_id = place), 
+        color = NA) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = "Max Absorption",
+           caption = paste0())
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+
+```
+
+
+Population adjusted non-normalized Total Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+```{r}
+
+df$ab_pop <- df$absorption_alpha_total/df$POPULATION
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = ab_pop, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(ab_pop, 5)}"), 
+                                data_id = place), 
+        color = NA) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = "Total Absorption/Pop",
+           caption = paste0())
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+
+```
+
+
+ Absorption Gini (inequality/concentration) (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+ Note: Gini of 0 is perfect equality/ no concentration and Gini of 1 is perfect inequality/ complete concentration
+ 
+```{r}
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = absorption_alpha_gini, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(absorption_alpha_gini, 5)}"), 
+                                data_id = place), 
+        color = NA) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = "Absorption Gini",
+           caption = paste0())
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+
+```
+
+
+
+
+
+Mahoning County, Ohio export excess connectedness to the nation
+Normalized Absorption, 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+``` {r}
 
 cp <- "39099"
 df <- place_centric_connect(central_place = cp,
                       cbp_year = "2012",
                       ag_year = "2012",
                       ilevel = "det",
-                      tiger_year = "2020",
-                      export_focused = TRUE)
+                      tiger_year = "2013",
+                      impedance = NULL, 
+                      normalized = FALSE)
+
 
 g <- ggplot(df) +
-        geom_sf_interactive(aes(fill = (round(central_place, 5)), 
-                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(central_place, 5)}"), 
+        geom_sf_interactive(aes(fill = (round(export_absorption, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(export_absorption, 5)}"), 
                                 data_id = place
         ), 
         color = NA
@@ -360,19 +445,12 @@ girafe(ggobj = g,
 
 
 Mahoning County, Ohio import needs connectedness to the nation
+Normalized Absorption, 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
 ``` {r}
 
-cp <- "39099"
-df <- place_centric_connect(central_place = cp,
-                      cbp_year = "2012",
-                      ag_year = "2012",
-                      ilevel = "det",
-                      tiger_year = "2020",
-                      export_focused = FALSE)
-
 g <- ggplot(df) +
-        geom_sf_interactive(aes(fill = (round(central_place, 5)), 
-                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(central_place, 5)}"), 
+        geom_sf_interactive(aes(fill = (round(import_absorption, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(import_absorption, 5)}"), 
                                 data_id = place
         ), 
         color = NA
@@ -393,5 +471,10 @@ girafe(ggobj = g,
 
 
 ```
+
+
+
+
+
 
 
