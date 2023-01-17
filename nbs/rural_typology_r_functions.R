@@ -18,7 +18,7 @@ library(dplyr)
 library(geosphere)
 library(spdep)
 
-library(DescTools)
+library(REAT)
 
 
 
@@ -35,7 +35,7 @@ ers_rurality <- import("rurec.pubdata.ers_rurality")
 geography <- import("rurec.pubdata.geography")
 naics <- import("rurec.pubdata.naics")
 geography_cbsa <- import("rurec.pubdata.geography_cbsa")
-
+ag_output <- import("rurec.ag_output")
 
 # Function to download  data
 data_getr <- function(FileURL,
@@ -245,7 +245,7 @@ expo_impedance_mat <- function(year,
   return(df)
 }
 
-# Produce  hyperbolic secant distance decay impedance matrix
+# Produce hyperbolic secant distance decay impedance matrix
 hyper_impedance_mat <- function(year,
                                scale = c("500k", "20m", "5m"),
                                decay_constant = 1000000){
@@ -253,7 +253,6 @@ hyper_impedance_mat <- function(year,
   df <- ((2/(exp(-(df/decay_constant)) + exp(df/decay_constant))))
   return(df)
 }
-
 
 # Call up and clean RUCC data
 call_rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
@@ -275,9 +274,6 @@ tiger_rucc <- function(year,
   #rownames(df) <- df$place
   return(df)
 }
-
-
-
 
 # Call up and clean CBP
 call_cbp <- function(year,
@@ -398,7 +394,18 @@ labor_share <- function(year,
 }
 
 
-
+# Call up and clean Ag Output data
+call_agoutput <- function(ag_year = c("2017", "2012", "2007", "2002"), 
+                          geo_level = c("county", "state", "national")){
+  ag_year <- match.arg(ag_year)
+  geo_level <- match.arg(geo_level)
+  df <- ag_output$get_farm_sales_by_bea_detail(strtoi(ag_year), geo_level)
+  place <- c(place = rownames(df))
+  df <- sapply(df, function(x)x/1000) %>% as.data.frame()
+  df <- cbind(place, df)
+  rownames(df) <- 1:nrow(df)
+  return(df)
+}
 
 ############ Derive the Total Output Matrix (in thousands of dollars)
 total_output <- function (year,
@@ -406,13 +413,14 @@ total_output <- function (year,
                           scale = c("county", "state", "us"),
                           output_metric = c("ap", "emp", "qp1", "est"),
                           data_dir = file.path("data", "robjs"),
-                          labor_share_year = year){
+                          labor_share_year = year,
+                          ag_year = c("2017", "2012", "2007", "2002"), 
+                          geo_level = c("county", "state", "national")){
   
-  ## Check farms sales exists
-  f <- file.path(find_rstudio_root_file(), data_dir, "farm_sales")
-  stopifnot("farm sales data do not exist" = file.exists(f) == TRUE) 
+  a <- strtoi(match.arg(ag_year))
+  if(strtoi(year) != a){cat("Warning: CBP Output year [",year,"] not the same as Ag Output year [",a,"]" )}
   
-  farm_sales <- readRDS(f)
+  farm_sales <- call_agoutput(ag_year, geo_level)
   fn <- colnames(farm_sales)[-c(1)]
   
   ilevel <- match.arg(ilevel)
@@ -430,8 +438,8 @@ total_output <- function (year,
   
   df <- apply(iout, 2, function (x) {x / ls})
   df <- t(df) %>% as.data.frame()
-  df$STCTY <- rownames(df)
-  df <- left_join(df, farm_sales, by = "STCTY")
+  df$place <- rownames(df)
+  df <- left_join(df, farm_sales, by = "place")
   if (ilevel == "sec") {
     df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
     df <- df %>% select(!c(fn))
@@ -441,8 +449,8 @@ total_output <- function (year,
   } else if (ilevel == "det") {
     df <- df %>% select(fn, everything())
   }
-  rownames(df) <- df$STCTY
-  df$STCTY <- NULL
+  rownames(df) <- df$place
+  df$place <- NULL
   df <- t(df)
   return(df)
 }
@@ -456,14 +464,18 @@ total_output_tidy <- function (year,
                                 output_metric = c("ap", "emp", "qp1", "est"),
                                 data_dir = file.path("data", "robjs"),
                                 labor_share_year = year,
-                                tiger_year = year){
+                                tiger_year = year,
+                                ag_year = c("2017", "2012", "2007", "2002"), 
+                                geo_level = c("county", "state", "national")){
   
   df <- total_output(year = year, 
                      ilevel = ilevel,
                      scale = scale,
                      output_metric = output_metric,
                      data_dir = data_dir,
-                     labor_share_year = labor_share_year)
+                     labor_share_year = labor_share_year,
+                     ag_year = ag_year, 
+                     geo_level = geo_level)
   t <- tiger_rucc(tiger_year)
   
   
@@ -600,7 +612,7 @@ absorption_maximum_match <- function(absorption_matrix,
                match = colnames(a)[apply(a, 1, which.max)],
                max_absorption_alpha = apply(a, 1, max), 
                second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])}), 
-               absorption_alpha_gini = apply(a, 1, Gini),
+               absorption_alpha_gini = apply(a, 1, gini),
                absorption_alpha_total = apply(a, 1, sum),
                absorption_alpha_mean = apply(a, 1, mean),
                absorption_alpha_sd = apply(a, 1, sd)
@@ -691,11 +703,14 @@ connectedness <- function (cbp_year,
                            scale = c("county", "state", "us"),
                            output_metric = c("ap", "emp", "qp1", "est"),
                            data_dir = file.path("data", "robjs"),
-                           labor_share_year = cbp_year,
+                           labor_share_year = bea_year,
                            tiger_year = cbp_year,
                            bea_year = cbp_year,
                            threshold = .05,
-                           impedance = NULL){
+                           impedance = NULL, 
+                           normalized = TRUE,
+                           ag_year = c("2017", "2012", "2007", "2002"), 
+                           geo_level = c("county", "state", "national")){
   
   o <- total_output_tidy(year = cbp_year,
                          ilevel = ilevel,
@@ -703,12 +718,19 @@ connectedness <- function (cbp_year,
                          output_metric = output_metric,
                          data_dir = data_dir,
                          labor_share_year = labor_share_year,
-                         tiger_year = tiger_year)
+                         tiger_year = tiger_year,
+                         ag_year = ag_year, 
+                         geo_level = geo_level)
   d <- direct_requirements(year = bea_year, 
                            ilevel = ilevel)
   i <- industry_input(d, o)
   s <- stacked_absorption_share(net_input_supply(o, i), net_input_demand(o, i))
-  n <- normalized_absorption_share(s, net_input_supply(o, i))
+  
+  if(!isTRUE(normalized)){
+    n <- s
+  } else {
+    n <- normalized_absorption_share(s, net_input_supply(o, i))
+  }
   
   df <- absorption_maximum_match(n, threshold = threshold, impedance = impedance)
   
@@ -722,11 +744,14 @@ spatial_connectedness <- function (cbp_year,
                                    scale = c("county", "state", "us"),
                                    output_metric = c("ap", "emp", "qp1", "est"),
                                    data_dir = file.path("data", "robjs"),
-                                   labor_share_year = cbp_year,
+                                   labor_share_year = bea_year,
                                    tiger_year = cbp_year,
                                    bea_year = cbp_year,
                                    threshold = .05,
-                                   impedance = NULL){
+                                   impedance = NULL, 
+                                   normalized = TRUE,
+                                   ag_year = c("2017", "2012", "2007", "2002"), 
+                                   geo_level = c("county", "state", "national")){
   c <- connectedness(cbp_year = cbp_year,
                      ilevel = ilevel,
                      scale = scale,
@@ -736,7 +761,10 @@ spatial_connectedness <- function (cbp_year,
                      tiger_year = tiger_year,
                      bea_year = bea_year,
                      threshold = threshold,
-                     impedance = impedance)
+                     impedance = impedance, 
+                     normalized = normalized,
+                     ag_year = ag_year, 
+                     geo_level = geo_level)
   s <- tiger_rucc(tiger_year) %>% 
         select(place, NAME, STATE_CODE, COUNTY_CODE, FIPS, STATE, COUNTY, RUC_CODE, POPULATION, geometry, center)
   df <- join_space_with_connectedness(c, s)
@@ -769,12 +797,15 @@ cluster_spatial_connectedness <- function (cbp_year,
                                            scale = c("county", "state", "us"),
                                            output_metric = c("ap", "emp", "qp1", "est"),
                                            data_dir = file.path("data", "robjs"),
-                                           labor_share_year = cbp_year,
+                                           labor_share_year = bea_year,
                                            tiger_year = cbp_year,
                                            bea_year = cbp_year,
                                            threshold = .05,
                                            impedance = NULL,
-                                           list_names = NULL){
+                                           list_names = NULL,
+                                           normalized = normalized,
+                                           ag_year = c("2017", "2012", "2007", "2002"), 
+                                           geo_level = c("county", "state", "national")){
   df <- spatial_connectedness(cbp_year = cbp_year,
                               ilevel = ilevel,
                               scale = scale,
@@ -784,7 +815,10 @@ cluster_spatial_connectedness <- function (cbp_year,
                               tiger_year = tiger_year,
                               bea_year = bea_year,
                               threshold = threshold,
-                              impedance = impedance)
+                              impedance = impedance,
+                              normalized = normalized,
+                              ag_year = ag_year, 
+                              geo_level = geo_level)
   x <- df$eca_membership %>% unique() %>% .[order(.)]
   for (i in x){
     print(paste(list_names, "start cluster: ", i, which(i == x), "of", length(x), Sys.time()))
@@ -794,6 +828,67 @@ cluster_spatial_connectedness <- function (cbp_year,
   df <- df %>% .[.$place %in% .$eca_membership, ]
   return(df)
 }
+
+
+
+
+############ Place-centric connectedness
+place_centric_connect <- function(central_place,
+                                  cbp_year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  scale = c("county", "state", "us"),
+                                  output_metric = c("ap", "emp", "qp1", "est"),
+                                  data_dir = file.path("data", "robjs"),
+                                  labor_share_year = bea_year,
+                                  tiger_year = cbp_year,
+                                  bea_year = cbp_year,
+                                  impedance = NULL, 
+                                  normalized = TRUE,
+                                  ag_year = c("2017", "2012", "2007", "2002"), 
+                                  geo_level = c("county", "state", "national")){
+  
+  o <- total_output_tidy(year = cbp_year,
+                         ilevel = ilevel,
+                         scale = scale,
+                         output_metric = output_metric,
+                         data_dir = data_dir,
+                         labor_share_year = labor_share_year,
+                         tiger_year = tiger_year,
+                         ag_year = ag_year, 
+                         geo_level = geo_level)
+  d <- direct_requirements(year = bea_year, 
+                           ilevel = ilevel)
+  i <- industry_input(d, o)
+  s <- stacked_absorption_share(net_input_supply(o, i), net_input_demand(o, i))
+  
+  if(!isTRUE(normalized)){
+    n <- s
+  } else {
+    n <- normalized_absorption_share(s, net_input_supply(o, i))
+  }
+  
+  if(is.null(impedance)){
+    a <- n
+  } else {
+    a <- n * impedance[colnames(n), rownames(n)]
+  }
+  
+  b <- cbind(export_absorption = c(t(a[central_place, , drop=FALSE])),
+             import_absorption = c(a[, central_place , drop=FALSE]),
+             place = rownames(a))
+  
+  t <- tiger_rucc(tiger_year)
+  
+  df <- join_space_with_connectedness(b, t)
+  
+  df$export_absorption <- as.numeric(df$export_absorption)
+  df$import_absorption <- as.numeric(df$import_absorption)
+  
+  return(df)
+  
+}
+
+
 
 
 ############ Aggregate economic industry output of each ECA member in a cluster, keep all non source places as ECA core unit label
