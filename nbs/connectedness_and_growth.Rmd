@@ -3,23 +3,40 @@ title: "Connectedness and economic growth"
 ---
 
 ```{r preamble}
-options(scipen=3)
 
 library(tidyverse)
 library(ggplot2)
+library(ggExtra)
 
+bea_io <- reticulate::import("rurec.pubdata.bds")
 bds <- reticulate::import("rurec.pubdata.bds")
 cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 geography <- reticulate::import("rurec.pubdata.geography")
 
 data_dir = file.path(rprojroot::find_rstudio_root_file(), "data", "robjs")
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+```
+
+```{r data}
+
+df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
 
 
 ```
 
-Prepare absorption share for all counties by running [notebook](national_connectedness.Rmd) up to `Connectedness_table <-` line, then `saver(Connectedness_table)`.
 
-```{r}
+
+There is significant variation among sectors in the share of output that is used as intermediate input.
+
+The big difference in Retail and Wholesale trade sectors between "Total Commodity Output" in Supply table and "Total use of products" in Use table is "Trade margins".
+
+Total product supply (purchaser prices) = Total product supply (basic prices) + trade margins + taxes.
+
+Trade margins are huge negative numbers in trade, and big positive numbers in manufacturing.
+
+
+```{r, bea-sectors}
 y <- 2021L
 d1 <- bea_io$get_sup(y, 'sec', TRUE)[1:15, ] %>%
   as_tibble(rownames = "commodity") %>%
@@ -33,8 +50,91 @@ d2 <- bea_io$get_use(y, 'sec', TRUE)[1:15, ] %>%
   mutate(intermed_share = intermed / use) %>%
   select(commodity, intermed, use, intermed_share)
 
-inner_join(d1, d2)
+d <- inner_join(d1, d2, by = "commodity")
+d %>% arrange(desc(output_share))
 ```
+
+
+Is absorption strongly correlated with weighted industry intermediate-ness?
+
+```{r, preload-slow-data}
+io_use_det <- bea_io$get_use(2012L, 'det')
+```
+
+
+
+```{r}
+# county-by-industry output
+df <- readRDS(file.path(data_dir, "Output_mat"))$Detail %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "output") %>%
+  filter(output > 0) %>%
+  select(stcty, industry, output) %>%
+  arrange(stcty, industry)
+
+# intermediate output share by industry (detail)
+d <- io_use_det %>%
+  as_tibble(rownames = "industry") %>%
+  slice_head(n = 401) %>%     # last industry "S00203: Other state and local government enterprises"
+  mutate(intermed_share = T001 / T019) %>% 
+  replace_na(list(intermed_share = 0)) %>%
+  # select(industry, T001, T019, intermed_share)
+  select(industry, intermed_share)
+
+# d %>% filter(intermed_share == 0) %>% View
+
+# merge and fill missing values
+df <- left_join(df, d, by = "industry")
+
+# missing: 23 (Construction) and 331314 (Secondary smelting and alloying of aluminum)
+df %>% filter(is.na(intermed_share)) %>% count(industry)
+
+# missing replacement
+# "331314" is same commodity as "331313", but different industry
+shr_331313 <- filter(d, industry == "331313")$intermed_share
+# "23" maps to CBP only on sector level
+shr_23 <- bea_io$get_use(2012L, 'sec') %>% 
+  as_tibble(rownames = "industry") %>%
+  filter(industry == "23") %>%
+  transmute(shr = T001 / T019) %>%
+  as.numeric()
+
+df <- df %>%
+  mutate(intermed_share = case_when(
+    industry == "331314" ~ shr_331313,
+    industry == "23" ~ shr_23,
+    TRUE ~ intermed_share
+  ))
+
+stopifnot(!is.na(d1$intermed_share))
+
+# average intermed share by county
+df <- df %>% 
+  group_by(stcty) %>% 
+  summarise(intermed_share = sum(intermed_share * output) / sum(output))
+
+# absorption
+d <- readRDS(file.path(data_dir, "Connectedness_table"))$Detail %>%
+  ungroup() %>%
+  rename(stcty = place) %>%
+  select(stcty, max_absorption_alpha)
+df <- inner_join(df, d, by = "stcty")
+
+p <- ggplot(df) + 
+  geom_point(aes(intermed_share, max_absorption_alpha)) +
+  coord_fixed(ratio = 1)
+p <- ggMarginal(p, type = "histogram")
+p
+```
+
+
+
+
+
+Correlation of absorption and industry shares.
+
+
+Prepare absorption share for all counties by running [notebook](national_connectedness.Rmd) up to `Connectedness_table <-` line, then `saver(Connectedness_table)`.
 
 
 ```{r data}
@@ -84,6 +184,19 @@ df %<>% drop_na(emp_gr)
 df
 
 ```
+
+
+```{r}
+d <- geography$get_county_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  rename(stcty = code, cty_name = name) %>%
+  select(stcty, cty_name)
+
+df %>% ungroup() %>%
+  filter(str_sub(stcty, 1, 2) == "55") %>%
+  left_join(d, by = "stcty")
+```
+
 
 
 Visual relationship between max absorption and growth rate.
@@ -158,5 +271,15 @@ ggplot(dydx_wi,
   labs(title = "Marginal effect of max_absorption_alpha in WI counties")
 
 
+```
+
+
+
+
+```{r}
+df <- readRDS("~/Downloads/CBP2012_Connected")
+d <- df %>% as.data.frame() %>% select(!c(geometry, center))
+write.csv(d, "~/Downloads/CBP2012_Connected.csv")
+  
 ```
 
