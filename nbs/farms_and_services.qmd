@@ -32,11 +32,32 @@ geography <- reticulate::import("rurec.pubdata.geography")
 #| output: false
 
 import io
+import shutil
 
 import numpy as np
 import pandas as pd
 
-from rurec.pubdata import agcensus, geography
+from rurec.pubdata import agcensus, geography, qcew
+from rurec.pubdata import bea_nipa
+from rurec.reseng.caching import simplecache
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
+
+PATH = {
+  'prep': nbd.root / 'data/farms_and_services'
+}
+
+def cleanup():
+  print('Removing data...')
+  shutil.rmtree(PATH['prep'])
+
+PAR = {
+  'years': [2002, 2007, 2012, 2017]
+}
+
+```
+
+```{python}
 
 def set_zero_value(d, drop_flag=True):
   mask = (d['value_f'] == '(Z)')
@@ -45,7 +66,47 @@ def set_zero_value(d, drop_flag=True):
   if drop_flag: del d['value_f']
 
 
+
+def cached_nom_real(base_year=2021, price_index='purchases_price_index'):
+  '''Return pair of functions that convert from nominal to real dollars and back.
+  Functions take two index-aligned pd.Series: years and values,
+  and return converted series with same index.
+  '''
+  pi = bea_nipa.get_price_index_df()[price_index]
+  pi.name = 'deflator'
+  pi_base = pi.at[base_year]
+  pi = pi.to_frame()
+  def _nom2real(years, values):
+    d = pd.concat({'year': years, 'nominal': values}, axis=1)
+    d = d.merge(pi, 'left', 'year')
+    d['real'] = d['nominal'] / d['deflator'] * pi_base
+    return d['real']
+  def _real2nom(years, values):
+    d = pd.concat({'year': years, 'real': values}, axis=1)
+    d = d.merge(pi, 'left', 'year')
+    d['nominal'] = d['real'] * d['deflator'] / pi_base
+    return d['nominal']
+  
+  return _nom2real, _real2nom
+
+
+def _test_cached_nom_real():
+  y = pd.Series([2020, 2021, 2020, 2021])
+  n = pd.Series([100, 200, 200, 100])
+  
+  nom2real, real2nom = cached_nom_real()
+  r = nom2real(y, n)
+  n1 = real2nom(y, r)
+  assert (n1 == n).all()
+
+_test_cached_nom_real()
+
+
+nom2real, real2nom = cached_nom_real()
+
 ```
+
+
 
 # Overview of variables
 
@@ -436,29 +497,177 @@ ggplot(d, aes(hhi_value, hhi_type)) +
 ```
 
 
+# Ag services in QCEW
 
-# Prepare analysis dataset
+By "agricultural services" we mean two 4-digit NAICS industries, 1151: Support Activities for Crop Production, and 1152: Support Activities for Animal Production.
+Together with 1153: Support Activities for Forestry, these industries aggregate to a 3-digit level code 115: Support Activities for Agriculture and Forestry.
+
+CBP only reports business with non-ag employees (payroll form 941).
+BDS aggregates all "Sector 11" establishments at 4-digit NAICS level as "1100".
+QCEW does include 1151 and 1152, although there is a lot of suppression at county level.
+
+Only looking at privately owned establishments.
+There are publicly owned in the data, but very small percentage.
 
 
+## Compare 1151 in LBD and QCEW
 
 ```{python}
 #| output: false
 #| cache: false
 
-years = [2002, 2007, 2012, 2017]
+# QCEW national totals, private ownership
+df = qcew.get_df(range(1992, 2017), 
+  ['year', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages'],
+  [('agglvl_code', '==', '16'), ('industry_code', '==', '1151'), ('own_code', '==', '5')]).set_index('year').add_prefix('qcew_')
+# deflate wages to 2016 dollars
+d = bea_nipa.get_price_index_df()
+df = df.merge(d[['purchases_price_index']], 'left', 'year')
+df['qcew_total_annual_wages'] = df['qcew_total_annual_wages'].astype('float64') / df['purchases_price_index'] * df.at[2016, 'purchases_price_index']
 
-# total number of farms
-df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
-                     [
-                       ('AGG_LEVEL_DESC', '==', 'COUNTY'),
-                       ('DOMAIN_DESC', '==', 'TOTAL'),
-                       ('SHORT_DESC', '==', 'FARM OPERATIONS - NUMBER OF OPERATIONS'),
-                      ]).rename(columns=str.lower)
-set_zero_value(df)
-df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
-assert not df[['year', 'stcty']].duplicated().any()
+# LBD establishments
+d = pd.read_excel(nbd.root / 'data/rdc/20191101/results_disc.xlsx')\
+  .rename(columns={'yr': 'year', 's_ptot': 'lbd_ptot_est', 's_p941': 'lbd_p941_est', 's_p943': 'lbd_p943_est'})\
+  .set_index('year')[['lbd_ptot_est', 'lbd_p941_est', 'lbd_p943_est']]
+df = df.merge(d, on='year')
 
-farm_data = df[['year', 'stcty', 'value']].rename(columns={'value': 'farm_count'})
+# LBD emp and pay
+d = pd.read_excel(nbd.root / 'data/rdc/20191101/results_disc.xlsx', 'emp_pay_wage_agg_by_year', header=None, skiprows=3, usecols='A,D,G,J,M', names=['year', 'p941_emp_q1', 'p941_emp_ann', 'p941', 'p943'])
+d['ptot'] = d['p941'] + d['p943']
+d = d.set_index('year').add_prefix('lbd_')
+df = df.merge(d, on='year')
+
+df_1151 = df.reset_index()
+```
+
+Number of establishments is notably similar in both QCEW and LBD, despite very different types of source data.
+However, trends diverge after 2005.
+QCEW shows increasing number of establishments, while in LBD it is decreasing.
+
+```{r}
+d <- py$df_1151 %>% 
+  select(year, qcew_annual_avg_estabs, lbd_ptot_est, lbd_p941_est, lbd_p943_est) %>%
+  pivot_longer(!year, names_to = "series", values_to = "establishments")
+  
+ggplot(d, aes(x = year, y = establishments)) +
+  geom_line(aes(color = series)) +
+  coord_trans(ylim = c(0, 12000)) +
+  labs(title = "Total number of establishments in NAICS 1151") +
+  theme_minimal() + theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+Total employment in QCEW is 5-6 higher than non-ag employment in LBD.
+
+```{r}
+d <- py$df_1151 %>% 
+  select(year, qcew_annual_avg_emplvl, lbd_p941_emp_q1, lbd_p941_emp_ann) %>%
+  pivot_longer(!year, names_to = "series", values_to = "employment") %>%
+  mutate(employment = employment / 1000)
+  
+ggplot(d, aes(x = year, y = employment)) +
+  geom_line(aes(color = series)) +
+  coord_trans(ylim = c(0, 350)) +
+  labs(title = "Total employment in NAICS 1151") +
+  ylab('thousands') +
+  theme_minimal() + theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+Total payroll in QCEW is almost twice as high as total payroll in LBD.
+
+```{r}
+d <- py$df_1151 %>% 
+  select(year, qcew_total_annual_wages, lbd_ptot, lbd_p941, lbd_p943) %>%
+  mutate(qcew_total_annual_wages = qcew_total_annual_wages / 1000) %>%
+  pivot_longer(!year, names_to = "series", values_to = "payroll") %>%
+  mutate(payroll = payroll / 1000000)
+  
+ggplot(d, aes(x = year, y = payroll)) +
+  geom_line(aes(color = series)) +
+  coord_trans(ylim = c(0, 10)) +
+  labs(title = "Total payroll in NAICS 1151") +
+  ylab('bln $ 2016') +
+  theme_minimal() + theme(legend.position = "bottom", legend.title = element_blank())
+```
+
+## County data suppression
+
+Data in small county-industry cells is suppressed, as reflected in `disclosure_code` variable.
+Suppression methodology was changing over time.
+Before 2002, disclosure code was not given.
+In 2002, suppressed cells have est, emp and pay set to zero.
+In 2012, estabs in suppressed cells are reported, and only emp and pay are zero.
+
+```{python}
+
+year = 2012
+industries = ['115', '1151', '1152', '1153']
+
+# full cross-product of county and industry codes
+df = qcew.get_df([year], ['area_fips'], [('agglvl_code', '==', '70')])
+df = pd.DataFrame([[c, i] for c in df['area_fips'] for i in industries], columns=['area_fips', 'industry_code'])
+
+# merge data to prepared county-industry frame.
+# unmatched entries = zero values in county-industry
+d = qcew.get_df([year], 
+  ['area_fips', 'industry_code', 'disclosure_code', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages'],
+  [('agglvl_code', 'in', ['75', '76']), ('industry_code', 'in', industries), ('own_code', '==', '5')])
+df = df.merge(d, 'left', ['area_fips', 'industry_code'])
+
+df['disc_flag'] = 'available'
+df.loc[df['annual_avg_estabs'].isna(), 'disc_flag'] = 'zero'
+df.loc[df['disclosure_code'] == 'N', 'disc_flag'] = 'suppressed'
+
+
+df_cty = df.groupby(['industry_code', 'disc_flag']).agg({
+  'area_fips': 'size', 
+  'annual_avg_estabs': 'sum',
+  'annual_avg_emplvl': 'sum',
+  'total_annual_wages': 'sum'
+  }).rename(columns={'area_fips': 'counties'})
+  
+df_nat = qcew.get_df([year], ['industry_code', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages'],
+  [('agglvl_code', 'in', ['15', '16']), ('industry_code', 'in', industries), ('own_code', '==', '5')]).\
+  set_index(['industry_code'])
+df_nat['counties'] = df_cty.groupby('industry_code')['counties'].sum()
+  
+
+t_qcew_county_suppression = (df_cty / df_nat)[['counties', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages']].reset_index()
+
+del year, industries, df, d, df_cty, df_nat
+```
+
+
+```{r}
+py$t_qcew_county_suppression %>%
+  mutate(across(counties:total_annual_wages, ~ .x * 100)) %>%
+  mutate(across(counties:total_annual_wages, ~ ifelse(.x == 0, "", sprintf("%.1f%%", .x))))
+```
+
+
+
+# Prepare analysis dataset
+
+## Number of farm operations
+
+```{python}
+#| output: false
+#| cache: false
+
+@simplecache(PATH['prep'] / 'farm_count.pkl')
+def prep_data_farm_count():
+  
+  # total number of farms
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                       [
+                         ('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'TOTAL'),
+                         ('SHORT_DESC', '==', 'FARM OPERATIONS - NUMBER OF OPERATIONS'),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  assert not df[['year', 'stcty']].duplicated().any()
+  
+  return df[['year', 'stcty', 'value']].rename(columns={'value': 'farm_count'})
 ```
 
 ## Farm land
@@ -469,66 +678,58 @@ Cropland can be either harvested, used for pasture or other (mainly idle).
 ```{python}
 #| output: false
 #| cache: false
-# total acres
-# mean acres
-# median acres
-# cropland acres and share
-# pastureland acres and share
-# woodland acres and share
-# other land acres and share
-items_to_cols = {
-  'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
-  'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION': 'land_mean',
-  'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION, MEDIAN': 'land_med',
-  'AG LAND, CROPLAND - ACRES': 'land_crop',
-  'AG LAND, PASTURELAND, (EXCL CROPLAND & WOODLAND) - ACRES': 'land_pasture',
-  'AG LAND, WOODLAND - ACRES': 'land_wood',
-  'AG LAND, (EXCL CROPLAND & PASTURELAND & WOODLAND) - ACRES': 'land_other'
-}
-df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
-                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
-                       ('DOMAIN_DESC', '==', 'TOTAL'),
-                       ('SHORT_DESC', 'in', list(items_to_cols)),
-                      ]).rename(columns=str.lower)
-set_zero_value(df)
-df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
-df['item'] = df['short_desc'].map(items_to_cols)
-d = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
-farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+
+@simplecache(PATH['prep'] / 'farm_land.pkl')
+def prep_data_farm_land():
+  items_to_cols = {
+    'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
+    'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION': 'land_mean',
+    'FARM OPERATIONS - AREA OPERATED, MEASURED IN ACRES / OPERATION, MEDIAN': 'land_med',
+    'AG LAND, CROPLAND - ACRES': 'land_crop',
+    'AG LAND, PASTURELAND, (EXCL CROPLAND & WOODLAND) - ACRES': 'land_pasture',
+    'AG LAND, WOODLAND - ACRES': 'land_wood',
+    'AG LAND, (EXCL CROPLAND & PASTURELAND & WOODLAND) - ACRES': 'land_other'
+  }
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                       [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'TOTAL'),
+                         ('SHORT_DESC', 'in', list(items_to_cols)),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  df['item'] = df['short_desc'].map(items_to_cols)
+  return df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
 ```
 
 ## Sales
 
-### todo: deflate nominal $s
 
 ```{python}
 #| output: false
 #| cache: false
-# total sales
-# mean sales
-# share of farms with crop sales
-# share of farms with animal sales
-# share of crop sales
-# share of animal sales
+@simplecache(PATH['prep'] / 'farm_sales.pkl')
+def prep_data_farm_sales():
+  items_to_cols = {
+    'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
+    'COMMODITY TOTALS - SALES, MEASURED IN $ / OPERATION': 'sales_mean',
+    'CROP TOTALS - OPERATIONS WITH SALES': 'farm_count_sales_crop',
+    'CROP TOTALS - SALES, MEASURED IN $': 'sales_crop',
+    'ANIMAL TOTALS, INCL PRODUCTS - OPERATIONS WITH SALES': 'farm_count_sales_animal',
+    'ANIMAL TOTALS, INCL PRODUCTS - SALES, MEASURED IN $': 'sales_animal'
+  }
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                       [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'TOTAL'),
+                         ('SHORT_DESC', 'in', list(items_to_cols)),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  df['item'] = df['short_desc'].map(items_to_cols)
+  df = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
+  for c in ['sales_animal', 'sales_crop', 'sales_mean', 'sales_tot']:
+    df[c] = nom2real(df['year'], df[c])
+  return df
 
-items_to_cols = {
-  'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
-  'COMMODITY TOTALS - SALES, MEASURED IN $ / OPERATION': 'sales_mean',
-  'CROP TOTALS - OPERATIONS WITH SALES': 'farm_count_sales_crop',
-  'CROP TOTALS - SALES, MEASURED IN $': 'sales_crop',
-  'ANIMAL TOTALS, INCL PRODUCTS - OPERATIONS WITH SALES': 'farm_count_sales_animal',
-  'ANIMAL TOTALS, INCL PRODUCTS - SALES, MEASURED IN $': 'sales_animal'
-}
-df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
-                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
-                       ('DOMAIN_DESC', '==', 'TOTAL'),
-                       ('SHORT_DESC', 'in', list(items_to_cols)),
-                      ]).rename(columns=str.lower)
-set_zero_value(df)
-df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
-df['item'] = df['short_desc'].map(items_to_cols)
-d = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
-farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
 
 ```
 
@@ -540,48 +741,49 @@ farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
 ```{python}
 #| output: false
 #| cache: false
-
-items_to_cols = {
-  'FARM OPERATIONS - NUMBER OF OPERATIONS': 'farm_count',
-  'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
-}
-df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
-                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
-                       ('DOMAIN_DESC', '==', 'AREA OPERATED'),
-                       ('SHORT_DESC', 'in', list(items_to_cols)),
-                      ]).rename(columns=str.lower)
-set_zero_value(df, False)
-df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
-df['item'] = df['short_desc'].map(items_to_cols)
-
-# (full label, short label, imputation value)
-land_cats = [
-  ('AREA OPERATED: (1.0 TO 9.9 ACRES)', '1.0 TO 9.9 ACRES', 5.5),
-  ('AREA OPERATED: (10.0 TO 49.9 ACRES)', '10.0 TO 49.9 ACRES', 30),
-  ('AREA OPERATED: (50.0 TO 69.9 ACRES)', '50.0 TO 69.9 ACRES', 60),
-  ('AREA OPERATED: (70.0 TO 99.9 ACRES)', '70.0 TO 99.9 ACRES', 85),
-  ('AREA OPERATED: (100 TO 139 ACRES)', '100 TO 139 ACRES', 120),
-  ('AREA OPERATED: (140 TO 179 ACRES)', '140 TO 179 ACRES', 160),
-  ('AREA OPERATED: (180 TO 219 ACRES)', '180 TO 219 ACRES', 200),
-  ('AREA OPERATED: (220 TO 259 ACRES)', '220 TO 259 ACRES', 240),
-  ('AREA OPERATED: (260 TO 499 ACRES)', '260 TO 499 ACRES', 380),
-  ('AREA OPERATED: (500 TO 999 ACRES)', '500 TO 999 ACRES', 750),
-  ('AREA OPERATED: (1,000 TO 1,999 ACRES)', '1,000 TO 1,999 ACRES', 1500),
-  ('AREA OPERATED: (2,000 OR MORE ACRES)', '2,000 OR MORE ACRES', 3000),
-  #('AREA OPERATED: (50 TO 179 ACRES)', '50 TO 179 ACRES', ),
-  #('AREA OPERATED: (180 TO 499 ACRES)', '180 TO 499 ACRES', ),
-  #('AREA OPERATED: (1,000 OR MORE ACRES)', '1,000 OR MORE ACRES', ),
-]
-df['land_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in land_cats})
-
-# impute missing values as bin middle * number of farms in bin
-d = df.dropna(subset=['land_cat']).set_index(['year', 'stcty', 'land_cat', 'item'])['value'].unstack().reset_index()
-d.loc[d['land_tot'].isna(), 'land_tot'] = d['land_cat'].map({x[1]: x[2] for x in land_cats}) * d['farm_count']
-df_by_cat = d
-
-d = df_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'land_cat', 'farm_count', 'land_tot')
-d = d[['thumb']].reset_index().rename(columns={'thumb': 'land_tot_hhi'})
-farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+@simplecache(PATH['prep'] / 'farm_conc_land.pkl')
+def prep_data_farm_conc_land():
+  items_to_cols = {
+    'FARM OPERATIONS - NUMBER OF OPERATIONS': 'farm_count',
+    'FARM OPERATIONS - ACRES OPERATED': 'land_tot',
+  }
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
+                       [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'AREA OPERATED'),
+                         ('SHORT_DESC', 'in', list(items_to_cols)),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df, False)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  df['item'] = df['short_desc'].map(items_to_cols)
+  
+  # (full label, short label, imputation value)
+  land_cats = [
+    ('AREA OPERATED: (1.0 TO 9.9 ACRES)', '1.0 TO 9.9 ACRES', 5.5),
+    ('AREA OPERATED: (10.0 TO 49.9 ACRES)', '10.0 TO 49.9 ACRES', 30),
+    ('AREA OPERATED: (50.0 TO 69.9 ACRES)', '50.0 TO 69.9 ACRES', 60),
+    ('AREA OPERATED: (70.0 TO 99.9 ACRES)', '70.0 TO 99.9 ACRES', 85),
+    ('AREA OPERATED: (100 TO 139 ACRES)', '100 TO 139 ACRES', 120),
+    ('AREA OPERATED: (140 TO 179 ACRES)', '140 TO 179 ACRES', 160),
+    ('AREA OPERATED: (180 TO 219 ACRES)', '180 TO 219 ACRES', 200),
+    ('AREA OPERATED: (220 TO 259 ACRES)', '220 TO 259 ACRES', 240),
+    ('AREA OPERATED: (260 TO 499 ACRES)', '260 TO 499 ACRES', 380),
+    ('AREA OPERATED: (500 TO 999 ACRES)', '500 TO 999 ACRES', 750),
+    ('AREA OPERATED: (1,000 TO 1,999 ACRES)', '1,000 TO 1,999 ACRES', 1500),
+    ('AREA OPERATED: (2,000 OR MORE ACRES)', '2,000 OR MORE ACRES', 3000),
+    #('AREA OPERATED: (50 TO 179 ACRES)', '50 TO 179 ACRES', ),
+    #('AREA OPERATED: (180 TO 499 ACRES)', '180 TO 499 ACRES', ),
+    #('AREA OPERATED: (1,000 OR MORE ACRES)', '1,000 OR MORE ACRES', ),
+  ]
+  df['land_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in land_cats})
+  
+  # impute missing values as bin middle * number of farms in bin
+  d = df.dropna(subset=['land_cat']).set_index(['year', 'stcty', 'land_cat', 'item'])['value'].unstack().reset_index()
+  d.loc[d['land_tot'].isna(), 'land_tot'] = d['land_cat'].map({x[1]: x[2] for x in land_cats}) * d['farm_count']
+  df_by_cat = d
+  
+  d = df_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'land_cat', 'farm_count', 'land_tot')
+  d = d[['thumb']].reset_index().rename(columns={'thumb': 'land_tot_hhi'})
+  return d
 ```
 
 
@@ -591,48 +793,71 @@ farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
 ```{python}
 #| output: false
 #| cache: false
-
-items_to_cols = {
-  'COMMODITY TOTALS - OPERATIONS WITH SALES': 'farm_count',
-  'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
-}
-df = agcensus.get_df(years, ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
-                     [('AGG_LEVEL_DESC', '==', 'COUNTY'),
-                       ('DOMAIN_DESC', '==', 'FARM SALES'),
-                       ('SHORT_DESC', 'in', list(items_to_cols)),
-                      ]).rename(columns=str.lower)
-set_zero_value(df, False)
-df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
-df['item'] = df['short_desc'].map(items_to_cols)
-
-# (full label, short label, imputation value)
-sales_cats = [
-  ('FARM SALES: (LESS THAN 1,000 $)', 'LESS THAN 1,000', 500), 
-  ('FARM SALES: (1,000 TO 2,499 $)', '1,000 TO 2,499', 1750),
-  ('FARM SALES: (2,500 TO 4,999 $)', '2,500 TO 4,999', 3750),
-  ('FARM SALES: (5,000 TO 9,999 $)', '5,000 TO 9,999', 7500),
-  ('FARM SALES: (10,000 TO 19,999 $)', '10,000 TO 19,999', 15000),
-  ('FARM SALES: (20,000 TO 24,999 $)', '20,000 TO 24,999', 22500),
-  ('FARM SALES: (25,000 TO 39,999 $)', '25,000 TO 39,999', 32500),
-  ('FARM SALES: (40,000 TO 49,999 $)', '40,000 TO 49,999', 45000),
-  ('FARM SALES: (50,000 TO 99,999 $)', '50,000 TO 99,999', 75000),
-  ('FARM SALES: (100,000 TO 249,999 $)', '100,000 TO 249,999', 175000),
-  ('FARM SALES: (250,000 TO 499,999 $)', '250,000 TO 499,999', 375000),
-  ('FARM SALES: (500,000 OR MORE $)', '500,000 OR MORE', 750000),
-]
-df['sales_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in sales_cats})
-
-# impute missing values as bin middle * number of farms in bin
-d = df.dropna(subset=['sales_cat']).set_index(['year', 'stcty', 'sales_cat', 'item'])['value'].unstack().reset_index()
-d.loc[d['sales_tot'].isna(), 'sales_tot'] = d['sales_cat'].map({x[1]: x[2] for x in sales_cats}) * d['farm_count']
-df_sales_by_cat = d
-
-d = df_sales_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'sales_cat', 'farm_count', 'sales_tot')
-d = d[['thumb']].reset_index().rename(columns={'thumb': 'sales_tot_hhi'})
-farm_data = farm_data.merge(d, 'outer', ['year', 'stcty'])
+@simplecache(PATH['prep'] / 'farm_conc_sales.pkl')
+def prep_data_farm_conc_sales():
+  items_to_cols = {
+    'COMMODITY TOTALS - OPERATIONS WITH SALES': 'farm_count',
+    'COMMODITY TOTALS - SALES, MEASURED IN $': 'sales_tot',
+  }
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'DOMAINCAT_DESC', 'VALUE', 'VALUE_F'],
+                       [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'FARM SALES'),
+                         ('SHORT_DESC', 'in', list(items_to_cols)),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df, False)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  df['item'] = df['short_desc'].map(items_to_cols)
+  
+  # (full label, short label, imputation value)
+  sales_cats = [
+    ('FARM SALES: (LESS THAN 1,000 $)', 'LESS THAN 1,000', 500), 
+    ('FARM SALES: (1,000 TO 2,499 $)', '1,000 TO 2,499', 1750),
+    ('FARM SALES: (2,500 TO 4,999 $)', '2,500 TO 4,999', 3750),
+    ('FARM SALES: (5,000 TO 9,999 $)', '5,000 TO 9,999', 7500),
+    ('FARM SALES: (10,000 TO 19,999 $)', '10,000 TO 19,999', 15000),
+    ('FARM SALES: (20,000 TO 24,999 $)', '20,000 TO 24,999', 22500),
+    ('FARM SALES: (25,000 TO 39,999 $)', '25,000 TO 39,999', 32500),
+    ('FARM SALES: (40,000 TO 49,999 $)', '40,000 TO 49,999', 45000),
+    ('FARM SALES: (50,000 TO 99,999 $)', '50,000 TO 99,999', 75000),
+    ('FARM SALES: (100,000 TO 249,999 $)', '100,000 TO 249,999', 175000),
+    ('FARM SALES: (250,000 TO 499,999 $)', '250,000 TO 499,999', 375000),
+    ('FARM SALES: (500,000 OR MORE $)', '500,000 OR MORE', 750000),
+  ]
+  df['sales_cat'] = df['domaincat_desc'].map({x[0]: x[1] for x in sales_cats})
+  
+  # impute missing values as bin middle * number of farms in bin
+  d = df.dropna(subset=['sales_cat']).set_index(['year', 'stcty', 'sales_cat', 'item'])['value'].unstack().reset_index()
+  d.loc[d['sales_tot'].isna(), 'sales_tot'] = d['sales_cat'].map({x[1]: x[2] for x in sales_cats}) * d['farm_count']
+  df_sales_by_cat = d
+  
+  d = df_sales_by_cat.groupby(['year', 'stcty']).apply(calculate_binned_hhi, 'sales_cat', 'farm_count', 'sales_tot')
+  d = d[['thumb']].reset_index().rename(columns={'thumb': 'sales_tot_hhi'})
+  return d
 ```
 
 
+# Ag services
+
+
+
+
+```{python}
+def prep_data_agser():
+  df = qcew.get_df(PAR['years'], ['year', 'area_fips'], [('agglvl_code', '==', '70')])
+  
+  d = qcew.get_df(PAR['years'], 
+    ['year', 'area_fips', 'disclosure_code', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages'],
+    [('agglvl_code', '==', '75'), ('industry_code', '==', '115'), ('own_code', '==', '5')])
+  d = d.rename(columns={'disclosure_code': 'disc', 'annual_avg_estabs': 'est', 'annual_avg_emplvl': 'emp', 'total_annual_wages': 'pay'})
+  d['disc'] = d['disc'].replace('N', 'suppressed').fillna('available')
+  df = df.merge(d, 'left', ['year', 'area_fips'])
+  df['disc'] = df['disc'].fillna('zero')
+  df[['est', 'emp', 'pay']] = df[['est', 'emp', 'pay']].fillna(0)
+  
+  df = df.rename(columns={'area_fips': 'stcty'})
+  df['pay'] = nom2real(df['year'], df['pay'])
+  return df
+```
 
 
 
@@ -678,10 +903,9 @@ compute_stats <- function(df, var, gr_var = "year") {
 
 ## Total number of farm operations
 
-```{r farm_count}
+```{r}
 
-d <- py$farm_data %>% 
-  select(year, stcty, farm_count) %>%
+d <- py$prep_data_farm_count() %>%
   mutate(year = factor(year))
 
 t <- compute_stats(d, "farm_count") %>%
@@ -701,10 +925,9 @@ ggplot(d, aes(farm_count, year)) +
 
 Growth rate of number of farm operations
 
-```{r farm_count_gr}
+```{r}
 
-d <- py$farm_data %>% 
-  select(year, stcty, farm_count) %>%
+d <- py$prep_data_farm_count() %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
   mutate(farm_count_gr = 100 * 2 * (farm_count - lag(farm_count)) / (farm_count + lag(farm_count))) %>%
@@ -730,9 +953,9 @@ ggplot(d, aes(farm_count_gr, year)) +
 
 ## Total land in farms, acres
 
-```{r land_tot}
+```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot) %>%
   mutate(year = factor(year))
 
@@ -753,8 +976,8 @@ ggplot(d, aes(land_tot, year)) +
 
 Growth rate of total land in farms
 
-```{r land_tot_gr}
-d <- py$farm_data %>% 
+```{r}
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -781,7 +1004,7 @@ ggplot(d, aes(land_tot_gr, year)) +
 ## Mean farm land size
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_mean) %>%
   mutate(year = factor(year))
 
@@ -803,7 +1026,7 @@ ggplot(d, aes(land_mean, year)) +
 Growth rate of mean farm land size
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_mean) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -832,7 +1055,7 @@ ggplot(d, aes(land_mean_gr, year)) +
 
 ```{r land_med}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_med) %>%
   mutate(year = factor(year))
 
@@ -854,7 +1077,7 @@ ggplot(d, aes(land_med, year)) +
 Growth rate of median farm size
 
 ```{r land_med_gr}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_med) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -882,7 +1105,7 @@ ggplot(d, aes(land_med_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_crop) %>%
   mutate(land_crop_pct = 100 * land_crop / land_tot) %>%
   mutate(year = factor(year))
@@ -905,7 +1128,7 @@ ggplot(d, aes(land_crop_pct, year)) +
 Growth of cropland share
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_crop) %>%
   mutate(land_crop_pct = 100 * land_crop / land_tot) %>%
   group_by(stcty) %>%
@@ -936,7 +1159,7 @@ Permanent pastureland only, excluding pastured cropland and woodland.
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_pasture) %>%
   mutate(land_pasture_pct = 100 * land_pasture / land_tot) %>%
   mutate(year = factor(year))
@@ -959,7 +1182,7 @@ ggplot(d, aes(land_pasture_pct, year)) +
 Growth of pastureland share
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_pasture) %>%
   mutate(land_pasture_pct = 100 * land_pasture / land_tot) %>%
   group_by(stcty) %>%
@@ -988,7 +1211,7 @@ ggplot(d, aes(land_pasture_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_wood) %>%
   mutate(land_wood_pct = 100 * land_wood / land_tot) %>%
   mutate(year = factor(year))
@@ -1011,7 +1234,7 @@ ggplot(d, aes(land_wood_pct, year)) +
 Growth of woodland share
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_wood) %>%
   mutate(land_wood_pct = 100 * land_wood / land_tot) %>%
   group_by(stcty) %>%
@@ -1040,7 +1263,7 @@ ggplot(d, aes(land_wood_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_other) %>%
   mutate(land_other_pct = 100 * land_other / land_tot) %>%
   mutate(year = factor(year))
@@ -1063,7 +1286,7 @@ ggplot(d, aes(land_other_pct, year)) +
 Growth of other land share
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_land() %>% 
   select(year, stcty, land_tot, land_other) %>%
   mutate(land_other_pct = 100 * land_other / land_tot) %>%
   group_by(stcty) %>%
@@ -1088,11 +1311,11 @@ ggplot(d, aes(land_other_pct_gr, year)) +
 ```
 
 
-## Total sales, $1000s
+## Total sales, 1000s of 2021 $s
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot) %>%
   mutate(sales_tot = sales_tot / 1000) %>%
   mutate(year = factor(year))
@@ -1115,7 +1338,7 @@ ggplot(d, aes(sales_tot, year)) +
 Growth rate of total sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -1143,7 +1366,7 @@ ggplot(d, aes(sales_tot_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_mean) %>%
   mutate(year = factor(year))
 
@@ -1165,7 +1388,7 @@ ggplot(d, aes(sales_mean, year)) +
 Growth rate of mean sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_mean) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -1193,7 +1416,8 @@ ggplot(d, aes(sales_mean_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
+  inner_join(py$prep_data_farm_count()) %>%
   select(year, stcty, farm_count, farm_count_sales_crop) %>%
   mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
   mutate(year = factor(year))
@@ -1216,7 +1440,8 @@ ggplot(d, aes(sales_crop_farm_pct, year)) +
 Growth of share of farms with crop sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
+  inner_join(py$prep_data_farm_count()) %>%
   select(year, stcty, farm_count, farm_count_sales_crop) %>%
   mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
   group_by(stcty) %>%
@@ -1245,7 +1470,8 @@ ggplot(d, aes(sales_crop_farm_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
+  inner_join(py$prep_data_farm_count()) %>%
   select(year, stcty, farm_count, farm_count_sales_animal) %>%
   mutate(sales_crop_animal_pct = 100 * farm_count_sales_animal / farm_count) %>%
   mutate(year = factor(year))
@@ -1268,7 +1494,8 @@ ggplot(d, aes(sales_crop_animal_pct, year)) +
 Growth of share of farms with animal sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
+  inner_join(py$prep_data_farm_count()) %>%
   select(year, stcty, farm_count, farm_count_sales_animal) %>%
   mutate(sales_animal_farm_pct = 100 * farm_count_sales_animal / farm_count) %>%
   group_by(stcty) %>%
@@ -1296,7 +1523,7 @@ ggplot(d, aes(sales_animal_farm_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot, sales_crop) %>%
   mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
   mutate(year = factor(year))
@@ -1319,7 +1546,7 @@ ggplot(d, aes(sales_crop_pct, year)) +
 Growth of share of crop sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot, sales_crop) %>%
   mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
   group_by(stcty) %>%
@@ -1347,7 +1574,7 @@ ggplot(d, aes(sales_crop_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot, sales_animal) %>%
   mutate(sales_animal_pct = 100 * sales_animal / sales_tot) %>%
   mutate(year = factor(year))
@@ -1370,7 +1597,7 @@ ggplot(d, aes(sales_animal_pct, year)) +
 Growth of share of animal sales
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_sales() %>% 
   select(year, stcty, sales_tot, sales_crop) %>%
   mutate(sales_crop_pct = 100 * sales_crop / sales_tot) %>%
   group_by(stcty) %>%
@@ -1399,7 +1626,7 @@ ggplot(d, aes(sales_crop_pct_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_conc_land() %>% 
   select(year, stcty, land_tot_hhi) %>%
   mutate(year = factor(year))
 
@@ -1421,7 +1648,7 @@ ggplot(d, aes(land_tot_hhi, year)) +
 Growth of total farm land HHI
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_conc_land() %>% 
   select(year, stcty, land_tot_hhi) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -1450,7 +1677,7 @@ ggplot(d, aes(land_tot_hhi_gr, year)) +
 
 ```{r}
 
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_conc_sales() %>% 
   select(year, stcty, sales_tot_hhi) %>%
   mutate(year = factor(year))
 
@@ -1472,7 +1699,7 @@ ggplot(d, aes(sales_tot_hhi, year)) +
 Growth of total sales HHI
 
 ```{r}
-d <- py$farm_data %>% 
+d <- py$prep_data_farm_conc_sales() %>% 
   select(year, stcty, sales_tot_hhi) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
@@ -1494,4 +1721,12 @@ ggplot(d, aes(sales_tot_hhi_gr, year)) +
   coord_trans(xlim = c(-0.5, 0.5)) +
   theme_minimal()
 ```
+
+
+# Future work
+
+
+- Review county codes alignment between Agcensus and QCEW. Coverage probably differs. And Alaska counties appear grouped in Agcensus.
+
+
 
