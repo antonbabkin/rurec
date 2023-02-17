@@ -20,12 +20,17 @@ execute:
 library(tidyverse)
 library(ggiraph)
 library(ggpp)
+library(ggside)
 library(glue)
+library(margins)
 library(huxtable)
+library(patchwork)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
 geography <- reticulate::import("rurec.pubdata.geography")
+
+ggplot2::theme_set(theme_minimal())
 
 # options(scipen=999)
 EVAL <- FALSE
@@ -45,6 +50,7 @@ import pandas as pd
 
 from rurec.pubdata import agcensus, geography, qcew
 from rurec.pubdata import bea_nipa
+from rurec.pubdata import population
 from rurec.reseng.caching import simplecache
 from rurec.reseng.nbd import Nbd
 nbd = Nbd('rurec')
@@ -876,6 +882,39 @@ def prep_data_agser():
   df['pay'] = nom2real(df['year'], df['pay'])
   return df
 ```
+
+
+# Other county characteristics
+
+Total county population from PopEst and total payroll from QCEW.
+
+```{python}
+#| cache: false
+# (PATH['prep'] / 'county_other.pkl').unlink(missing_ok=True)
+@simplecache(PATH['prep'] / 'county_other.pkl')
+def prep_data_county_other():
+  df = qcew.get_df(PAR['years'], ['year', 'area_fips', 'total_annual_wages'], [('agglvl_code', '==', '70')])
+  df = df.rename(columns={'area_fips': 'stcty', 'total_annual_wages': 'pay'})
+  df['pay'] = nom2real(df['year'], df['pay'])
+  
+  d = population.get_df()
+  d = d[d['year'].isin(PAR['years']) & (d['cty'] != '000')].copy()
+  d['stcty'] = d['st'] + d['cty']
+  d = d[['stcty', 'year', 'pop']]
+  df = df.merge(d, 'left', ['year', 'stcty'])
+  
+  return df
+```
+
+Population and payroll are strongly positively correlated.
+
+```{r}
+#| eval: false
+d <- py$prep_data_county_other() %>% filter(year == 2012)
+cor.test(d$pay, d$pop)
+ggplot(d, aes(pop, pay)) + geom_point() + scale_x_log10() + scale_y_log10()
+```
+
 
 
 
@@ -1772,18 +1811,25 @@ ggplot(d, aes(sales_tot_hhi_gr, year)) +
   theme_minimal()
 ```
 
+
 # Farms-services relationship
 
 Prepare analysis dataframe.
 
 ```{r}
 df <- py$prep_data_agser() %>% 
-  rename_with(~ paste0("agser_", .x), .cols = !c("year", "stcty"))
+  rename_with(~ paste0("agser_", .x), .cols = !c(year, stcty))
+
 d <- py$prep_data_farm_sales() %>%
-  rename_with(~ paste0("farm_", .x), .cols = !c("year", "stcty"))
+  rename_with(~ paste0("farm_", .x), .cols = !c(year, stcty))
 df <- left_join(df, d, by = c("year", "stcty"))
+
 d <- py$prep_data_farm_conc_sales() %>%
-  rename_with(~ paste0("farm_", .x), .cols = !c("year", "stcty"))
+  rename_with(~ paste0("farm_", .x), .cols = !c(year, stcty))
+df <- left_join(df, d, by = c("year", "stcty"))
+
+d <- py$prep_data_county_other() %>%
+  rename_with(~ paste0("cty_", .x), .cols = !c(year, stcty))
 df <- left_join(df, d, by = c("year", "stcty"))
 
 growth_rate <- function(x) {
@@ -1798,45 +1844,361 @@ df <- df %>%
 head(df, 100)
 
 ```
+
+
 ## Static
 
-```{r}
+Sector sizes measured by total sales (farms) and total payroll in NAICS: 115.
 
+- Positive association between farms and ag services size.
+- Counties with zero or suppressed ag services have smaller farming.
+- Farm sales in zero are less than in suppressed.
+
+```{r}
 d <- df %>%
   select(year, stcty, farm_sales_tot, agser_pay, agser_disc) %>%
   mutate(agser_pay = agser_pay + if_else(agser_disc == "suppressed", 1000, 0))
-
 ggplot(d, aes(farm_sales_tot, agser_pay, color = agser_disc)) +
-  geom_point() +
-  scale_x_log10() + scale_y_log10() + theme_minimal()
+  geom_point() + scale_x_log10() + scale_y_log10() + theme_minimal()
+```
+
+### Regressions
+
+All regressions only include counties where agser payroll is available (exclude zero and suppressed).
+
+Effects of log-scale and weighting.
+
+Because county size distribution is strongly right-skewed, estimates in levels can be strongly affected by outliers.
+Skewness also worsens statistical properties of OLS estimators.
+To mitigate these issues, we log-transform farm sales and agser payroll.
+
+What weights are more appropriate in log-log regression: `sales` or `log(sales)`?
+
+
+```{r}
+#| column: page
+
+d <- df %>%
+  filter(agser_disc == "available")
+
+m <- list()
+m[["lev"]] <- lm(agser_pay ~ farm_sales_tot, data = d)
+m[["lev + wgt_lev"]] <- lm(agser_pay ~ farm_sales_tot, data = d, weights = farm_sales_tot)
+m[["log"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d)
+m[["log + wgt_lev"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d, weights = farm_sales_tot)
+m[["log + wgt_log"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d, weights = log(farm_sales_tot))
+
+huxreg(m)
 
 ```
+
+### County size
+
+Why positive relationship, and how robust?
+Maybe big counties have big everything, and positive correlation between farms and services follows mechanically?
+This is not true.
+Controlling for county size, positive relationship holds.
+
+Interacting farm sales and county size (either population or total payroll) reveals that relationship measured by elasticity increases from 0 in smallest counties to 1 in largest.
+This is consistent with the explanation that specialization (i.e. separation of services from farms) becomes more prevalent at bigger scale of operations.
+Same can be shown allowing for non-linear (e.g. quadratic) relationship.
+
+
 
 ```{r}
 #| column: page
 
 d <- df %>%
   filter(agser_disc == "available") %>%
-  mutate(agser_disc = factor(agser_disc, c("zero", "suppressed", "available"))) %>%
-  mutate(sales_crop_pct = farm_sales_crop / farm_sales_tot)
+  mutate(across(c(agser_pay, farm_sales_tot, cty_pop, cty_pay), log, .names = "log_{.col}"))
 
-m <- list()
-# m[["plain"]] <- lm(agser_pay ~ farm_sales_tot, data = d)
-m[["wgt"]] <- lm(agser_pay ~ farm_sales_tot, data = d, weights = farm_sales_tot)
-m[["log"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d)
-# m[["log + wgt_log"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d, weights = log(farm_sales_tot))
-m[["log + wgt"]] <- lm(log(agser_pay) ~ log(farm_sales_tot), data = d, weights = farm_sales_tot)
-m[["log + wgt + year"]] <- lm(log(agser_pay) ~ log(farm_sales_tot) + factor(year), data = d, weights = farm_sales_tot)
-m[["log + wgt + year + crop"]] <- lm(log(agser_pay) ~ log(farm_sales_tot) * sales_crop_pct + factor(year), data = d, weights = farm_sales_tot)
-m[["log + wgt + year + hhi"]] <- lm(log(agser_pay) ~ log(farm_sales_tot) * farm_sales_tot_hhi + factor(year), data = d, weights = farm_sales_tot)
-m[["log + wgt + year + crop + hhi"]] <- lm(log(agser_pay) ~ log(farm_sales_tot) * (sales_crop_pct + farm_sales_tot_hhi) + factor(year), data = d, weights = farm_sales_tot)
+ms <- list()
+ms[["log + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot, data = d, weights = log_farm_sales_tot)
+ms[["log + cty_pay + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot + log_cty_pay, data = d, weights = log_farm_sales_tot)
+ms[["log X cty_pay + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot * log_cty_pay, data = d, weights = log_farm_sales_tot)
+ms[["log + cty_pop + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot + log_cty_pop, data = d, weights = log_farm_sales_tot)
+ms[["log X cty_pop + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot * log_cty_pop, data = d, weights = log_farm_sales_tot)
 
-x <- m[["log + wgt + year"]]$coefficients %>% names()
-omit <- str_subset(x, "year")
-huxreg(m, omit_coefs = omit, statistics = c(N = "nobs", R2 = "r.squared"))
+m <- ms[["log X cty_pop + wgt_log"]]
+dm <- d[rownames(m$model), ]
+pairs(~ log_agser_pay + log_farm_sales_tot + log_cty_pay data = dm)
+```
+
+```{r}
+huxreg(ms)
 ```
 
 
+```{r}
+m0 <- ms[["log + cty_pay + wgt_log"]]
+me0 <- list(
+  coef = m0$coefficients["log_farm_sales_tot"],
+  ci = confint(m0, "log_farm_sales_tot")
+)
+
+x <- quantile(dm$log_cty_pay)
+m <- ms[["log X cty_pay + wgt_log"]]
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(log_cty_pay = x))
+
+c <- c("interaction" = "blue", "no interaction" = "black")
+ggplot(me, aes(log_cty_pay)) +
+  geom_line(aes(y = me0$coef, color = "no interaction")) +
+  geom_ribbon(aes(ymin = me0$ci[1], ymax = me0$ci[2]), fill = c["no interaction"], alpha = 0.3) +
+  geom_line(aes(y = AME, color = "interaction")) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = c["interaction"], alpha = 0.3) +
+  geom_xsidehistogram(data = dm, bins = 20) +
+  scale_xsidey_continuous(breaks = NULL) +
+  scale_colour_manual(name = "model", values = c) + theme(legend.position = c(1, 0), legend.justification = c(1, 0)) +
+  scale_x_continuous("total payroll", breaks = log(10^seq(7, 11)), labels = function(x) format(exp(x), scientific = TRUE)) +
+  scale_y_continuous("elasticity") +
+  labs(title = "agser_pay ~ farm_sales X cty_pay")
+```
+
+
+```{r}
+m0 <- ms[["log + cty_pop + wgt_log"]]
+me0 <- list(
+  coef = m0$coefficients["log_farm_sales_tot"],
+  ci = confint(m0, "log_farm_sales_tot")
+)
+
+m <- ms[["log X cty_pop + wgt_log"]]
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(log_cty_pop = quantile(dm$log_cty_pop)))
+
+c <- c("interaction" = "blue", "no interaction" = "black")
+ggplot(me, aes(log_cty_pop)) +
+  geom_line(aes(y = me0$coef, color = "no interaction")) +
+  geom_ribbon(aes(ymin = me0$ci[1], ymax = me0$ci[2]), fill = c["no interaction"], alpha = 0.3) +
+  geom_line(aes(y = AME, color = "interaction")) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = c["interaction"], alpha = 0.3) +
+  geom_xsidehistogram(data = dm, bins = 20) +
+  scale_xsidey_continuous(breaks = NULL) +
+  scale_colour_manual(name = "model", values = c) + theme(legend.position = c(1, 0), legend.justification = c(1, 0)) +
+  scale_x_continuous("population", breaks = log(10^seq(3, 7)), labels = function(x) format(exp(x), scientific = TRUE)) +
+  scale_y_continuous("elasticity") +
+  labs(title = "agser_pay ~ farm_sales X cty_pop")
+```
+
+```{r}
+d <- df %>%
+  filter(agser_disc == "available") %>%
+  mutate(across(c(agser_pay, farm_sales_tot, cty_pop, cty_pay), log, .names = "log_{.col}"))
+
+m <- lm(log_agser_pay ~ log_farm_sales_tot + I(log_farm_sales_tot^2), data = d, weights = log_farm_sales_tot)
+dm <- d[rownames(m$model), ]
+xq <- quantile(dm$log_farm_sales_tot)
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(log_farm_sales_tot = xq))
+
+xbr <- log10(exp(range(dm$log_farm_sales_tot)))
+xbr <- c(floor(xbr[1]), ceiling(xbr[2]))
+
+ggplot(me, aes(log_farm_sales_tot)) +
+  geom_line(aes(y = AME)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.3) +
+  geom_xsidehistogram(data = dm, bins = 20) +
+  scale_xsidey_continuous(breaks = NULL) +
+  scale_x_continuous("farm sales", breaks = log(10^seq(xbr[1], xbr[2])), labels = function(x) format(exp(x), scientific = TRUE)) +
+  scale_y_continuous("elasticity") +
+  labs(title = "agser_pay ~ farm_sales + farm_sales^2")
+```
+
+### Year f.e.
+
+Does not matter.
+
+```{r}
+d <- df %>%
+  filter(agser_disc == "available") %>%
+  mutate(across(c(agser_pay, farm_sales_tot, cty_pop, cty_pay), log, .names = "log_{.col}"))
+
+ms <- list()
+ms[["log + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot, data = d, weights = log_farm_sales_tot)
+ms[["log + wgt_log + year"]] <- lm(log_agser_pay ~ log_farm_sales_tot + factor(year), data = d, weights = log_farm_sales_tot)
+ms[["log + wgt_log X year"]] <- lm(log_agser_pay ~ log_farm_sales_tot * factor(year), data = d, weights = log_farm_sales_tot)
+ms[["log X cty_pay + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot * log_cty_pay, data = d, weights = log_farm_sales_tot)
+ms[["log X cty_pay + wgt_log + year"]] <- lm(log_agser_pay ~ log_farm_sales_tot * log_cty_pay + factor(year), data = d, weights = log_farm_sales_tot)
+
+huxreg(ms)
+```
+
+
+
+### Crop share and market concentation
+
+In which kind of farming - crop or animal - is connection between farms and services stronger?
+
+
+```{r}
+#| column: page
+
+d <- df %>%
+  filter(agser_disc == "available") %>%
+  mutate(across(c(agser_pay, farm_sales_tot, cty_pop, cty_pay), log, .names = "log_{.col}")) %>%
+  mutate(sales_crop_pct = farm_sales_crop / farm_sales_tot)
+
+ms <- list()
+ms[["pay ~ sale"]] <- lm(log_agser_pay ~ log_farm_sales_tot, data = d, weights = log_farm_sales_tot)
+ms[["pay ~ sale * crop"]] <- lm(log_agser_pay ~ log_farm_sales_tot * sales_crop_pct, data = d, weights = log_farm_sales_tot)
+ms[["pay ~ sale * hhi"]] <- lm(log_agser_pay ~ log_farm_sales_tot * farm_sales_tot_hhi, data = d, weights = log_agser_pay)
+ms[["pay ~ sale * (crop + hhi)"]] <- lm(log_agser_pay ~ log_farm_sales_tot * (sales_crop_pct + farm_sales_tot_hhi), data = d, weights = log_farm_sales_tot)
+
+huxreg(ms)
+```
+
+Marginal effects 
+
+```{r}
+#| eval: !expr EVAL
+#| output: false
+
+colors <- c(
+  "pay ~ sale" = "black",
+  "pay ~ sale * crop" = "blue",
+  "pay ~ sale * (crop + hhi)" = "red"
+)
+
+
+# marginal effect
+m <- ms$`pay ~ sale * crop`
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(sales_crop_pct = quantile(dm$sales_crop_pct)))
+p_crop <- ggplot(mapping = aes(sales_crop_pct)) +
+  geom_line(aes(y = AME, color = "pay ~ sale * crop"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale * crop"], alpha = 0.3)
+
+# distribution
+p_crop <- p_crop +
+  geom_xsidehistogram(data = dm, bins = 20) +
+  scale_xsidey_continuous(breaks = NULL)
+
+# marginal effect
+m <- ms$`pay ~ sale * (crop + hhi)`
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(sales_crop_pct = quantile(dm$sales_crop_pct)))
+p_crop <- p_crop +
+  geom_line(aes(y = AME, color = "pay ~ sale * (crop + hhi)"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale * (crop + hhi)"], alpha = 0.3)
+
+# no interaction
+m <- ms$`pay ~ sale`
+me <- me %>% select(sales_crop_pct)
+me$AME <- m$coefficients["log_farm_sales_tot"]
+x <- confint(m, "log_farm_sales_tot")
+me$lower <- x[1]
+me$upper <- x[2]
+p_crop <- p_crop +
+  geom_line(aes(y = AME, color = "pay ~ sale"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale"], alpha = 0.3)
+
+p_crop <- p_crop +
+  scale_color_manual(name = "model", values = colors) +
+  theme(legend.position = c(1, 0), legend.justification = c(1, 0)) +
+  labs(title = "elasticity by crop share")
+
+rm(colors, m, dm, me, x)
+p_crop
+```
+
+```{r}
+#| eval: !expr EVAL
+#| output: false
+
+colors <- c(
+  "pay ~ sale" = "black",
+  "pay ~ sale * hhi" = "blue",
+  "pay ~ sale * (crop + hhi)" = "red"
+)
+
+# marginal effect
+m <- ms$`pay ~ sale * hhi`
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(farm_sales_tot_hhi = quantile(dm$farm_sales_tot_hhi)))
+p_hhi <- ggplot(mapping = aes(farm_sales_tot_hhi)) +
+  geom_line(aes(y = AME, color = "pay ~ sale * hhi"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale * hhi"], alpha = 0.3)
+
+# distribution
+p_hhi <- p_hhi +
+  geom_xsidehistogram(data = dm, bins = 20) +
+  scale_xsidey_continuous(breaks = NULL)
+
+# marginal effect
+m <- ms$`pay ~ sale * (crop + hhi)`
+dm <- d[rownames(m$model), ]
+me <- margins_summary(m, variables = "log_farm_sales_tot", at = list(farm_sales_tot_hhi = quantile(dm$farm_sales_tot_hhi)))
+p_hhi <- p_hhi +
+  geom_line(aes(y = AME, color = "pay ~ sale * (crop + hhi)"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale * (crop + hhi)"], alpha = 0.3)
+
+# no interaction
+m <- ms$`pay ~ sale`
+me <- me %>% select(farm_sales_tot_hhi)
+me$AME <- m$coefficients["log_farm_sales_tot"]
+x <- confint(m, "log_farm_sales_tot")
+me$lower <- x[1]
+me$upper <- x[2]
+p_hhi <- p_hhi +
+  geom_line(aes(y = AME, color = "pay ~ sale"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), me, fill = colors["pay ~ sale"], alpha = 0.3)
+
+p_hhi <- p_hhi +
+  scale_colour_manual(name = "model", values = colors) +
+  theme(legend.position = c(1, 0), legend.justification = c(1, 0)) +
+  labs(title = "elasticity by HHI")
+
+rm(colors, m, dm, me, x)
+p_hhi
+
+```
+
+```{r}
+p_crop | p_hhi
+```
+
+### All together
+
+```{r}
+d <- df %>%
+  filter(agser_disc == "available") %>%
+  mutate(across(c(agser_pay, farm_sales_tot, cty_pop, cty_pay), log, .names = "log_{.col}")) %>%
+  mutate(sales_crop_pct = farm_sales_crop / farm_sales_tot)
+
+m <- lm(log_agser_pay ~ log_farm_sales_tot * (log_cty_pay + sales_crop_pct + farm_sales_tot_hhi) + factor(year), data = d, weights = log_farm_sales_tot)
+
+huxreg(list("full model" = m))
+```
+To summarize, in the sample of counties with positive "NAICS: 115" payroll (about 30% of all counties), size of the ag services sector is positively associated with the size of the farming sector.
+On average, 1% higher farm sales correspond to 0.4% more in ag services payroll.
+The relationship stronger in counties that are bigger, are more crop oriented, and have higher market concentration in farm sales.
+
+```{r}
+
+at_q <- seq(0, 1, 0.1)
+dm <- d[rownames(m$model), ]
+me_ame <- margins_summary(m, variables = "log_farm_sales_tot")
+me_ame <- bind_rows(replicate(length(at_q), me_ame, simplify = FALSE))
+me_cty <- margins_summary(m, variables = "log_farm_sales_tot", at = list(log_cty_pay = quantile(dm$log_cty_pay, at_q)))
+me_crop <- margins_summary(m, variables = "log_farm_sales_tot", at = list(sales_crop_pct = quantile(dm$sales_crop_pct, at_q)))
+me_hhi <- margins_summary(m, variables = "log_farm_sales_tot", at = list(farm_sales_tot_hhi = quantile(dm$farm_sales_tot_hhi, at_q)))
+
+colors = c("AME" = "black", "cty_pay" = "red", "crop_pct" = "blue", "HHI" = "purple")
+ggplot(mapping = aes(x = at_q)) +
+  geom_line(aes(y = AME, color = "AME"), me_ame) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "AME"), me_ame, alpha = 0.3) +
+  geom_line(aes(y = AME, color = "cty_pay"), me_cty) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "cty_pay"), me_cty, alpha = 0.3) +
+  geom_line(aes(y = AME, color = "crop_pct"), me_crop) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "crop_pct"), me_crop, alpha = 0.3) +
+  geom_line(aes(y = AME, color = "HHI"), me_hhi) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "HHI"), me_hhi, alpha = 0.3) +
+  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = FALSE) +
+  scale_x_continuous("interaction variable quantile") + scale_y_continuous("elasticity") +
+  labs(title = "Elasticity in full model at different levels of interaction covariates")
+
+
+```
 
 
 
