@@ -34,6 +34,25 @@ ggplot2::theme_set(theme_minimal())
 
 # options(scipen=999)
 EVAL <- FALSE
+
+run_tagged_chunks <- function(tag) {
+  # start with clean knitr session
+  knitr::knit_code$restore()
+  # parse and load chunks from active notebook into knitr session
+  src <- rstudioapi::getActiveDocumentContext()$content
+  chunks <- knitr:::split_file(src, patterns = knitr::all_patterns$md)
+  # split_file returns chunks metadata, and code can be accessed with knit_code$get
+  for (c in chunks) {
+    if (!is.null(c$params) && !is.null(c$params$tags) && (tag %in% c$params$tags)) {
+      print(c("---- run chunk:", c$params$label))
+      code <- knitr::knit_code$get(c$params$label)
+      if (!is.null(c$params$engine) && (c$params$engine == "python"))
+        rstudioapi::sendToConsole(c("repl_python(quiet = TRUE)", code, "exit"))
+      else
+        rstudioapi::sendToConsole(code, focus = FALSE)
+    }
+  }
+}
 ```
 
 
@@ -69,7 +88,16 @@ PAR = {
 
 ```
 
+
+## run selected chunks
+
+```{r}
+run_tagged_chunks("def-data-prep")
+```
+
+
 ```{python}
+#| tags: [def-data-prep]
 
 def set_zero_value(d, drop_flag=True):
   mask = (d['value_f'] == '(Z)')
@@ -117,6 +145,7 @@ _test_cached_nom_real()
 nom2real, real2nom = cached_nom_real()
 
 ```
+
 
 
 
@@ -425,6 +454,7 @@ Another practical issue is that at a county level, values of some bins in smalle
 Some form of imputation is required, from taking simple middle point of bin bounds to assuming and calibrating within bin distribution.
 
 ```{python}
+#| tags: [def-data-prep]
 #| cache: false
 def calculate_binned_hhi(d, cat_col, count_col, size_col):
   total_size = d[size_col].sum()
@@ -657,7 +687,7 @@ del year, industries, df, d, df_cty, df_nat
 
 
 ```{r}
-t <- py$t_qcew_county_suppression %>%
+py$t_qcew_county_suppression %>%
   mutate(across(counties:total_annual_wages, ~ .x * 100)) %>%
   mutate(across(counties:total_annual_wages, ~ ifelse(.x == 0, "", sprintf("%.1f%%", .x))))
 
@@ -672,6 +702,7 @@ t <- py$t_qcew_county_suppression %>%
 ```{python}
 #| output: false
 #| cache: false
+#| tags: [def-data-prep]
 
 @simplecache(PATH['prep'] / 'farm_count.pkl')
 def prep_data_farm_count():
@@ -698,6 +729,7 @@ Cropland can be either harvested, used for pasture or other (mainly idle).
 ```{python}
 #| output: false
 #| cache: false
+#| tags: [def-data-prep]
 
 @simplecache(PATH['prep'] / 'farm_land.pkl')
 def prep_data_farm_land():
@@ -727,6 +759,7 @@ def prep_data_farm_land():
 ```{python}
 #| output: false
 #| cache: false
+#| tags: [def-data-prep]
 
 # (PATH['prep'] / 'farm_sales.pkl').unlink()
 @simplecache(PATH['prep'] / 'farm_sales.pkl')
@@ -763,6 +796,7 @@ def prep_data_farm_sales():
 ```{python}
 #| output: false
 #| cache: false
+#| tags: [def-data-prep]
 @simplecache(PATH['prep'] / 'farm_conc_land.pkl')
 def prep_data_farm_conc_land():
   items_to_cols = {
@@ -815,6 +849,7 @@ def prep_data_farm_conc_land():
 ```{python}
 #| output: false
 #| cache: false
+#| tags: [def-data-prep]
 @simplecache(PATH['prep'] / 'farm_conc_sales.pkl')
 def prep_data_farm_conc_sales():
   items_to_cols = {
@@ -858,6 +893,37 @@ def prep_data_farm_conc_sales():
 ```
 
 
+## By commodity
+
+```{python}
+#| output: false
+#| cache: false
+#| tags: [def-data-prep]
+
+# (PATH['prep'] / 'farm_commod.pkl').unlink(missing_ok = True)
+@simplecache(PATH['prep'] / 'farm_commod.pkl')
+def prep_data_farm_commod():
+  items_to_cols = {
+    'CORN, GRAIN - ACRES HARVESTED': 'corn_land',
+    'CORN, GRAIN - PRODUCTION, MEASURED IN BU': 'corn_prod',
+    'SOYBEANS - ACRES HARVESTED': 'soy_land',
+    'SOYBEANS - PRODUCTION, MEASURED IN BU': 'soy_prod',
+  }
+  df = agcensus.get_df(PAR['years'], ['YEAR', 'STATE_FIPS_CODE', 'COUNTY_CODE', 'SHORT_DESC', 'VALUE', 'VALUE_F'],
+                       [('AGG_LEVEL_DESC', '==', 'COUNTY'),
+                         ('DOMAIN_DESC', '==', 'TOTAL'),
+                         ('SHORT_DESC', 'in', list(items_to_cols)),
+                        ]).rename(columns=str.lower)
+  set_zero_value(df)
+  df['stcty'] = df['state_fips_code'] + df['county_code'].fillna('000')
+  df['item'] = df['short_desc'].map(items_to_cols)
+  df = df.set_index(['year', 'stcty', 'item'])['value'].unstack().reset_index()
+  for c in ['corn', 'soy']:
+    df[f'{c}_yield'] = df[f'{c}_prod'] / df[f'{c}_land']
+  return df
+```
+
+
 # Ag services
 
 
@@ -865,6 +931,8 @@ def prep_data_farm_conc_sales():
 
 ```{python}
 #| cache: false
+#| tags: [def-data-prep]
+# (PATH['prep'] / 'agser.pkl').unlink(missing_ok = True)
 @simplecache(PATH['prep'] / 'agser.pkl')
 def prep_data_agser():
   df = qcew.get_df(PAR['years'], ['year', 'area_fips'], [('agglvl_code', '==', '70')])
@@ -877,10 +945,22 @@ def prep_data_agser():
   df = df.merge(d, 'left', ['year', 'area_fips'])
   df['disc'] = df['disc'].fillna('zero')
   df[['est', 'emp', 'pay']] = df[['est', 'emp', 'pay']].fillna(0)
+  df['pay'] = nom2real(df['year'], df['pay'])
+
+  d = qcew.get_df(PAR['years'], 
+    ['year', 'area_fips', 'disclosure_code', 'annual_avg_estabs', 'annual_avg_emplvl', 'total_annual_wages'],
+    [('agglvl_code', '==', '76'), ('industry_code', '==', '1151'), ('own_code', '==', '5')])
+  d = d.rename(columns={'disclosure_code': 'disc1151', 'annual_avg_estabs': 'est1151', 'annual_avg_emplvl': 'emp1151', 'total_annual_wages': 'pay1151'})
+  d['disc1151'] = d['disc1151'].replace('N', 'suppressed').fillna('available')
+  df = df.merge(d, 'left', ['year', 'area_fips'])
+  df['disc1151'] = df['disc1151'].fillna('zero')
+  df[['est1151', 'emp1151', 'pay1151']] = df[['est1151', 'emp1151', 'pay1151']].fillna(0)
+  df['pay1151'] = nom2real(df['year'], df['pay1151'])
   
   df = df.rename(columns={'area_fips': 'stcty'})
-  df['pay'] = nom2real(df['year'], df['pay'])
   return df
+
+d = prep_data_agser()
 ```
 
 
@@ -890,6 +970,7 @@ Total county population from PopEst and total payroll from QCEW.
 
 ```{python}
 #| cache: false
+#| tags: [def-data-prep]
 # (PATH['prep'] / 'county_other.pkl').unlink(missing_ok=True)
 @simplecache(PATH['prep'] / 'county_other.pkl')
 def prep_data_county_other():
@@ -1814,7 +1895,7 @@ ggplot(d, aes(sales_tot_hhi_gr, year)) +
 
 # Farms-services relationship
 
-Prepare analysis dataframe.
+## Prepare analysis dataframe
 
 ```{r}
 df <- py$prep_data_agser() %>% 
@@ -1832,14 +1913,22 @@ d <- py$prep_data_county_other() %>%
   rename_with(~ paste0("cty_", .x), .cols = !c(year, stcty))
 df <- left_join(df, d, by = c("year", "stcty"))
 
+d <- py$prep_data_farm_land() %>%
+  rename_with(~ paste0("farm_", .x), .cols = !c(year, stcty))
+df <- left_join(df, d, by = c("year", "stcty"))
+
+d <- py$prep_data_farm_commod() %>%
+  rename_with(~ paste0("farm_", .x), .cols = !c(year, stcty))
+df <- left_join(df, d, by = c("year", "stcty"))
+
 growth_rate <- function(x) {
   100 * 2 * (x - lag(x)) / (x + lag(x))
 }
 
-df <- df %>%
-  group_by(stcty) %>%
-  arrange(stcty, year) %>%
-  mutate(across(starts_with(c("agser", "farm")) & !agser_disc, growth_rate, .names = "{.col}_gr"))
+# df <- df %>%
+#   group_by(stcty) %>%
+#   arrange(stcty, year) %>%
+#   mutate(across(starts_with(c("agser", "farm")) & !agser_disc & !agser_disc1151, growth_rate, .names = "{.col}_gr"))
 
 head(df, 100)
 
@@ -1904,7 +1993,6 @@ This is consistent with the explanation that specialization (i.e. separation of 
 Same can be shown allowing for non-linear (e.g. quadratic) relationship.
 
 
-
 ```{r}
 #| column: page
 
@@ -1921,7 +2009,7 @@ ms[["log X cty_pop + wgt_log"]] <- lm(log_agser_pay ~ log_farm_sales_tot * log_c
 
 m <- ms[["log X cty_pop + wgt_log"]]
 dm <- d[rownames(m$model), ]
-pairs(~ log_agser_pay + log_farm_sales_tot + log_cty_pay data = dm)
+pairs(~ log_agser_pay + log_farm_sales_tot + log_cty_pay, data = dm)
 ```
 
 ```{r}
@@ -2193,12 +2281,236 @@ ggplot(mapping = aes(x = at_q)) +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = "crop_pct"), me_crop, alpha = 0.3) +
   geom_line(aes(y = AME, color = "HHI"), me_hhi) +
   geom_ribbon(aes(ymin = lower, ymax = upper, fill = "HHI"), me_hhi, alpha = 0.3) +
-  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = FALSE) +
+  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = "none") +
   scale_x_continuous("interaction variable quantile") + scale_y_continuous("elasticity") +
   labs(title = "Elasticity in full model at different levels of interaction covariates")
 
 
 ```
+
+
+## Productivity
+
+Is crop farming productivity (yield) higher in places with more ag services?
+This analysis is restricted to crop farming, since productivity in animal farming is harder to define.
+We need to restrict ag services data to "NAICS: 1151", which will greatly reduce sample size.
+
+
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available")
+pairs(~ log(agser_pay1151) + log(farm_sales_tot) + log(farm_sales_crop), d)
+```
+
+### Sales per acre
+
+One simple way to measure crop farming productivity is to divide sales by land.
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(farm_crop_prod = farm_sales_crop / farm_land_crop) %>%
+  mutate(farm_crop_prod = if_else(farm_crop_prod < 10000, farm_crop_prod, NA_real_)) %>% # outliers
+  mutate(log_farm_crop_prod = log(farm_crop_prod))
+
+ggplot(d, aes(log_farm_crop_prod)) +
+  geom_density(aes(color = factor(year))) +
+  scale_x_continuous("farm_crop_prod, $/acre", labels = function(x) format(exp(x), digits=2, scientific = TRUE)) 
+```
+
+
+```{r}
+pairs(~ log(cty_pay) + log(agser_pay1151) + log(farm_sales_crop) + log(farm_land_crop) + log(farm_crop_prod), d)
+```
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(farm_crop_prod = farm_sales_crop / farm_land_crop) %>%
+  mutate(farm_crop_prod = if_else(farm_crop_prod < 10000, farm_crop_prod, NA_real_)) %>% # outliers
+  mutate(across(c(agser_pay1151, farm_sales_crop, cty_pay, farm_land_crop, farm_crop_prod), log, .names = "log_{.col}"))
+
+m <- lm(log_farm_crop_prod ~ log_agser_pay1151 * (log_cty_pay + log_farm_sales_crop) + factor(year), d, weights = log_agser_pay1151)
+huxreg(m)
+```
+
+```{r}
+at_q <- seq(0, 1, 0.1)
+dm <- d[rownames(m$model), ]
+me = list()
+me$ame <- margins_summary(m, variables = "log_agser_pay1151")
+me$ame <- bind_rows(replicate(length(at_q), me$ame, simplify = FALSE))
+me$cty <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_cty_pay = quantile(dm$log_cty_pay, at_q)))
+me$sale <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_farm_sales_crop = quantile(dm$log_farm_sales_crop, at_q)))
+
+
+colors = c("AME" = "black", "cty_pay" = "red", "crop_sale" = "blue")
+ggplot(mapping = aes(x = at_q)) +
+  geom_line(aes(y = AME, color = "AME"), me$ame) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "AME"), me$ame, alpha = 0.3) +
+  geom_line(aes(y = AME, color = "cty_pay"), me$cty) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "cty_pay"), me$cty, alpha = 0.3) +
+  geom_line(aes(y = AME, color = "crop_sale"), me$sale) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "crop_sale"), me$sale, alpha = 0.3) +
+  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = "none") +
+  scale_x_continuous("interaction variable quantile") + scale_y_continuous("elasticity") +
+  labs(title = "log_farm_crop_prod ~ log_agser_pay1151 * (log_cty_pay + log_farm_sales_crop)")
+
+```
+
+### Yield
+
+We can also measure productivity in units of output per acre, for example, bushels of soybeans.
+This measures efficiency of crop production process more directly, without potential noise from pricing and marketing.
+On the downside, different commodities need to be considered separately.
+This restricts sample size further - fewer counties grow specific crop than just any crop.
+And general ag services industry (1151) is not as clearly tied to particular commodity.
+
+
+Here we look at two of the most widely produced crops: grain corn and soybeans.
+ERS maps [here](https://www.nass.usda.gov/Charts_and_Maps/Crops_County/) give an overview of regions where different crops are farmed.
+Yield by county: [corn](https://www.nass.usda.gov/Charts_and_Maps/graphics/CR-YI-RGBChor.pdf), [soy](https://www.nass.usda.gov/Charts_and_Maps/graphics/SB-YI-RGBChor.pdf).
+
+
+```{r}
+d <- df %>%
+  filter(year == 2017) %>%
+  select(farm_land_crop, farm_corn_land, farm_soy_land) %>%
+  replace_na(list(farm_corn_land = 0, farm_soy_land = 0)) %>%
+  mutate(across(c(farm_corn_land, farm_soy_land), ~ .x / farm_land_crop, .names = "{.col}_share")) %>%
+  drop_na()
+
+d %>%
+  mutate(corn_land = if_else(farm_corn_land_share > 0.05, "> 5%", "< 5%"),
+         soy_land = if_else(farm_soy_land_share > 0.05, "> 5%", "< 5%")) %>%
+  count(corn_land, soy_land) %>%
+  pivot_wider(id_cols = corn_land, names_from = soy_land, names_prefix = "soy_land ", values_from = n)
+
+ggplot(d, aes(farm_corn_land_share, farm_soy_land_share)) +
+  geom_point() +
+  geom_xsidehistogram(bins = 20) +
+  geom_ysidehistogram(bins = 20)
+```
+
+
+#### Corn
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(across(c(agser_pay1151, farm_sales_crop, cty_pay, farm_corn_land, farm_corn_prod), log, .names = "log_{.col}"))
+
+compute_stats(d, "farm_corn_yield") %>%
+  mutate(na_pct = formatC(na_pct, digits = 2, format = "f"),
+         across(c(n, mean:max), formatC, digits = 0, format = "d", big.mark = ","))
+
+ggplot(d) +
+  geom_density(aes(x = farm_corn_yield, color = factor(year)))
+
+pairs(~ farm_corn_yield + log_farm_corn_land + log_farm_corn_prod + log_agser_pay1151 + log_farm_sales_crop, d)
+```
+
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(across(c(agser_pay1151, farm_sales_crop, cty_pay, farm_land_crop, farm_sales_crop, farm_corn_prod, farm_corn_land), log, .names = "log_{.col}"))
+
+m <- lm(farm_corn_yield ~ log_agser_pay1151 * (log_farm_sales_crop + log_farm_corn_land) + factor(year), d, weights = log_agser_pay1151)
+huxreg(m)
+
+dm <- d[rownames(m$model), ]
+pairs(~ farm_corn_yield + log_farm_corn_land + log_agser_pay1151 + log_farm_sales_crop, dm)
+
+at_q <- seq(0, 1, 0.1)
+me <- margins_summary(m, variables = "log_agser_pay1151") %>%
+  replicate(length(at_q), ., simplify = FALSE) %>%
+  bind_rows()
+
+colors = c("AME" = "black", "log_farm_sales_crop" = "red", "log_farm_corn_land" = "blue")
+p <- ggplot(mapping = aes(x = at_q)) +
+  geom_line(aes(y = AME, color = "AME"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "AME"), me, alpha = 0.3)
+
+me <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_farm_sales_crop = quantile(dm$log_farm_sales_crop, at_q)))
+p <- p +
+  geom_line(aes(y = AME, color = "log_farm_sales_crop"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "log_farm_sales_crop"), me, alpha = 0.3)
+
+me <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_farm_corn_land = quantile(dm$log_farm_corn_land, at_q)))
+p <- p +
+  geom_line(aes(y = AME, color = "log_farm_corn_land"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "log_farm_corn_land"), me, alpha = 0.3)
+
+p +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = "none") +
+  scale_x_continuous("interaction variable quantile") + scale_y_continuous("marginal effect") +
+  labs(title = "farm_corn_yield ~ log_agser_pay1151 * (log_farm_sales_crop + log_farm_corn_land)") + 
+  theme(plot.title = element_text(size = 10))
+```
+
+
+#### Soy
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(across(c(agser_pay1151, farm_sales_crop, cty_pay, farm_soy_land, farm_soy_prod), log, .names = "log_{.col}"))
+
+compute_stats(d, "farm_soy_yield") %>%
+  mutate(na_pct = formatC(na_pct, digits = 2, format = "f"),
+         across(c(n, mean:max), formatC, digits = 0, format = "d", big.mark = ","))
+
+ggplot(d) +
+  geom_density(aes(x = farm_soy_yield, color = factor(year)))
+
+pairs(~ farm_soy_yield + log_farm_soy_land + log_farm_soy_prod + log_agser_pay1151 + log_farm_sales_crop, d)
+```
+
+
+```{r}
+d <- df %>%
+  filter(agser_disc1151 == "available") %>%
+  mutate(across(c(agser_pay1151, farm_sales_crop, cty_pay, farm_land_crop, farm_sales_crop, farm_soy_prod, farm_soy_land), log, .names = "log_{.col}"))
+
+m <- lm(farm_soy_yield ~ log_agser_pay1151 * (log_farm_sales_crop + log_farm_soy_land) + factor(year), d, weights = log_agser_pay1151)
+huxreg(m)
+
+dm <- d[rownames(m$model), ]
+pairs(~ farm_soy_yield + log_farm_soy_land + log_agser_pay1151 + log_farm_sales_crop, dm)
+
+at_q <- seq(0, 1, 0.1)
+me <- margins_summary(m, variables = "log_agser_pay1151") %>%
+  replicate(length(at_q), ., simplify = FALSE) %>%
+  bind_rows()
+
+colors = c("AME" = "black", "log_farm_sales_crop" = "red", "log_farm_soy_land" = "blue")
+p <- ggplot(mapping = aes(x = at_q)) +
+  geom_line(aes(y = AME, color = "AME"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "AME"), me, alpha = 0.3)
+
+me <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_farm_sales_crop = quantile(dm$log_farm_sales_crop, at_q)))
+p <- p +
+  geom_line(aes(y = AME, color = "log_farm_sales_crop"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "log_farm_sales_crop"), me, alpha = 0.3)
+
+me <- margins_summary(m, variables = "log_agser_pay1151", at = list(log_farm_soy_land = quantile(dm$log_farm_soy_land, at_q)))
+p <- p +
+  geom_line(aes(y = AME, color = "log_farm_soy_land"), me) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = "log_farm_soy_land"), me, alpha = 0.3)
+
+p +
+  geom_hline(yintercept = 0, linetype = "dotted") +
+  scale_color_manual("interaction variable", values = colors) + scale_fill_manual(values = colors, guide = "none") +
+  scale_x_continuous("interaction variable quantile") + scale_y_continuous("marginal effect") +
+  labs(title = "farm_soy_yield ~ log_agser_pay1151 * (log_farm_sales_crop + log_farm_soy_land)") + 
+  theme(plot.title = element_text(size = 10))
+```
+
+
+
 
 
 
