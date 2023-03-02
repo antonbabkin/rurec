@@ -57,8 +57,8 @@ if (!file.exists(file.path(data_dir, "sum_cord"))){
 # Specific Sector level concordance
 if (!file.exists(file.path(data_dir, "sec_cord"))){
   sec_cord <- c()
-  sec_cord$SECTOR <- c("11", "21", "22", "23", "31G", "42", "44RT", "48TW", "51", "FIRE", "FIRE", "PROF", "PROF", "PROF", "6", "6", "7", "7", "81")
-  sec_cord$NAICS <- c("11", "21", "22", "23", "31", "42", "44", "48", "51", "52", "53", "54", "55", "56", "61", "62", "71", "72", "81")
+  sec_cord$SECTOR <- c("11", "21", "22", "23", "31G", "31G", "31G", "42", "44RT", "44RT", "48TW", "48TW", "51", "FIRE", "FIRE", "PROF", "PROF", "PROF", "6", "6", "7", "7", "81", "G")
+  sec_cord$NAICS <- c("11", "21", "22", "23", "31", "32", "33", "42", "44", "45", "48", "49", "51", "52", "53", "54", "55", "56", "61", "62", "71", "72", "81", "91")
   sec_cord <- as.data.frame(sec_cord)
   #write.csv(sec_cord, file.path(find_rstudio_root_file(), "data", "sec_cord"), row.names = FALSE)
   saver(sec_cord)
@@ -105,8 +105,8 @@ if (!file.exists(file.path(data_dir, "sec_cord"))){
 
 
 ### Test example of censoring/noise-infusion data loss
-# sum(place_industry_economy_long("2012")$ap) / sum(filter(cbp("2012"), NAICS == '-')$ap)
-# sum(place_industry_economy_long("2012")$emp) / sum(filter(cbp("2012"), NAICS == '-')$emp)
+# sum(place_industry_economy_long("2012")$ap) / sum(filter(call_cbp("2012"), NAICS == '-')$ap)
+# sum(place_industry_economy_long("2012")$emp) / sum(filter(call_cbp("2012"), NAICS == '-')$emp)
 
 
 
@@ -151,6 +151,61 @@ log_info("TIGER/RUCC merge complete")
 #setdiff(tiger("2020")$place, rucc()$place)
 #setdiff(rucc()$place, tiger("2020")$place)
 ## Note: Four non overlapping counties from each ("02063" "02066" "02158" "46102") and ("02261" "02270" "46113" "51515") for 2020
+
+
+
+
+
+
+# 
+# sample_years <- c("2017", "2012", "2007", "2002")
+# t <- vector("list", length(sample_years))
+# names(t) <- sample_years
+# for (y in sample_years){
+#   if(isTRUE(y > "2007")){b = "2012"}else{b = "2007"}
+#   t[[y]] <- industry_distribution(industry_aggregate_class = "sec",
+#                                   cbp_year = y,
+#                                   bea_year = b,
+#                                   ag_year = y,
+#                                   ilevel = "det",
+#                                   tiger_year = "2013")
+# }
+# 
+# 
+# barcharts <- vector("list", length(names(t)))
+# names(barcharts) <-  names(t) 
+# for (y in  names(t) ){  
+#   for (i in names(t[[y]]) ){
+#     barcharts[[y]][[i]] <- industry_distribution_barcharts(t[[y]][[i]], 
+#                                                            interact = FALSE, 
+#                                                            short = TRUE)
+#   }
+# }
+# 
+# htmlplots <- vector("list", length(names(barcharts)))
+# names(htmlplots) <- names(barcharts)
+# for (y in sample_years){
+#   htmlplots[[y]] <- vector("list", length(names(barcharts[[y]])))
+#   names(htmlplots[[y]]) <- names(barcharts[[y]])
+#   for (i in names(barcharts[[y]])){
+#     htmlplots[[y]][[i]] <- vector("list", length(barcharts[[y]][[i]]))
+#   }
+# }
+# 
+# 
+# for (y in names(htmlplots)){  
+#   for (i in names(htmlplots[[y]])){
+#     print(y)
+#     print(i)
+#     print(Sys.time())
+#     for (p in 1:length(htmlplots[[y]][[i]])){
+#       htmlplots[[y]][[i]][p] <- htmltools::plotTag(barcharts[[y]][[i]][p], alt = "") %>% as.character()
+#     }
+#   }
+# }
+# 
+
+
 
 
 

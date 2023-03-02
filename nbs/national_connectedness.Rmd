@@ -39,6 +39,8 @@ library(dplyr)
  library(ggiraph)
  library(glue)
  library(RColorBrewer)
+ library(viridis)
+library(reshape2)
 # library(magrittr)
 # library(ggforce)
 # library(cowplot)
@@ -52,7 +54,12 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
 
 ```
 
-```{r load data, include=FALSE}
+
+::: {.panel-tabset}
+
+### Stepwise 
+
+```{r load data, include=FALSE, eval = FALSE}
 
 ############ Define data directory path
 data_dir = file.path(find_rstudio_root_file(), "data", "robjs")
@@ -85,7 +92,7 @@ if (file.exists(file.path(data_dir, "TIGER_RUCC")) &
 This document maps various topological similarity index relationships.
 
 
-```{r tidy output matrix, include=FALSE}
+```{r tidy output matrix, include=FALSE, eval = FALSE}
 
 ############ Remove counties not in TIGER
 Output_mat <- lapply(Output_mat, function(x){x[, colnames(x) %in% c(unique(TIGER_RUCC$place))]})
@@ -105,7 +112,7 @@ for (l in names(Output_mat)){
 
 
 
-```{r first level connectedness}
+```{r first level connectedness, eval = FALSE}
 
 ############ For each industry specificity level (sector, summary, detail), derive the industry-by-county matrix of input needs: DY
 Input_mat <- mapply(industry_input, Direct_mat, Output_mat)
@@ -134,9 +141,10 @@ Connectedness_table <- lapply(NAS_mat, absorption_maximum_match, threshold = .05
 ############ Test for non-singular row-wise absorption potential maximum 
 mapply(absorption_max_check, Connectedness_table, names(Connectedness_table))
 
+
 ```
 
-```{r first level spatial agglomeration}
+```{r first level spatial agglomeration, eval = FALSE}
 
 ############ Refine TIGER and RUCC data to keep only the pertinent variables
 Space_data <- select(TIGER_RUCC, place, NAME, STATE_CODE, COUNTY_CODE, FIPS, STATE, COUNTY, RUC_CODE, POPULATION, geometry, center)
@@ -156,10 +164,11 @@ if (file.exists(file.path(data_dir, "Spatial_Clustered_data"))){
 ```
 
 
-```{r first level economic agglomeration}
+```{r first level economic agglomeration, eval = FALSE}
 
 ############ For each industry specificity level (sector, summary, detail), aggregate economic industry output of each ECA member in a cluster keeping only non-source places as ECA core unit labels
 Output_mat2 <- mapply(aggregate_industry_output, Output_mat, Connectedness_table)
+
 
 ```
 
@@ -196,7 +205,7 @@ Output_mat3 <- mapply(aggregate_industry_output, Output_mat2, Connectedness_tabl
 
 
 
-```{r n level economic agglomeration}
+```{r n level economic agglomeration, eval = FALSE}
 
 ############ For each industry specificity level (sector, summary, detail), aggregate economic industry output of each ECA member in a cluster keeping only non-source places as ECA core unit labels and iterate over all possible consecutive clusters
 ############ Note: file is cached because process time can be lengthy
@@ -224,16 +233,15 @@ if (file.exists(file.path(data_dir, "Hierarchical_Connectedness_table")) &
   saver(Hierarchical_Output_mat)
 }
 
-```
-
-```{r}
-
 
 ```
 
 
 
-```{r display maps, eval = FALSE}
+
+### ECA Absorption Matching Maps
+
+```{r display maps , eval = FALSE}
 
 
 df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
@@ -266,9 +274,9 @@ girafe(ggobj = g,
 Various topological similarity index relationship examples.
 
 
-Normalized Max Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Normalized Max Absorption (row-wise maximum export excess ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, 0.05 matching threshold, no spatial impedance
 ```{r}
-print(Sys.time())
+
 df <- spatial_connectedness(cbp_year = "2012", 
                             ilevel = "det", 
                             bea_year = "2012",
@@ -277,9 +285,8 @@ df <- spatial_connectedness(cbp_year = "2012",
                             ag_year = "2012",
                             threshold = .05,
                             impedance = NULL, 
-                            normalized = TRUE)
-print(Sys.time())
-
+                            normalized = TRUE,
+                            row_max_match = TRUE)
 
 
 g <- ggplot(df) +
@@ -302,25 +309,24 @@ girafe(ggobj = g,
 
 
 
+
 ```
 
 
 
-Non-normalized Max Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Gross Max Absorption (non-normalized, row-wise maximum export excess ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
 ```{r}
-print(Sys.time())
+
 df <- spatial_connectedness(cbp_year = "2012", 
                             ilevel = "det", 
                             bea_year = "2012",
                             labor_share_year = "2012",
                             tiger_year = "2013", 
                             ag_year = "2012",
-                            threshold = .05,
+                            threshold = 0,
                             impedance = NULL, 
-                            normalized = FALSE)
-print(Sys.time())
-
-
+                            normalized = FALSE,
+                            row_max_match = TRUE)
 
 g <- ggplot(df) +
         geom_sf_interactive(aes(fill = max_absorption_alpha, 
@@ -334,18 +340,18 @@ g <- ggplot(df) +
       labs(fill = "Max Absorption",
            caption = paste0())
 
+
 girafe(ggobj = g, 
                        options = list(opts_hover(css = "stroke:gray;r:20pt;"),
                                       opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
                        )
       )
-
+ 
 
 
 ```
 
-
-Population adjusted non-normalized Total Absorption (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Population adjusted Gross Max Absorption (non-normalized, row-wise maximum export excess ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
 ```{r}
 
 df$ab_pop <- df$absorption_alpha_total/df$POPULATION
@@ -367,12 +373,10 @@ girafe(ggobj = g,
                        )
       )
 
-
-
 ```
 
 
- Absorption Gini (inequality/concentration) (row-wise max ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Absorption Gini (inequality/concentration) (non-normalized, row-wise maximum export excess ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
  Note: Gini of 0 is perfect equality/ no concentration and Gini of 1 is perfect inequality/ complete concentration
  
 ```{r}
@@ -400,11 +404,50 @@ girafe(ggobj = g,
 ```
 
 
+Gross Max Absorption (non-normalized, column-wise maximum import excess ECA matching), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
+```{r}
+
+df <- spatial_connectedness(cbp_year = "2012", 
+                            ilevel = "det", 
+                            bea_year = "2012",
+                            labor_share_year = "2012",
+                            tiger_year = "2013", 
+                            ag_year = "2012",
+                            threshold = 0,
+                            impedance = NULL, 
+                            normalized = FALSE,
+                            row_max_match = FALSE)
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = max_absorption_alpha, 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(max_absorption_alpha, 5)}"), 
+                                data_id = place), 
+        color = NA) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = "Max Absorption",
+           caption = paste0())
 
 
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+
+```
+
+
+
+
+### Place-centric Absorption Maps
 
 Mahoning County, Ohio export excess connectedness to the nation
-Normalized Absorption, 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Gross Absorption (non-normalized, location specific row-wise export excess), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
 ``` {r}
 
 cp <- "39099"
@@ -414,7 +457,8 @@ df <- place_centric_connect(central_place = cp,
                       ilevel = "det",
                       tiger_year = "2013",
                       impedance = NULL, 
-                      normalized = FALSE)
+                      normalized = FALSE,
+                      cbsa_year = NULL)
 
 
 g <- ggplot(df) +
@@ -445,7 +489,7 @@ girafe(ggobj = g,
 
 
 Mahoning County, Ohio import needs connectedness to the nation
-Normalized Absorption, 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure
+Gross Absorption (non-normalized, location specific column-wise import needs), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
 ``` {r}
 
 g <- ggplot(df) +
@@ -474,6 +518,75 @@ girafe(ggobj = g,
 
 
 
+Youngstown-Warren-Boardman CBSA export excess connectedness to the nation
+Gross Absorption (non-normalized, location specific row-wise export excess), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
+``` {r}
+
+cp <- "49660"
+df <- place_centric_connect(central_place = cp,
+                      cbp_year = "2012",
+                      ag_year = "2012",
+                      ilevel = "det",
+                      tiger_year = "2013",
+                      impedance = NULL, 
+                      normalized = FALSE,
+                      cbsa_year = "2013")
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = (round(export_absorption, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(export_absorption, 5)}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      geom_sf_interactive(data = df[df$place==cp,], fill = "#8b0000", color = NA) +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = glue("{df[df$place==cp,]$COUNTY}, {df[df$place==cp,]$STATE} Absorption"))
+
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+
+
+```
+
+
+
+Youngstown-Warren-Boardman CBSA import needs connectedness to the nation
+Gross Absorption (non-normalized, location specific column-wise import needs), 2012 BEA industry structure at detail level, 2012 CBP and farm sales data, 2013 TIGER county structure, no spatial impedance
+``` {r}
+
+g <- ggplot(df) +
+        geom_sf_interactive(aes(fill = (round(import_absorption, 5)), 
+                                tooltip = glue("County: {NAME}\nFIPS: {place}\nAlpha: {round(import_absorption, 5)}"), 
+                                data_id = place
+        ), 
+        color = NA
+        ) + 
+      guides(alpha = "none") +
+      coord_sf() +
+      theme_void() +
+      geom_sf_interactive(data = df[df$place==cp,], fill = "#8b0000", color = NA) +
+      scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+      labs(fill = glue("{df[df$place==cp,]$COUNTY}, {df[df$place==cp,]$STATE} Absorption"))
+
+
+girafe(ggobj = g, 
+                       options = list(opts_hover(css = "stroke:gray;r:20pt;"),
+                                      opts_tooltip(css = "font-family:sans-serif;background-color:gray;color:white;padding:10px;border-radius:5px;") 
+                       )
+      )
+
+
+```
 
 
 
