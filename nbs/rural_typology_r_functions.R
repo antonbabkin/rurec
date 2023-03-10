@@ -32,6 +32,9 @@ library(scales)
 library(cowplot)
 library(ggnewscale)
 
+library(matlib)
+#detach("package:MASS")
+
 
 # Display start time
 log_info("Define functions start")
@@ -58,8 +61,6 @@ data_getr <- function(FileURL,
     }
   }) 
 }
-
-
 # Function to download and unzip data
 data_zipr <- function(ZipURL,
                       DestDir,
@@ -83,9 +84,6 @@ data_zipr <- function(ZipURL,
       }
   })
 }
-
-
-
 # Function to import a file of excel data tables
 excel_importr <- function(TableName,
                           FileDir,
@@ -118,8 +116,6 @@ finiter <- function(x){
 finiterer <- function(x){ 
   lapply(1:length(x), function(i) apply(x[[i]], c(1,2), finiter))
 }
-
-
 # Function(s) to truncate values in lists of matrix  
 oner <- function(x, t=1, l=1){
   if (x > l){
@@ -145,9 +141,7 @@ saver <- function (dataname, filepath = file.path("data", "robjs")){
   if (!file.exists(file.path(data_dir, as.character(substitute(dataname))))){
     saveRDS(dataname, file = file.path(data_dir, as.character(substitute(dataname))))
   }
-
 }
-
 #Function to import robj data
 importr <- function(x, filepath = file.path("data", "robjs")){
   require(rprojroot)
@@ -191,11 +185,15 @@ dismapr <- function(p){
   }
 }
 
+
+
+
 # Call up and clean TIGER data
 # shapefile formats are available for 2000, 2007 and every year after that.
 call_tiger <- function(tiger_year,
                   scale = c("20m", "500k", "5m"),
-                  geometry = TRUE){
+                  geometry = TRUE, 
+                  ...){
   scale <- match.arg(scale)
   df <- geography$get_county_df(strtoi(tiger_year), 
                                 geometry, 
@@ -211,9 +209,8 @@ call_tiger <- function(tiger_year,
 }
 
 # Produce Distance  Matrix
-dist_mat <- function(year,
-                     scale = c("20m", "500k", "5m")){
-  t <- call_tiger(year, scale)
+dist_mat <- function(...){
+  t <- call_tiger(...)
   df <- t$center %>% 
     as_Spatial() %>% 
     distm()
@@ -221,11 +218,11 @@ dist_mat <- function(year,
   return(df)
 }
 
+
 # Produce Border Proximity  Matrix
-bprox_mat <- function(year,
-                      scale = c("20m", "500k", "5m"),
-                      queen = TRUE){
-  t <- tiger(year, scale)
+bprox_mat <- function(queen = TRUE, 
+                      ...){
+  t <- tiger(...)
   df <- t$geometry %>% 
     poly2nb(queen = queen) %>%
     nb2mat(style = "B", zero.policy = TRUE)
@@ -234,78 +231,101 @@ bprox_mat <- function(year,
 }
 
 # Produce Distance Proximity Matrix
-dprox_mat <- function(year,
-                      scale = c("20m","500k", "5m"),
-                      boundary_limit){
-  df <- dist_mat(year, scale)
-  df[df<boundary_limit & df>0] <- 1
-  df[df>boundary_limit] <- 0
+dprox_mat <- function(boundary_limit,
+                      ...){
+  df <- dist_mat(...)
+  df[df < boundary_limit & df > 0] <- 1
+  df[df > boundary_limit] <- 0
   return(df)
 }
 
 # Produce inverse power distance decay impedance matrix
-power_impedance_mat <- function(year,
-                      scale = c("20m", "500k", "5m"),
-                      decay_power = 2){
-  df <- dist_mat(year, scale)
+power_impedance_mat <- function(decay_power = 2, 
+                                ...){
+  df <- dist_mat(...)
   df <- (1/(df)^decay_power)
   return(df)
 }
 
 # Produce exponential distance decay impedance matrix
-expo_impedance_mat <- function(year,
-                      scale = c("20m", "500k", "5m"),
-                      decay_constant = 10000){
-  df <- dist_mat(year, scale)
+expo_impedance_mat <- function(decay_constant = 10000,
+                               ...){
+  df <- dist_mat(...)
   df <- exp(-(df/decay_constant)) 
   return(df)
 }
 
 # Produce hyperbolic secant distance decay impedance matrix
-hyper_impedance_mat <- function(year,
-                               scale = c("20m", "500k", "5m"),
-                               decay_constant = 1000000){
-  df <- dist_mat(year, scale)
+hyper_impedance_mat <- function(decay_constant = 1000000,
+                                ...){
+  df <- dist_mat(...)
   df <- ((2/(exp(-(df/decay_constant)) + exp(df/decay_constant))))
   return(df)
 }
 
 # Call up and clean RUCC data
-call_rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974")){
+call_rucc <- function(ryear = c("2013", "2003", "1993", "1983", "1974"),
+                      ...){
   ryear <- match.arg(ryear)
   df <- ers_rurality$get_ruc_df()
-  df <- df %>% filter(RUC_YEAR==ryear)
+  df <- df %>% filter(RUC_YEAR == ryear)
   df$place <- df$FIPS
   return(df)
 }
 
 # Produce TIGER and RUCC table
-tiger_rucc <- function(year,
-                       scale = c("20m", "500k", "5m"),
-                       ryear = c("2013", "2003", "1993", "1983", "1974")){
-  t <- call_tiger(year, scale)
-  r <- call_rucc(ryear) %>% select(-c(2))
+tiger_rucc <- function(...){
+  t <- call_tiger(...)
+  r <- call_rucc(...) %>% select(-c(2))
   df <- inner_join(t, r, by = "place")
   df <- df[order(df$place), ]
   return(df)
 }
 
 # Call up and clean CBP
+# ($1,000 of dollars)
 # available for years 1986:2020
 call_cbp <- function(cbp_year,
-                     scale = c("county", "state", "us")){
-  scale <- match.arg(scale)
-  df <- cbp$get_df(scale, strtoi(cbp_year))
-  df %<>% rename(NAICS = industry)
-  df$place <- paste0(df$fipstate, df$fipscty)
-  df %<>% select(fipstate, fipscty, place, NAICS, emp, qp1, ap, est)
+                     cbp_scale = c("county", "state", "us"),
+                     ...){
+  cbp_scale <- match.arg(cbp_scale)
+  df <- cbp$get_df(cbp_scale, 
+                   strtoi(cbp_year))
+
+  if(cbp_scale == "county"){
+    df$place <- paste0(df$fipstate, df$fipscty)
+  }
+  n <- c("lfo", "fipstate", "fipscty", "place", "industry", "emp", "qp1", "ap", "est")
+  df <- df[names(df) %in% n] %>% 
+    rename(NAICS = industry)
   return(df)
+}
+
+year2cbsa <- function(year,
+                      ...){
+  cbsa_year = c("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003")
+  if(!year %in% cbsa_year){
+    warning("CBSA concordance years do not contain [",year,"]")
+    }
+  if(year %in% cbsa_year){
+    return(year)
+  }else if(year > "2018"){
+    return(cbsa_year[1])
+  }else if(year == "2016"){
+    return(cbsa_year[3])
+  }else if(year == "2014"){
+    return(cbsa_year[4])
+  }else if(year %in% 2012:2010){
+    return(cbsa_year[5])
+  }else if(year < "2004"){
+    return(cbsa_year[12])
+  }
 }
 
 # Call up and clean CBSA concordance codes 
 #(Delineations available for 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2013, 2015, 2017, 2018, 2020)
-call_cbsa_concord <- function(cbsa_year = c("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003")){
-  cbsa_year <- match.arg(cbsa_year)
+call_cbsa_concord <- function(...){
+  cbsa_year <- year2cbsa(...)  
   df <- geography_cbsa$get_cbsa_delin_df(strtoi(cbsa_year))
   df$CBSA_TITLE <- sapply(strsplit(df$CBSA_TITLE, ","), "[", 1)
   df$CBSA_TITLE <- paste(df$CBSA_TITLE, rep("CBSA", length(df$CBSA_TITLE)))
@@ -315,53 +335,41 @@ call_cbsa_concord <- function(cbsa_year = c("2020", "2018", "2017", "2015", "201
 }
 
 #Convert a fips code into a cbsa code 
-fips2cbsa <- function(fips,
-                      cbsa_year = c("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003")){
-  cb <- call_cbsa_concord(cbsa_year)
+fips2cbsa <- function(fips, 
+                      ...){
+  cb <- call_cbsa_concord(...)
+  if(isFALSE(fips %in% paste0(dataRetrieval::countyCd$STATE, dataRetrieval::countyCd$COUNTY))){
+    warning("FIPS entry [",fips,"] not found in ANSI FIPS records\n See: https://www2.census.gov/geo/docs/reference/codes/national_county.txt")
+    }
   if(isTRUE(fips %in% cb$place)){cb$CBSA_CODE[fips == cb$place]}else{fips}
 }
 
-# Aggregate industry output of each CBSA members in a cluster
-cbsa_aggregate_industry_output <- function(cbsa_year = c("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"),
-                                           cbp_year,
-                                           ilevel = c("det", "sum", "sec"),
-                                           scale = c("county", "state", "us"),
-                                           data_dir = file.path("data", "robjs"),
-                                           geo_level = c("county", "state", "national")){
-  o <- total_output(cbp_year = cbp_year,
-                    ilevel = ilevel,
-                    scale = scale,
-                    data_dir = data_dir,
-                    geo_level = geo_level)
-    
-  
-  c <- call_cbsa_concord(cbsa_year)
-  c <- c[c$place %in% intersect(c$place, colnames(o)),]
-  c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(colnames(o), c$place)), 
-                     place = c(c$place, setdiff(colnames(o), c$place)))
-  c <- c[order(c$CBSA_CODE), ]
-  rownames(c) <- 1:nrow(c)
-  
-
-  x <- c$CBSA_CODE %>% unique()
-  df <- data.frame(row.names = rownames(o))
-  for(i in x){
-    df[, i] <- rowSums(o[, c$place[c$CBSA_CODE == i], drop = FALSE])
-  } 
-  df <- as.matrix(df)
-  df[is.na(df)] = 0
-  return(df)
-
+year2tiger <- function(year,
+                      ...){
+  tiger_year = c("2022":"2013", "2010", "2000", "1990")
+  if(!year %in% tiger_year){
+    warning("Shapefile years do not contain [",year,"]")
+    }
+  if(year %in% tiger_year){
+    return(year)
+  }else if(year > max(tiger_year)){
+    return(max(tiger_year))
+  }else if(year > "2011"){
+    return("2013")
+  }else if(year > "2005"){
+    return("2010")
+  }else if(year > "1995"){
+    return("2000")
+  }else if(year < "1995"){
+      return(min(tiger_year))
+    }
 }
 
-# Aggregate spatial features of each CBSA members in a cluster
-cbsa_spatial_cluster <- function(cbsa_year = c("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"),
-                                 tiger_year){
-  
-  #if(strtoi(cbsa_year) != tiger_year){cat("Warning: CBSA concordance year [",cbsa_year,"] not the same as TIGER shapefile year [",tiger_year,"]" )}
-  
-  t <- call_tiger(tiger_year)
-  c <- call_cbsa_concord(cbsa_year)
+# Aggregate spatial features of each CBSA member in a cluster
+cbsa_spatial_cluster <- function(...){
+  tiger_year <- year2tiger(...)
+  t <- call_tiger(...)
+  c <- call_cbsa_concord(...)
   c <- c[c$place %in% intersect(c$place, t$place),]
   c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(t$place, c$place)), 
                   place = c(c$place, setdiff(t$place, c$place)),
@@ -383,101 +391,78 @@ cbsa_spatial_cluster <- function(cbsa_year = c("2020", "2018", "2017", "2015", "
 
 
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
-place_industry_economy_long <- function(cbp_year,
-                                        ilevel_concord = c("det_cord", "sum_cord", "sec_cord"), 
-                                        scale = c("county", "state", "us"),
-                                        data_dir = file.path("data", "robjs")){
-  ilevel_concord <- match.arg(ilevel_concord)
+place_industry_economy_long <- function(ilevel = c("det", "sum", "sec"),
+                                        data_dir = file.path("data", "robjs"),
+                                        ...){
+  ilevel_concord <- match.arg(ilevel) %>% paste0(., "_cord")
   ## Check industry level concordance exists
   concord <- file.path(find_rstudio_root_file(), data_dir, ilevel_concord)
   stopifnot("industry level concordance does not exist" = file.exists(concord) == TRUE) 
   
   conc <- readRDS(concord)
-  cbp_dat <- call_cbp(cbp_year, scale)
+  n <- names(conc)[1]
+  cbp_dat <- call_cbp(..., cbp_scale = "county")
   x <- left_join(cbp_dat, conc, by = "NAICS") 
   x <- x %>%
-    filter(.[9] != "NULL") %>%
-    group_by(place, .[9]) %>%
+    filter(.[dim(x)[2]] != "NULL") %>%
+    group_by(place, .[dim(x)[2]]) %>%
     summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
     as.data.frame()
   x <- x %>%
     group_by(place) %>%
     arrange(factor(x[[2]], levels = unique(conc[[1]])), .by_group = TRUE) %>%
     as.data.frame()
-  df <- x %>% pivot_wider(id_cols = "DETAIL", names_from = "place", values_from = c("emp", "qp1", "ap", "est"), names_sep = ".", values_fill = 0) 
-  df <- df %>% pivot_longer(-DETAIL, names_to = c(".value", "place"), names_pattern = "([^\\.]*)\\.*(\\d+)") %>% as.data.frame()
-  df <- df %>% group_by(df[[2]]) %>% arrange(factor(df[[1]], levels = unique(conc[[1]])), .by_group = TRUE)
+    df <- x %>% pivot_wider(id_cols = n, names_from = "place", values_from = c("emp", "qp1", "ap", "est"), names_sep = ".", values_fill = 0)
+    df <- df %>% pivot_longer(-n, names_to = c(".value", "place"), names_pattern = "([^\\.]*)\\.*(\\d+)") %>% as.data.frame()
+    df <- df %>% group_by(df[[2]]) %>% arrange(factor(df[[1]], levels = unique(conc[[1]])), .by_group = TRUE)
   names(df)[1] <- "indcode"
   df <- df[1:6]
   return(df)
 }
 
 #Generate industry output ("ap", "emp", "qp1", or "est") by location (county) from CBP in terms of BEA industry codes ("det_cord", "sum_cord", or "sec_cord") for any available year
-industry_output_by_place <- function(cbp_year,
-                                     ilevel_concord = c("det_cord", "sum_cord", "sec_cord"), 
-                                     scale = c("county", "state", "us"),
-                                     data_dir = file.path("data", "robjs"), 
-                                     output_metric = c("ap", "emp", "qp1", "est")){
+industry_output_by_place <- function(output_metric = c("ap", "emp", "qp1", "est"),
+                                     ...){
   output_metric <- match.arg(output_metric)
-  df <- place_industry_economy_long(cbp_year = cbp_year, 
-                                    ilevel_concord = ilevel_concord, 
-                                    scale = scale, 
-                                    data_dir = data_dir) %>% 
-    .[, c("indcode", "place", output_metric)] 
+  df <- place_industry_economy_long(...) %>% .[, c("indcode", "place", output_metric)] 
   df <- df %>% pivot_wider(id_cols = "indcode", names_from = "place", values_from = output_metric) %>% as.data.frame()
   rownames(df) <- df[,1]
   df <- df[, colnames(df) != "indcode"] %>% as.matrix()
   return(df)
 }
 
-
-
-
 ############ Call and clean pubdata BEA IO Use table
-call_use_table <- function(year,
-                           ilevel = c("det", "sum", "sec")){
-  
+call_use_table <- function(bea_year,
+                           ilevel = c("det", "sum", "sec"),
+                           ...){
   ilevel <- match.arg(ilevel)
-  
   if(ilevel == "det"){
-    x <- year %in% c("2007", "2012")
+    x <- bea_year %in% c("2007", "2012")
     stopifnot("BEA detail level tables only exist for years 2007 and 2012" = x == TRUE)
   }
-  
-  df <- bea_io$get_use(strtoi(year), ilevel) %>% as.matrix()
+  df <- bea_io$get_use(strtoi(bea_year), ilevel) %>% as.matrix()
+  df[is.na(df)] = 0
   return(df)
 }
 
-
-############ Derive the industry labor shares by year and scale
-labor_share <- function(year,
-                        ilevel = c("det", "sum", "sec")){
-  ilevel <- match.arg(ilevel)
-  df <- call_use_table(year, ilevel) %>% as.matrix()
-  
-  if (ilevel == "det"){
-    # Collapse ambiguous detail level industry 23* codes
-    # adding up all construction columns together
-    l <- 1:24
-    c <- 25:36
-    r <- 37:405
-    df <- cbind(df[, l], rowSums(df[, c], na.rm = TRUE), df[, r])
-    colnames(df)[25] <- "23"
-    df <- df["V00100", , drop = FALSE]/df["T018", , drop = FALSE] %>% as.matrix()
-  } else {
-    df <- df["V001", , drop = FALSE]/df["T018", , drop = FALSE] %>% as.matrix()
-  }
-  rownames(df) <- "labor_share"
+############ Derive the industry labor shares by year and industry scale
+labor_share <- function(...){
+  df <- call_use_table(...)
+  ext <- grep("^(F|T)[0-9]", colnames(df), value = TRUE)
+  df <- df[, !colnames(df) %in% ext]
+  lcv <- grep("^V001", rownames(df), value = TRUE)
+  df <- (df[lcv, , drop = FALSE] / df["T018", , drop = FALSE]) 
+  rownames(df) <- "LaborShare"
   return(df)
 }
-
 
 # Call up and clean Ag Output data
 call_agoutput <- function(ag_year = c("2017", "2012", "2007", "2002"), 
-                          geo_level = c("county", "state", "national")){
+                          geo_level = c("county", "state", "national"),
+                          ...){
   ag_year <- match.arg(ag_year)
   geo_level <- match.arg(geo_level)
-  df <- ag_output$get_farm_sales_by_bea_detail(strtoi(ag_year), geo_level)
+  df <- ag_output$get_farm_sales_by_bea_detail(strtoi(ag_year), geo_level) %>% as.data.frame()
   place <- c(place = rownames(df))
   df <- sapply(df, function(x)x/1000) %>% as.data.frame()
   df <- cbind(place, df)
@@ -485,48 +470,76 @@ call_agoutput <- function(ag_year = c("2017", "2012", "2007", "2002"),
   return(df)
 }
 
+year2bea <- function(year,
+                     ilevel,
+                     ...){
+  if(ilevel != "det"){
+    bea_year = c("2021":"1997")
+    if(!year %in% bea_year){
+      warning("BEA years do not contain [",year,"]")
+      }
+    if(year %in% bea_year){
+      return(year)
+    }else if(year > max(bea_year)){
+      return(max(bea_year))
+    }else if(year < min(bea_year)){
+      return(min(bea_year))
+    }
+  }else{
+    bea_year = c("2012", "2007")
+    if(!year %in% bea_year){
+      warning("Detail level BEA years do not contain  [",year,"]")
+      }
+    if(year %in% bea_year){
+      return(year)
+    }else if(year > "2007"){
+      return("2012")
+    }else if(year < "2007"){
+      return("2007")
+    }
+  }
+}
 
+year2agcensus <- function(year,
+                          ...){
+  ag_year = c("2017", "2012", "2007", "2002")
+  if(!year %in% ag_year){
+    warning("AgCensus years do not contain [",year,"]")
+    }
+  if(year %in% ag_year){
+    return(year)
+  }else if(year > "2014"){
+    return("2017")
+  }else if(year > "2009"){
+    return("2012")
+  }else if(year > "2004"){
+    return("2007")
+  }else if(year < "2005"){
+    return("2002")
+  }
+}
+
+### Need to add farm sales tax/inventory correction
+### Need to adjust for cbp basis as GDP not TotalOutput  
 ############ Derive the Total Output Matrix (in thousands of dollars)
 total_output <- function (cbp_year,
-                          ilevel = c("det", "sum", "sec"),
-                          scale = c("county", "state", "us"),
-                          data_dir = file.path("data", "robjs"), 
-                          geo_level = c("county", "state", "national")){
-  
+                          ilevel = c("det", "sum", "sec"), 
+                          ...){
   ilevel <- match.arg(ilevel)
-  scale <- match.arg(scale)
-  ilevel_concord <- paste0(ilevel, "_cord")
-  
-  if(cbp_year > "2014"){
-    ag_year = "2017"
-  }else if(cbp_year %in% 2014:2010){
-    ag_year = "2012"
-  }else if(cbp_year %in% 2009:2005){
-    ag_year = "2007"
-  }else if(cbp_year < "2005"){
-    ag_year = "2002"}
-  
-  if(strtoi(cbp_year) != ag_year){cat("Warning: CBP Output year [",cbp_year,"] not the same as Ag Output year [",ag_year,"]\n" )}
-
-  if(ilevel != "det"){
-    labor_share_year = cbp_year
-  }else{
-      if(isTRUE(cbp_year > "2007")){
-        labor_share_year = "2012"
-      }else{
-          labor_share_year = "2007"}
-    }
-  
-  farm_sales <- call_agoutput(ag_year, geo_level)
+  ag_year <- year2agcensus(cbp_year, ...)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  ls <- labor_share(bea_year = bea_year, ilevel = ilevel, ...)
+  farm_sales <- call_agoutput(ag_year, ...)
   fn <- colnames(farm_sales)[-c(1)]
-  
-  iout <- industry_output_by_place(cbp_year, 
-                                   ilevel_concord = ilevel_concord, 
-                                   scale = scale,
-                                   data_dir = data_dir)
-  ls <- labor_share(labor_share_year, ilevel) %>% .[, rownames(iout)] %>% unlist()
-  
+  iout <- industry_output_by_place(cbp_year = cbp_year, ilevel = ilevel, ...)
+  if(ilevel == "det"){
+    cn <- matrix(mean(ls[, grep("^23", colnames(ls), value = TRUE)]), dimnames = list(rownames(ls), c("23")) )
+    nc <- ls[, !grepl("^23", colnames(ls)), drop = FALSE] 
+    ls <- cbind(cn, nc)  
+  }
+  ls <- ls[, rownames(iout)[rownames(iout) %in% colnames(ls)], drop = FALSE] 
   df <- apply(iout, 2, function (x) {x / ls})
+  rownames(df) <- rownames(iout)
   df <- t(df) %>% as.data.frame()
   df$place <- rownames(df)
   df <- left_join(df, farm_sales, by = "place")
@@ -542,89 +555,74 @@ total_output <- function (cbp_year,
   rownames(df) <- df$place
   df$place <- NULL
   df <- t(df)
+  df[is.na(df)] = 0
   return(df)
 }
 
 
+# Aggregate industry output of each CBSA members in a cluster
+cbsa_aggregate_industry_output <- function(cbp_year,
+                                           ...){
+  o <- total_output(cbp_year, ...)
+  c <- call_cbsa_concord(cbp_year, ...)
+  c <- c[c$place %in% intersect(c$place, colnames(o)),]
+  c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(colnames(o), c$place)), 
+                  place = c(c$place, setdiff(colnames(o), c$place)))
+  c <- c[order(c$CBSA_CODE), ]
+  rownames(c) <- 1:nrow(c)
+  x <- c$CBSA_CODE %>% unique()
+  df <- data.frame(row.names = rownames(o))
+  for(i in x){
+    df[, i] <- rowSums(o[, c$place[c$CBSA_CODE == i], drop = FALSE])
+  } 
+  df <- as.matrix(df)
+  df[is.na(df)] = 0
+  return(df)
+}
+
 ############ Derive clean Output Matrix 
 total_output_tidy <- function (cbp_year,
-                                ilevel = c("det", "sum", "sec"),
-                                scale = c("county", "state", "us"),
-                                data_dir = file.path("data", "robjs"),
-                                tiger_year = cbp_year,
-                                geo_level = c("county", "state", "national"),
-                                cbsa_year = NULL){
-  t <- call_tiger(tiger_year)
-  if(is.null(cbsa_year)){
-    df <- total_output(cbp_year = cbp_year, 
-                       ilevel = ilevel,
-                       scale = scale,
-                       data_dir = data_dir,
-                       geo_level = geo_level)
-    df <- df[, colnames(df) %in% c(t$place)]
-    df <- df[, colnames(df) %in% c(filter(t, !STATE_CODE %in% c("02", "15"))$place)]
-    
+                               cbsa_clust = FALSE, 
+                               ...){
+  t <- year2tiger(cbp_year, ...)  %>% call_tiger(...)
+  if(isFALSE(cbsa_clust)){
+    df <- total_output(cbp_year, ...)
+    df <- df[, colnames(df) %in% t$place]
   } else {
-    df <- cbsa_aggregate_industry_output(cbsa_year = cbsa_year,
-                                         cbp_year = cbp_year,
-                                         ilevel = ilevel,
-                                         scale = scale,
-                                         data_dir = data_dir,
-                                         geo_level = geo_level)
-    
-    c <- call_cbsa_concord(cbsa_year)
+    df <- cbsa_aggregate_industry_output(cbp_year, ...)
+    c <- call_cbsa_concord(cbp_year, ...)
     c <- c[c$place %in% intersect(c$place, t$place),]
-    c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(t$place, c$place)), 
+    c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(t$place, c$place)),
                     place = c(c$place, setdiff(t$place, c$place)))
-
-    df <- df[,!colnames(df) %in% c[grepl('^02', c$place),]$place]
-    df <- df[,!colnames(df) %in% c[grepl('^15', c$place),]$place]
-    df <- df[,!colnames(df) %in% c[grepl('^72', c$place),]$place]
-    df <- df[,!colnames(df) %in% c[grepl('^02', c$place),]$CBSA_CODE]
-    df <- df[,!colnames(df) %in% c[grepl('^15', c$place),]$CBSA_CODE]
-    df <- df[,!colnames(df) %in% c[grepl('^72', c$place),]$CBSA_CODE]
-    df <- df[,!colnames(df) %in% colnames(df[,grep('999$', colnames(df))])]
+    df <- df[, colnames(df) %in% c$CBSA_CODE]
   }
+  df <- df[, !colnames(df) %in% colnames(df[,grep('^(02|15)', colnames(df))]) ]
   df[is.na(df)] = 0
   df <- df[, colSums(df != 0) > 0]
   return(df)
 }
 
-
 ############ Call and clean the total requirements matrix 
-call_total_requirements <- function(year,
-                                    ilevel = c("det", "sum", "sec")){
+call_total_requirements <- function(bea_year,
+                                    ilevel = c("det", "sum", "sec"), 
+                                    ...){
   ilevel <- match.arg(ilevel)
   if(ilevel == "det"){
-    x <- year %in% c("2007", "2012")
+    x <- bea_year %in% c("2007", "2012")
     stopifnot("BEA detail level tables only exist for years 2007 and 2012" = x == TRUE)
   }
-  
-  df <- bea_io$get_ixi(year, ilevel) %>% 
-    .[1:ncol(.), ] %>% 
-    as.matrix()
+  df <- bea_io$get_ixi(strtoi(bea_year), ilevel) %>% .[1:ncol(.), ] %>% as.matrix()
   rownames(df) <- colnames(df)
-  
-  # Collapse ambiguous industry 23* codes at detail level
-  if(ilevel == "det"){ 
-    d <- sum(df[25:36, 25:36]) / 12
-    df[, 25] <- rowMeans(df[, 25:36])
-    df <- df[, -c(26:36)]
-    df[25, ] <- colMeans(df[25:36, ])
-    df <- df[-c(26:36), ]
-    df[25, 25] <- d
-    colnames(df)[25] <- rownames(df)[25] <- "23"
-  }
-  
   return(df)
 }
 
+
+### Need better methods for matrix inversion in tests inv() gave more accurate results but solve() was MUCH faster: inv() will also reach memory limit
 ############ Derive the direct requirements matrix (Technical Coefficients) 
-direct_requirements <- function(bea_year,
-                                ilevel = c("det", "sum", "sec")){
-  options(scipen=999)
-  df <- call_total_requirements(bea_year, ilevel)
+call_direct_requirements <- function(...){
+  df <- call_total_requirements(...)
   df <- diag(ncol(df)) - solve(df)
+  df[df < 0] = 0
   return(df)
 }
 
@@ -774,8 +772,6 @@ absorption_maximum_match <- function(absorption_matrix,
                       cluster_members_count)
 }
 
-
-
 ############ Test for non-singular row-wise absorption potential maximums 
 absorption_max_check <- function(connectedness_table, 
                                  list_names = NULL, 
@@ -794,7 +790,6 @@ join_space_with_connectedness <- function(connectedness_table,
   df <- inner_join(space_data, connectedness_table, by = deparse(substitute(join_variable)), copy = TRUE)
 }
 
-
 ############ Single function of nested functions to derive connectedness tables from an output matrix and direct requirements matrix of multiple industry specificity levels
 direct_connectedness <- function(technical_coefficients_matrix, industry_output_matrix, threshold=.05){
   tc <- technical_coefficients_matrix
@@ -809,166 +804,283 @@ one_direct_connect <- function(technical_coefficients_matrix, industry_output_ma
   df <- absorption_maximum_match(normalized_absorption_share(stacked_absorption_share(net_input_supply(io, industry_input(tc, io)), net_input_demand(io, industry_input(tc, io))), net_input_supply(io, industry_input(tc, io))), threshold)  
 }
 
-
+############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
+one_hierarchical_connectedness <- function(direct_mat, 
+                                           output_mat, 
+                                           space_mat,
+                                           threshold = .05, 
+                                           list_names = NULL){
+  d <- direct_mat
+  o <- output_mat
+  s <- space_mat
+  hct <- list()
+  hsct <- list()
+  hom <- list()
+  hom$level_0 <- o
+  n = 1
+  i = FALSE
+  df <- list()
+  print(list_names)
+  while(i == FALSE){
+    print(paste("level", n))
+    c <- one_direct_connect(d, o, threshold)
+    hct[[paste0("level_", deparse(n))]] <- c
+    i <- all(c$place %in% c$eca_membership) 
+    if (i == TRUE){next}
+    hsct[[paste0("level_", deparse(n))]] <- join_space_with_connectedness(c, s) %>% spatial_cluster()
+    o <- aggregate_industry_output(o, c)
+    hom[[paste0("level_", deparse(n))]] <- o
+    n = n + 1
+  }
+  df[[deparse(list_names)]] <- list("Hierarchical_Connectedness_table" = hct,
+                                    "Hierarchical_Spatial_Cluster_table" = hsct,
+                                    "Hierarchical_Output_mat" = hom)
+}
 
 ############ Call connectedness matrix for any available year and industry scale
-connectedness_matrix <- function(cbp_year,
+absorption_matrix <- function(cbp_year,
                                  ilevel = c("det", "sum", "sec"),
+                                 cbsa_clust = FALSE, 
                                  normalized = TRUE,
                                  impedance = NULL, 
-                                 tiger_year = cbp_year,
-                                 scale = c("county", "state", "us"),
                                  data_dir = file.path("data", "robjs"),
-                                 geo_level = c("county", "state", "national"),
-                                 cbsa_year = NULL){
-  
+                                 ...){
   ilevel <- match.arg(ilevel)
-  if(ilevel != "det"){
-    bea_year = cbp_year
-  }else{
-    if(isTRUE(cbp_year > "2007")){
-      bea_year = "2012"
-    }else{
-      bea_year = "2007"}}
-  
-  if(cbp_year > "2014"){
-    ag_year = "2017"
-  }else if(cbp_year %in% 2014:2010){
-    ag_year = "2012"
-  }else if(cbp_year %in% 2009:2005){
-    ag_year = "2007"
-  }else if(cbp_year < "2005"){
-    ag_year = "2002"}
-  
-  o <- total_output_tidy(cbp_year = cbp_year,
-                         ilevel = ilevel,
-                         scale = scale,
-                         data_dir = data_dir,
-                         tiger_year = tiger_year,
-                         geo_level = geo_level,
-                         cbsa_year = cbsa_year)
-  d <- direct_requirements(bea_year = bea_year, 
-                           ilevel = ilevel)
+  ag_year <- year2agcensus(cbp_year, ...)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  cbsa_year <- year2cbsa(cbp_year, ...)  %>% suppressWarnings() 
+  tiger_year <- year2tiger(cbp_year, ...) %>% suppressWarnings()
+  o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+  d <- call_direct_requirements(bea_year, ilevel, ...)
+  if(ilevel == "det"){ 
+    con <- grep("^23", colnames(d), value = TRUE)
+    cm <- matrix(sum(d[con,con])/length(con), 
+                 dimnames = list(c("23"), c("23")))
+    cr <- t(matrix(colMeans(d[con, ]), 
+                   dimnames = list(colnames(d), c("23")) ))
+    cc <- matrix(rowMeans(d[, con]), 
+                 dimnames = list(colnames(d), c("23"))) 
+    d <- cbind( rbind(cr, d ), rbind(cm, cc )) 
+    d <- d[colnames(d)[!colnames(d) %in% con] , colnames(d)[!colnames(d) %in% con]]
+    d <- d[rownames(o)[rownames(o) %in% rownames(d)], rownames(o)[rownames(o) %in% colnames(d)]] 
+  }
   i <- industry_input(d, o)
   
-  sasf <- paste0("sas", "_", match.arg(ilevel),"class", "_", cbp_year, "cbp", "_", bea_year, "bea", "_", ag_year, "ag", "_", tiger_year, "tiger", "_", if(!is.null(cbsa_year)){cbsa_year}else{"NA"}, "cbsa")
+  sasf <- paste0("sas", "_", match.arg(ilevel),"class", "_", cbp_year, "cbp", "_", bea_year, "bea", "_", ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
   if (file.exists(file.path(find_rstudio_root_file(), data_dir, sasf) ) ){ 
     df <- readRDS(file.path(find_rstudio_root_file(), data_dir, sasf))
   } else {
     df <- stacked_absorption_share(net_input_supply(o, i), net_input_demand(o, i))
     saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, sasf) )
   }
-  
   if(isTRUE(normalized)){
     df <- normalized_absorption_share(df, net_input_supply(o, i))
   }
-  
   if(!is.null(impedance)){
     df <- df * impedance[colnames(df), rownames(df)]
   }
-  return(df)
-  
+ return(df)
 }
-
 
 ############ Call connectedness for any available year and industry scale
 connectedness <- function (cbp_year,
-                           ilevel = c("det", "sum", "sec"),
-                           scale = c("county", "state", "us"),
-                           data_dir = file.path("data", "robjs"),
-                           tiger_year = cbp_year,
-                           impedance = NULL, 
-                           normalized = TRUE,
-                           geo_level = c("county", "state", "national"),
-                           cbsa_year = NULL,
                            threshold = .05,
-                           row_max_match = TRUE){
-  
-  df <- connectedness_matrix(cbp_year = cbp_year,
-                             ilevel = ilevel,
-                             normalized = normalized,
-                             impedance = impedance, 
-                             tiger_year = tiger_year,
-                             scale = scale,
-                             data_dir = data_dir,
-                             geo_level = geo_level,
-                             cbsa_year = cbsa_year)
-  
+                           row_max_match = TRUE,
+                           ...){
+  df <- absorption_matrix(cbp_year, ...)
   df <- absorption_maximum_match(absorption_matrix = df, 
                                  threshold = threshold, 
                                  row_max_match = row_max_match)
-  
+  return(df)
+}
+
+############ industry (output, input, nid, nis) distributions by county
+industry_distribution <- function(industry_aggregate_class = c("sec", "sum", "det"),
+                                  cbp_year,
+                                  cbsa_clust = FALSE,
+                                  ilevel = c("det", "sum", "sec"),
+                                  ...){
+  industry_aggregate_class <- match.arg(industry_aggregate_class)
+  ilevel <- match.arg(ilevel)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  o <- total_output(cbp_year = cbp_year, ilevel = ilevel, ...)
+  if(isTRUE(cbsa_clust)){
+    o <- cbsa_aggregate_industry_output(cbp_year, ...)
+  }
+  d <- call_direct_requirements(bea_year, ilevel, ...)
+  if(ilevel == "det"){ 
+    con <- grep("^23", colnames(d), value = TRUE)
+    cm <- matrix(sum(d[con,con])/length(con), 
+                 dimnames = list(c("23"), c("23")))
+    cr <- t(matrix(colMeans(d[con, ]), 
+                   dimnames = list(colnames(d), c("23")) ))
+    cc <- matrix(rowMeans(d[, con]), 
+                 dimnames = list(colnames(d), c("23"))) 
+    d <- cbind( rbind(cr, d ), rbind(cm, cc )) 
+    d <- d[colnames(d)[!colnames(d) %in% con] , colnames(d)[!colnames(d) %in% con]]
+    d <- d[rownames(o)[rownames(o) %in% rownames(d)], rownames(o)[rownames(o) %in% colnames(d)]] 
+  }
+  i <- industry_input(d, o)
+  nis <- net_input_supply(o, i)
+  nid <- net_input_demand(o, i)
+  indicator_type = c("output", "input", "nis", "nid")
+  ti <- vector("list", length(indicator_type))
+  names(ti) <- indicator_type
+  ti[[1]] <- o
+  ti[[2]] <- i
+  ti[[3]] <- nis
+  ti[[4]] <- nid
+  for (i in 1:length(ti)){
+    ti[[i]] <- melt(ti[[i]])
+    ti[[i]] <- ti[[i]] %>% 
+      filter(value > 0)
+    names(ti[[i]]) <- c("DETAIL", "place", indicator_type[i])
+    ti[[i]]$place <- ti[[i]]$place  %>% formatC(width = 5, format = "d", flag = "0")
+  }
+  c <- bea_io$get_naics_df() %>% 
+       filter(DETAIL != "NaN") %>% 
+       filter(NAICS != "n.a.") %>% 
+       distinct(DETAIL, .keep_all = TRUE) %>% 
+       unnest(., cols = names(.))
+  if (industry_aggregate_class == "sec") {
+    ilevel_concord <- paste0(ilevel, "_cord")
+    concord <- file.path(find_rstudio_root_file(), data_dir, ilevel_concord)
+    stopifnot("industry level concordance does not exist" = file.exists(concord) == TRUE) 
+    cord <- readRDS(concord)
+    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
+                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
+    names(n) <- c("SECTOR", "name")
+    n <- left_join(cord, n, by = "SECTOR") 
+    names(n) <- c("BEA_SECTOR", "SECTOR", "name")
+    c[["SECTOR"]] <- substr(c[["SECTOR"]], 1, 2)
+    sn <- inner_join(n, c, by = "SECTOR") 
+    sn$abv <- sn$BEA_SECTOR
+    rm(sec_cord)
+  } else if (industry_aggregate_class == "sum"){
+    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
+                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
+    names(n) <- c("SUMMARY", "name")
+    sn <- inner_join(n, c, by = "SUMMARY") 
+    sn$abv <- sn$SUMMARY
+  } else if (industry_aggregate_class == "det") {
+    sn <- c
+    sn <- rename(sn, name = DESCRIPTION)
+    sn$abv <- sn$DETAIL
+  }
+  pal <- data.frame(color = viridis(length(unique(sn$name))),
+                    name = unique(sn$name))
+  sn <- inner_join(sn, pal, by = "name")
+  sn["DETAIL"][sn["NAICS"] == "23*"] <- "23"
+  sn <- sn %>% 
+    distinct(DETAIL, .keep_all = TRUE) 
+  df <- vector("list", length(indicator_type))
+  names(df) <- indicator_type
+  for (i in 1:length(df)){
+    df[[i]] <- inner_join(ti[[i]], sn, by = "DETAIL")
+  }
   return(df)
 }
 
 
+############ Bar charts of industry distributions by county
+industry_distribution_barcharts <- function(data,
+                                            interact = TRUE,
+                                            short = TRUE){
+  df <- c()
+  l <- unique(distinct(data, DETAIL, abv)[order(distinct(data, DETAIL, abv)$DETAIL),]$abv)
+  for (i in 1:length(unique(data$place))){
+    d <- data[data$place == unique(data$place)[i], ]
+    
+    if(isTRUE(interact)){
+      df[[i]] <- ggplot(d, aes(if(isTRUE(short)){x = factor(abv, levels = l)}else{x = factor(name, levels = unique(name))},
+                               y = .data[[names(data)[3]]],
+                               fill = DETAIL,
+                               tooltip = glue("industry: {DETAIL}\n{names(data)[3]}: {round(.data[[names(data)[3]]], 0)}"),  
+                               data_id = DETAIL)) +
+        geom_col_interactive(color = NA)
+    } else {
+      df[[i]] <- ggplot(d, aes(if(isTRUE(short)){x = factor(abv, levels = l)}else{x = factor(name, levels = unique(name))},
+                               y = .data[[names(data)[3]]],
+                               fill = DETAIL)) +
+        geom_col(color = NA)
+    }
+    df[[i]] <- df[[i]] +
+      scale_fill_manual(values = d$color) +
+      theme_minimal() +
+      theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
+            axis.text.y = element_text(size = rel(.75)),
+            plot.subtitle = element_text(size = rel(.75), vjust = -2), 
+            plot.margin = margin(t = 0, r = 50, b = 0, l = 0, unit = "pt")) +
+      labs(x = element_blank(),
+           y = element_blank(),
+           subtitle = names(data)[3],
+           title = element_blank()) +
+      guides(fill = "none")
+    names(df)[i] <- unique(data$place)[i]
+  }
+  return(df)
+}
+
+############ html plots of bar charts of industry distributions by county [used in mapping interactive tooltips]
+html_industry_dist_plots <- function(cbp_year,
+                                     short = TRUE,
+                                     ...){
+  t <- industry_distribution(cbp_year = cbp_year, ...)
+  b <- vector("list")
+  for (i in names(t) ){
+    b[[i]] <- industry_distribution_barcharts(t[[i]], 
+                                              interact = FALSE, 
+                                              short = short)
+  }
+  df <- vector("list", length = length(b))
+  names(df) <- names(b)
+  for (i in names(df)){
+    print(i)
+    print(Sys.time())
+   df[[i]] <- vector("list", length = length(b[[i]]))
+   for (p in 1:length(df[[i]])){
+     df[[i]][p] <- htmltools::plotTag(b[[i]][p], alt = "") %>% as.character()
+   }
+   names(df[[i]])<-names(b[[i]])
+  }
+  return(df)
+}
+
+###Need to make adding html a separate operation
 ############ Call connectedness for any available year and industry scale with spatial component
-spatial_connectedness <- function (cbp_year,
-                                   ilevel = c("det", "sum", "sec"),
-                                   scale = c("county", "state", "us"),
-                                   data_dir = file.path("data", "robjs"),
-                                   tiger_year = cbp_year,
-                                   threshold = .05,
-                                   impedance = NULL, 
-                                   normalized = TRUE,
-                                   geo_level = c("county", "state", "national"),
-                                   cbsa_year = NULL,
-                                   row_max_match = TRUE,
-                                   add_html = FALSE,
-                                   industry_aggregate_class = "sec"){
-  
-  c <- connectedness(cbp_year = cbp_year,
-                     ilevel = ilevel,
-                     scale = scale,
-                     data_dir = data_dir,
-                     tiger_year = tiger_year,
-                     threshold = threshold,
-                     impedance = impedance, 
-                     normalized = normalized,
-                     geo_level = geo_level,
-                     cbsa_year = cbsa_year,
-                     row_max_match = row_max_match)
-  
-  if(is.null(cbsa_year)){
-    s <- call_tiger(tiger_year) 
+spatial_connectedness <- function(cbp_year,
+                                  cbsa_clust = FALSE,
+                                  add_html = FALSE,
+                                  industry_aggregate_class = "sec",
+                                  ...){
+  tiger_year <- year2tiger(cbp_year, ...) 
+  c <- connectedness(cbp_year = cbp_year, cbsa_clust = cbsa_clust, ...)
+  ag_year <- year2agcensus(cbp_year, ...) %>% suppressWarnings()
+  if(isFALSE(cbsa_clust)){
+    s <- call_tiger(tiger_year, ...) 
   } else {
-    s <- cbsa_spatial_cluster(cbsa_year,
-                              tiger_year)
+    s <- cbsa_spatial_cluster(cbp_year, ...)
     s <- rename(s, place = CBSA_CODE)
     s <- rename(s, NAME = CBSA_TITLE)
+    cbsa_year <- year2cbsa(cbp_year, ...)  %>% suppressWarnings() 
   }
   df <- join_space_with_connectedness(c, s)
-  
-  if(cbp_year > "2014"){
-    ag_year = "2017"
-  }else if(cbp_year %in% 2014:2010){
-    ag_year = "2012"
-  }else if(cbp_year %in% 2009:2005){
-    ag_year = "2007"
-  }else if(cbp_year < "2005"){
-    ag_year = "2002"}
-  
-
   if(isTRUE(add_html)){
-    hp <- paste0("htmlplots", "_", industry_aggregate_class, "class", "_", cbp_year, "cbp", "_",  ag_year, "ag", "_", tiger_year, "tiger", "_", if(!is.null(cbsa_year)){cbsa_year}else{"NA"}, "cbsa")
+    hp <- paste0("htmlplots", "_", industry_aggregate_class, "class", "_", cbp_year, "cbp", "_",  ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
     if (file.exists(file.path(find_rstudio_root_file(), data_dir, hp))){ 
       h <- readRDS(file.path(find_rstudio_root_file(), data_dir, hp))
     } else {
       h <- html_industry_dist_plots(cbp_year,
-                                    industry_aggregate_class = industry_aggregate_class,
-                                    cbsa_year = cbsa_year)
+                                    ...)
       saveRDS(h, file = file.path(find_rstudio_root_file(), data_dir, hp))
     }
-    indicator_type = c("output", "input", "nis", "nid")
+    indicator_type = names(h)
     for(i in indicator_type){
       df[[paste0("html_", i) ]] <- h[[i]]
     }
   } 
-  
-  
   return(df)
 }
-
 
 ############ Spatial union each ECA member in a cluster
 spatial_cluster <- function(spatial_connectedness_table,
@@ -987,31 +1099,11 @@ spatial_cluster <- function(spatial_connectedness_table,
   df <- df %>% .[.$place %in% .$eca_membership, ]
 }
 
-
 ############ Call spatial connectedness for any available year and industry scale aggregating eca clusters across space
 cluster_spatial_connectedness <- function (cbp_year,
-                                           ilevel = c("det", "sum", "sec"),
-                                           scale = c("county", "state", "us"),
-                                           data_dir = file.path("data", "robjs"),
-                                           tiger_year = cbp_year,
-                                           threshold = .05,
-                                           impedance = NULL,
                                            list_names = NULL,
-                                           normalized = TRUE, 
-                                           geo_level = c("county", "state", "national"),
-                                           cbsa_year = NULL,
-                                           row_max_match = TRUE){
-  df <- spatial_connectedness(cbp_year = cbp_year,
-                              ilevel = ilevel,
-                              scale = scale,
-                              data_dir = data_dir,
-                              tiger_year = tiger_year,
-                              threshold = threshold,
-                              impedance = impedance,
-                              normalized = normalized,
-                              geo_level = geo_level,
-                              cbsa_year = cbsa_year,
-                              row_max_match = row_max_match)
+                                           ...){
+  df <- spatial_connectedness(cbp_year, ...)
   x <- df$eca_membership %>% unique() %>% .[order(.)]
   for (i in x){
     print(paste(list_names, "start cluster: ", i, which(i == x), "of", length(x), Sys.time()))
@@ -1022,138 +1114,79 @@ cluster_spatial_connectedness <- function (cbp_year,
   return(df)
 }
 
-
-
-
+###Need to make adding html a separate operation
 ############ Place-centric connectedness
 place_centric_connect <- function(central_place,
                                   cbp_year,
-                                  ilevel = c("det", "sum", "sec"),
-                                  scale = c("county", "state", "us"),
-                                  data_dir = file.path("data", "robjs"),
-                                  tiger_year = cbp_year,
-                                  impedance = NULL, 
-                                  normalized = TRUE,
-                                  geo_level = c("county", "state", "national"),
-                                  cbsa_year = NULL,
+                                  cbsa_clust = FALSE,
                                   add_html = FALSE,
-                                  industry_aggregate_class = "sec"){
-  
-  
-  df <- connectedness_matrix(cbp_year = cbp_year,
-                             ilevel = ilevel,
-                             normalized = normalized,
-                             impedance = impedance, 
-                             tiger_year = tiger_year,
-                             scale = scale,
-                             data_dir = data_dir,
-                             geo_level = geo_level,
-                             cbsa_year = cbsa_year)
-  
-  
-  if(!is.null(cbsa_year)){central_place <- fips2cbsa(central_place)}
-    
-  df <- cbind(export_absorption = c(t(df[central_place, , drop=FALSE])),
-              import_absorption = c(df[, central_place , drop=FALSE]),
-              place = rownames(df))
-  
-  if(is.null(cbsa_year)){
-    t <- call_tiger(tiger_year)
+                                  industry_aggregate_class = "sec",
+                                  ...){
+  df <- absorption_matrix(cbp_year, cbsa_clust = cbsa_clust, ...)
+  if(isTRUE(cbsa_clust)){central_place <- fips2cbsa(central_place)}
+  df <- cbind(export_absorption = c(t(df[central_place, , drop = FALSE])),
+              import_absorption = c(df[, central_place , drop = FALSE]),
+              place = rownames(df)) 
+  tiger_year <- year2tiger(cbp_year, ...) 
+  ag_year <- year2agcensus(cbp_year, ...) %>% suppressWarnings()
+  if(isFALSE(cbsa_clust)){
+    s <- call_tiger(tiger_year, ...) 
   } else {
-    t <- cbsa_spatial_cluster(cbsa_year,
-                              tiger_year)
-    t <- rename(t, place = CBSA_CODE)
-    t <- rename(t, NAME = CBSA_TITLE)
+    s <- cbsa_spatial_cluster(cbp_year, ...)
+    s <- rename(s, place = CBSA_CODE)
+    s <- rename(s, NAME = CBSA_TITLE)
+    cbsa_year <- year2cbsa(cbp_year, ...)  %>% suppressWarnings() 
   }
-
-  df <- join_space_with_connectedness(df, t)
-
+  df <- join_space_with_connectedness(df, s)
   df$export_absorption <- as.numeric(df$export_absorption)
   df$import_absorption <- as.numeric(df$import_absorption)
-  
-  if(cbp_year > "2014"){
-    ag_year = "2017"
-  }else if(cbp_year %in% 2014:2010){
-    ag_year = "2012"
-  }else if(cbp_year %in% 2009:2005){
-    ag_year = "2007"
-  }else if(cbp_year < "2005"){
-    ag_year = "2002"}
-  
+
   if(isTRUE(add_html)){
-    indicator_type = c("output", "input", "nis", "nid")
-    hp <- paste0("htmlplots", "_", industry_aggregate_class, "class", "_", cbp_year, "cbp", "_",  ag_year, "ag", "_", tiger_year, "tiger", "_", if(!is.null(cbsa_year)){cbsa_year}else{"NA"}, "cbsa")
-    
+    hp <- paste0("htmlplots", "_", industry_aggregate_class, "class", "_", cbp_year, "cbp", "_",  ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
     if (file.exists(file.path(find_rstudio_root_file(), data_dir, hp))){ 
       h <- readRDS(file.path(find_rstudio_root_file(), data_dir, hp))
-      for(i in indicator_type){
-        df[[paste0("html_", i) ]] <- h[[i]]
-      }
     } else {
       h <- html_industry_dist_plots(cbp_year,
-                                    industry_aggregate_class = industry_aggregate_class,
-                                    cbsa_year = cbsa_year)
+                                    ...)
       saveRDS(h, file = file.path(find_rstudio_root_file(), data_dir, hp))
-      for(i in indicator_type){
-        df[[paste0("html_", i) ]] <- h[[i]]
-      }
+    }
+    indicator_type = names(h)
+    for(i in indicator_type){
+      df[[paste0("html_", i) ]] <- h[[i]]
     }
   } 
-  
   return(df)
-  
 }
 
-
-## Need to revise with better TIGER tracking across time
 ############ Change in connectedness over time for a county 
 place_connect_delta <- function(central_place, 
-                                sample_years = c("2017", "2012", "2007", "2002"),
-                                ilevel = c("det", "sum", "sec"),
-                                tiger_year = "2013",
-                                impedance = NULL, 
-                                normalized = TRUE,
-                                cbsa_year = NULL,
-                                add_html = FALSE,
-                                industry_aggregate_class = "sec"){
+                                sample_years, # vector of years
+                                ...){
+  n <- c("export_absorption", "import_absorption", "html_output", "html_input", "html_nis", "html_nid")
   place_connect <- vector("list", length(sample_years))
   names(place_connect) <- sample_years
   for (i in sample_years){
     place_connect[[i]] <- place_centric_connect(central_place = central_place,
                                                 cbp_year = i,
-                                                ilevel = ilevel,
-                                                tiger_year = tiger_year,
-                                                impedance = impedance, 
-                                                normalized = normalized,
-                                                cbsa_year = cbsa_year,
-                                                add_html = add_html,
-                                                industry_aggregate_class = industry_aggregate_class)
+                                                ...)
+    x <- n[n %in% names(place_connect[[i]])]
+    names(place_connect[[i]])[names(place_connect[[i]]) %in% x] <- paste(x, i, sep=".")
   }
-
-  cl <- c("export_absorption", "import_absorption", "place", "html_output", "html_input", "html_nis", "html_nid") %>% .[. %in% names(place_connect[[sample_years[2]]])]
-  df <- st_set_geometry(place_connect[[sample_years[2]]], NULL) %>% select(cl) %>% 
-      inner_join(place_connect[[sample_years[1]]], ., by = "place", suffix = c(paste0(".", sample_years[1]), paste0(".", sample_years[2])))
-  
-  for (s in 2:(length(sample_years)-1)){
-    cl <- c("export_absorption", "import_absorption", "place", "html_output", "html_input", "html_nis", "html_nid") %>% .[. %in% names(place_connect[[sample_years[s+1]]])]
-    df <- st_set_geometry(place_connect[[sample_years[s+1]]], NULL) %>% select(cl) %>% 
-      inner_join(df, ., by = "place", suffix = c(paste0(".", sample_years[s]), paste0(".", sample_years[s+1])))
+  df <- place_connect[[1]]
+  for(i in 2:length(sample_years)){
+    df <- st_set_geometry(place_connect[[i]], NULL) %>% .[c(grep("*[0-9]", colnames(.), value = TRUE), "place")] %>% inner_join(df, ., by = "place")
   }
-
-
   com <- combn(sample_years, 2)
-  for (c in 1:ncol(com)){
-    df[[paste0("export_absorption_delta_", substr(com[2, c], 3, 4), substr(com[1, c], 3, 4))]] <- df[[paste0("export_absorption.", com[1, c])]] - df[[paste0("export_absorption.", com[2, c])]]
-    df[[paste0("import_absorption_delta_", substr(com[2, c], 3, 4), substr(com[1, c], 3, 4))]] <- df[[paste0("import_absorption.", com[1, c])]] - df[[paste0("import_absorption.", com[2, c])]]
+  for (x in 1:ncol(com)){
+    df[[paste0("export_absorption_delta_", substr(com[2, x], 3, 4), substr(com[1, x], 3, 4))]] <- df[[paste0("export_absorption.", com[1, x])]] - df[[paste0("export_absorption.", com[2, x])]]
+    df[[paste0("import_absorption_delta_", substr(com[2, x], 3, 4), substr(com[1, x], 3, 4))]] <- df[[paste0("import_absorption.", com[1, x])]] - df[[paste0("import_absorption.", com[2, x])]]
   }
-  
   ###Percent Change option
-  # for (c in 1:ncol(com)){
-  #   df[[paste0("export_absorption_delta_", substr(com[2, c], 3, 4), substr(com[1, c], 3, 4))]] <- (df[[paste0("export_absorption.", com[1, c])]] - df[[paste0("export_absorption.", com[2, c])]])/df[[paste0("export_absorption.", com[1, c])]]*100
-  #   df[[paste0("import_absorption_delta_", substr(com[2, c], 3, 4), substr(com[1, c], 3, 4))]] <- (df[[paste0("import_absorption.", com[1, c])]] - df[[paste0("import_absorption.", com[2, c])]])/df[[paste0("import_absorption.", com[1, c])]]*100
+  # for (x in 1:ncol(com)){
+  #   df[[paste0("export_absorption_delta_", substr(com[2, x], 3, 4), substr(com[1, x], 3, 4))]] <- (df[[paste0("export_absorption.", com[1, x])]] - df[[paste0("export_absorption.", com[2, x])]])/df[[paste0("export_absorption.", com[1, x])]]*100
+  #   df[[paste0("import_absorption_delta_", substr(com[2, x], 3, 4), substr(com[1, x], 3, 4))]] <- (df[[paste0("import_absorption.", com[1, x])]] - df[[paste0("import_absorption.", com[2, x])]])/df[[paste0("import_absorption.", com[1, x])]]*100
   # }
-
-  return(df)
+return(df)
 }
 
 ############ Map change in connectedness over time for a county 
@@ -1162,7 +1195,6 @@ absorption_delta_map <- function(central_place,
                          fill,
                          delta_min,
                          delta_max){
-  
   g <- ggplot(df) +
     geom_sf_interactive(aes(fill = .data[[fill]], 
                             tooltip = if("STATE" %in% names(df)){
@@ -1216,7 +1248,6 @@ absorption_map <- function(df,
                            fill, 
                            fill_lab,
                            unit_scale = TRUE){
-  
   if(!isTRUE(add_html)){
     g <- ggplot(df) +
       geom_sf_interactive(aes(fill = .data[[fill]], 
@@ -1268,7 +1299,6 @@ absorption_map <- function(df,
                   if(!is.null(threshold)){labs(fill = fill_lab,
                                                caption = paste0(threshold*100,"% Isolation Threshold"))} else {labs(fill = fill_lab)} }
   }
-  
   girafe(ggobj = g, 
          options = list(
            opts_hover(
@@ -1287,13 +1317,10 @@ absorption_map <- function(df,
       
 }
 
-
-
 ############ Hierarchical Map absorption metrics
 hier_ab_map <- function(df, 
                         central_place,
                         threshold = .05){
-  
     g <- ggplot() +
       geom_sf_interactive(aes(fill = eca_membership, 
                               tooltip = if("STATE" %in% names(df)){
@@ -1359,11 +1386,7 @@ hier_ab_map <- function(df,
                                            color:white;
                                            padding:10px;
                                            border-radius:5px;") ))
-  
 }
-
-
-
 
 ############ Map cluster membership counts by absorption 
 clustmember_map <- function(df, 
@@ -1461,7 +1484,6 @@ if(!isTRUE(add_html)){
               legend.text = element_text(size = rel(0.5)),
               legend.position = c(0.9, 0.2)) +
         labs(caption = paste0(5,"% Isolation Threshold")) 
-
     }
   girafe(ggobj = g, 
          options = list(
@@ -1478,11 +1500,7 @@ if(!isTRUE(add_html)){
                                            border-radius:5px;",
                         use_cursor_pos = FALSE,
                         offx = 0, offy = 330) ))
-  
-
-      
 }
-
 
 ############ Map place-centric connectedness for a county 
 place_absorption_map <- function(central_place,
@@ -1595,10 +1613,8 @@ aggregate_industry_output <- function(industry_output_matrix,
                                       connectedness_table,
                                       place = place, 
                                       eca_membership = eca_membership){
-  
   df <- industry_output_matrix
   c <- connectedness_table
-  
   x <- c$eca_membership %>% unique() %>% .[order(.)]
   for(i in x){
     df[, i] <- rowSums(df[, c$place[c$eca_membership == i], drop = FALSE])
@@ -1606,211 +1622,17 @@ aggregate_industry_output <- function(industry_output_matrix,
   df <- df[, x]
 }
 
-
-############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
-one_hierarchical_connectedness <- function(direct_mat, 
-                                           output_mat, 
-                                           space_mat,
-                                           threshold = .05, 
-                                           list_names = NULL){
-  d <- direct_mat
-  o <- output_mat
-  s <- space_mat
-  hct <- list()
-  hsct <- list()
-  hom <- list()
-  hom$level_0 <- o
-  n = 1
-  i = FALSE
-  df <- list()
-  print(list_names)
-  while(i == FALSE){
-    print(paste("level", n))
-    c <- one_direct_connect(d, o, threshold)
-    hct[[paste0("level_", deparse(n))]] <- c
-    i <- all(c$place %in% c$eca_membership) 
-    if (i == TRUE){next}
-    hsct[[paste0("level_", deparse(n))]] <- join_space_with_connectedness(c, s) %>% spatial_cluster()
-    o <- aggregate_industry_output(o, c)
-    hom[[paste0("level_", deparse(n))]] <- o
-    n = n + 1
-  }
-  df[[deparse(list_names)]] <- list("Hierarchical_Connectedness_table" = hct,
-                                    "Hierarchical_Spatial_Cluster_table" = hsct,
-                                    "Hierarchical_Output_mat" = hom)
-}
-
-
-### Need to correct for CBSA capability
-############ industry (output, input, nid, nis) distributions by county
-industry_distribution <- function(industry_aggregate_class = c("sec", "sum", "det"),
-                                  cbp_year,
-                                  ilevel = c("det", "sum", "sec"),
-                                  scale = c("county", "state", "us"),
-                                  data_dir = file.path("data", "robjs"), 
-                                  geo_level = c("county", "state", "national"),
-                                  cbsa_year = NULL){
-  
-  industry_aggregate_class <- match.arg(industry_aggregate_class)
-  ilevel <- match.arg(ilevel)
-  if(ilevel != "det"){
-    bea_year = cbp_year
-  }else{
-    if(isTRUE(cbp_year > "2007")){
-      bea_year = "2012"
-    }else{
-      bea_year = "2007"}}
-  
-  o <-  total_output(cbp_year = cbp_year, 
-                     ilevel = ilevel,
-                     scale = scale,
-                     data_dir = data_dir,
-                     geo_level = geo_level)
-  if(!is.null(cbsa_year)){ 
-    c <- call_cbsa_concord(cbsa_year)
-    c <- c[c$place %in% intersect(c$place, colnames(o)),]
-    c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(colnames(o), c$place)), 
-                    place = c(c$place, setdiff(colnames(o), c$place)))
-    c <- c[order(c$CBSA_CODE), ]
-    rownames(c) <- 1:nrow(c)
-    x <- c$CBSA_CODE %>% unique()
-    cbo <- data.frame(row.names = rownames(o))
-    for(i in x){
-      cbo[, i] <- rowSums(o[, c$place[c$CBSA_CODE == i], drop = FALSE])
-    } 
-    o <- as.matrix(cbo)
-    o[is.na(o)] = 0
-  }
-  
-  i <- industry_input(direct_requirements(bea_year = bea_year,
-                                          ilevel = ilevel), o)
-  nis <- net_input_supply(o, i)
-  nid <- net_input_demand(o, i)
-  
-  indicator_type = c("output", "input", "nis", "nid")
-  ti <- vector("list", length(indicator_type))
-  names(ti) <- indicator_type
-  ti[[1]] <- o
-  ti[[2]] <- i
-  ti[[3]] <- nis
-  ti[[4]] <- nid
-  for (i in 1:length(ti)){
-    ti[[i]] <- melt(ti[[i]])
-    ti[[i]] <- ti[[i]] %>% 
-      filter(value > 0)
-    names(ti[[i]]) <- c("DETAIL", "place", indicator_type[i])
-    ti[[i]]$place <- ti[[i]]$place  %>% formatC(width = 5, format = "d", flag = "0")
-  }
-  
-  c <- bea_io$get_naics_df() %>% 
-    filter(DETAIL != "NaN") %>% 
-    filter(NAICS != "n.a.") %>% 
-    distinct(DETAIL, .keep_all = TRUE) %>% 
-    unnest(., cols = names(.))
-  
-  if (industry_aggregate_class == "sum"){
-    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
-                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
-    names(n) <- c("SUMMARY", "name")
-    sn <- inner_join(n, c, by = "SUMMARY") 
-    sn$abv <- sn$SUMMARY
-  } else if (industry_aggregate_class == "sec") {
-    cord = importr(sec_cord)
-    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
-                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
-    names(n) <- c("SECTOR", "name")
-    n <- left_join(cord, n, by = "SECTOR") 
-    names(n) <- c("BEA_SECTOR", "SECTOR", "name")
-    c[["SECTOR"]] <- substr(c[["SECTOR"]], 1, 2)
-    sn <- inner_join(n, c, by = "SECTOR") 
-    sn$abv <- sn$BEA_SECTOR
-  } else if (industry_aggregate_class == "det") {
-    sn <- c
-    sn <- rename(sn, name = DESCRIPTION)
-    sn$abv <- sn$DETAIL
-  }
-  pal <- data.frame(color = viridis(length(unique(sn$name))),
-                    name = unique(sn$name))
-  sn <- inner_join(sn, pal, by = "name")
-  sn["DETAIL"][sn["NAICS"] == "23*"] <- "23"
-  sn <- sn %>% 
-    distinct(DETAIL, .keep_all = TRUE) 
-  
-  df <- vector("list", length(indicator_type))
-  names(df) <- indicator_type
-  for (i in 1:length(df)){
-    df[[i]] <- inner_join(ti[[i]], sn , by = "DETAIL")
-  }
-  return(df)
-}
-
-
-
-############ Bar charts of industry distributions by county
-industry_distribution_barcharts <- function(data,
-                                            interact = TRUE,
-                                            short = TRUE){
-  df <- c()
-  l <- unique(distinct(data, DETAIL, abv)[order(distinct(data, DETAIL, abv)$DETAIL),]$abv)
-  for (i in 1:length(unique(data$place))){
-    d <- data[data$place == unique(data$place)[i], ]
-    
-    if(isTRUE(interact)){
-      df[[i]] <- ggplot(d, aes(if(isTRUE(short)){x = factor(abv, levels = l)}else{x = factor(name, levels = unique(name))},
-                               y = .data[[names(data)[3]]],
-                               fill = DETAIL,
-                               tooltip = glue("industry: {DETAIL}\n{names(data)[3]}: {round(.data[[names(data)[3]]], 0)}"),  
-                               data_id = DETAIL)) +
-        geom_col_interactive(color = NA)
-    } else {
-      df[[i]] <- ggplot(d, aes(if(isTRUE(short)){x = factor(abv, levels = l)}else{x = factor(name, levels = unique(name))},
-                               y = .data[[names(data)[3]]],
-                               fill = DETAIL)) +
-        geom_col(color = NA)
-    }
-    df[[i]] <- df[[i]] +
-      scale_fill_manual(values = d$color) +
-      theme_minimal() +
-      theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
-            axis.text.y = element_text(size = rel(.75)),
-            plot.subtitle = element_text(size = rel(.75), vjust = -2), 
-            plot.margin = margin(t = 0, r = 50, b = 0, l = 0, unit = "pt")) +
-      labs(x = element_blank(),
-           y = element_blank(),
-           subtitle = names(data)[3],
-           title = element_blank()) +
-      guides(fill = "none")
-    names(df)[i] <- unique(data$place)[i]
-  }
-  return(df)
-}
-
 ############ Multi plot of bar charts of industry distributions for a given county
 industry_dist_plots <- function(central_place,
                                 cbp_year,
-                                cbsa_year = NULL,
-                                interact = TRUE,
-                                short = TRUE,
-                                industry_aggregate_class = c("sec", "sum", "det"),
-                                geo_level = c("county", "state", "national"),
-                                ilevel = c("det", "sum", "sec"),
-                                scale = c("county", "state", "us"),
-                                data_dir = file.path("data", "robjs")
-                                ){
-  
-  idis <- industry_distribution(industry_aggregate_class = industry_aggregate_class,
-                                       cbp_year = cbp_year,
-                                       ilevel = ilevel,
-                                       scale = scale,
-                                       data_dir = data_dir,
-                                       geo_level = geo_level,
-                                       cbsa_year = cbsa_year)
+                                cbsa_clust = FALSE,
+                                ...){
+  if(isTRUE(cbsa_clust)){central_place <- fips2cbsa(central_place)}
+  idis <- industry_distribution(cbp_year = cbp_year, ...)
   bd <-  vector("list")
   for (i in names(idis) ){
     x <- idis[[i]][idis[[i]]$place == central_place, ] 
-    bd[[i]] <- industry_distribution_barcharts(data = x, 
-                                              interact = interact, 
-                                              short = short)
+    bd[[i]] <- industry_distribution_barcharts(data = x, ...)
   }
   pobj <- plot_grid(bd$output[[central_place]],
                     bd$input[[central_place]],
@@ -1831,36 +1653,6 @@ industry_dist_plots <- function(central_place,
 
 
 
-############ html plots of bar charts of industry distributions by county [used in mapping interactive tooltips]
-html_industry_dist_plots <- function(cbp_year,
-                                     industry_aggregate_class = c("sec", "sum", "det"),
-                                     cbsa_year = NULL){
-  
-  t <- industry_distribution(industry_aggregate_class = industry_aggregate_class,
-                             cbp_year = cbp_year,
-                             ilevel = "det",
-                             cbsa_year = cbsa_year)
-  
-  b <-  vector("list")
-  for (i in names(t) ){
-    b[[i]] <- industry_distribution_barcharts(t[[i]], 
-                                              interact = FALSE, 
-                                              short = TRUE)
-  }
-  
-  h <- b
-  
-  for (i in names(h)){
-    print(i)
-    print(Sys.time())
-    for (p in 1:length(h[[i]])){
-      h[[i]][p] <- htmltools::plotTag(b[[i]][p], alt = "") %>% as.character()
-    }
-  }
-  
-  return(h)
-  
-}
 
 ############ Absorption matching outcomes over time
 absorption_match_overtime <- function(years = 2000:2020,

@@ -49,6 +49,7 @@ if (!file.exists(file.path(data_dir, "sum_cord"))){
   rownames(sum_cord) <- 1:nrow(sum_cord)
   sum_cord$SUM <- substr(sum_cord$NAICS, 1, 3)
   sum_cord <- distinct(sum_cord, SUM, .keep_all = TRUE)
+  sum_cord <- sum_cord %>% select(-SUM)
   #write.csv(sum_cord, file.path(find_rstudio_root_file(), "data", "sum_cord"), row.names = FALSE)
   saver(sum_cord)
   rm(sum_cord, x)

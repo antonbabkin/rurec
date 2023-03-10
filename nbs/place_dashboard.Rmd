@@ -113,7 +113,7 @@ industry_dist_plots(central_place = params$county_fips,
 #####Specify the parameter options for national scope maps
 
 #Year of CBP industry output (annual payroll), from ("1986" through "2020") 
-cbp_year = "2012" 
+cbp_year = "2017" 
 
 #Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
 tiger_year = "2013" 
