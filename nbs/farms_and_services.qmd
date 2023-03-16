@@ -22,7 +22,6 @@ params:
 
 ```{r}
 #| cache: false
-#| echo: false
 #| output: false
 library(tidyverse)
 library(ggiraph)
@@ -35,7 +34,6 @@ library(patchwork)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
-geography <- reticulate::import("rurec.pubdata.geography")
 
 ggplot2::theme_set(theme_minimal())
 
@@ -44,8 +42,6 @@ ggplot2::theme_set(theme_minimal())
 
 ```{python}
 #| cache: false
-#| echo: false
-#| output: false
 
 import io
 import shutil
@@ -74,6 +70,7 @@ if r.params["eval_cleanup"]:
 
 ```{python}
 #| cache: false
+#| output: false
 
 def set_zero_value(d, drop_flag=True):
   mask = (d['value_f'] == '(Z)')
@@ -346,6 +343,7 @@ CATTLE, MILK, CORN, HORTICULTURE, POULTRY, "FIELD CROPS, OTHER", VEGETABLE and S
 ```{r}
 #| eval: !expr params$eval_explor
 
+geography <- reticulate::import("rurec.pubdata.geography")
 d <- geography$get_state_df(geometry = FALSE) %>%
   rename(ST = CODE, STATE = NAME) %>%
   select(ST, STATE)
@@ -1041,14 +1039,14 @@ compute_stats <- function(df, var, gr_var = "year") {
 d <- py$prep_data_farm_count() %>%
   mutate(year = factor(year))
 
-t <- compute_stats(d, "farm_count") %>%
+t <- compute_stats(d, "count") %>%
   mutate(
     na_pct = formatC(na_pct, digits = 2, format = "f"),
     across(c(n, mean:max), formatC, digits = 0, format = "d", big.mark = ",")
     )
 print(t)
 
-ggplot(d, aes(farm_count, year)) +
+ggplot(d, aes(count, year)) +
   geom_violin(color = "blue", na.rm = TRUE) +
   geom_boxplot(na.rm = TRUE, alpha = 0.5) +
   stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
@@ -1064,11 +1062,11 @@ Growth rate of number of farm operations
 d <- py$prep_data_farm_count() %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
-  mutate(farm_count_gr = 100 * 2 * (farm_count - lag(farm_count)) / (farm_count + lag(farm_count))) %>%
+  mutate(count_gr = 100 * 2 * (count - lag(count)) / (count + lag(count))) %>%
   filter(year > 2002) %>%
   mutate(year = factor(year))
 
-t <- compute_stats(d, "farm_count_gr") %>%
+t <- compute_stats(d, "count_gr") %>%
   mutate(
     n = formatC(n, format = "d", big.mark = ","),
     na_pct = formatC(na_pct, digits = 2, format = "f"),
@@ -1076,7 +1074,7 @@ t <- compute_stats(d, "farm_count_gr") %>%
     )
 print(t)
 
-ggplot(d, aes(farm_count_gr, year)) +
+ggplot(d, aes(count_gr, year)) +
   geom_violin(color = "blue", na.rm = TRUE) +
   geom_boxplot(na.rm = TRUE, alpha = 0.5) +
   stat_summary(fun = "mean", geom = "point", color = "red", na.rm = TRUE) +
@@ -1580,8 +1578,8 @@ ggplot(d, aes(sales_mean_gr, year)) +
 
 d <- py$prep_data_farm_sales() %>% 
   inner_join(py$prep_data_farm_count()) %>%
-  select(year, stcty, farm_count, farm_count_sales_crop) %>%
-  mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
+  select(year, stcty, count, count_sales_crop) %>%
+  mutate(sales_crop_farm_pct = 100 * count_sales_crop / count) %>%
   mutate(year = factor(year))
 
 t <- compute_stats(d, "sales_crop_farm_pct") %>%
@@ -1606,8 +1604,8 @@ Growth of share of farms with crop sales
 
 d <- py$prep_data_farm_sales() %>% 
   inner_join(py$prep_data_farm_count()) %>%
-  select(year, stcty, farm_count, farm_count_sales_crop) %>%
-  mutate(sales_crop_farm_pct = 100 * farm_count_sales_crop / farm_count) %>%
+  select(year, stcty, count, count_sales_crop) %>%
+  mutate(sales_crop_farm_pct = 100 * count_sales_crop / count) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
   mutate(sales_crop_farm_pct_gr = sales_crop_farm_pct - lag(sales_crop_farm_pct)) %>%
@@ -1637,8 +1635,8 @@ ggplot(d, aes(sales_crop_farm_pct_gr, year)) +
 
 d <- py$prep_data_farm_sales() %>% 
   inner_join(py$prep_data_farm_count()) %>%
-  select(year, stcty, farm_count, farm_count_sales_animal) %>%
-  mutate(sales_crop_animal_pct = 100 * farm_count_sales_animal / farm_count) %>%
+  select(year, stcty, count, count_sales_animal) %>%
+  mutate(sales_crop_animal_pct = 100 * count_sales_animal / count) %>%
   mutate(year = factor(year))
 
 t <- compute_stats(d, "sales_crop_animal_pct") %>%
@@ -1663,8 +1661,8 @@ Growth of share of farms with animal sales
 
 d <- py$prep_data_farm_sales() %>% 
   inner_join(py$prep_data_farm_count()) %>%
-  select(year, stcty, farm_count, farm_count_sales_animal) %>%
-  mutate(sales_animal_farm_pct = 100 * farm_count_sales_animal / farm_count) %>%
+  select(year, stcty, count, count_sales_animal) %>%
+  mutate(sales_animal_farm_pct = 100 * count_sales_animal / count) %>%
   group_by(stcty) %>%
   arrange(stcty, year) %>%
   mutate(sales_animal_farm_pct_gr = sales_animal_farm_pct - lag(sales_animal_farm_pct)) %>%

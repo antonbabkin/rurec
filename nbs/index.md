@@ -5,7 +5,7 @@ jupytext:
     extension: .md
     format_name: myst
     format_version: 0.13
-    jupytext_version: 1.14.0
+    jupytext_version: 1.14.4
 kernelspec:
   display_name: Python 3 (ipykernel)
   language: python
@@ -129,6 +129,26 @@ bea_io.get_naics_df().head()
 
 from rurec import ag_output
 ag_output.get_farm_sales_by_bea_detail(2017, 'national')
+```
+
+# Farms and ag servies relationship
+
+Reproduction of the entire notebook. Parts can be toggled on and off by changing `eval_` params.
+
+```{code-cell} ipython3
+:tags: []
+
+import os
+from rurec.reseng.nbd import Nbd
+nbd = Nbd('rurec')
+os.chdir(nbd.root)
+
+!quarto render nbs/farms_and_services.qmd \
+  -P eval_cleanup:true \
+  -P eval_tests:true \
+  -P eval_explor:true \
+  -P eval_anal_regr:true \
+  -P eval_summ_stats:true
 ```
 
 +++ {"tags": []}
