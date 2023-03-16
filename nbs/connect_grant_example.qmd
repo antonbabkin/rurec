@@ -20,6 +20,7 @@ library(geosphere)
 
 ```
 
+::: panel-tabset
 ## Example
 
 ```{r}
@@ -194,11 +195,11 @@ Toy_Q  %>% round(3)
 ```
 
 "Connectedness Classification"
+
 ```{r}
 (data.frame(County = colnames((Toy_Queeg_R * Toy_Q )), Match = colnames((Toy_Queeg_R * Toy_Q ))[apply((Toy_Queeg_R * Toy_Q ), 1, which.max)]))
 
 ```
-
 
 ```{r}
 #Direct Requirements
@@ -311,5 +312,135 @@ as.matrix(rowSums(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0))) - as.matri
 
 ```
 
+## New Derivation
 
+**Interindustry Flows**
 
+Assume that the economy can be categorized into $n$ sectors and denote the total output (production) of sector $i$, as $x_{i}$. In addition, let sales to purchasers who are external or *exogenous* to the productive "industry" sectors e.g., households, government, capital investments, and foreign trade, be referred to as *final demand*. Denote total final demand for sector $i$'s product, as $f_{i}$. The accounting equation for the way sector $i$ distributes its product to other sectors and to final demand is given by:
+
+```{=tex}
+\begin{equation}
+x_{i} = z_{i1} + ... + z_{ij} + ... + z_{in} + f_{i} = \sum^{n}_{j=1} z_{ij} + f_{i}
+\end{equation}
+```
+The $z_{ij}$ terms represent monetary transactions between pairs of sectors or *interindustry* sales (or *intermediate* sales) by sector $i$ to all sectors $j$ (including itself, when $j = i$). This single equation represents sector $i$'s *output*. Similarly, there are output equations for each of the $n$ *endogenous* sectors in the economy.
+
+```{=tex}
+\begin{align*}
+& x_{1} = z_{11} + ... + z_{1j} + ... + z_{1n} + f_{1} \\
+& \vdots \\
+& x_{i} = z_{i1} + ... + z_{ij} + ... + z_{in} + f_{i} \\
+& \vdots \\
+& x_{n} = z_{n1} + ... + z_{nj} + ... + z_{nn} + f_{n} \\
+\end{align*}
+```
+The total output, interindustry sales, and final demand are given by:
+
+```{=tex}
+\begin{equation}
+\mathbf{x} = 
+  \begin{bmatrix} 
+  x_{1} \\ 
+  \vdots \\ 
+  x_{n} \\ 
+  \end{bmatrix}, \; \;
+\mathbf{Z} = 
+  \begin{bmatrix}
+    z_{11} & \dots & z_{1n}\\
+    \vdots & \ddots & \vdots\\
+    z_{n1} & \dots & z_{nn} \\
+  \end{bmatrix}
+, \; \text{  and } \; \;
+\mathbf{f} = 
+  \begin{bmatrix}
+    f_{1} \\
+    \vdots \\
+    f_{n} \\
+  \end{bmatrix}
+\end{equation}
+```
+with the output equations for distribution of each sector's sales summarized in matrix notation as:
+
+$$\mathbf{x} = \mathbf{Zi} + \mathbf{f}$$
+
+where $\mathbf{i}$ represent a column vector of 1's. (Postmultiplication of a matrix by $\mathbf{i}$ creates a column vector whose elements are the row sums of the matrix. Similarly, premultiplication of a matrix by $\mathbf{i'}$ creates a row vector whose elements are the column sums of the matrix.)
+
+The magnitudes of the interindustry flows can be recorded in a table, with sectors of origin (producers) listed on the left and the same sectors, now destinations (purchasers), listed across the top. From the column point of view, these show each sector's inputs; from the row point of view the figures are each sector's outputs; hence the name *input--output* table.
+
+```{=tex}
+\begin{equation}
+\begin{matrix}
+&  & 1 & \dots & j & \dots & n \\ 
+\hline
+1 & & z_{11} & \dots & z_{1j} & \dots & z_{1n} \\ 
+\vdots & & \vdots &  & \vdots &  & \vdots \\ 
+i & & z_{i1} & \dots & z_{ij} & \dots & z_{in} \\ 
+\vdots & & \vdots &  & \vdots &  & \vdots \\ 
+n & & z_{n1} & \dots & z_{nj} & \dots & z_{nn} \\ 
+\hline
+\end{matrix}
+\end{equation}
+```
+**Direct Requirements/Technical Coefficients**
+
+In input--output studies, a fundamental assumption is that the interindustry flows from $i$ to $j$ depend entirely on the total output of sector $j$ for that same time period. The quantity of the output of sector $i$ absorbed by sector $j$ per unit of its total output is identified as $a_{ij}$ and called the *input coefficient* of sector $i$'s product in sector $j$.
+
+$$a_{ij} = z_{ij} / x_{j}$$
+
+A complete table of input coefficients is called a *structural matrix*, given by: $\mathbf{A} = \left[a_{ij}\right]$. This ratio is also called the *technical coefficient*; the terms *input--output coefficient* and *direct input coefficient* are also used. This ratio specifies the required amount of industry $i$'s commodity used to produce of one unit of industry $j$'s commodity, or how much of the $i$th commodity is used for the production of each unit of the $j$th commodity. Therefore the $n \times n$ matrix of technical coefficients can be represented as
+
+$$\mathbf{A} = \mathbf{Z\hat{x}}^{-1}$$ where the "hat" over a vector denotes a diagonal matrix with the elements of the vector along the main diagonal i.e.,
+
+```{=tex}
+\begin{equation}
+\mathbf{\hat{x}^{-1}} = 
+  \begin{bmatrix}
+    \dfrac{1}{x_{1}} & \dots & 0\\
+    \vdots & \ddots & \vdots\\
+    0 & \dots & \dfrac{1}{x_{n}} \\
+  \end{bmatrix}
+\end{equation}
+```
+and the inverse must satisfy the usual requirement $(\mathbf{\hat{x}})(\mathbf{\hat{x}})^{-1} = \mathbf{I}$.
+
+Note we must assume that a sector uses inputs in *fixed proportions*. The form of the production functions inherent to this system are isoquant "curves" that exhibit constant output. Such Leontief production functions require inputs in fixed proportions where a fixed amount of each input is required to produce one unit of output. Given a set of fixed technical coefficients, the accounting equations for the distribution of total output to other sectors and to final demand can be rewritten as
+
+```{=tex}
+\begin{align*}
+& x_{1} = a_{11}x_{1} + ... + a_{1j}x_{i} + ... + a_{1n}x_{n} + f_{1} \\
+& \vdots \\
+& x_{i} = a_{i1}x_{1} + ... + a_{ij}x_{i} + ... + a_{in}x_{n} + f_{i} \\
+& \vdots \\
+& x_{n} = a_{n1}x_{1} + ... + a_{nj}x_{i} + ... + a_{nn}x_{n} + f_{n} \\
+\end{align*}
+```
+Or in matrix notation as
+
+$$\mathbf{x} = \mathbf{Ax} + \mathbf{f}$$
+
+These equations serve to make explicit the dependence of interindustry flows on the total outputs of each sector.
+
+**Total Requirements/Leontief Inverse**
+
+Rearranging the production equation gives:
+
+$$\left(\mathbf{I} - \mathbf{A}\right)\mathbf{x} = \mathbf{f}$$
+
+And if $\left(\mathbf{I} - \mathbf{A}\right)$ is non-singular, i.e., $\left(\mathbf{I} - \mathbf{A}\right)^{-1}$ exists, then the equation is further refined by
+
+$$\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$$ or sometimes denoted as
+
+$$\mathbf{x} = \mathbf{Lf}$$
+
+where $\left(\mathbf{I} - \mathbf{A}\right)^{-1} = \mathbf{L} = \left[l_{ij}\right]$ is known as the *Leontief inverse* or the *total requirements matrix*.
+
+**Regional Specification**
+
+Thus far the economy has been specified at the national level, without any regional heterogeneity. Although the national level coefficients are averages of data from individual producers in specific regions, the structure of production in a particular region may be identical to or it may differ from the national level tables. In addition, the smaller the spatio-economic scope the more dependent that economy is on trade with "outside" areas -- transactions that cross the region's borders -- both for sales of regional outputs and purchases of inputs needed for production.
+
+Let superscript $r$ designate "region $r$" in the same way that subscript $i$ denotes "sector $i$." Thus, just as $X_{i}$ denotes the gross output of sector $i$, let $\mathbf{x^{r}} = [x^{r}_{i}]$ denote the vector of gross output of sectors in region $r$. Similarly, $\mathbf{f^{r}} = [f^{r}_{i}]$ represents the vector of exogenous demand for goods made in region $r$.
+
+One problem we face empirically is that only a national technical coefficients matrix, $\mathbf{A}$, is readily available. To start, we would like to have a matrix showing inputs from firms *in the region* to production *in that region*. Denote this matrix by $\mathbf{A^{rr}} = [a^{rr}_{ij}]$, where $a^{rr}_{ij}$ is the amount of input from sector $i$ in $r$ per dollar's worth of output of sector $j$ in $r$.
+
+For now, we assume that local producers use the same production recipes as the national coefficients table, meaning that the *technology* of production in each sector in region $r$ is the same as in the nation as a whole.
+:::

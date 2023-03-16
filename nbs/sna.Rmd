@@ -1,0 +1,179 @@
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  sna_state: "24"
+  sna_place: "24510"
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+library(tidyr)
+library(Matrix)
+library(dplyr)
+
+############ To add in future for more capabilities
+ library(ggplot2)
+ library(ggiraph)
+ library(glue)
+ library(RColorBrewer)
+ library(viridis)
+ library(reshape2)
+ library(scales)
+ library(cowplot)
+ library(ggnewscale)
+library(qgraph)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+
+```
+
+```{r parameters, include = FALSE}
+#Initialize parameter values
+params
+
+```
+
+::: panel-tabset
+
+### Social Network Analysis
+
+Social Network Analysis (SNA):
+
+In network parlance the social actors (e.g. counties) are nodes or vertices and the ties between them are edges. The data for a social network can be organized as an adjacency matrix, with non-zero entries in the $i,j^{th}$  entry of the $i^{th}$ node shares an edge with the $j^{th}$ node.
+
+If the edges have weights, the entries in the non-zero entries are the weights for the edges. If the edges are not weighted, the non-zero entries are simply one.
+Directed graphs have edges originating from one node and ending in another. If the network is undirected this matrix is symmetric.
+
+
+```{r sna}
+
+#####Specify
+
+#Year of CBP industry output (annual payroll), from ("1986" through "2020") 
+cbp_year <- "2017"
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
+tiger_year = "2013" 
+
+#TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
+normalized = TRUE 
+#NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
+#e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
+impedance = NULL
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
+cbsa_year = NULL 
+
+conmat <- connectedness_matrix(cbp_year = cbp_year,
+                           normalized = normalized,
+                           tiger_year = tiger_year,
+                           impedance = impedance,
+                           ilevel = ilevel,
+                           cbsa_year = cbsa_year)
+
+```
+
+```{r sample sna}
+
+#Specify state sub sample
+df <-  grep(paste0("^", params$sna_state), rownames(conmat)) %>% conmat[., .] 
+  
+```
+
+
+```{r qgraph}
+
+#Edges with absolute weight that are not above this value are REMOVED from the network.
+threshold = 0.05
+
+Q <- qgraph(df, 
+            threshold = threshold, 
+            layout = 'spring', 
+            vsize = 4, 
+            labels = colnames(df))
+
+```
+
+Network plot of directed and weighted state sub-sample absorption matrix with minimium `r threshold` edge weight threshold.
+
+```{r flow graph}
+
+Q <- qgraph(df,
+            threshold = 0,
+            layout = 'spring',
+            vsize = 4,
+            labels = colnames(df)) %>%
+      flow(from = params$sna_place)
+
+
+#centrality_auto(Q, weighted = TRUE, signed = TRUE)
+#centrality(Q)
+```
+
+Flow to and from `r params$sna_place`
+
+```{r centrality plot 1}
+
+centralityPlot(Q, include = c("Betweenness","Closeness"), decreasing = TRUE)
+```
+
+Betweeness:  measure of the extent to which the node connects disparate group. A node’s betweenness is the number of shortest paths the node is included in divided by the total number of shortest paths.
+
+Closeness: measures how well connected a node is to every other node in the network. A node’s closeness is the average number of hops required to reach every other node in the network. 
+
+
+```{r centrality plot 2}
+centralityPlot(Q, include = c("InStrength", "OutStrength"), decreasing = TRUE)
+```
+
+Degree is the number of edges for a node. In a directed network, edges have a starting and end node, thus there are both the in-degree (number of edges the node is an end node of), out-degree (number of edges a node is a starting node of).
+
+InStrength (weighted in-degree): Strength of incoming edges (pointing to the node). 
+
+OutStrength (weighted out-degree): Strength of outgoing edges (pointing away from the node).
+
+
+```{r centrality plot 3}
+centralityPlot(Q, include = c("OutExpectedInfluence", "InExpectedInfluence"), decreasing = TRUE)
+
+```
+
+InExpectedInfluence: Expected incoming influence - sum of incoming edge weights connected to a node (not made absolute).
+
+OutExpectedInfluence: Expected outgoing influence - sum of outgoing edge weights connected to a node (not made absolute).
+
+
+[SNA INTRO](http://www.stat.yale.edu/~blc3/SNA2016/Intro_SNA_Presentation.pdf) 
+[SNA BEGIN](https://builtin.com/data-science/social-network-analysis)
+
+
+:::
+
+
+

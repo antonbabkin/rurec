@@ -1,0 +1,361 @@
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  county_fips: "21195"
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+library(tidyr)
+library(Matrix)
+library(dplyr)
+
+############ To add in future for more capabilities
+ library(ggplot2)
+ library(ggiraph)
+ library(glue)
+ library(RColorBrewer)
+ library(viridis)
+ library(reshape2)
+ library(scales)
+ library(cowplot)
+ library(ggnewscale)
+library(qgraph)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+
+```
+
+```{r parameters, include = FALSE}
+#Initialize parameter values
+params
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020")
+tiger_year = "2020" 
+
+#Get county and state names of params:county_fips
+t <- call_tiger(tiger_year, 
+                geometry = FALSE)
+
+county_name <- t$NAME[t$place == params$county_fips]
+state_name <- t$STATE[t$place == params$county_fips]
+
+```
+
+::: panel-tabset
+
+### `r county_name`, `r state_name` Industry Distributions
+
+```{r industry distribution tables}
+
+#####Specify industry output/farms sales data for industry distribution tables
+
+#Year of CBP industry output (annual payroll), from ("1986" through "2020")
+cbp_year <- "2017"
+
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#industry level aggregation class, one of ("det", "sum", "sec"), default == "sec"
+industry_aggregate_class = "sec"
+
+```
+
+
+```{r industry distribution plots}
+
+industry_dist_plots(central_place = params$county_fips,
+                    cbp_year = cbp_year,
+                    ilevel = ilevel,
+                    industry_aggregate_class = industry_aggregate_class,
+                    interact = TRUE)
+
+```
+
+`r county_name`, `r state_name` industry activity distribution. \
+`r cbp_year` CBP data. \
+`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r if(industry_aggregate_class == "det"){"Detail"}else if(industry_aggregate_class == "sum"){"Summary"}else if(industry_aggregate_class == "sec"){"Sector"}`-level industry structure aggregate from `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}`-level structure.
+
+
+
+### `r county_name`, `r state_name` Economic Catchment Area
+
+
+```{r national connectedness}
+
+#####Specify the parameter options for national scope maps
+
+#Year of CBP industry output (annual payroll), from ("1986" through "2020") 
+cbp_year = "2012" 
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
+tiger_year = "2013" 
+
+
+#Minimum matching absorption cutoff, typically only specified if absorption is normalized, range [0,1], default == 0.05
+threshold = .05 
+#NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
+#e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
+impedance = NULL
+#TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
+normalized = TRUE 
+#TRUE or FALSE, row-match for forward supply linkages column-match for backward demand linkages in matching calculation of county-by-county absorption matrix, default == TRUE
+row_max_match = TRUE 
+#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
+cbsa_year = NULL 
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
+add_html = TRUE
+
+
+df <- spatial_connectedness(cbp_year = cbp_year,
+                            tiger_year = tiger_year,
+                            threshold = threshold,
+                            impedance = impedance, 
+                            normalized = normalized,
+                            row_max_match = row_max_match,
+                            cbsa_year = cbsa_year,
+                            ilevel = ilevel,
+                            add_html = add_html)
+
+
+```
+
+
+```{r ECA map}
+
+hier_ab_map(df = df,
+            central_place = params$county_fips,
+            threshold = threshold)
+
+```
+
+
+### `r county_name`, `r state_name` Absorption Maps
+
+```{r place connectedness}
+
+#####Specify the parameter options for place specific maps
+
+#Year of CBP industry output (annual payroll), from ("1986" through "2020") 
+cbp_year <- "2017"
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
+tiger_year = "2013" 
+
+#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
+cbsa_year = NULL 
+#NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
+#e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
+impedance = NULL
+#TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
+normalized = TRUE 
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
+add_html = TRUE
+
+
+df <- place_centric_connect(central_place = params$county_fips,
+                            cbp_year = cbp_year,
+                            tiger_year = tiger_year,
+                            impedance = impedance, 
+                            normalized = normalized,
+                            cbsa_year = cbsa_year,
+                            ilevel = ilevel,
+                            add_html = add_html)
+
+```
+
+`r county_name`, `r state_name` connectedness to the nation
+
+```{r place absorption map 1}
+
+#####Specify the display options for place specific maps
+
+#row-match forward supply linkages or column-match backward demand linkages in absorption matrix, one of "export_absorption" or "import_absorption"
+fill <- "export_absorption"
+
+#TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
+add_html = FALSE 
+#TRUE or FALSE, set color scale min and max to (0,1) or set color scale min and max to fill variable min and max, default == TRUE
+unit_scale = TRUE
+
+place_absorption_map(central_place = params$county_fips,
+                     df = df,
+                     fill = fill,
+                     add_html = add_html,
+                     unit_scale = unit_scale)
+
+```
+
+`r if(fill == "export_absorption"){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` absorption. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r cbp_year` CBP data. \
+`r cbp_year` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r tiger_year` county boundary year. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+No spatial impedance.
+
+
+```{r place absorption map 2}
+
+#####Specify the display options for place specific maps
+
+#row-match forward supply linkages or column-match backward demand linkages in absorption matrix, one of "export_absorption" or "import_absorption"
+fill <- "import_absorption"
+
+#TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
+add_html = FALSE 
+#TRUE or FALSE, set color scale min and max to (0,1) or set color scale min and max to fill variable min and max, default == TRUE
+unit_scale = TRUE
+
+place_absorption_map(central_place = params$county_fips,
+                     df = df,
+                     fill = fill,
+                     add_html = add_html,
+                     unit_scale = unit_scale)
+
+```
+
+`r if(fill == "export_absorption"){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` absorption. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r cbp_year` CBP data. \
+`r cbp_year` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r tiger_year` county boundary year. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+No spatial impedance.
+
+
+### `r county_name`, `r state_name` Absorption Change Maps
+
+```{r place connectedness delta}
+
+#####Specify the parameter options for place specific maps - with changes over time
+
+#Sample year of industry output data
+sample_years = c("2017", "2012", "2007", "2002")
+#combn(sample_years, 2) #table of combinations 
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == "2013"
+tiger_year = "2013" 
+#NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
+#e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
+impedance = NULL
+#TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
+normalized = TRUE 
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE
+add_html = FALSE
+
+df <- place_connect_delta(central_place = params$county_fips,
+                          sample_years = sample_years,
+                          tiger_year = tiger_year,
+                          impedance = impedance, 
+                          normalized = normalized,
+                          ilevel = ilevel,
+                          add_html = add_html)
+
+#Set scale min and max to include extremes across all years 
+delta_min <- df %>% select( grep("delta", names(df), value = TRUE)) %>% st_set_geometry(., NULL) %>% min()
+delta_max <- df %>% select( grep("delta", names(df), value = TRUE)) %>% st_set_geometry(., NULL) %>% max()
+
+```
+
+
+```{r place absorption delta map 1}
+
+#####Specify the display options for place specific maps over time
+
+#Starting year of place specific absorption, one of "sample_years" specified above
+y1 <- "2012"
+
+#Ending year of place specific absorption, one of "sample_years" specified above
+y2 <- "2017"
+
+#row-match forward supply linkages or column-match backward demand linkages in absorption matrix, one of "export_absorption_delta" or "import_absorption_delta"
+fill <- "export_absorption_delta" 
+
+
+absorption_delta_map(central_place = params$county_fips,
+                     df = df,
+                     fill = paste0(fill, "_", substr(y1, 3, 4), substr(y2, 3, 4)),
+                     delta_min = delta_min,
+                     delta_max = delta_max)
+
+```
+
+`r y1` to `r y2`. \
+`r if(fill == "export_absorption_delta"){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` absorption. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r tiger_year` county boundary year. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+No spatial impedance. \
+
+
+
+```{r place absorption delta map 2}
+
+#####Specify the display options for place specific maps over time
+
+#Starting year of place specific absorption, one of "sample_years" specified above
+y1 <- "2002"
+
+#Ending year of place specific absorption, one of "sample_years" specified above
+y2 <- "2017"
+
+#row-match forward supply linkages or column-match backward demand linkages in absorption matrix, one of "export_absorption_delta" or "import_absorption_delta"
+fill <- "export_absorption_delta" 
+
+
+absorption_delta_map(central_place = params$county_fips,
+                     df = df,
+                     fill = paste0(fill, "_", substr(y1, 3, 4), substr(y2, 3, 4)),
+                     delta_min = delta_min,
+                     delta_max = delta_max)
+
+```
+
+`r y1` to `r y2`. \
+`r if(fill == "export_absorption_delta"){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` absorption. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r tiger_year` county boundary year. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+No spatial impedance. \
+
+
+:::
+
+
+

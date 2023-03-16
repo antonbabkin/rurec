@@ -1,0 +1,276 @@
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+library(tidyr)
+library(Matrix)
+library(dplyr)
+
+############ To add in future for more capabilities
+ library(ggplot2)
+ library(ggiraph)
+ library(glue)
+ library(RColorBrewer)
+ library(viridis)
+ library(reshape2)
+ library(scales)
+ library(cowplot)
+ library(ggnewscale)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+
+```
+
+```{r parameters, include = FALSE}
+#Initialize parameter values
+#params
+
+```
+
+::: panel-tabset
+
+### National Absorption Maps
+
+```{r national connectedness}
+
+#####Specify the parameter options for national scope maps
+
+#Year of CBP industry output (annual payroll), from ("1986" through "2020") 
+cbp_year = "2012" 
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
+tiger_year = "2013" 
+
+
+#Minimum matching absorption cutoff, typically only specified if absorption is normalized, range [0,1], default == 0.05
+threshold = .05 
+#NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
+#e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
+impedance = NULL
+#TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
+normalized = TRUE 
+#TRUE or FALSE, row-match for forward supply linkages column-match for backward demand linkages in matching calculation of county-by-county absorption matrix, default == TRUE
+row_max_match = TRUE 
+#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
+cbsa_year = NULL 
+#BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
+ilevel = "det"
+#TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
+add_html = TRUE
+
+
+df <- spatial_connectedness(cbp_year = cbp_year,
+                            tiger_year = tiger_year,
+                            threshold = threshold,
+                            impedance = impedance, 
+                            normalized = normalized,
+                            row_max_match = row_max_match,
+                            cbsa_year = cbsa_year,
+                            ilevel = ilevel,
+                            add_html = add_html)
+
+
+
+```
+
+
+```{r cluster map}
+
+#variable name for alpha value in map hover tooltip, default == "max_absorption_alpha"
+#e.g., "max_absorption_alpha" "absorption_alpha_gini" "absorption_alpha_total" "absorption_alpha_mean" "absorption_alpha_sd" or a user specified transformation
+alpha = "max_absorption_alpha"
+
+#TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
+add_html = TRUE 
+
+clustmember_map(df = df,
+                alpha = alpha,
+                add_html = add_html)
+
+```
+
+National cluster membership. \
+`r cbp_year` CBP data. \
+`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r tiger_year` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+No spatial impedance. \
+
+```{r absorption map 1}
+
+#Variable name for alpha value in map hover tooltip
+#e.g., one of "max_absorption_alpha" "absorption_alpha_gini" "absorption_alpha_total" "absorption_alpha_mean" "absorption_alpha_sd" or a user specified transformation
+fill = "max_absorption_alpha"
+
+#Display label in map
+fill_lab = "Max Absorption"
+
+#TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
+add_html = FALSE 
+
+#TRUE or FALSE, set color scale min and max to (0,1) or set color scale min and max to fill variable min and max, default == TRUE
+unit_scale = TRUE
+
+absorption_map(df = df,
+               add_html = add_html,
+               threshold = threshold,
+               fill = fill, 
+               fill_lab = fill_lab,
+               unit_scale = unit_scale)
+
+
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r tiger_year` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+No spatial impedance.
+
+
+```{r absorption map 2}
+
+#Variable name for alpha value in map hover tooltip
+#e.g., one of "max_absorption_alpha" "absorption_alpha_gini" "absorption_alpha_total" "absorption_alpha_mean" "absorption_alpha_sd" or a user specified transformation
+fill = "absorption_alpha_gini"
+
+#Display label in map
+fill_lab = "Absorption Gini"
+
+#TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
+add_html = FALSE 
+
+#TRUE or FALSE, set color scale min and max to (0,1) or set color scale min and max to fill variable min and max, default == TRUE
+unit_scale = TRUE
+
+absorption_map(df = df,
+               add_html = add_html,
+               threshold = threshold,
+               fill = fill, 
+               fill_lab = fill_lab,
+               unit_scale = unit_scale)
+
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
+`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
+`r tiger_year` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+No spatial impedance. \
+A Gini of 0 is no concentration and Gini of 1 is complete concentration. 
+
+
+### National Absorption Statistics
+
+```{r absorption distribution}
+
+#####Specify year range for normalized and nominal absorption stats
+years = 2000:2020
+
+  if (file.exists(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot") ) ){
+    normal_absorb_ot <- readRDS(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot"))
+  } else {
+    normal_absorb_ot <- absorption_match_overtime(years = years,
+                                                  normalized = TRUE,
+                                                  ilevel = ilevel,
+                                                  threshold = threshold,
+                                                  cbsa_year = cbsa_year,
+                                                  row_max_match = row_max_match,
+                                                  tiger_year = tiger_year)
+
+    saveRDS(normal_absorb_ot,  file = file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot") )
+  }
+
+  if (file.exists(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") ) ){
+    nominal_absorb_ot <- readRDS(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot"))
+  } else {
+    nominal_absorb_ot <- absorption_match_overtime(years = years,
+                                                    normalized = FALSE,
+                                                    ilevel = ilevel,
+                                                    threshold = threshold,
+                                                    cbsa_year = cbsa_year,
+                                                    row_max_match = row_max_match,
+                                                    tiger_year = tiger_year)
+
+
+    saveRDS(nominal_absorb_ot,  file = file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") )
+  }
+
+```
+
+
+```{r absorption density}
+
+
+#Specify density fill and label
+fill = "max_absorption_alpha"
+fill_lab = "Max Absorption Alpha"
+
+#TRUE or FALSE, label if using normal_absorb_ot or nominal_absorb_ot
+normalized = TRUE
+#NULL, otherwise a mathematical transformation of x-axis units 
+#e.g., "log10"
+trans = NULL
+#colors for specific year ranges of interest
+colorbreaks = c("#440154FF" = 2000:2006, "#1E9C89FF" = 2007:2016 , "#D64B40FF" = 2017, "#FDE725FF" =  2018:2020)
+
+absorption_density_plot(df = normal_absorb_ot,
+                        fill = fill,
+                        fill_lab = fill_lab,
+                        normalized = normalized,
+                        trans = trans,
+                        colorbreaks = colorbreaks)
+
+
+```
+
+`r fill_lab` density. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r min(years)` to `r max(years)` CBP data. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching.
+
+
+:::
+
+
+
