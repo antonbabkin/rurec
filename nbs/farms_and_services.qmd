@@ -10,10 +10,10 @@ format:
 execute:
   cache: true
 params:
-  eval_cleanup: false
-  eval_tests: false
-  eval_explor: false
-  eval_summ_stats: false
+  eval_cleanup: true
+  eval_tests: true
+  eval_explor: true
+  eval_summ_stats: true
   eval_anal_regr: true
   years: [2002, 2007, 2012, 2017]
 ---
@@ -25,7 +25,6 @@ params:
 #| output: false
 library(tidyverse)
 library(ggiraph)
-library(ggpp)
 library(ggside)
 library(glue)
 library(margins)
@@ -62,7 +61,7 @@ PATH = {
 
 if r.params["eval_cleanup"]:
   print('Removing cached data...')
-  shutil.rmtree(PATH['prep'])
+  shutil.rmtree(PATH['prep'], ignore_errors=True)
 
 ```
 
