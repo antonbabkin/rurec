@@ -1,0 +1,22 @@
+Package: rurec
+Title: Rural economy
+
+Imports:
+  markdown,
+  reticulate,
+  margins,
+  tidyverse,
+  ggiraph,
+  ggside,
+  huxtable,
+  patchwork,
+  cowplot,
+  ggnewscale,
+  qgraph,
+  openxlsx,
+  rlog,
+  sf,
+  geosphere,
+  spdep,
+  REAT,
+  arrow

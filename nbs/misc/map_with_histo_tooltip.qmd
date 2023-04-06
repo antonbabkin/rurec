@@ -1,0 +1,107 @@
+---
+title: "Interactive map with histogram tooltips"
+format:
+  html:
+    code-fold: true
+    embed-resources: true
+---
+
+This notebook is an example of an interactive map with images (histogram plots) with images shown in mouseover tooltips.
+Notebook can be rendered as a static HTML file and retain interactivity, i.e. it does not require "kernel" running in the background.
+All popup images are pre-generated and embedded in the HTML file as binary blobs.
+
+Prepare R libraries.
+
+```{r}
+#| output: false
+library(tidyverse)
+library(ggiraph)
+library(reticulate)
+reticulate::use_condaenv("rurec")
+
+# S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries ----
+
+# Convert Python geopandas.GeoSeries to R sfc object
+py_to_r.geopandas.geoseries.GeoSeries <- function(x) {
+  crs <- x$crs$to_epsg()
+  # GeoSeries.to_wkt() returns numpy array of WKT strings, which is automatically converted to R char array
+  x <- x$to_wkt()
+  # convert char array to sfc, keeping original CRS
+  sf::st_as_sfc(x, crs = sf::st_crs(crs))
+}
+
+# Convert Python geopandas.GeoDataFrame to R sf object
+py_to_r.geopandas.geodataframe.GeoDataFrame <- function(x) {
+  # GeoSeries automatically converts to sfc
+  geom_col <- x$geometry
+  # convert geopandas.GeoDataFrame to pandas.DataFrame,
+  # which automatically converts to R data.frame
+  pd <- import("pandas")
+  x <- pd$DataFrame(x)
+  # replace geometry with sfc object
+  x$geometry <- geom_col
+  # convert data.frame to sf object
+  sf::st_as_sf(x)
+}
+```
+
+Prepare Python libraries, load and assemble dataset.
+
+```{python}
+#| output: false
+import numpy as np
+import pandas as pd
+from rurec.pubdata import geography
+from rurec import ag_output
+
+
+df = geography.get_county_df()\
+  .query('STATE_CODE == "55"')\
+  .rename(columns=str.lower)\
+  .rename(columns={'code': 'stcty'})\
+  [['stcty', 'name', 'geometry']]
+
+d = ag_output.get_farm_sales_by_bea_detail(2017, 'county')\
+  .rename(columns={'1111A0': 'oilseed', '1111B0': 'grain', '111200': 'vegetable', '111300': 'fruit', '111400': 'horticulture', '111900': 'other_crop', '112120': 'dairy', '1121A0': 'beef', '112300': 'poultry', '112A00': 'other_animal'})\
+  .reset_index().rename(columns=str.lower)
+
+df = df.merge(d, 'left', 'stcty')
+
+```
+
+For every county in the dataset, create a histogram of farm output sales as ggplot object, convert to HTML string and assign it to "tooltip" column of the dataframe.
+Then plot dataframe as interactive map.
+
+```{r}
+df <- py$df %>% as.data.frame()
+
+df$tooltip <- "dummy"
+for (i in rownames(df)) {
+  c <- df[i, "stcty"]
+  d <- df %>% 
+    subset(stcty == c) %>%
+    select(oilseed:other_animal) %>%
+    pivot_longer(everything())
+  # generate a plot object
+  p <- ggplot(d, aes(x=name, y=value)) + 
+    geom_col() +
+    theme_void() +
+    labs(title = paste(df[i, "name"], c)) +
+    theme(axis.text.x = element_text(size = 8, angle = 45))
+  # convert plot object to an HTML blob
+  t <- htmltools::plotTag(p, alt = "", width = 200, height = 100)
+  t$attribs$style <- paste0(t$attribs$style, "transform:scale(3);")
+  # store blob in the dataframe
+  df[i, "tooltip"] <- as.character(t)
+}
+
+df <- sf::st_as_sf(df)
+
+pg <- girafe(ggobj = {
+  ggplot(df) +
+    geom_sf_interactive(aes(tooltip = tooltip))
+})
+pg
+```
+
+
