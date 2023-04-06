@@ -9,7 +9,7 @@ format:
     code_download: yes
     latex_engine: pdflatex
 params:
-  county_fips: "21195"
+  county_fips: "39099"
 ---
 
 ```{r preamble, include = FALSE}
@@ -253,11 +253,9 @@ No spatial impedance.
 #####Specify the parameter options for place specific maps - with changes over time
 
 #Sample year of industry output data
-sample_years = c("2017", "2012", "2007", "2002")
+sample_years = c("2017", "2012", "2007")
 #combn(sample_years, 2) #table of combinations 
 
-#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == "2013"
-tiger_year = "2013" 
 #NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
 #e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
 impedance = NULL
@@ -270,7 +268,6 @@ add_html = FALSE
 
 df <- place_connect_delta(central_place = params$county_fips,
                           sample_years = sample_years,
-                          tiger_year = tiger_year,
                           impedance = impedance, 
                           normalized = normalized,
                           ilevel = ilevel,
@@ -312,36 +309,6 @@ absorption_delta_map(central_place = params$county_fips,
 `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
 No spatial impedance. \
 
-
-
-```{r place absorption delta map 2}
-
-#####Specify the display options for place specific maps over time
-
-#Starting year of place specific absorption, one of "sample_years" specified above
-y1 <- "2002"
-
-#Ending year of place specific absorption, one of "sample_years" specified above
-y2 <- "2017"
-
-#row-match forward supply linkages or column-match backward demand linkages in absorption matrix, one of "export_absorption_delta" or "import_absorption_delta"
-fill <- "export_absorption_delta" 
-
-
-absorption_delta_map(central_place = params$county_fips,
-                     df = df,
-                     fill = paste0(fill, "_", substr(y1, 3, 4), substr(y2, 3, 4)),
-                     delta_min = delta_min,
-                     delta_max = delta_max)
-
-```
-
-`r y1` to `r y2`. \
-`r if(fill == "export_absorption_delta"){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` absorption. \
-`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
-`r tiger_year` county boundary year. \
-`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
-No spatial impedance. \
 
 
 
