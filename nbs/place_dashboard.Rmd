@@ -48,7 +48,7 @@ library(dplyr)
 library(qgraph)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
 ```
 
@@ -88,7 +88,6 @@ industry_aggregate_class = "sec"
 
 
 ```{r industry distribution plots}
-
 industry_dist_plots(central_place = params$county_fips,
                     cbp_year = cbp_year,
                     ilevel = ilevel,
@@ -115,10 +114,6 @@ industry_dist_plots(central_place = params$county_fips,
 #Year of CBP industry output (annual payroll), from ("1986" through "2020") 
 cbp_year = "2017" 
 
-#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
-tiger_year = "2013" 
-
-
 #Minimum matching absorption cutoff, typically only specified if absorption is normalized, range [0,1], default == 0.05
 threshold = .05 
 #NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
@@ -128,24 +123,21 @@ impedance = NULL
 normalized = TRUE 
 #TRUE or FALSE, row-match for forward supply linkages column-match for backward demand linkages in matching calculation of county-by-county absorption matrix, default == TRUE
 row_max_match = TRUE 
-#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
-cbsa_year = NULL 
+#TRUE or FALSE, to aggregate shapefiles and industry output data to start with cbsa clusters or counties
+cbsa_clust = FALSE
 #BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
 ilevel = "det"
 #TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
-add_html = TRUE
-
+add_html = FALSE
 
 df <- spatial_connectedness(cbp_year = cbp_year,
-                            tiger_year = tiger_year,
                             threshold = threshold,
-                            impedance = impedance, 
+                            impedance = impedance,
                             normalized = normalized,
                             row_max_match = row_max_match,
-                            cbsa_year = cbsa_year,
+                            cbsa_clust = cbsa_clust,
                             ilevel = ilevel,
                             add_html = add_html)
-
 
 ```
 
@@ -166,30 +158,27 @@ hier_ab_map(df = df,
 #####Specify the parameter options for place specific maps
 
 #Year of CBP industry output (annual payroll), from ("1986" through "2020") 
-cbp_year <- "2017"
+cbp_year = "2017" 
 
-#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
-tiger_year = "2013" 
-
-#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
-cbsa_year = NULL 
 #NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
 #e.g. "power_impedance_mat", "expo_impedance_mat",  "hyper_impedance_mat", "dprox_mat", "bprox_mat", "dist_mat"
 impedance = NULL
 #TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
 normalized = TRUE 
+#TRUE or FALSE, row-match for forward supply linkages column-match for backward demand linkages in matching calculation of county-by-county absorption matrix, default == TRUE
+row_max_match = TRUE 
+#TRUE or FALSE, to aggregate shapefiles and industry output data to start with cbsa clusters or counties
+cbsa_clust = FALSE
 #BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
 ilevel = "det"
 #TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
-add_html = TRUE
-
+add_html = FALSE
 
 df <- place_centric_connect(central_place = params$county_fips,
                             cbp_year = cbp_year,
-                            tiger_year = tiger_year,
-                            impedance = impedance, 
+                            impedance = impedance,
                             normalized = normalized,
-                            cbsa_year = cbsa_year,
+                            cbsa_clust = cbsa_clust,
                             ilevel = ilevel,
                             add_html = add_html)
 
@@ -353,6 +342,66 @@ absorption_delta_map(central_place = params$county_fips,
 `r tiger_year` county boundary year. \
 `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
 No spatial impedance. \
+
+
+
+### Spatial Impedance Distribution Examples
+
+```{r}
+year = "2012"
+central_place = params$county_fips
+```
+
+```{r}
+impedance_distribution_map(decay_function = "bisquare", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "hyper", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "gaus", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "expo", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "power", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "dprox", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "bprox", 
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+hierarchy_of_neighbors_map(year = year,
+                           central_place = central_place)
+```
+
+Qualitative neighbor of neighbor hierarchy
+
+
 
 
 :::

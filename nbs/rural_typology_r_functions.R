@@ -35,6 +35,10 @@ library(ggnewscale)
 library(matlib)
 #detach("package:MASS")
 
+library(magick)
+
+library(tmaptools)
+
 
 # Display start time
 log_info("Define functions start")
@@ -103,7 +107,6 @@ excel_importr <- function(TableName,
   }
 }
 
-
 # Function(s) to clean non-finite values in lists of matrix 
 finiter <- function(x){
   if (!is.finite(x)){
@@ -128,7 +131,6 @@ oner <- function(x, t=1, l=1){
 onerer <- function(x){ 
   lapply(1:length(x), function(i) apply(x[[i]], c(1,2), oner))
 }
-
 
 #Function to save parsed r data tables
 saver <- function (dataname, filepath = file.path("data", "robjs")){
@@ -185,14 +187,53 @@ dismapr <- function(p){
   }
 }
 
+###### Call and tidy NAICS to BEA industry concordance table
+call_industry_concordance <- function(){
+  df <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
+  for(i in names(df)){
+    df[[i]] <- unlist(df[[i]], use.names = FALSE) 
+  }
+  df %<>% add_row(SECTOR = "23", SUMMARY = "23", U_SUMMARY = "23",DETAIL = "23", DESCRIPTION = "Construction", NAICS = "23", .after = 39)
+  df %<>% filter(NAICS != "23*")
+  df %<>% filter(DETAIL != "531HST")
+  df <- df[order(df$NAICS), ]
+  rownames(df) <- 1:nrow(df)
+  b <- c("11", "21", "22", "23", "31G", "31G", "31G", "42", "44RT", "44RT", "48TW", "48TW", "51", "FIRE", "FIRE", "PROF", "PROF", "PROF", "6", "6", "7", "7", "81", "G")
+  n <- c("11", "21", "22", "23", "31", "32", "33", "42", "44", "45", "48", "49", "51", "52", "53", "54", "55", "56", "61", "62", "71", "72", "81", "92")
+  for(i in 1:length(n)){
+    df$SECTOR[substr(df$NAICS, 1,2) %in% n[i]] <- b[i]
+  }
+  return(df)
+}
 
-
+###### Get specific industry NAICS to BEA concordance
+ilevel_concord <- function(ilevel = c("det", "sum", "sec"), ...){
+  ilevel <- match.arg(ilevel)
+  x <- call_industry_concordance()
+  if(ilevel == "det"){
+    df <- x %>% select(DETAIL, NAICS)
+    }
+  if(ilevel == "sum"){
+    df <- x %>% select(SUMMARY, NAICS) 
+    df$NAICS <- substr(df$NAICS, 1,3)
+    df <- df[!duplicated(df), ]
+    rownames(df) <- 1:nrow(df)
+  }
+  if(ilevel == "sec"){
+    df <- x %>% select(SECTOR, NAICS) 
+    df$NAICS <- substr(df$NAICS, 1,2)
+    df <- df[!duplicated(df), ]
+    rownames(df) <- 1:nrow(df)
+  }
+  return(df)
+}
 
 # Call up and clean TIGER data
 # shapefile formats are available for 2000, 2007 and every year after that.
 call_tiger <- function(tiger_year,
                   scale = c("20m", "500k", "5m"),
                   geometry = TRUE, 
+                  center = TRUE,
                   ...){
   scale <- match.arg(scale)
   df <- geography$get_county_df(strtoi(tiger_year), 
@@ -200,7 +241,7 @@ call_tiger <- function(tiger_year,
                                 scale)
   df %<>% rename(place = CODE)
   df$COUNTY <- paste(df$NAME, "County")
-  if(isTRUE(geometry)){df$center <- st_centroid(df$geometry)}
+  if(isTRUE(geometry) & isTRUE(center)){df$center <- st_centroid(df$geometry)}
   st <- geography$get_state_df(geometry = FALSE) %>% select(c(1:3)) 
   names(st) <- c("STATE_CODE", "STATE_NAME", "STATE")
   df <- left_join(df, st, by = "STATE_CODE")
@@ -208,8 +249,14 @@ call_tiger <- function(tiger_year,
   return(df)
 }
 
+# Convert miles to meters
+miles2meters <- function(miles){
+  df <- as.integer(miles)*1609.344
+  return(df)
+}
+
 # Produce Distance  Matrix
-dist_mat <- function(...){
+dist_matc <- function(...){
   t <- call_tiger(...)
   df <- t$center %>% 
     as_Spatial() %>% 
@@ -218,11 +265,23 @@ dist_mat <- function(...){
   return(df)
 }
 
+# Produce Distance Matrix from polygon edge with variable distance
+dist_matb <- function(dist, 
+                     ...){
+  t <- call_tiger(...)
+  df = st_is_within_distance(t$geometry, 
+                             dist = dist)
+  df <- +as.matrix(df)
+  diag(df) <- 0
+  rownames(df) = colnames(df) <- t$place
+  return(df)
+}
+
 
 # Produce Border Proximity  Matrix
 bprox_mat <- function(queen = TRUE, 
                       ...){
-  t <- tiger(...)
+  t <- call_tiger(...)
   df <- t$geometry %>% 
     poly2nb(queen = queen) %>%
     nb2mat(style = "B", zero.policy = TRUE)
@@ -231,9 +290,10 @@ bprox_mat <- function(queen = TRUE,
 }
 
 # Produce Distance Proximity Matrix
+# distance in meters
 dprox_mat <- function(boundary_limit,
                       ...){
-  df <- dist_mat(...)
+  df <- dist_matc(...)
   df[df < boundary_limit & df > 0] <- 1
   df[df > boundary_limit] <- 0
   return(df)
@@ -242,7 +302,7 @@ dprox_mat <- function(boundary_limit,
 # Produce inverse power distance decay impedance matrix
 power_impedance_mat <- function(decay_power = 2, 
                                 ...){
-  df <- dist_mat(...)
+  df <- dist_matc(...)
   df <- (1/(df)^decay_power)
   return(df)
 }
@@ -250,16 +310,33 @@ power_impedance_mat <- function(decay_power = 2,
 # Produce exponential distance decay impedance matrix
 expo_impedance_mat <- function(decay_constant = 10000,
                                ...){
-  df <- dist_mat(...)
+  df <- dist_matc(...)
   df <- exp(-(df/decay_constant)) 
+  return(df)
+}
+
+# Produce Gaussian distance decay impedance matrix
+gaus_impedance_mat <- function(rms_width = 1609344,
+                               ...){
+  df <- dist_matc(...)
+  df <- exp(-.5*(df/rms_width)^2) 
   return(df)
 }
 
 # Produce hyperbolic secant distance decay impedance matrix
 hyper_impedance_mat <- function(decay_constant = 1000000,
                                 ...){
-  df <- dist_mat(...)
+  df <- dist_matc(...)
   df <- ((2/(exp(-(df/decay_constant)) + exp(df/decay_constant))))
+  return(df)
+}
+
+# Produce bi-square distance decay 
+bisquare_impedance_mat <- function(decay_zero,
+                                   ...){
+  dis <- dist_matc(...)
+  df <- (1-(dis/decay_zero)^2)^2
+  df[dis>decay_zero] <- 0
   return(df)
 }
 
@@ -389,17 +466,9 @@ cbsa_spatial_cluster <- function(...){
   return(df)
 }
 
-
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
-place_industry_economy_long <- function(ilevel = c("det", "sum", "sec"),
-                                        data_dir = file.path("data", "robjs"),
-                                        ...){
-  ilevel_concord <- match.arg(ilevel) %>% paste0(., "_cord")
-  ## Check industry level concordance exists
-  concord <- file.path(find_rstudio_root_file(), data_dir, ilevel_concord)
-  stopifnot("industry level concordance does not exist" = file.exists(concord) == TRUE) 
-  
-  conc <- readRDS(concord)
+place_industry_economy_long <- function(...){
+  conc <- ilevel_concord(...)
   n <- names(conc)[1]
   cbp_dat <- call_cbp(..., cbp_scale = "county")
   x <- left_join(cbp_dat, conc, by = "NAICS") 
@@ -453,6 +522,37 @@ labor_share <- function(...){
   lcv <- grep("^V001", rownames(df), value = TRUE)
   df <- (df[lcv, , drop = FALSE] / df["T018", , drop = FALSE]) 
   rownames(df) <- "LaborShare"
+  return(df)
+}
+
+############ Derive the national level, industry specific, payroll share of gross output by year and industry scale
+payroll_share <- function(cbp_year,
+                          ilevel = c("det", "sum", "sec"),
+                          ...){
+  ilevel <- match.arg(ilevel)
+  indout <- year2bea(cbp_year, ilevel, ...) %>% 
+    call_use_table(ilevel, ...) %>% 
+    .["T018", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE]*1000000
+  if(ilevel == "det"){
+    cn <- indout %>% .[, grep("^23", colnames(.), value = TRUE)] %>% sum() %>% matrix(dimnames = list(rownames(indout), c("23")) ) 
+    nc <- indout %>% .[, !grepl("^23", colnames(.)), drop = FALSE]  
+    indout <- cbind(cn, nc) 
+  }
+  conc <- ilevel_concord(...)
+  cbp_dat <- call_cbp(..., cbp_year = cbp_year, cbp_scale = "us")
+  ap <- left_join(cbp_dat, conc, by = "NAICS") %>% 
+    filter(.[dim(.)[2]] != "NULL" & .[["lfo"]] == "-")
+  n <- names(ap)[dim(ap)[2]]
+  ap <- ap %>% 
+    group_by(.[dim(.)[2]]) %>%
+    summarise(across(where(is.numeric), sum), .groups = 'drop') %>% 
+    .[c("ap", n )] %>% 
+    pivot_wider(names_from = n, values_from = c("ap"), names_sep = ".", values_fill = 0) %>% 
+    as.matrix()*1000
+  rownames(ap) <- "ap"
+  intind <- intersect(colnames(ap), colnames(indout))
+  df <- (ap["ap", intind , drop = FALSE] / indout["T018", intind , drop = FALSE]) 
+  rownames(df) <- "psogo"
   return(df)
 }
 
@@ -520,25 +620,19 @@ year2agcensus <- function(year,
 }
 
 ### Need to add farm sales tax/inventory correction
-### Need to adjust for cbp basis as GDP not TotalOutput  
 ############ Derive the Total Output Matrix (in thousands of dollars)
 total_output <- function (cbp_year,
                           ilevel = c("det", "sum", "sec"), 
                           ...){
   ilevel <- match.arg(ilevel)
   ag_year <- year2agcensus(cbp_year, ...)
-  bea_year <- year2bea(cbp_year, ilevel, ...)
-  ls <- labor_share(bea_year = bea_year, ilevel = ilevel, ...)
   farm_sales <- call_agoutput(ag_year, ...)
   fn <- colnames(farm_sales)[-c(1)]
   iout <- industry_output_by_place(cbp_year = cbp_year, ilevel = ilevel, ...)
-  if(ilevel == "det"){
-    cn <- matrix(mean(ls[, grep("^23", colnames(ls), value = TRUE)]), dimnames = list(rownames(ls), c("23")) )
-    nc <- ls[, !grepl("^23", colnames(ls)), drop = FALSE] 
-    ls <- cbind(cn, nc)  
-  }
-  ls <- ls[, rownames(iout)[rownames(iout) %in% colnames(ls)], drop = FALSE] 
-  df <- apply(iout, 2, function (x) {x / ls})
+  ps <- payroll_share(cbp_year, ilevel, ...)
+  ps <- ps[, rownames(iout)[rownames(iout) %in% colnames(ps)], drop = FALSE] 
+  df <- apply(iout, 2, function (x) {x / ps})
+  df[is.infinite(df)] = 0
   rownames(df) <- rownames(iout)
   df <- t(df) %>% as.data.frame()
   df$place <- rownames(df)
@@ -556,9 +650,9 @@ total_output <- function (cbp_year,
   df$place <- NULL
   df <- t(df)
   df[is.na(df)] = 0
+  df[is.infinite(df)] = 0
   return(df)
 }
-
 
 # Aggregate industry output of each CBSA members in a cluster
 cbsa_aggregate_industry_output <- function(cbp_year,
@@ -580,6 +674,7 @@ cbsa_aggregate_industry_output <- function(cbp_year,
   return(df)
 }
 
+#Need to adjust to not use tiger
 ############ Derive clean Output Matrix 
 total_output_tidy <- function (cbp_year,
                                cbsa_clust = FALSE, 
@@ -704,13 +799,14 @@ normalized_absorption_share <- function(sas_matrix,
 ############ Row-wise Absorption Potential Maximum and Match
 absorption_maximum_match <- function(absorption_matrix, 
                                      threshold = .05,
-                                     row_max_match = TRUE){
+                                     row_max_match = TRUE,
+                                     ...){
   a <- absorption_matrix
   if(isTRUE(row_max_match)){
     df <-  cbind(place = rownames(a), 
                  match = colnames(a)[apply(a, 1, which.max)],
                  max_absorption_alpha = apply(a, 1, max), 
-                 second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])}), 
+                 second_max_absorption_alpha = apply(a, 1, function(x){max(x[x != max(x), drop = FALSE])}) %>% suppressWarnings(), 
                  absorption_alpha_gini = apply(a, 1, gini),
                  absorption_alpha_total = apply(a, 1, sum),
                  absorption_alpha_mean = apply(a, 1, mean),
@@ -804,47 +900,15 @@ one_direct_connect <- function(technical_coefficients_matrix, industry_output_ma
   df <- absorption_maximum_match(normalized_absorption_share(stacked_absorption_share(net_input_supply(io, industry_input(tc, io)), net_input_demand(io, industry_input(tc, io))), net_input_supply(io, industry_input(tc, io))), threshold)  
 }
 
-############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
-one_hierarchical_connectedness <- function(direct_mat, 
-                                           output_mat, 
-                                           space_mat,
-                                           threshold = .05, 
-                                           list_names = NULL){
-  d <- direct_mat
-  o <- output_mat
-  s <- space_mat
-  hct <- list()
-  hsct <- list()
-  hom <- list()
-  hom$level_0 <- o
-  n = 1
-  i = FALSE
-  df <- list()
-  print(list_names)
-  while(i == FALSE){
-    print(paste("level", n))
-    c <- one_direct_connect(d, o, threshold)
-    hct[[paste0("level_", deparse(n))]] <- c
-    i <- all(c$place %in% c$eca_membership) 
-    if (i == TRUE){next}
-    hsct[[paste0("level_", deparse(n))]] <- join_space_with_connectedness(c, s) %>% spatial_cluster()
-    o <- aggregate_industry_output(o, c)
-    hom[[paste0("level_", deparse(n))]] <- o
-    n = n + 1
-  }
-  df[[deparse(list_names)]] <- list("Hierarchical_Connectedness_table" = hct,
-                                    "Hierarchical_Spatial_Cluster_table" = hsct,
-                                    "Hierarchical_Output_mat" = hom)
-}
 
 ############ Call connectedness matrix for any available year and industry scale
 absorption_matrix <- function(cbp_year,
-                                 ilevel = c("det", "sum", "sec"),
-                                 cbsa_clust = FALSE, 
-                                 normalized = TRUE,
-                                 impedance = NULL, 
-                                 data_dir = file.path("data", "robjs"),
-                                 ...){
+                              ilevel = c("det", "sum", "sec"),
+                              cbsa_clust = FALSE, 
+                              normalized = TRUE,
+                              impedance = NULL, 
+                              data_dir = file.path("data", "robjs"),
+                              ...){
   ilevel <- match.arg(ilevel)
   ag_year <- year2agcensus(cbp_year, ...)
   bea_year <- year2bea(cbp_year, ilevel, ...)
@@ -865,7 +929,6 @@ absorption_matrix <- function(cbp_year,
     d <- d[rownames(o)[rownames(o) %in% rownames(d)], rownames(o)[rownames(o) %in% colnames(d)]] 
   }
   i <- industry_input(d, o)
-  
   sasf <- paste0("sas", "_", match.arg(ilevel),"class", "_", cbp_year, "cbp", "_", bea_year, "bea", "_", ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
   if (file.exists(file.path(find_rstudio_root_file(), data_dir, sasf) ) ){ 
     df <- readRDS(file.path(find_rstudio_root_file(), data_dir, sasf))
@@ -890,7 +953,8 @@ connectedness <- function (cbp_year,
   df <- absorption_matrix(cbp_year, ...)
   df <- absorption_maximum_match(absorption_matrix = df, 
                                  threshold = threshold, 
-                                 row_max_match = row_max_match)
+                                 row_max_match = row_max_match,
+                                 ...)
   return(df)
 }
 
@@ -924,59 +988,34 @@ industry_distribution <- function(industry_aggregate_class = c("sec", "sum", "de
   nis <- net_input_supply(o, i)
   nid <- net_input_demand(o, i)
   indicator_type = c("output", "input", "nis", "nid")
-  ti <- vector("list", length(indicator_type))
-  names(ti) <- indicator_type
-  ti[[1]] <- o
-  ti[[2]] <- i
-  ti[[3]] <- nis
-  ti[[4]] <- nid
-  for (i in 1:length(ti)){
-    ti[[i]] <- melt(ti[[i]])
-    ti[[i]] <- ti[[i]] %>% 
-      filter(value > 0)
-    names(ti[[i]]) <- c("DETAIL", "place", indicator_type[i])
-    ti[[i]]$place <- ti[[i]]$place  %>% formatC(width = 5, format = "d", flag = "0")
-  }
-  c <- bea_io$get_naics_df() %>% 
-       filter(DETAIL != "NaN") %>% 
-       filter(NAICS != "n.a.") %>% 
-       distinct(DETAIL, .keep_all = TRUE) %>% 
-       unnest(., cols = names(.))
-  if (industry_aggregate_class == "sec") {
-    ilevel_concord <- paste0(ilevel, "_cord")
-    concord <- file.path(find_rstudio_root_file(), data_dir, ilevel_concord)
-    stopifnot("industry level concordance does not exist" = file.exists(concord) == TRUE) 
-    cord <- readRDS(concord)
-    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
-                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
-    names(n) <- c("SECTOR", "name")
-    n <- left_join(cord, n, by = "SECTOR") 
-    names(n) <- c("BEA_SECTOR", "SECTOR", "name")
-    c[["SECTOR"]] <- substr(c[["SECTOR"]], 1, 2)
-    sn <- inner_join(n, c, by = "SECTOR") 
-    sn$abv <- sn$BEA_SECTOR
-    rm(sec_cord)
-  } else if (industry_aggregate_class == "sum"){
-    n <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
-                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
-    names(n) <- c("SUMMARY", "name")
-    sn <- inner_join(n, c, by = "SUMMARY") 
-    sn$abv <- sn$SUMMARY
-  } else if (industry_aggregate_class == "det") {
-    sn <- c
-    sn <- rename(sn, name = DESCRIPTION)
-    sn$abv <- sn$DETAIL
-  }
-  pal <- data.frame(color = viridis(length(unique(sn$name))),
-                    name = unique(sn$name))
-  sn <- inner_join(sn, pal, by = "name")
-  sn["DETAIL"][sn["NAICS"] == "23*"] <- "23"
-  sn <- sn %>% 
-    distinct(DETAIL, .keep_all = TRUE) 
   df <- vector("list", length(indicator_type))
   names(df) <- indicator_type
+  df[[1]] <- o
+  df[[2]] <- i
+  df[[3]] <- nis
+  df[[4]] <- nid
   for (i in 1:length(df)){
-    df[[i]] <- inner_join(ti[[i]], sn, by = "DETAIL")
+    df[[i]] <- melt(df[[i]])
+    df[[i]] <- df[[i]] %>% 
+      filter(value > 0)
+    names(df[[i]]) <- c("DETAIL", "place", indicator_type[i])
+    df[[i]]$place <- df[[i]]$place  %>% formatC(width = 5, format = "d", flag = "0")
+  }
+  des <- data.frame(names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, FALSE)), 
+                    names(bea_io$get_sup(strtoi(bea_year), industry_aggregate_class, TRUE)))
+  if(industry_aggregate_class=="det"){bc <- "DETAIL"}
+  if(industry_aggregate_class=="sum"){bc <- "SUMMARY"}
+  if(industry_aggregate_class=="sec"){bc <- "SECTOR"}
+  names(des) <- c(bc, "Description")
+  conc <- call_industry_concordance() %>% select(-c("DESCRIPTION", "U_SUMMARY", "NAICS"))
+  sn <- left_join(conc, des, by = bc) 
+  pal <- data.frame(color = viridis(length(unique(sn$Description))),
+                    Description = unique(sn$Description))
+  sn <- inner_join(sn, pal, by = "Description") %>% 
+    distinct(DETAIL, .keep_all = TRUE) 
+  sn$abv <- sn[[bc]]
+  for (i in names(df)){
+    df[[i]] <- inner_join(df[[i]], sn, by = "DETAIL")
   }
   return(df)
 }
@@ -985,7 +1024,8 @@ industry_distribution <- function(industry_aggregate_class = c("sec", "sum", "de
 ############ Bar charts of industry distributions by county
 industry_distribution_barcharts <- function(data,
                                             interact = TRUE,
-                                            short = TRUE){
+                                            short = TRUE,
+                                            ...){
   df <- c()
   l <- unique(distinct(data, DETAIL, abv)[order(distinct(data, DETAIL, abv)$DETAIL),]$abv)
   for (i in 1:length(unique(data$place))){
@@ -1052,8 +1092,9 @@ spatial_connectedness <- function(cbp_year,
                                   cbsa_clust = FALSE,
                                   add_html = FALSE,
                                   industry_aggregate_class = "sec",
+                                  data_dir = file.path("data", "robjs"),
                                   ...){
-  tiger_year <- year2tiger(cbp_year, ...) 
+  tiger_year <- year2tiger(cbp_year, ...) %>% suppressWarnings() 
   c <- connectedness(cbp_year = cbp_year, cbsa_clust = cbsa_clust, ...)
   ag_year <- year2agcensus(cbp_year, ...) %>% suppressWarnings()
   if(isFALSE(cbsa_clust)){
@@ -1084,17 +1125,14 @@ spatial_connectedness <- function(cbp_year,
 
 ############ Spatial union each ECA member in a cluster
 spatial_cluster <- function(spatial_connectedness_table,
-                            list_names = NULL, 
-                            place = place, 
-                            geometry = geometry, 
-                            eca_membership = eca_membership){
-  
+                            quiet = TRUE,
+                            ...){
   df <-  spatial_connectedness_table %>% select(names(.)[!(names(.) %in% c("center", "html_output", "html_input", "html_nis", "html_nid"))])
   x <- df$eca_membership %>% unique() %>% .[order(.)]
   for (i in x){
-    print(paste(list_names, "start cluster: ", i, which(i == x), "of", length(x), Sys.time()))
+    if(!quiet == TRUE){print(paste("start cluster: ", i, which(i == x), "of", length(x), Sys.time()))}
     df[df$place == i,]$geometry <- df %>% filter(df$eca_membership == i) %>% st_union()
-    print(paste(list_names, "  end cluster: ", i, which(i == x), "of", length(x), Sys.time()))
+    if(!quiet == TRUE){print(paste("end cluster: ", i, which(i == x), "of", length(x), Sys.time()))}
   }
   df <- df %>% .[.$place %in% .$eca_membership, ]
 }
@@ -1114,6 +1152,87 @@ cluster_spatial_connectedness <- function (cbp_year,
   return(df)
 }
 
+############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
+one_hierarchical_connectedness <- function(cbp_year,
+                                           ilevel = c("det", "sum", "sec"),
+                                           cbsa_clust = FALSE,
+                                           normalized = TRUE,
+                                           impedance = NULL,
+                                           data_dir = file.path("data", "robjs"),
+                                           queen = TRUE,
+                                           ...){
+  ilevel <- match.arg(ilevel)
+  cbsa_year <- year2cbsa(cbp_year, ...)  %>% suppressWarnings() 
+  ag_year <- year2agcensus(cbp_year, ...)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  tiger_year <- year2tiger(cbp_year, ...) %>% suppressWarnings()
+  sasf <- paste0("hier", "_", ilevel,"class", "_", cbp_year, "cbp", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa", "_", if(is.null(impedance)){"NA_impedance"}else if(is.numeric(impedance)){paste0(impedance,"_impedance")}else{if(queen==TRUE){"queenborder_impedance"}else{"rookborder_impedance"}} )
+  if (file.exists(file.path(find_rstudio_root_file(), data_dir, sasf) ) ){ 
+    df <- readRDS(file.path(find_rstudio_root_file(), data_dir, sasf))
+  } else {
+    o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    d <- call_direct_requirements(bea_year, ilevel, ...)
+    if(ilevel == "det"){ 
+      con <- grep("^23", colnames(d), value = TRUE)
+      cm <- matrix(sum(d[con,con])/length(con), 
+                   dimnames = list(c("23"), c("23")))
+      cr <- t(matrix(colMeans(d[con, ]), 
+                     dimnames = list(colnames(d), c("23")) ))
+      cc <- matrix(rowMeans(d[, con]), 
+                   dimnames = list(colnames(d), c("23"))) 
+      d <- cbind( rbind(cr, d ), rbind(cm, cc )) 
+      d <- d[colnames(d)[!colnames(d) %in% con] , colnames(d)[!colnames(d) %in% con]]
+      d <- d[rownames(o)[rownames(o) %in% rownames(d)], rownames(o)[rownames(o) %in% colnames(d)]] 
+    }
+    hct <- list()
+    hsct <- list()
+    hsct$level_0 <- spatial_connectedness(cbp_year, ...)
+    hom <- list()
+    hom$level_0 <- o
+    n = 1
+    i = FALSE
+    while(i == FALSE){
+      print(paste("level", n))
+      ii <- industry_input(d, o)
+      nis <- net_input_supply(o, ii)
+      nid <- net_input_demand(o, ii)
+      df <- stacked_absorption_share(nis, nid)
+      if(isTRUE(normalized)){
+        df <- normalized_absorption_share(df, nis)
+      }
+      if(is.null(impedance)){
+        df <- df
+        } else if(is.numeric(impedance)){
+          impd = st_is_within_distance(hsct[[paste0("level_", n-1)]]$geometry, dist = miles2meters(impedance))
+          impd <- +as.matrix(impd)
+          diag(impd) <- 0
+          rownames(impd) = colnames(impd) <- hsct[[paste0("level_", n-1)]]$place
+          df <- df * impd[colnames(df), rownames(df)]
+        } else {
+        impd = hsct[[paste0("level_", n-1)]]$geometry %>% 
+          poly2nb(queen = queen) %>%
+          nb2mat(style = "B", zero.policy = TRUE)
+        rownames(impd) = colnames(impd) <- hsct[[paste0("level_", n-1)]]$place
+        df <- df * impd[colnames(df), rownames(df)]
+      }
+      c <- absorption_maximum_match(absorption_matrix = df, ...)  
+      s <-  hsct[[paste0("level_", n-1)]] %>% select(c("place", "NAME", "STATE_CODE", "COUNTY_CODE", "COUNTY", "STATE_NAME", "STATE", "geometry" ))
+      hct[[paste0("level_", n)]] <- join_space_with_connectedness(c, s)
+      i <- all(c$place %in% c$eca_membership) 
+      if (i == TRUE){next}
+      hsct[[paste0("level_", n)]] <- hct[[paste0("level_", n)]] %>% spatial_cluster()
+      o <- aggregate_industry_output(o, c)
+      hom[[paste0("level_", n)]] <- o
+      n = n + 1
+    }
+    df <- list("Hierarchical_Connectedness_table" = hct,
+               "Hierarchical_Spatial_Cluster_table" = hsct,
+               "Hierarchical_Output_mat" = hom)
+    saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, sasf) )
+  }
+  return(df)
+}
+
 ###Need to make adding html a separate operation
 ############ Place-centric connectedness
 place_centric_connect <- function(central_place,
@@ -1121,6 +1240,7 @@ place_centric_connect <- function(central_place,
                                   cbsa_clust = FALSE,
                                   add_html = FALSE,
                                   industry_aggregate_class = "sec",
+                                  data_dir = file.path("data", "robjs"),
                                   ...){
   df <- absorption_matrix(cbp_year, cbsa_clust = cbsa_clust, ...)
   if(isTRUE(cbsa_clust)){central_place <- fips2cbsa(central_place)}
@@ -1140,7 +1260,6 @@ place_centric_connect <- function(central_place,
   df <- join_space_with_connectedness(df, s)
   df$export_absorption <- as.numeric(df$export_absorption)
   df$import_absorption <- as.numeric(df$import_absorption)
-
   if(isTRUE(add_html)){
     hp <- paste0("htmlplots", "_", industry_aggregate_class, "class", "_", cbp_year, "cbp", "_",  ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
     if (file.exists(file.path(find_rstudio_root_file(), data_dir, hp))){ 
@@ -1188,6 +1307,222 @@ place_connect_delta <- function(central_place,
   # }
 return(df)
 }
+
+############ Generate neighbors of neighbors for a place ad nauseam
+#Watch out for Nantucket, MA; Staten Island,NY; and San Juan, WA
+neighbor_of_neighbor <- function(central_place = "20183",
+                                 year = "2012",
+                                 quiet = TRUE,
+                                 ...){
+  t <- year2tiger(year) %>% call_tiger(...)
+  t <- t[t$STATE_CODE != "02" & 
+         t$STATE_CODE != "15" & 
+         t$STATE_CODE != "72", ]
+  df <- data.frame("place" = t$place, 
+                   "nn" = vector(mode = "character", length = length(t$place)))
+  df$nn[df$place %in% central_place] <- "n0"
+  nn <- central_place
+  l <- 1
+  x <- 0
+  while(sum(df$nn=="") != x){
+    x = sum(df$nn=="")
+    tp <- st_touches(t$geometry, 
+                     t[t$place %in% nn, ]$geometry)
+    tp <- +as.matrix(tp)
+    rownames(tp) <- t$place
+    colnames(tp) <- c(nn)
+    nx <- setdiff(rownames(tp)[apply(tp, 1, function(x){any(x==1)})], nn)
+    df$nn[df$place %in% nx] <- paste0("n",l)
+    nn <- c(nn, nx)
+    l = l + 1
+    if(!quiet == TRUE){
+      print(paste("Interval level:", l))
+      print(paste("Places remaining:", sum(df$nn=="")))
+    }
+  }
+  return(df)
+}
+
+############ hierarchy GIF generator
+national_hierarchy_gif <- function(df,
+                                  folder,
+                                  map_function, 
+                                  caption = NULL,
+                                  ...){
+  r <- file.path(find_rstudio_root_file(), "data", folder)
+  if(!dir.exists(r)){
+    dir.create(r)
+  }
+  fn <- list()
+  lev <- list(names(df))
+  for(l in names(df)){
+    fp <- file.path(r, paste0(folder, "_", l, ".png"))
+    if(!file.exists(fp)){ 
+      argList <- list()
+      argList$df <- df[[l]]
+      argList$caption <- glue("Level {which(names(df) == l)} Hierarchy\n 5% Isolation Threshold")
+      do.call(map_function, argList)
+      ggsave(fp)
+    }
+    fn[[which(names(df) == l)]] <- fp
+  }
+  anim <- fn %>% unlist() %>% lapply(image_read) %>% image_join() %>% image_animate(fps = 1)
+  image_write(image = anim,
+              path = file.path(r, paste0(folder, ".gif")))
+}
+
+############ Distance impedance map GIF generator
+national_progressiveimpedance_gif <- function(cbp_year,
+                                              dist,
+                                              impd,
+                                              folder,
+                                              map_function,
+                                              ...){
+  r <- file.path(find_rstudio_root_file(), "data", folder)
+  if(!dir.exists(r)){
+    dir.create(r)
+  }
+  fn <- list()
+  tiger_year = year2tiger(cbp_year) %>% suppressWarnings()
+  for(d in dist){
+    fp <- file.path(r, paste0(folder, "_", d, ".png"))
+    if(!file.exists(fp)){
+      if(impd == "B"){
+        impedance = dist_matb(dist = miles2meters(d), 
+                              tiger_year = tiger_year)
+      }
+      if(impd == "C"){
+        impedance = dprox_mat(boundary_limit = miles2meters(d), 
+                              tiger_year = tiger_year)
+      }
+      df <- spatial_connectedness(cbp_year = cbp_year,
+                                  impedance = impedance,
+                                  ...)
+      argList <- list()
+      argList$df <- df
+      argList$caption <- glue("{d} Mile Impedance \n 5% Isolation Threshold")
+      g <- do.call(map_function, argList)
+      ggsave(fp)
+    }
+    fn[[which(dist == d)]] <- fp
+  }
+  anim <- fn %>% unlist() %>% lapply(image_read) %>% image_join() %>% image_animate(fps = 1)
+  image_write(image = anim,
+              path = file.path(r, paste0(folder, ".gif")))
+}
+
+
+############ Aggregate economic industry output of each ECA member in a cluster, keep all non source places as ECA core unit label
+aggregate_industry_output <- function(industry_output_matrix, 
+                                      connectedness_table,
+                                      ...){
+  df <- industry_output_matrix
+  c <- connectedness_table
+  x <- c$eca_membership %>% unique() %>% .[order(.)]
+  for(i in x){
+    df[, i] <- rowSums(df[, c$place[c$eca_membership == i], drop = FALSE])
+  } 
+  df <- df[, x]
+}
+
+############ Multi plot of bar charts of industry distributions for a given county
+industry_dist_plots <- function(central_place,
+                                cbp_year,
+                                cbsa_clust = FALSE,
+                                ...){
+  if(isTRUE(cbsa_clust)){central_place <- fips2cbsa(central_place)}
+  idis <- industry_distribution(cbp_year = cbp_year, ...)
+  bd <-  vector("list")
+  for (i in names(idis) ){
+    x <- idis[[i]][idis[[i]]$place == central_place, ] 
+    bd[[i]] <- industry_distribution_barcharts(data = x, ...)
+  }
+  pobj <- plot_grid(bd$output[[central_place]],
+                    bd$input[[central_place]],
+                    bd$nis[[central_place]],
+                    bd$nid[[central_place]])
+  girafe(ggobj = pobj, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;") ))
+}
+
+############ Absorption matching outcomes over time
+absorption_match_overtime <- function(years = 2000:2020,
+                                      threshold = 0,
+                                      normalized = TRUE,
+                                      ...){
+  dis <- vector("list", length(years))
+  names(dis) <- years
+  for (y in years){
+    dis[[y]] <- connectedness(cbp_year = as.character(y),
+                              threshold = threshold,
+                              normalized = normalized)
+  }
+  df <- bind_rows(dis, .id = "id")
+  return(df)
+}
+
+############ Map arbitrary qualitative data (four color theorem) 
+aqual_map <- function(df,
+                      fcmt = FALSE,
+                      tooltip = glue("Place: {NAME}\nECA: {eca_membership}"),
+                      data_id = eca_membership,
+                      ncols = 8,
+                      minimize = FALSE,
+                      palette = "Set2",
+                      caption = NULL,
+                      ...){
+  if(fcmt == FALSE){
+    g <- ggplot(df) + 
+      geom_sf_interactive(aes(fill = factor(max_absorption_alpha), 
+                              tooltip = {{tooltip}}, 
+                              data_id = {{data_id}})) + 
+      theme_void() +
+      theme(legend.position = "none") + 
+      labs(caption = caption)
+  } else {
+    stopifnot("dataframe needs sf geometry" = "sf" %in% class(df) == TRUE) 
+    if(!"Ncol" %in% names(df)){
+      df[["Ncol"]] <- map_coloring(df$geometry,
+                                 ncols = ncols,
+                                 minimize = minimize)
+    }
+      g <- ggplot(df) + 
+        geom_sf_interactive(aes(fill = factor(Ncol), 
+                                tooltip = {{tooltip}}, 
+                                data_id = {{data_id}})) + 
+        theme(legend.position = "none") + 
+        scale_fill_brewer(palette = palette) + 
+        labs(caption = caption)
+  }
+  girafe(ggobj = g,
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;fill:orange",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_selection(type = "multiple", 
+                          only_shiny = FALSE,
+                          css = "fill:black"),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(offx = 20, offy = 20,
+                        css = "font-family:sans-serif;
+                               background-color:gray;
+                               color:white;
+                               padding:10px;
+                               border-radius:5px;",
+                        use_cursor_pos = TRUE) ))
+}
+
 
 ############ Map change in connectedness over time for a county 
 absorption_delta_map <- function(central_place,
@@ -1244,10 +1579,10 @@ absorption_delta_map <- function(central_place,
 ############ Map absorption metrics
 absorption_map <- function(df, 
                            add_html = FALSE,
-                           threshold = .05,
-                           fill, 
-                           fill_lab,
-                           unit_scale = TRUE){
+                           fill = "max_absorption_alpha", 
+                           fill_lab = "Max Absorption",
+                           unit_scale = TRUE,
+                           caption = paste0(5,"% Isolation Threshold")){
   if(!isTRUE(add_html)){
     g <- ggplot(df) +
       geom_sf_interactive(aes(fill = .data[[fill]], 
@@ -1270,9 +1605,9 @@ absorption_map <- function(df,
           scale_fill_viridis(direction = -1, limits=c(floor(0), ceiling(1)))
         } else {
           scale_fill_viridis(direction = -1)
-        } } + {
-      if(!is.null(threshold)){labs(fill = fill_lab,
-           caption = paste0(threshold*100,"% Isolation Threshold"))} else {labs(fill = fill_lab)} }
+        } } + 
+      labs(fill = fill_lab,
+           caption = caption)
   } else {
       g <- ggplot(df) +
         geom_sf_interactive(aes(fill = .data[[fill]], 
@@ -1295,9 +1630,9 @@ absorption_map <- function(df,
                   scale_fill_viridis(direction = -1, limits=c(floor(0), ceiling(1)))
                 } else {
                   scale_fill_viridis(direction = -1)
-                } } + {
-                  if(!is.null(threshold)){labs(fill = fill_lab,
-                                               caption = paste0(threshold*100,"% Isolation Threshold"))} else {labs(fill = fill_lab)} }
+                } } + 
+        labs(fill = fill_lab,
+             caption = caption)
   }
   girafe(ggobj = g, 
          options = list(
@@ -1391,7 +1726,8 @@ hier_ab_map <- function(df,
 ############ Map cluster membership counts by absorption 
 clustmember_map <- function(df, 
                             alpha = "max_absorption_alpha",
-                            add_html = FALSE){
+                            add_html = FALSE,
+                            caption = paste0(5,"% Isolation Threshold")){
 if(!isTRUE(add_html)){
   g <- ggplot() +
     geom_sf_interactive(aes(fill = cluster_members_count,
@@ -1401,9 +1737,9 @@ if(!isTRUE(add_html)){
                               glue("{NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(.data[[alpha]], 5)}")
                             },
                             data_id = place),
-                        data = subset(df, cluster_category == "Cluster Sink"),
+                        data = subset(df, cluster_category == "Cluster Sink" | cluster_category == "Isolated, Cluster Sink" ),
                         color = NA) + 
-    labs(fill = "Cluster Matches") +
+    labs(fill = "Cluster Sink") +
     scale_fill_gradient(low = "#feb24c", high = "#f03b20", guide = guide_colorbar(order = 2)) +
     new_scale_fill() +
     geom_sf_interactive(aes(fill = cluster_members_count,
@@ -1425,10 +1761,10 @@ if(!isTRUE(add_html)){
                               glue("{NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(.data[[alpha]], 5)}")
                             },
                             data_id = place),
-                        data = subset(df, cluster_category == "Isolated, Cluster Sink"),
+                        data = subset(df, cluster_category == "Isolated"),
                         color = NA) + 
     guides(fill=guide_legend(title=NULL)) +
-    scale_fill_manual(values = "#FFC0CB",
+    scale_fill_manual(values = "#b2df8a",
                       guide = guide_legend(order = 3)) +
     coord_sf() +
     theme_void() +
@@ -1437,7 +1773,7 @@ if(!isTRUE(add_html)){
           legend.title = element_text(size = rel(0.5)), 
           legend.text = element_text(size = rel(0.5)),
           legend.position = c(0.9, 0.2)) +
-    labs(caption = paste0(5,"% Isolation Threshold")) 
+    labs(caption = caption) 
     } else {
       g <- ggplot() +
         geom_sf_interactive(aes(fill = cluster_members_count,
@@ -1447,7 +1783,7 @@ if(!isTRUE(add_html)){
                                   glue("{NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(.data[[alpha]], 5)}\nIndustry Output\n{html_output}")
                                 },
                                 data_id = place),
-                            data = subset(df, cluster_category == "Cluster Sink"),
+                            data = subset(df, cluster_category == "Cluster Sink" | cluster_category == "Isolated, Cluster Sink"),
                             color = NA) + 
         labs(fill = "Cluster Matches") +
         scale_fill_gradient(low = "#feb24c", high = "#f03b20", guide = guide_colorbar(order = 2)) +
@@ -1471,10 +1807,10 @@ if(!isTRUE(add_html)){
                                   glue("{NAME}\nFIPS: {place}\nMatch: {eca_membership}\nAlpha: {round(.data[[alpha]], 5)}\nIndustry Output\n{html_output}")
                                 },
                                 data_id = place),
-                            data = subset(df, cluster_category == "Isolated, Cluster Sink"),
+                            data = subset(df, cluster_category == "Isolated"),
                             color = NA) + 
         guides(fill=guide_legend(title=NULL)) +
-        scale_fill_manual(values = "#FFC0CB",
+        scale_fill_manual(values = "#b2df8a",
                           guide = guide_legend(order = 3)) +
         coord_sf() +
         theme_void() +
@@ -1483,7 +1819,7 @@ if(!isTRUE(add_html)){
               legend.title = element_text(size = rel(0.5)), 
               legend.text = element_text(size = rel(0.5)),
               legend.position = c(0.9, 0.2)) +
-        labs(caption = paste0(5,"% Isolation Threshold")) 
+        labs(caption = caption) 
     }
   girafe(ggobj = g, 
          options = list(
@@ -1499,7 +1835,8 @@ if(!isTRUE(add_html)){
                                            padding:10px;
                                            border-radius:5px;",
                         use_cursor_pos = FALSE,
-                        offx = 0, offy = 330) ))
+                        offx = 0, offy = 330),
+           opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
 }
 
 ############ Map place-centric connectedness for a county 
@@ -1608,77 +1945,6 @@ nis2nid_map <- function(df){
   
 }
 
-############ Aggregate economic industry output of each ECA member in a cluster, keep all non source places as ECA core unit label
-aggregate_industry_output <- function(industry_output_matrix, 
-                                      connectedness_table,
-                                      place = place, 
-                                      eca_membership = eca_membership){
-  df <- industry_output_matrix
-  c <- connectedness_table
-  x <- c$eca_membership %>% unique() %>% .[order(.)]
-  for(i in x){
-    df[, i] <- rowSums(df[, c$place[c$eca_membership == i], drop = FALSE])
-  } 
-  df <- df[, x]
-}
-
-############ Multi plot of bar charts of industry distributions for a given county
-industry_dist_plots <- function(central_place,
-                                cbp_year,
-                                cbsa_clust = FALSE,
-                                ...){
-  if(isTRUE(cbsa_clust)){central_place <- fips2cbsa(central_place)}
-  idis <- industry_distribution(cbp_year = cbp_year, ...)
-  bd <-  vector("list")
-  for (i in names(idis) ){
-    x <- idis[[i]][idis[[i]]$place == central_place, ] 
-    bd[[i]] <- industry_distribution_barcharts(data = x, ...)
-  }
-  pobj <- plot_grid(bd$output[[central_place]],
-                    bd$input[[central_place]],
-                    bd$nis[[central_place]],
-                    bd$nid[[central_place]])
-  girafe(ggobj = pobj, 
-         options = list(
-           opts_hover(
-             css = girafe_css(
-               css = "stroke:gray;r:8pt;",
-               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
-           opts_tooltip(css = "font-family:sans-serif;
-                                             background-color:gray;
-                                             color:white;
-                                             padding:10px;
-                                             border-radius:5px;") ))
-}
-
-
-
-
-############ Absorption matching outcomes over time
-absorption_match_overtime <- function(years = 2000:2020,
-                                      normalized = TRUE,
-                                      ilevel = c("det", "sum", "sec"),
-                                      threshold = 0,
-                                      cbsa_year = NULL,
-                                      row_max_match = TRUE,
-                                      tiger_year = "2013",
-                                      data_dir = file.path("data", "robjs")){
-  dis <- vector("list", length(years))
-  names(dis) <- years
-  for (y in names(dis)){
-    dis[[y]] <- connectedness(cbp_year = y,
-                              normalized = normalized,
-                              ilevel = ilevel,
-                              threshold = threshold,
-                              cbsa_year = cbsa_year,
-                              row_max_match = row_max_match,
-                              tiger_year = tiger_year,
-                              data_dir = data_dir)
-  }
-  df <- bind_rows(dis, .id = "id")
-  return(df)
-}
-
 absorption_density_plot <- function(df,
                                     fill,
                                     fill_lab,
@@ -1725,8 +1991,135 @@ girafe(ggobj = g,
        )
 }
 
+############ Map various spatial impedance functions
+impedance_distribution_map <- function(year = "2012",
+                                       central_place = "20183", 
+                                       decay_function = c("bisquare", "hyper", "gaus", "expo", "power", "dprox", "bprox"),
+                                       boundary_limit = 200,
+                                       rms_width = 200,
+                                       hyper_decay_constant = 200,
+                                       expo_decay_constant = 200,
+                                       decay_power = 1/8,
+                                       queen = TRUE,
+                                       ...){
+  decay_function <- match.arg(decay_function)
+  df <- year2tiger(year) %>% 
+    call_tiger(...)
+  if(decay_function == "bisquare"){
+    sf <- bisquare_impedance_mat(tiger_year = year2tiger(year), 
+                                 decay_zero = miles2meters(boundary_limit),
+                                 ...)
+    caption <- glue("Bi-square Decay: {boundary_limit} mile limit")}
+  if(decay_function == "hyper"){
+    sf <- hyper_impedance_mat(tiger_year = year2tiger(year),
+                              decay_constant = miles2meters(hyper_decay_constant),
+                                 ...)
+    caption <- glue("Hyperbolic Secant Decay: {hyper_decay_constant} mile scewness scalar")}
+  if(decay_function == "gaus"){
+    sf <- gaus_impedance_mat(tiger_year = year2tiger(year),
+                             rms_width = miles2meters(rms_width),
+                              ...)
+    caption <- glue("Gaussian Decay: {rms_width} mile RMS scalar")}
+  if(decay_function == "expo"){
+    sf <- expo_impedance_mat(tiger_year = year2tiger(year),
+                             decay_constant = miles2meters(expo_decay_constant),
+                             ...)
+    caption <- glue("Exponential Decay: {expo_decay_constant} mile disintegration scalar")}
+  if(decay_function == "power"){
+    sf <- power_impedance_mat(tiger_year = year2tiger(year),
+                              decay_power = decay_power,
+                              ...)
+    sf[is.infinite(sf)] = 1
+    caption <- glue("Inverse Power Decay: decay power of {decay_power}")}
+  if(decay_function == "dprox"){
+    sf <- dprox_mat(tiger_year = year2tiger(year),
+                    boundary_limit = miles2meters(boundary_limit),
+                    ...)
+    diag(sf) <- 1
+    caption <- glue("Uniform Proximity: {boundary_limit} mile limit")}
+  if(decay_function == "bprox"){
+    sf <- bprox_mat(tiger_year = year2tiger(year),
+                    queen = queen,
+                    ...)
+    diag(sf) <- 1
+    caption <- if(isTRUE(queen)){
+      glue("Queen Adjacent Borders")
+    }else{
+        glue("Rook Adjacent Borders")}}
+  
+  sf <- data.frame(place = rownames(sf), 
+                   imped = c(sf[, central_place, drop = FALSE]))
+  df <- left_join(df, sf, by = "place")
+  df <- df[df$STATE_CODE != "02" & 
+           df$STATE_CODE != "15" & 
+           df$STATE_CODE != "72", ]
+  g <- ggplot() + 
+    geom_sf_interactive(aes(fill = imped, 
+                            tooltip = glue("Value: {round(imped,4)}\nCounty: {NAME}\nFIPS: {place}"), 
+                            data_id = place), 
+                        data = df, 
+                        color = NA) + 
+    guides(fill = guide_legend(title = "Impedance", 
+                               reverse = TRUE)) + 
+    theme_void() + 
+    scale_fill_viridis(direction = -1, 
+                       limits=c(floor(0), 
+                                ceiling(1))) +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+           legend.key.size = unit(.2, "cm"),
+           legend.title = element_text(size = rel(0.75)), 
+           legend.text = element_text(size = rel(0.75)),
+           legend.position = c(0.9, 0.3)) + 
+    labs(caption = caption)
+  girafe(ggobj = g, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:orange;r:12pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;") ))
+}
 
-
+############ Map hierarchy of neighbors from central place
+hierarchy_of_neighbors_map <- function(year,
+                                       ...){
+  df <- year2tiger(year) %>% call_tiger(...)
+  df <- neighbor_of_neighbor(...) %>% inner_join(df, ., by = "place")
+  g <- ggplot() + 
+    geom_sf_interactive(aes(fill = nn, 
+                            tooltip = glue("Interval level: {nn}\nCounty: {NAME}\nFIPS: {place}"), 
+                            data_id = place), 
+                        data = df, 
+                        color = NA) + 
+    guides(fill = guide_legend(title = "Neighbors", 
+                               reverse = TRUE)) + 
+    theme_void() +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+          legend.key.size = unit(.2, "cm"),
+          legend.title = element_text(size = rel(0.75)), 
+          legend.text = element_text(size = rel(0.75)),
+          legend.position = "none") + 
+    labs(caption = paste0(df$COUNTY[df$nn=="n0"], ", ", df$STATE[df$nn=="n0"], " Hierarchy of Neighbors"))
+  girafe(ggobj = g, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:orange;r:12pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                               background-color:gray;
+                                               color:white;
+                                               padding:10px;
+                                               border-radius:5px;") ))
+}
 
 
 ################################### 

@@ -45,7 +45,7 @@ library(dplyr)
  library(ggnewscale)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
 ```
 
@@ -66,10 +66,6 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
 #Year of CBP industry output (annual payroll), from ("1986" through "2020") 
 cbp_year = "2012" 
 
-#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
-tiger_year = "2013" 
-
-
 #Minimum matching absorption cutoff, typically only specified if absorption is normalized, range [0,1], default == 0.05
 threshold = .05 
 #NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
@@ -79,25 +75,21 @@ impedance = NULL
 normalized = TRUE 
 #TRUE or FALSE, row-match for forward supply linkages column-match for backward demand linkages in matching calculation of county-by-county absorption matrix, default == TRUE
 row_max_match = TRUE 
-#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
-cbsa_year = NULL 
+#TRUE or FALSE, to aggregate shapefiles and industry output data to start with cbsa clusters or counties
+cbsa_clust = FALSE
 #BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
 ilevel = "det"
 #TRUE or FALSE, to add html image data of industry distribution characteristics to dataframe, if TRUE can significantly increase processing time if done for the first time, default == FALSE 
-add_html = TRUE
-
+add_html = FALSE
 
 df <- spatial_connectedness(cbp_year = cbp_year,
-                            tiger_year = tiger_year,
                             threshold = threshold,
-                            impedance = impedance, 
+                            impedance = impedance,
                             normalized = normalized,
                             row_max_match = row_max_match,
-                            cbsa_year = cbsa_year,
+                            cbsa_clust = cbsa_clust,
                             ilevel = ilevel,
                             add_html = add_html)
-
-
 
 ```
 
@@ -109,7 +101,7 @@ df <- spatial_connectedness(cbp_year = cbp_year,
 alpha = "max_absorption_alpha"
 
 #TRUE or FALSE, to add html image data of industry {output} distribution to map tooltip hover, if TRUE may prevent successful html render of whole notebook, default == FALSE
-add_html = TRUE 
+add_html = FALSE 
 
 clustmember_map(df = df,
                 alpha = alpha,
@@ -119,9 +111,9 @@ clustmember_map(df = df,
 
 National cluster membership. \
 `r cbp_year` CBP data. \
-`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
-`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
-`r tiger_year` county boundary year. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
 `r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
 `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
 `r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
@@ -144,7 +136,6 @@ unit_scale = TRUE
 
 absorption_map(df = df,
                add_html = add_html,
-               threshold = threshold,
                fill = fill, 
                fill_lab = fill_lab,
                unit_scale = unit_scale)
@@ -154,9 +145,9 @@ absorption_map(df = df,
 
 `r fill_lab` connectedness. \
 `r cbp_year` CBP data. \
-`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
-`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
-`r tiger_year` county boundary year. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
 `r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
 `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
 `r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
@@ -180,7 +171,6 @@ unit_scale = TRUE
 
 absorption_map(df = df,
                add_html = add_html,
-               threshold = threshold,
                fill = fill, 
                fill_lab = fill_lab,
                unit_scale = unit_scale)
@@ -189,14 +179,420 @@ absorption_map(df = df,
 
 `r fill_lab` connectedness. \
 `r cbp_year` CBP data. \
-`r if(cbp_year > "2014"){"2017"}else if(cbp_year %in% 2014:2010){"2012"}else if(cbp_year %in% 2009:2005){"2007"}else if(cbp_year < "2005"){"2002"}` Farm sales data. \
-`r if(ilevel != "det"){cbp_year}else{if(isTRUE(cbp_year > "2007")){"2012"}else{"2007"}}` BEA requirements tables. \
-`r tiger_year` county boundary year. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
 `r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
 `r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
 `r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
 No spatial impedance. \
 A Gini of 0 is no concentration and Gini of 1 is complete concentration. 
+
+
+
+### Hierarchical Absorption Maps
+
+```{r hierarchial maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det")
+```
+
+```{r hierarchial impedance clust maps}
+
+folder = "national_hierarcy_clust"
+map_function = clustmember_map
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+```{r hierarchial impedance abs maps}
+
+folder = "national_hierarcy_abs"
+map_function = absorption_map
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+```{r hierarchial clustering L1}
+clustmember_map(df = df$Hierarchical_Connectedness_table$level_1,
+                caption = glue("Level 1 Hierarchy\n {threshold*100}% Isolation Threshold"))
+```
+
+```{r hierarchial absorption L1}
+absorption_map(df = df$Hierarchical_Connectedness_table$level_1,
+               caption = glue("Level 1 Hierarchy\n {threshold*100}% Isolation Threshold"))
+```
+
+
+### Progressive Distance Impedance Maps
+
+```{r progressive distance impedance clust maps}
+folder = "national_progressive_impedance_cluster_bdist"
+if(!file.exists(file.path(find_rstudio_root_file(), "data", folder, paste0(folder, ".gif")))){
+national_progressiveimpedance_gif(cbp_year,
+                                   dist,
+                                   impd = "B",
+                                   folder = folder,
+                                   map_function = clustmember_map)
+}
+file.path(find_rstudio_root_file(), "data", folder) %>%
+  list.files(full.names = T, pattern = "\\.gif$") %>%
+  image_read()
+```
+
+
+National cluster membership. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+
+
+```{r progressive distance impedance abs maps}
+folder = "national_progressive_impedance_absorption_bdist"
+if(!file.exists(file.path(find_rstudio_root_file(), "data", folder, paste0(folder, ".gif")))){
+national_progressiveimpedance_gif(cbp_year,
+                                   dist,
+                                   impd = "B",
+                                   folder = folder,
+                                   map_function = absorption_map)
+}
+file.path(find_rstudio_root_file(), "data", folder) %>%
+  list.files(full.names = T, pattern = "\\.gif$") %>%
+  image_read()
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+
+
+Distance from Border Qualitative ECAs
+```{r }
+cbp_year = "2012"
+dist = c("5", "10", "25", "50", "75", "100", "150", "200", "250", "300", "400", "500", "750", "1000", "1250", "1500", "2000", "2500", "3000")
+
+sasf <- paste0("spacecon", "_", ilevel, "class", "_", cbp_year, "cbp", "_", "PDI")
+  if (file.exists(file.path(find_rstudio_root_file(), "data", "robjs", sasf) ) ){ 
+    df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", sasf))
+  } else {
+    df <- list()
+    tiger_year = year2tiger(cbp_year)
+    for(d in dist){
+      impedance = dist_matb(dist = miles2meters(d), 
+                            tiger_year = tiger_year)
+      df[[d]] <- spatial_connectedness(cbp_year = cbp_year,
+                                        impedance = impedance)
+    }
+    saveRDS(df,  file = file.path(find_rstudio_root_file(), "data", "robjs", sasf) )
+  }
+ 
+ 
+```
+
+
+```{r}
+aqual_map(df = df[["5"]], caption = paste0("5", " Mile Impedance"))
+aqual_map(df = df[["10"]], caption = paste0("10", " Mile Impedance"))
+aqual_map(df = df[["25"]], caption = paste0("25", " Mile Impedance"))
+aqual_map(df = df[["50"]], caption = paste0("50", " Mile Impedance"))
+aqual_map(df = df[["75"]], caption = paste0("75", " Mile Impedance"))
+aqual_map(df = df[["100"]], caption = paste0("100", " Mile Impedance"))
+aqual_map(df = df[["150"]], caption = paste0("150", " Mile Impedance"))
+aqual_map(df = df[["200"]], caption = paste0("200", " Mile Impedance"))
+aqual_map(df = df[["250"]], caption = paste0("250", " Mile Impedance"))
+aqual_map(df = df[["300"]], caption = paste0("300", " Mile Impedance"))
+aqual_map(df = df[["400"]], caption = paste0("400", " Mile Impedance"))
+aqual_map(df = df[["500"]], caption = paste0("500", " Mile Impedance"))
+aqual_map(df = df[["750"]], caption = paste0("750", " Mile Impedance"))
+aqual_map(df = df[["1000"]], caption = paste0("1000", " Mile Impedance"))
+aqual_map(df = df[["1250"]], caption = paste0("1250", " Mile Impedance"))
+aqual_map(df = df[["1500"]], caption = paste0("1500", " Mile Impedance"))
+aqual_map(df = df[["2000"]], caption = paste0("2000", " Mile Impedance"))
+aqual_map(df = df[["2500"]], caption = paste0("2500", " Mile Impedance"))
+aqual_map(df = df[["3000"]], caption = paste0("3000", " Mile Impedance"))
+```
+
+
+### Hierarchical with Impedance Maps
+
+All Matching Restricted to 5 Mile Border Buffer
+
+```{r hierarchial distance impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det",  impedance = 5)
+
+#Minimum matching absorption cutoff, typically only specified if absorption is normalized, range [0,1], default == 0.05
+threshold = .05 
+#Display label in map
+fill_lab = "Max Absorption"
+```
+
+
+```{r distance 5 impedance cluster map}
+clustmember_map(df = df$Hierarchical_Connectedness_table$level_1,
+                caption = glue("5 Mile Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+National cluster membership. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+5 Mile Border Impedance. \
+
+```{r distance 5 impedance absorption map}
+absorption_map(df = df$Hierarchical_Connectedness_table$level_1,
+               caption = glue("5 Mile Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+5 Mile Border Impedance. \
+
+
+```{r hierarchial distance 5 impedance clust maps}
+folder = "national_hierarcy_dist5_clust"
+map_function = clustmember_map
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+```{r hierarchial distance 5 impedance abs maps}
+folder = "national_hierarcy_dist5_abs"
+map_function = absorption_map
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+All Matching Restricted to Shared Queen Borders
+
+```{r hierarchial queen border impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det",  impedance = "B", queen = TRUE)
+```
+
+```{r queen border impedance cluster map}
+clustmember_map(df = df$Hierarchical_Connectedness_table$level_1,
+                caption = glue("Queen Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+National cluster membership. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+Queen Border spatial impedance. \
+
+```{r queen border impedance absorption map}
+absorption_map(df = df$Hierarchical_Connectedness_table$level_1,
+               caption = glue("Queen Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+Queen Border spatial impedance. \
+
+```{r hierarchial queen border impedance clust maps}
+folder = "national_hierarcy_queenboundry_clust"
+map_function = clustmember_map
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+```{r hierarchial queen border impedance abs maps}
+folder = "national_hierarcy_queenboundry_abs"
+map_function = absorption_map
+
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+
+All Matching Restricted to Shared Rook Borders
+
+```{r hierarchial rook border impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det",  impedance = "B", queen = FALSE)
+```
+
+```{r rook border impedance cluster map}
+clustmember_map(df = df$Hierarchical_Connectedness_table$level_1,
+                caption = glue("Rook Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+National cluster membership. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+Rook Border spatial impedance. \
+
+```{r rook border impedance absorption map}
+absorption_map(df = df$Hierarchical_Connectedness_table$level_1,
+               caption = glue("Rook Border Impedance \n {threshold*100}% Isolation Threshold"))
+```
+
+`r fill_lab` connectedness. \
+`r cbp_year` CBP data. \
+`r year2agcensus(cbp_year)` Farm sales data. \
+`r year2bea(cbp_year, ilevel)` BEA requirements tables. \
+`r year2tiger(cbp_year)` county boundary year. \
+`r if(isTRUE(normalized)){"Normalized"}else{"Nominal"}` Absorption. \
+`r if(ilevel == "det"){"Detail"}else if(ilevel == "sum"){"Summary"}else if(ilevel == "sec"){"Sector"}` level industry structure. \
+`r if(isTRUE(row_max_match)){"Export Excess (row-wise)"}else{"Import Needs (column-wise)"}` matching. \
+Rook Border spatial impedance. \
+
+```{r hierarchial rook border impedance clust maps}
+folder = "national_hierarcy_rookboundry_clust"
+map_function = clustmember_map
+
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+```{r hierarchial rook border impedance abs maps}
+folder = "national_hierarcy_rookboundry_abs"
+map_function = absorption_map
+
+national_hierarchy_gif(df = df$Hierarchical_Connectedness_table, 
+                      folder = folder,
+                      map_function = map_function)
+
+file.path(find_rstudio_root_file(), "data", folder) %>% 
+  list.files(full.names = T, pattern = "\\.gif$") %>% 
+  image_read()
+
+```
+
+
+
+
+
+### Top Level Hierarchical Qualitative ECA Maps
+
+```{r hierarchial top qual map}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det")
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+No Matching Impedance\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
+
+```{r hierarchical queen border impedance qual maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det",  impedance = "B", queen = TRUE)
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+Matching Impedance Restricted to Shared (Queens) Borders\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
+
+```{r hierarchical rook border impedance qual maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det",  impedance = "B", queen = FALSE)
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+Matching Impedance Restricted to Shared (Rooks) Borders\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
+
+```{r hierarchial 5 mile border distance impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det", impedance = 5)
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+Matching Impedance Restricted to 5 Mile Border Distance\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
+
+```{r hierarchial 50 mile border distance impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det", impedance = 50)
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+Matching Impedance Restricted to 50 Mile Border Distance\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
+
+```{r hierarchial 500 mile border distance impedance maps}
+df <- one_hierarchical_connectedness(cbp_year = "2012", ilevel = "det", impedance = 500)
+aqual_map(df=df$Hierarchical_Connectedness_table[[names(df$Hierarchical_Connectedness_table)[length(names(df$Hierarchical_Connectedness_table))]]])
+```
+
+Matching Impedance Restricted to 500 Mile Border Distance\
+Top ECAs of `r length(names(df$Hierarchical_Connectedness_table))` Iterations\
+Normalized Absorption Matrix\
+Minimum of 0.05 Absorption Cutoff\
 
 
 ### National Absorption Statistics
@@ -209,31 +605,18 @@ years = 2000:2020
   if (file.exists(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot") ) ){
     normal_absorb_ot <- readRDS(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot"))
   } else {
-    normal_absorb_ot <- absorption_match_overtime(years = years,
-                                                  normalized = TRUE,
-                                                  ilevel = ilevel,
-                                                  threshold = threshold,
-                                                  cbsa_year = cbsa_year,
-                                                  row_max_match = row_max_match,
-                                                  tiger_year = tiger_year)
-
+    normal_absorb_ot <- absorption_match_overtime(years = years)
     saveRDS(normal_absorb_ot,  file = file.path(find_rstudio_root_file(), file.path("data", "robjs"), "normal_absorb_ot") )
   }
 
-  if (file.exists(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") ) ){
-    nominal_absorb_ot <- readRDS(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot"))
-  } else {
-    nominal_absorb_ot <- absorption_match_overtime(years = years,
-                                                    normalized = FALSE,
-                                                    ilevel = ilevel,
-                                                    threshold = threshold,
-                                                    cbsa_year = cbsa_year,
-                                                    row_max_match = row_max_match,
-                                                    tiger_year = tiger_year)
+  # if (file.exists(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") ) ){
+  #   nominal_absorb_ot <- readRDS(file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot"))
+  # } else {
+  #   nominal_absorb_ot <- absorption_match_overtime(years = years,
+  #                                                   normalized = FALSE)
+  #   saveRDS(nominal_absorb_ot,  file = file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") )
+  # }
 
-
-    saveRDS(nominal_absorb_ot,  file = file.path(find_rstudio_root_file(), file.path("data", "robjs"), "nominal_absorb_ot") )
-  }
 
 ```
 
