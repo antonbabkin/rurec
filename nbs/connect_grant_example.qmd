@@ -11,112 +11,969 @@ editor: visual
 ---
 
 ```{r packages and libraries, include = FALSE}
-
-# Load packages
-
 library(tidyr)
 library(geosphere)
-
 
 ```
 
 ::: panel-tabset
-## Example
+# The Principle Setup
+
+## Commodity/Industry economic sectors
 
 ```{r}
-##From Direct to Total 
+## Commodity/Industry economic sectors
+Toy_Sectors <- c("Agriculture", 
+                 "Mining",
+                 "Manufacturing")
+Toy_Sectors
+```
 
-Industry_Count <- 3
-Toy_Direct_mat <-  matrix(c(0.429,  0.014, 0.086, 
-                            0.08,  0.56, 0.24,
-                            0.016,  0.392, 0.568), nrow = Industry_Count, byrow = TRUE)
+## Make Matrix (industry-by-commodity in Dollars): $\mathbf{V}$
 
-rownames(Toy_Direct_mat) = colnames(Toy_Direct_mat) <- c("Oil", "Wheat", "Bread")
+Shows the industry i output value of commodity j
 
-Toy_Total_mat <-  solve(diag(ncol(Toy_Direct_mat)) - Toy_Direct_mat)
+```{r}
+## Make Matrix (industry-by-commodity in Dollars)
+Toy_Make_mat <- t(Toy_Supply_mat)
+Toy_Make_mat
+```
+
+## Supply Matrix (commodity-by-industry in Dollars): $\mathbf{V^{'}}$
+
+Shows the value of the output of commodity i that is produced by industry j
+
+The transpose of a Make matrix is the Supply matrix
+
+In this example there is no secondary production, thus Supply == Make and commodity output == industry output but this may not always be true
+
+```{r}
+## Supply Matrix (commodity-by-industry in Dollars)
+Toy_Supply_mat <- rbind(c(80, 0, 0),
+                        c(0, 120, 0),
+                        c(0, 0, 190))
+rownames(Toy_Supply_mat) = colnames(Toy_Supply_mat) <- Toy_Sectors
+Toy_Supply_mat
+```
+
+## Total Commodity Output Vector: $\mathbf{q}$
+
+The row sum of the Supply matrix and the transposed column sum of the Make matrix
+
+```{r}
+## Total Commodity Output Vector
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
+Toy_Total_Commodity_Output
+```
+
+## Total Industry Output Vector: $\mathbf{x}$
+
+The transposed column sum of the Supply matrix and the row sum of the Make matrix
+
+```{r}
+## Total Industry Output Vector
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
+Toy_Total_Industry_Output
+```
+
+## Use Matrix (commodity-by-industry in Dollars): $\mathbf{U}$
+
+Shows the value of purchases of commodity i by industry j
+
+Row sums represent the dollar value of a commodity used across all industries - Value of Aggregate (commodity) Factor Demand
+
+Column sums represent the dollar value across all commodities used by an industry - Total (industry) Factor Cost
+
+Cells are both intermediate sales of a commodity to an industry and intermediate purchases of a commodity by an industry
+
+Sometimes called the input matrix
+
+```{r}
+## Use Matrix (commodity-by-industry in Dollars)
+#Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) %*% Toy_Direct_mat %*% diag(as.vector(Toy_Total_Industry_Output))
+Toy_Use_mat <- rbind(c(10, 0, 9),
+                     c(11, 45, 20),
+                     c(7, 15, 35))
+rownames(Toy_Use_mat) = colnames(Toy_Use_mat) <- Toy_Sectors
+Toy_Use_mat
+```
+
+## Value of Aggregate (commodity) Factor Demand Vector: $\mathbf{Ui}$
+
+The row sum of the Use matrix
+
+```{r}
+## Value of Aggregate (commodity) Factor Demand Vector
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Aggregate_Factor_Demand <- Toy_Use_mat %*% i
+Toy_Aggregate_Factor_Demand
+```
+
+## Total (industry) Factor Cost Vector: $(\mathbf{i^{'}U})^{'}$
+
+The transposed column sum of the Use matrix
+
+```{r}
+## Total (industry) Factor Cost Vector
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Factor_Cost <- t(t(i) %*% Toy_Use_mat)
+Toy_Total_Factor_Cost
+```
+
+## Final Demand Vector: $\mathbf{e} = \mathbf{q} - \mathbf{Ui}$
+
+Difference of Total Commodity Output and Value of Aggregate (commodity) Factor Demand
+
+In motivating the theoretical framework Final Demand is exogenous to producers (i.e., industrial sectors)
+
+Component parts of Final Demand: Personal consumption expenditures, Private fixed investment, Change in private inventories, Exports of goods and services, and Government consumption expenditures and gross investment
+
+```{r}
+## Final Demand Vector
+Toy_Final_Demand <- Toy_Total_Commodity_Output - Toy_Aggregate_Factor_Demand
+Toy_Final_Demand
+```
+
+## Value Added Vector: $\mathbf{v} = \mathbf{x} - (\mathbf{i^{'}U})^{'}$
+
+Difference of Total Industry Output and Total (industry) Factor Cost
+
+Component parts of Value Added: Employee compensation, Taxes on production, and Gross operating surplus; plus Imports of goods and services less subsidies
+
+```{r}
+## Value Added Vector
+Toy_Value_Added <- Toy_Total_Industry_Output - Toy_Total_Factor_Cost
+Toy_Value_Added
+```
+
+## B matrix: $\mathbf{B} = \mathbf{U\hat{x}^{-1}}$
+
+The commodities-by-industries parallel to ordinary technical coefficients matrix, $\mathbf{A}$
+
+Unlike $\mathbf{A}$, the $\mathbf{B}$ matrix cannot generate a total requirements matrix directly because Total Industry Output and Total Commodity Output cannot be combined directly to give the Final Demand Vector of commodities
+
+column j represents the value of inputs of each commodity per dollar's worth of industry j's output
+
+```{r}
+## B matrix
+Toy_B_mat <- Toy_Use_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) 
+rownames(Toy_B_mat) = colnames(Toy_B_mat)  <- Toy_Sectors
+Toy_B_mat
+```
+
+## D matrix: $\mathbf{D} = \mathbf{V\hat{q}^{-1}}$
+
+The Industry Source of Commodity Outputs
+
+Denotes the fraction of total commodity j output that was produced by industry i
+
+By definition, each column sum in $\mathbf{D}$ is unity
+
+If the Supply matrix is diagonal, the $\mathbf{D}$ matrix is an Identity matrix
+
+```{r}
+## D matrix
+Toy_D_mat <- t(Toy_Supply_mat) %*% inv(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
+rownames(Toy_D_mat) = colnames(Toy_D_mat) <- Toy_Sectors
+Toy_D_mat
+```
+
+## C matrix: $\mathbf{C} = \mathbf{V^{'}\hat{x}^{-1}}$
+
+Commodity Composition of Industry Outputs
+
+Denotes the fraction of total industry i output that is in the form of commodity j
+
+By definition, each column sum in $\mathbf{C}$ is unity
+
+If the Supply matrix is diagonal, the $\mathbf{C}$ matrix is an Identity matrix
+
+```{r}
+## C matrix
+Toy_C_mat <- Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
+rownames(Toy_C_mat) = colnames(Toy_C_mat) <- Toy_Sectors
+Toy_C_mat
+```
+
+Total Requirements matrices
+
+## Commodity-by-Commodity Total Requirements Matrix - Industry technology: $(\mathbf{I} - \mathbf{BD})^{-1}$
+
+```{r}
+## Commodity-by-Commodity Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByCom_IT_mat <- inv(I - Toy_B_mat %*% Toy_D_mat)
+rownames(Toy_Total_ComByCom_IT_mat) = colnames(Toy_Total_ComByCom_IT_mat) <- Toy_Sectors
+Toy_Total_ComByCom_IT_mat
+```
+
+## Industry-by-Commodity Total Requirements Matrix - Industry technology: $\mathbf{D}(\mathbf{I} - \mathbf{BD})^{-1}$
+
+```{r}
+## Industry-by-Commodity Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_IndByCom_IT_mat <- Toy_D_mat %*% inv(I - Toy_B_mat %*% Toy_D_mat)
+rownames(Toy_Total_IndByCom_IT_mat) = colnames(Toy_Total_IndByCom_IT_mat) <- Toy_Sectors
+Toy_Total_IndByCom_IT_mat
+```
+
+## Industry-by-Industry Total Requirements Matrix - Industry technology: $(\mathbf{I} - \mathbf{DB})^{-1}$
+
+```{r}
+## Industry-by-Industry Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_IndByInd_IT_mat <- inv(I - Toy_D_mat %*% Toy_B_mat)
+rownames(Toy_Total_IndByInd_IT_mat) = colnames(Toy_Total_IndByInd_IT_mat) <- Toy_Sectors
+Toy_Total_IndByInd_IT_mat
+```
+
+## Commodity-by-Industry Total Requirements Matrix - Industry technology: $\mathbf{D}^{-1}(\mathbf{I} - \mathbf{DB})^{-1}$
+
+```{r}
+## Commodity-by-Industry Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByInd_IT_mat <- inv(Toy_D_mat) %*% inv(I - Toy_D_mat %*% Toy_B_mat)
+rownames(Toy_Total_ComByInd_IT_mat) = colnames(Toy_Total_ComByInd_IT_mat) <- Toy_Sectors
+Toy_Total_ComByInd_IT_mat
+```
+
+## Commodity-by-Commodity Total Requirements Matrix - Commodity technology: $(\mathbf{I} - \mathbf{BC}^{-1})^{-1}$
+
+```{r}
+## Commodity-by-Commodity Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByCom_CT_mat <- inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+rownames(Toy_Total_ComByCom_CT_mat) = colnames(Toy_Total_ComByCom_CT_mat) <- Toy_Sectors
+Toy_Total_ComByCom_CT_mat
+```
+
+## Industry-by-Commodity Total Requirements Matrix - Commodity technology: $\mathbf{C}^{-1}(\mathbf{I} - \mathbf{BC}^{-1})^{-1}$
+
+```{r}
+## Industry-by-Commodity Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_IndByCom_CT_mat <- inv(Toy_C_mat) %*% inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+rownames(Toy_Total_IndByCom_CT_mat) = colnames(Toy_Total_IndByCom_CT_mat) <- Toy_Sectors
+Toy_Total_IndByCom_CT_mat
+```
+
+## Industry-by-Industry Total Requirements Matrix - Commodity technology: $(\mathbf{I} - \mathbf{C}^{-1}\mathbf{B})^{-1}$
+
+```{r}
+## Industry-by-Industry Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_IndByInd_CT_mat <- inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+rownames(Toy_Total_IndByInd_CT_mat) = colnames(Toy_Total_IndByInd_CT_mat) <- Toy_Sectors
+Toy_Total_IndByInd_CT_mat
+```
+
+## Commodity-by-Industry Total Requirements Matrix - Commodity technology: $\mathbf{C}(\mathbf{I} - \mathbf{C}^{-1}\mathbf{B})^{-1}$
+
+```{r}
+## Commodity-by-Industry Total Requirements
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByInd_CT_mat <- Toy_C_mat %*% inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+rownames(Toy_Total_ComByInd_CT_mat) = colnames(Toy_Total_ComByInd_CT_mat) <- Toy_Sectors
+Toy_Total_ComByInd_CT_mat
+```
+
+Direct Requirements matrices
+
+## Commodity-by-Commodity Direct Requirements, Industry-Demand-Driven Model: $\mathbf{BD}$
+
+```{r}
+## Commodity-by-Commodity Direct Requirements, Industry-Demand-Driven Model
+Toy_Direct_ComByCom_IT_mat <- Toy_B_mat %*% Toy_D_mat
+rownames(Toy_Direct_ComByCom_IT_mat) = colnames(Toy_Direct_ComByCom_IT_mat) <- Toy_Sectors
+Toy_Direct_ComByCom_IT_mat
+```
+
+## Commodity-by-Commodity Direct Requirements, Commodity-Demand-Driven Model: $\mathbf{B}\mathbf{C}^{-1}$
+
+```{r}
+## Commodity-by-Commodity Direct Requirements, Commodity-Demand-Driven Model
+Toy_Direct_ComByCom_CT_mat <- Toy_B_mat %*% inv(Toy_C_mat)
+rownames(Toy_Direct_ComByCom_CT_mat) = colnames(Toy_Direct_ComByCom_CT_mat) <- Toy_Sectors
+Toy_Direct_ComByCom_CT_mat
+```
+
+## Industry-by-Industry Direct Requirements, Industry-Demand-Driven Model: $\mathbf{DB}$
+
+```{r}
+## Industry-by-Industry Direct Requirements, Industry-Demand-Driven Model
+Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
+rownames(Toy_Direct_IndByInd_IT_mat) = colnames(Toy_Direct_IndByInd_IT_mat) <- Toy_Sectors
+Toy_Direct_IndByInd_IT_mat
+```
+
+## Industry-by-Industry Direct Requirements, Commodity-Demand-Driven Model: $\mathbf{C}^{-1}\mathbf{B}$
+
+```{r}
+## Industry-by-Industry Direct Requirements, Commodity-Demand-Driven Model
+Toy_Direct_IndByInd_CT_mat <- inv(Toy_C_mat) %*% Toy_B_mat
+rownames(Toy_Direct_IndByInd_CT_mat) = colnames(Toy_Direct_IndByInd_CT_mat) <- Toy_Sectors
+Toy_Direct_IndByInd_CT_mat
+```
+
+# National Example
+
+Given a Use matrix and Supply matrix can we recover the direct and total requirements matrices?
+
+```{r}
+# Use matrix (commodity by industry )
+Toy_Use_mat
+
+# Supply matrix (commodity by industry )
+Toy_Supply_mat
 
 ```
 
 ```{r}
-##From Total to Direct 
 
-# Industry_Count <- 3
-# Toy_Total_mat <-  matrix(c(1.350,  0.448, 0.624, 
-#                             0.329,  1.622, 0.992,
-#                             0.325,  0.226, 1.327), nrow = Industry_Count, byrow = TRUE)
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
+Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
+
+Toy_B_mat <- Toy_Use_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) 
+colnames(Toy_B_mat) <- Toy_Sectors
+Toy_D_mat <- t(Toy_Supply_mat) %*% inv(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
+colnames(Toy_D_mat) <- Toy_Sectors
+Toy_C_mat <- Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
+colnames(Toy_C_mat) <- Toy_Sectors
+
+# Direct 
+Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
+Toy_Direct_IndByInd_CT_mat <- inv(Toy_C_mat) %*% Toy_B_mat
+rownames(Toy_Direct_IndByInd_CT_mat) <- Toy_Sectors
+Toy_Direct_ComByCom_IT_mat <- Toy_B_mat %*% Toy_D_mat
+Toy_Direct_ComByCom_CT_mat <- Toy_B_mat %*% inv(Toy_C_mat)
+colnames(Toy_Direct_ComByCom_CT_mat) <- Toy_Sectors
+
+# Total 
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByCom_IT_mat <- inv(I - Toy_B_mat %*% Toy_D_mat)
+Toy_Total_IndByCom_IT_mat <- Toy_D_mat %*% inv(I - Toy_B_mat %*% Toy_D_mat)
+Toy_Total_IndByInd_IT_mat <- inv(I - Toy_D_mat %*% Toy_B_mat)
+Toy_Total_ComByInd_IT_mat <- inv(Toy_D_mat) %*% inv(I - Toy_D_mat %*% Toy_B_mat)
+  
+Toy_Total_ComByCom_CT_mat <- inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+Toy_Total_IndByCom_CT_mat <- inv(Toy_C_mat) %*% inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+Toy_Total_IndByInd_CT_mat <- inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+Toy_Total_ComByInd_CT_mat <- Toy_C_mat %*% inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+
+
+# ##back to direct from total test 
+# Toy_Total_IndByInd_mat <- inv(I - Toy_Direct_IndByInd_IT_mat) 
+# test <- diag(length(Toy_Sectors)) - inv(Toy_Total_IndByInd_mat)
+# rownames(test) <- rownames(Toy_Direct_IndByInd_IT_mat)
+# colnames(test) <- colnames(Toy_Direct_IndByInd_IT_mat)
+# test
+# test == Toy_Direct_IndByInd_IT_mat
+# all.equal(test, Toy_Direct_IndByInd_IT_mat, tolerance = 0, countEQ = TRUE)
+
+
+# ##counter example using solve()
+# Toy_B_mat <- Toy_Use_mat %*% solve(diag(as.vector(Toy_Total_Industry_Output)))
+# Toy_D_mat <- t(Toy_Supply_mat) %*% solve(diag(as.vector(Toy_Total_Commodity_Output)))
 # 
-# rownames(Toy_Total_mat) = colnames(Toy_Total_mat) <- c("Oil", "Wheat", "Bread")
+# # ind by ind direct
+# Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
 # 
+# # ind by ind total
+# Toy_Total_IndByInd_mat <- solve(diag(length(Toy_Sectors)) - Toy_Direct_IndByInd_IT_mat)
 # 
-# Toy_Direct_mat <-  diag(ncol(Toy_Total_mat)) - solve(Toy_Total_mat)
+# #back to direct from total
+# test <- diag(length(Toy_Sectors)) - solve(Toy_Total_IndByInd_mat)
+# rownames(test) <- rownames(Toy_Direct_IndByInd_IT_mat)
+# colnames(test) <- colnames(Toy_Direct_IndByInd_IT_mat)
+# test == Toy_Direct_IndByInd_IT_mat
+# all.equal(test, Toy_Direct_IndByInd_IT_mat, tolerance = 0, countEQ = TRUE)
+# 
+```
+
+# Regional Example
+
+Given Region specific Total Industry Output and National Use and Supply matrices, what can we derive?
+
+## Regional places
+
+```{r}
+## Regional places
+Toy_Places <- c("Albany", 
+                "Brown", 
+                "Cook")
+Toy_Places 
+```
+
+## Industry-by-County Total Output Table
+
+Shows the value of the output of industry i that is produced by county j
+
+```{r}
+## Sub-national Total Industry Output (Industry-by-County)
+Toy_Regional_Industry_Output <- rbind(c(50, 20, 10),
+                                      c(0, 70, 50),
+                                      c(35, 55, 100))
+rownames(Toy_Regional_Industry_Output) <- Toy_Sectors
+colnames(Toy_Regional_Industry_Output) <- Toy_Places
+Toy_Regional_Industry_Output
+```
+
+## Sub-national Total Commodity Output (Commodity-by-County)
+
+Shows the value of the output of commodity i that is produced by county j
+
+```{r}
+## Sub-national Total Commodity Output (Commodity-by-County)
+## Translate Sub-national Industry Output matrix into Commodity Output
+## The D matrix is the Industry Source of Commodity Outputs or the fraction of total commodity j output that was produced by industry i
+## The C matrix is the Commodity Composition of Industry Outputs or the fraction of total industry i output that is in the form of commodity j
+
+Toy_Regional_Commodity_Output <- inv(Toy_D_mat) %*% Toy_Regional_Industry_Output 
+Toy_Regional_Commodity_Output <- Toy_C_mat %*% Toy_Regional_Industry_Output
+Toy_Regional_Commodity_Output
 
 ```
 
-"National Industry-by-Industry Total Requirements Table" (BEA): $\mathbf{T}$
+## Regional Use matrices (Commodity-by-Industry)
+
+Shows the value of purchases of commodity i by industry j
+
+Cells are both intermediate sales of a commodity to an industry and intermediate purchases of a commodity by an industry
 
 ```{r}
-Toy_Total_mat %>% round(2)
+## Regional Use matrices (Commodity-by-Industry)
+Toy_Places[1]
+Toy_B_mat %*% diag(as.vector(Toy_Regional_Industry_Output[,1]))
+Toy_Places[2]
+Toy_B_mat %*% diag(as.vector(Toy_Regional_Industry_Output[,2]))
+Toy_Places[3]
+Toy_B_mat %*% diag(as.vector(Toy_Regional_Industry_Output[,3]))
 ```
 
-"National Industry-by-Industry Direct Requirements Table": $\mathbf{D} = \mathbf{I} - (\mathbf{T})^{-1}$
+## Regional Supply matrices (Commodity-by-Industry)
+
+Shows the value of the output of commodity i that is produced by industry j
 
 ```{r}
-Toy_Direct_mat %>% round(3)
+## Regional Supply matrices (Commodity-by-Industry)
+Toy_Places[1]
+t(Toy_D_mat %*% diag(as.vector(Toy_Regional_Commodity_Output[,1])))
+Toy_Places[2]
+t(Toy_D_mat %*% diag(as.vector(Toy_Regional_Commodity_Output[,2])))
+Toy_Places[3]
+t(Toy_D_mat %*% diag(as.vector(Toy_Regional_Commodity_Output[,3])))
+```
+
+## Regional Aggregate (commodity) Factor Demand
+
+Intermediate (commodity) sales
+
+Equivalent to Intermediate Commodity Output in a sector model
+
+Equivalent to Regional Use matrix row sum
+
+Called "county InputNeeds" in previous generations
+
+```{r}
+## Regional Aggregate (commodity) Factor Demand
+Toy_Regional_FactorDemand <- Toy_Direct_IndByInd_IT_mat %*% Toy_Regional_Industry_Output
+Toy_Regional_FactorDemand
+```
+
+## Regional Total (industry) Factor Cost
+
+Intermediate (industry) purchases
+
+Equivalent to Intermediate Industry Input in a sector model
+
+Equivalent to Regional Use matrix column sum
+
+```{r}
+## Regional Total (industry) Factor Cost
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Regional_FactorCost <- diag(as.vector( t(i) %*% Toy_Direct_IndByInd_IT_mat )) %*% Toy_Regional_Industry_Output
+rownames(Toy_Regional_FactorCost) <- Toy_Sectors
+Toy_Regional_FactorCost
 
 ```
 
-"Industry-by-County Output Table" (CBP): $\mathbf{Y}$
+## Regional (Industry) Value Added
+
+Difference of Total Industry Output and Total (industry) Factor Cost
+
+Component parts of Value Added: Employee compensation, Taxes on production, and Gross operating surplus; plus Imports of goods and services less subsidies
 
 ```{r}
-Region_Count <- 3
-
-Toy_X_mat <-  matrix(c(0, 30, 40, 
-                       100, 20,  30,
-                       100, 15,  75), nrow = Industry_Count, byrow = TRUE)
-
-rownames(Toy_X_mat) <- c("Oil", "Wheat", "Bread")
-colnames(Toy_X_mat) <- c("Albany", "Brown", "Cook")
-
-Toy_X_mat
+## Regional (Industry) Value Added 
+Toy_Regional_ValueAdded <- Toy_Regional_Industry_Output - Toy_Regional_FactorCost
+Toy_Regional_ValueAdded
 ```
 
-"Industry-by-County Input Needs Table": $\mathbf{D}\mathbf{Y}$
+## Regional Final (Commodity) Demand
+
+Difference of Total Commodity Output and Value of Aggregate (commodity) Factor Demand
+
+Component parts of Final Demand: Personal consumption expenditures, Private fixed investment, Change in private inventories, Exports of goods and services, and Government consumption expenditures and gross investment
 
 ```{r}
-Toy_Input_mat <- (Toy_Direct_mat  %*%  Toy_X_mat) 
-Toy_Input_mat  %>% round(2)
+## Regional Final (Commodity) Demand
+Toy_Regional_FinalDemand <- Toy_Regional_Commodity_Output - Toy_Regional_FactorDemand
+Toy_Regional_FinalDemand
 ```
 
-"Net Input Demand Table": $\max \{\mathbf{D}\mathbf{Y} - \mathbf{Y} , 0\}$
+
+
+What do these metrics mean at the regional level? What can we say about a county's "input needs"?
+
+
+
+We know Albany has a total output of \$50 Agriculture, \$0 Mining, and \$35 Manufacturing; what inputs did it use to satisfy this output?
+Looking at its region specific Use table or its Factor Demand, we see that Albany used \$7.907895 of Agriculture, \$10.559212 of Mining, and \$10.822371 of Manufacturing; where did it get these inputs?
+
+Similarly, we can observe the national Total Industry Output as \$80 Agriculture, \$120 Mining, and \$190 Manufacturing and derive the national Total Factor Demand as \$19 Agriculture, \$76 Mining, and \$57 Manufacturing. So where did these inputs come from? 
+
+Conjecture: Factor Demand inputs are sourced from Total Commodity Outputs. 
+
+By definition, sum of Total Industry Output = sum of Total Commodity Output which gives, sum of Total Factor Demand plus Total Final Demand = sum of Total Factor Cost plus Total Value Added. Likewise, sum of Total Final Demand = sum of Total Value Added along with sum of Total Factor Demand = sum of Total Factor Cost. (i.e., all production is consumed and all inputs are outputs of something else.)
+
+What does this tell us? 
+
+sum((19, 76, 57) + (61, 44, 133)) = sum((28, 60, 64) + (52, 60, 126))
+
+Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
+
+Toy_Regional_FactorDemand  = Toy_Regional_FactorCost + Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
+
+
+Toy_Regional_FactorDemand - Toy_Regional_FactorCost = (-9, 16, -7)
+
+Toy_Regional_FinalDemand - Toy_Regional_FactorDemand = (42, -32, 76)
+
+Toy_Regional_ValueAdded - Toy_Regional_FactorDemand = (33, -16, 69)
+
+
+Conjecture: Final Demand less Factor Demand is ?
+
+In a completely "closed" extended I-O model, all sectors in final demand are transmuted into the interindustry coefficients matrix, meaning the final demand vector is zero, which is to say all outputs are accounted for as inputs somewhere, and the system is completely closed without any exogenous sectors. In this situation we could say Total Factor Demand is Total Commodity Output. Likewise, Total Factor Cost is Total Industry Output. Thus (assuming a diagonal Make matrix), Total Factor Cost = Total Factor Demand. In other words, the total value of output from a sector must be equal to the total value of its inputs. In other other words, all inputs to a sector come from all outputs of all other sectors. What does this mean in the context of a non-completely closed model, and what does it mean when we do not observe Total Factor Cost and Total Factor Demand equivalence at the sector level? 
+
+First, we have shown that the source of Factor Demand inputs are Total Commodity Outputs. Thus the available export pool for Albany or any region is its Total Commodity Outputs less its Factor Demand A.K.A Final Demand. At the moment this Final Demand includes both what is consumed locally and what is exported to satisfy the national balance of accounts, without distinction. 
+
+Conjecture: If we observe a county with a negative Final Demand component, we know that it must be importing at least that must to satisfy the balance of accounts. I.e., NID: pmax(Toy_Regional_FactorDemand - Toy_Regional_Industry_Output, 0) is that lower bound value. Simalarly, NIS: pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorDemand, 0) represents the upper bound value of a counties availible exports 
+
+In our example, Albany needs to import at least \$10.559212 of Mining. Brown has at a maximum \$35.21053 of Mining to export and Cook has at a maximum \$19.348687 of Mining to export. Note this model inherently assumes that if a region needs an input and can produce that input it will use up all that local production before seeking imports. In other words, the available \$35.21053 of Mining that Brown has to export already has its own input needs of \$34.789466 accounted for. 
+
+So from which place and how much from each will Albany import its Mining needs from?
+
+Proposition: (Gravity Model) The interregional trade of (Mining) from Brown to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times BrownFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$35.21053) /(\$44) = Q_AB times \$8.449897. Similarly, the interregional trade of (Mining) from Cook to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times CookFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$19.348687) /(\$44) = Q_AB times \$4.643338.
+
+
+
+
+
+
+## National metrics from Regional
 
 ```{r}
-Toy_Input_mat_imp <- pmax(Toy_Input_mat - Toy_X_mat, 0)
-Toy_Input_mat_imp  %>% round(2)
+
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+
+## National Total Industry Output
+## The row sum of the Sub-national Total Industry Output matrix
+Toy_National_Industry_Output <- Toy_Regional_Industry_Output %*% i
+Toy_National_Industry_Output
+
+## National Total Commodity Output
+## The row sum of the Sub-national Total Commodity Output matrix
+Toy_National_Commodity_Output <- Toy_Regional_Commodity_Output %*% i
+Toy_National_Commodity_Output
+
+## National Use matrix
+Toy_National_Use_mat <- Toy_B_mat %*% diag(as.vector(Toy_National_Industry_Output))
+colnames(Toy_National_Use_mat) <- Toy_Sectors
+Toy_National_Use_mat
+
+## National Supply matrix
+Toy_National_Supply_mat <- t(Toy_D_mat %*% diag(as.vector(Toy_National_Commodity_Output)))
+rownames(Toy_National_Supply_mat) <- Toy_Sectors
+Toy_National_Supply_mat
+
+## National Aggregate (commodity) Factor Demand
+## Intermediate (commodity) sales
+## Equivalent to Intermediate Commodity Output in a sector model
+## Equivalent to National Use matrix row sum
+## called "county InputNeeds" in previous generations
+Toy_National_FactorDemand <- Toy_Direct_IndByInd_IT_mat %*% Toy_National_Industry_Output
+Toy_National_FactorDemand
+
+## National Total (industry) Factor Cost
+## Intermediate (industry) purchases
+## Equivalent to Intermediate Industry Input in a sector model
+## Equivalent to National Use matrix column sum
+Toy_National_FactorCost <- Toy_National_Industry_Output * (t(Toy_Direct_IndByInd_IT_mat) %*% i)
+Toy_National_FactorCost <- diag(as.vector(Toy_National_Industry_Output)) %*% t(Toy_Direct_IndByInd_IT_mat) %*% i
+rownames(Toy_National_FactorCost) <- Toy_Sectors
+Toy_National_FactorCost
+
+## National Value Added (by industries)
+Toy_National_ValueAdded <- Toy_National_Industry_Output - Toy_National_FactorCost
+Toy_National_ValueAdded
+
+## National Final Demand (of commodities)
+Toy_National_FinalDemand <- Toy_National_Commodity_Output - Toy_National_FactorDemand
+Toy_National_FinalDemand
+
+# ## National (Commodity) Final Demand
+# Toy_National_FinalDemand_ComCom_IT <- inv(Toy_Total_ComByCom_IT_mat) %*% Toy_National_Commodity_Output
+# Toy_National_FinalDemand_ComInd_IT <- inv(Toy_Total_IndByCom_IT_mat) %*% Toy_National_Industry_Output
+# Toy_National_FinalDemand_ComCom_CT <- inv(Toy_Total_ComByCom_CT_mat) %*% Toy_National_Commodity_Output
+# Toy_National_FinalDemand_ComInd_CT <- inv(Toy_Total_IndByCom_CT_mat) %*% Toy_National_Industry_Output
+# 
+# ## National (Industry) Final Demand
+# Toy_National_FinalDemand_IndInd_IT <- inv(Toy_Total_IndByInd_IT_mat) %*% Toy_National_Industry_Output
+# Toy_National_FinalDemand_IndCom_IT <- inv(Toy_Total_ComByInd_IT_mat) %*% Toy_National_Commodity_Output
+# Toy_National_FinalDemand_IndInd_CT <- inv(Toy_Total_IndByInd_CT_mat) %*% Toy_National_Industry_Output
+# Toy_National_FinalDemand_IndCom_CT <- inv(Toy_Total_ComByInd_CT_mat) %*% Toy_National_Commodity_Output
+
 ```
 
-"Net Input Supply Table": $\max \{ \mathbf{Y} - \mathbf{D}\mathbf{Y}, 0\}$
+## NID (Net Input Demand): $\max \{\mathbf{DB}\mathbf{X} - \mathbf{X}, 0\}$
 
 ```{r}
-Toy_Input_mat_exp <- abs(pmin(Toy_Input_mat - Toy_X_mat, 0))
-Toy_Input_mat_exp  %>% round(2)
+##import needs by region
+NID <- pmax(Toy_Regional_FactorDemand - Toy_Regional_Industry_Output, 0)
+NID
+```
+
+## NIS (Net Input Supply): $\max \{\mathbf{X} - \mathbf{DB}\mathbf{X}, 0\}$
+```{r}
+
+##exports (excess) by region
+NIS <- pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorDemand, 0)
+NIS
+
 ```
 
 County $r$ Absorption matrix: $\mathbf{A}^{r} = \min\{\text{NIE}^{r}, \textbf{NIS} \}$
 
+"Total Absorption matrix": $\mathbf{A} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \}~ \forall ~ r$
+
+"Normalized Absorption Shares": $\mathbf{\alpha} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \} / \text{NIE}^{r} ~ \forall ~ r$
+
+"Geographical Impedance matrix": $\mathbf{Q} = e^{-d^{rs}}$
+
+"Spatial Absorption matrix": $\mathbf{AQ}$
+
+"Spatial Normalized Absorption Shares": $\mathbf{\alpha Q}$
+
+
+## Alternatives?
+```{r}
+#ALt option choice using intermediate (industry) purchases?
+pmax(Toy_Regional_FactorCost - Toy_Regional_Industry_Output, 0)
+pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorCost, 0)
+
+## Note: Toy_Regional_FinalDemand == Toy_Regional_Commodity_Output - Toy_Regional_FactorDemand != Toy_Regional_Industry_Output - Toy_Regional_FactorDemand
+## Toy_Regional_Industry_Output and Toy_Regional_Commodity_Output may not even have the same dimensions or cell values
+
+```
+
+
+
+
+
+
+
+
+
+
+## Emperical calculations
+
+Average Total Labor Share from BEA in 2012 is 0.558.
+
+FRED puts total labor share at 0.59 and BLS puts labor share at 0.57 for the same time period.
+
+Average CBP equivalent industry Labor Share from BEA is 0.56.
+
+Total CBP non-farm Annual Payroll at the National level is \$5.414 Trillion.
+
+Total BEA non-farm equivalent Employee Compensation is \$6.788 Trillion.
+
+BEA non-farm equivalent employee compensation is \$1.374 Trillion greater than the CBP annual payroll or \~25% larger.
+
+Total CBP derived non-farm GDP (ratio of CBP Annual Payroll to industry Labor Share from BEA) is \$9.586 Trillion.
+
+Total CBP industry equivalent GDP from BEA is \$12.310 Trillion.
+
+BEA non-farm equivalent GDP is \$2.724 Trillion greater than the CBP derived non-farm GDP or \~28% larger.
+
+The labor share on average would need to decrease from 0.56 to 0.44 to be able to achieve the expected equivalent level of GDP using the CBP.
+
+Note the current labor compensation component used to derive the Labor Share only includes employee compensation, leaving out proprietors' labor compensation, which makes up the other (smaller) portion of labor compensation. It is difficult to estimate because BEA has data only on proprietors' total income, which also includes proprietors' return to capital. ("proprietors" is taken to mean "unincorporated proprietors." Incorporated self-employed workers are technically employees of their own corporation). However, a larger labor compensation would mean a larger, not smaller Labor Share.
+
+Out of curiosity, the expected BEA derived farm Labor Share is 0.26.
+
+Total AgCensus farm sales for 2012 are \$394.644 Billion.
+
+AgCensus industry equivalent Total Industry Output from BEA is \$412.926 Billion.
+
+BEA farm equivalent Total Industry Output is \$18.282 Billion greater than the AgCensus farm sales or \~4.6% larger.
+
+Note AgCensus does not include taxes or subsidies or account for inventory changes.
+
+Total AgCensus farm sales adjusted for BEA farm equivalent industry Inventories, Taxes, and Subsidies is \$395.613 Billion.
+
+Adjusting for Inventories, Taxes, and Subsidies, BEA farm equivalent Total Industry Output is \$969 Million greater than the AgCensus farm sales or \~0.2% larger.
+
+!!! Note in the current model specification Ag output is appended to labor share adjusted CBP. However, the AgCensus farm sales are (approximately) Total Industry Output (i.e., intermediate and final production) whereas labor share adjusted CBP are GDP or Industry (Value Added) Output (i.e., only final production). Furthermore, this piecemeal metric enters the analysis as Total Industry Output (i.e., intermediate and final production) !!!
+
+```{r}
+detindname <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") %>% .$DETAIL %>% unique() %>% unlist()
+detagnames <- rownames(as.data.frame(unlist(ag_output$get_farm_sales_by_bea_detail(strtoi(2012), "national"))))
+detnonagnames <- setdiff(detindname, detagnames) 
+detnonagnames <- detnonagnames[!detnonagnames %in% c("482000", "531HST", "814000", "491000")]
+```
+
+Total GDP from BEA
+
+```{r}
+TrueGDP <- (bea_io$get_use(strtoi(2012), "det")["VAPRO", "T001"] * 1000000)
+TrueGDP
+```
+
+CBP equivalent industry GDP from BEA
+
+```{r}
+TruenonfarmGDP <- sum(bea_io$get_use(strtoi(2012), "det")["VAPRO",detnonagnames]) * 1000000
+TruenonfarmGDP
+```
+
+AgCensus equivalent industry GDP from BEA
+
+```{r}
+TruefarmGDP <- sum(bea_io$get_use(strtoi(2012), "det")["VAPRO", detagnames]) *1000000
+TruefarmGDP
+```
+
+Average Total Labor Share from BEA
+
+```{r}
+#LaborShare = bea_io$get_use(strtoi(2012), "det")["V00100", "T001"] / bea_io$get_use(strtoi(2012), "det")["VABAS", "T001"]
+LaborShare <- mean(t((bea_io$get_use(strtoi(2012), "det")["V00100", detindname] / bea_io$get_use(strtoi(2012), "det")["VAPRO", detindname])))
+LaborShare
+```
+
+Average CBP equivalent industry Labor Share from BEA
+
+```{r}
+nonfarmLaborShare <- mean(t((bea_io$get_use(strtoi(2012), "det")["V00100", detnonagnames] / bea_io$get_use(strtoi(2012), "det")["VAPRO", detnonagnames])))
+nonfarmLaborShare
+```
+
+Average AgCensus equivalent industry Labor Share from BEA
+
+```{r}
+farmLaborShare <- mean(t((bea_io$get_use(strtoi(2012), "det")["V00100", detagnames] / bea_io$get_use(strtoi(2012), "det")["VAPRO", detagnames])))
+farmLaborShare
+```
+
+Total Total Employee Compensation from BEA
+
+```{r}
+#TrueEmpComp = bea_io$get_use(strtoi(2012), "det")["V00100", "T001"] *1000000
+TrueEmpComp <- sum(bea_io$get_use(strtoi(2012), "det")["V00100", detindname]) * 1000000
+TrueEmpComp
+```
+
+Total CBP equivalent industry Employee Compensation from BEA
+
+```{r}
+TruenonfarmEmpComp = sum(bea_io$get_use(strtoi(2012), "det")["V00100", detnonagnames]) *1000000
+TruenonfarmEmpComp
+```
+
+Total AgCensus equivalent industry Employee Compensation from BEA
+
+```{r}
+TruefarmEmpComp = sum(bea_io$get_use(strtoi(2012), "det")["V00100", detagnames]) *1000000
+TruefarmEmpComp
+```
+
+Total AgCensus equivalent industry Subsidies from BEA
+
+```{r}
+TruefarmSubsidies <- sum(bea_io$get_use(strtoi(2012), "det")["T00SUB",detagnames][!is.na(bea_io$get_use(strtoi(2012), "det")["T00SUB",detagnames] )]) * 1000000
+TruefarmSubsidies
+```
+
+Total AgCensus equivalent industry Inventories from BEA
+
+```{r}
+TruefarmInventories <- sum(bea_io$get_use(strtoi(2012), "det")[detagnames, "F03000"]) * 1000000
+TruefarmInventories
+```
+
+Total AgCensus equivalent industry Taxes from BEA
+
+```{r}
+TruefarmTaxes <- sum(bea_io$get_use(strtoi(2012), "det")["T00OTOP",detagnames]) * 1000000
+TruefarmTaxes
+```
+
+Total AgCensus equivalent industry Total Industry Output from BEA
+
+```{r}
+TruefarmTotalindOutput = sum(bea_io$get_use(strtoi(2012), "det")["T018",detagnames]) * 1000000
+TruefarmTotalindOutput
+```
+
+Total AgCensus equivalent industry Total Industry Output plus Inventories less Taxes and Subsidies from BEA
+
+```{r}
+(TruefarmTotalindOutput - TruefarmTaxes + TruefarmInventories - TruefarmSubsidies) 
+```
+
+Total AgCensus farm sales
+
+```{r}
+farmTotalindOutput <- sum(as.data.frame(unlist(ag_output$get_farm_sales_by_bea_detail(strtoi(2012), "national") ) ) )
+farmTotalindOutput
+```
+
+Total CBP Annual Payroll at the National level
+
+```{r}
+nonfarmPayroll = cbp$get_df("us", strtoi(2012))$ap[1] * 1000
+nonfarmPayroll
+```
+
+CBP derived non-farm GDP i.e., Ratio of Total CBP Annual Payroll at the National level to Average CBP equivalent industry Labor Share from BEA
+
+```{r}
+nonfarmGDP = nonfarmPayroll / nonfarmLaborShare
+nonfarmGDP
+```
+
+Difference of BEA farm Total Industry Output and AgCensus farm sales adjusted for BEA Inventories, Taxes, and Subsidies
+
+```{r}
+TruefarmTotalindOutput - (farmTotalindOutput - TruefarmInventories + TruefarmTaxes + TruefarmSubsidies)
+```
+
+Difference of BEA non-farm employee compensation and CBP Annual Payroll at the National level
+
+```{r}
+TruenonfarmEmpComp - nonfarmPayroll
+```
+
+Difference of BEA non-farm GDP and CBP derived GDP
+
+```{r}
+TruenonfarmGDP - nonfarmGDP
+```
+
+Labor Share needed for BEA non-farm GDP and CBP derived GDP to be equal
+
+```{r}
+nonfarmPayroll / TruenonfarmGDP
+```
+
+## Next steps
+
+Calculate GDP across counties We need a better way of describing the "excess" and "durth" of regions what are the total factor cost incurred by each industry in the county to be able to satisfy total output?
+
+Is our CBP "output" actually output or is it value added? A: it is GDp but not very well measured. 
+
+How do DY and Intermediate_Output relate when D is ind-by-ind?
+
+If DY-Y and Y-DY are needs and excesses then at the national level they should be zero. Do we want to instead describe the difference between final demand and intermediate inputs/outputs
+
+If in sector/Z framework: intermediate inputs = i'Z and intermediate outputs = Zi If in commodity/industry Use/Make framework: intermediate (industry) purchases = i'U and intermediate (commodity) sales = Ui
+
+!Must compare Ag Census to Total Industry Supply (T017 from Supply Table aka T018 from Use Table)! Currently off by \~\$18 Billion Should we adjust for inventories (F03000 from Use Table)? Note: Ag Census is "Market Value of Agricultural Products Sold Including Landlord's Share and Direct Sales" aka "Market Value of Agricultural Products Sold Including Food Marketing Practices and Value-Added Products"
+
+"Market value of agricultural products sold. This category represents the gross market value before taxes and production expenses of all agricultural products sold or removed from the place in 2017 regardless of who received the payment. It is equivalent to total sales and it includes sales by the producers as well as the value of any shares received by partners, landlords, contractors, or others associated with the operation. It includes value of organic sales, direct sales and the value of commodities placed in the Commodity Credit Corporation (CCC) loan program. Market value of agricultural products sold does not include payments received for participation in other Federal farm programs. It does not include income from farm-related sources such as customwork and other agricultural services, or income from nonfarm sources. The value of crops sold in 2017 does not necessarily represent the sales from crops harvested in 2017. Data may include sales from crops produced in earlier years and may exclude some crops produced in 2017 but held in storage and not sold. For commodities such as sugarbeets and wool sold through a co-op that made payments in several installments, respondents were requested to report the total value received in 2017. The value of agricultural products sold was requested of all producers. If the producers failed to report this information, estimates were made based on the amount of crops harvested, livestock or poultry inventory, or number sold."
+
+Need new labor share perspective:
+
+Output: "gross value-added output" = "gross output minus intermediate inputs" "defined as total labor compensation over nominal GDP or gross value added" "The labor share is the nominal wage bill over nominal output or nominal GDP" "Nominal unit labor costs, are defined as the nominal wage bill over real output" Finally, note that all output and compensation data used to calculate the labor share are in current dollars.
+
+Should we be turning CBP annual payroll into (Industry) Value Added Output?
+
+What does is mean to have Direct requirements times Value Added Output?
+
+Do we need to allow for cross hauling in the analysis, for the system to be closed?
+
+Can we try treating the regional model as just a big national model with a block diagonal direct requirements?
+
+!CBP is Industry Sector Output but we need Industry and Commodity Output! How do we translate Industry Output into Commodity? Answer: with inv(Dmat) or Cmat How do we translate Value Added into Final Demand?
+
+!(without cross hauling) what a place has available for "export" is Industry Output minus (industry) Factor Cost!
+
+Need example with how to go from v \> x \> e \> q \> v \> iU \> Ui and what L and A and iA and Ai mean How do we add Ag and CBP when we know they may not be gdp or even on equivalent/addible scales? Set up toy at national level where 0=0 and then go sub-national. See IO book on trade on page 150. What can RAS offer? What can location quotients offer? What can gravity models offer?
+
+Irrespective of cross hauling, is does what a place has available for "export" its Industry Output minus (industry) Factor Cost? No.
+
+!(without cross hauling) what a place has available for "export" is Industry Output minus (industry) Factor Cost!: NO Toy_National_ValueAdded - Toy_National_FactorDemand
+
+Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
+
+Toy_Regional_FactorDemand - Toy_Regional_FactorCost = Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
+
+Toy_Regional_FactorDemand - Toy_Regional_ValueAdded = Toy_Regional_FactorCost - Toy_Regional_FinalDemand
+
+Toy_Regional_ValueAdded - Toy_Regional_FinalDemand - Toy_Regional_FactorDemand + Toy_Regional_ValueAdded Toy_Regional_ValueAdded - Toy_Regional_FactorCost Toy_Regional_FactorDemand - Toy_Regional_FinalDemand
+
+To be able to satisfy the exogenous final demand consumption the Ag industry must produce what? Total Commodity Output? or is that double counting? To satisfy Ag finaldemand 61, Ag will produce a total of 80 commodity output, of which 28 Ag factorcost will go into the economy as intermediate inputs
+
+BUT you are short by 9 in Ag, what process translates (the excess mining) into ag consumption?
+
+!!"output" in practice from the data is GDP, but we are treating it like Total Output in the model!!!
+
+```{r}
+## county specific InputNeeds
+## row sum of InputNeeds == National_Intermediate_Output == Aggregate_Factor_Demand == row sum Use matrix
+Toy_Use_mat
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+cin <- Toy_Direct_IndByInd_IT_mat %*% Toy_Regional_Industry_Output
+cin
+Toy_Direct_IndByInd_IT_mat %*% Toy_Regional_Industry_Output  %*% i
+
+## cin[, 1] - what are the total factor cost incurred by each industry in the county to be able to satisfy total output
+
+
+```
+
+```{r}
+## county specific Intermediate Input 
+## row sum of county specific Intermediate Input == National_Intermediate_Input == Total_Factor_Cost == column sum Use matrix
+Toy_Use_mat
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+cii <- diag(as.vector( t(i) %*% Toy_Direct_IndByInd_IT_mat )) %*% Toy_Regional_Industry_Output 
+rownames(cii) <- Toy_Sectors
+cii
+diag(as.vector( t(i) %*% Toy_Direct_IndByInd_IT_mat )) %*% Toy_Regional_Industry_Output %*% as.matrix(rep(c(1), each=length(Toy_Places)))
+
+## cii[, 1] - what are the total factor cost incurred by each industry in the county to be able to satisfy total output
+
+```
+
 ```{r}
 
-Toy_Absorb <- vector(mode='list', length=ncol(Toy_X_mat))
-  names(Toy_Absorb) <- colnames(Toy_X_mat)
+Toy_Absorb <- vector(mode='list', length=ncol(Toy_Regional_Industry_Output))
+  names(Toy_Absorb) <- colnames(Toy_Regional_Industry_Output)
 
-for (i in 1:ncol(Toy_X_mat)){
-Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(Toy_Absorb[[i]])  <- rownames(Toy_X_mat)
-   colnames(Toy_Absorb[[i]]) <- colnames(Toy_X_mat)
+for (i in 1:ncol(Toy_Regional_Industry_Output)){
+Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_Regional_Industry_Output), ncol = ncol(Toy_Regional_Industry_Output))
+ rownames(Toy_Absorb[[i]])  <- rownames(Toy_Regional_Industry_Output)
+   colnames(Toy_Absorb[[i]]) <- colnames(Toy_Regional_Industry_Output)
 }
 
-  for (i in 1:ncol(Toy_X_mat)){
-    for (j in 1:ncol(Toy_X_mat)){
-        Toy_Absorb[[i]][,j]  <-   pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])  %>% round(2)
+  for (i in 1:ncol(Toy_Regional_Industry_Output)){
+    for (j in 1:ncol(Toy_Regional_Industry_Output)){
+        Toy_Absorb[[i]][,j]  <-   pmin(pmax(Toy_Regional_Industry_Output - cin, 0)[,i], pmax(cin - Toy_Regional_Industry_Output, 0)[,j])  %>% round(2)
     }
   }
 
@@ -124,195 +981,111 @@ Toy_Absorb
 
 ```
 
-"Total Absorption matrix": $\mathbf{A} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \}~ \forall ~ r$
-
 ```{r}
+## absorption
+absorption <- stacked_absorption_share(nis_matrix = pmax(Toy_Regional_Industry_Output - cin, 0),
+                          nid_matrix = pmax(cin - Toy_Regional_Industry_Output, 0))
 
-Toy_Queeg<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(Toy_Queeg) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+absorption
 
-  for (i in 1:ncol(Toy_X_mat)){
-    for (j in 1:ncol(Toy_X_mat)){
-        Toy_Queeg[i,j]  <-  rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])
-    }
-  }
+nabsorption <-  normalized_absorption_share(sas_matrix = absorption, 
+                                        nis_matrix = pmax(Toy_Regional_Industry_Output - cin, 0))
 
-
-colnames(Toy_Queeg) <- c("Albany", "Brown", "Cook")
-Toy_Queeg  %>% round(2)
+nabsorption
 
 ```
 
-"Normalized Absorption Shares": $\mathbf{\alpha} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \} / \text{NIE}^{r} ~ \forall ~ r$
+Toy Example: National first Lets assume we have a setup with a Use, Supply, IxC_Total, CxC_Total, and IxI_Total as givens along with some some form of "external" aggregate output data. What can we say about our system and what do we want to know? As a production technology function: What does the Total Requirements matrix do? What does the Direct Requirements matrix do? What does the Requirements matrices column/row total coefficients do? Does it matter what the Requirements matrices represent in the I/O framework if we are merely using them to model production technology? Answer: No(?) not necessarily If Y is GDP what does DY and DY-Y mean? if Y is TotalOutput what does DY and DY-Y mean?
 
 ```{r}
+# Get raw Supply and Use tables
+Toy_Use_mat <- bea_io$get_use(strtoi("2012"), "det") %>% as.matrix()
+Toy_Use_mat[is.na(Toy_Use_mat)] = 0
 
-Toy_Queeg_R<-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(Toy_Queeg_R) = colnames(Toy_Queeg) <- colnames(Toy_X_mat)
+Toy_Supply_mat <- bea_io$get_sup(strtoi("2012"), "det") %>% as.matrix()
+Toy_Supply_mat[is.na(Toy_Supply_mat)] = 0
 
-  for (i in 1:ncol(Toy_X_mat)){
-    for (j in 1:ncol(Toy_X_mat)){
-        Toy_Queeg_R[i,j]  <-  (rep(c(1), each=ncol(Toy_Total_mat)) %*% pmin(Toy_Input_mat_exp[,i], Toy_Input_mat_imp[,j])) /
-                                    (rep(c(1), each=ncol(Toy_Total_mat)) %*% Toy_Input_mat_exp[,i] )
-        
+# Sector names
+Toy_Sectors <- intersect(intersect(rownames(Toy_Use_mat), rownames(Toy_Supply_mat)), intersect(colnames(Toy_Use_mat), colnames(Toy_Supply_mat)))
+Toy_Sectors <- Toy_Sectors[!(Toy_Sectors %in% c("4200ID", "814000"))]
 
-    }
-  }
+# Use matrix (commodity by industry )
+Toy_Use_mat <- Toy_Use_mat[Toy_Sectors, Toy_Sectors]
+
+# Supply matrix (commodity by industry )
+Toy_Supply_mat <- Toy_Supply_mat[Toy_Sectors, Toy_Sectors]
 
 
-colnames(Toy_Queeg_R) <- c("Albany", "Brown", "Cook")
-Toy_Queeg_R  %>% round(2)
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+## Total Commodity Output Vector
+## The row sum of the Supply matrix and the transposed column sum of the Make matrix
+Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
+## Total Industry Output Vector
+## The transposed column sum of the Supply matrix and the row sum of the Make matrix
+Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
+
+##In tests inv() gave more accurate results but solve() was MUCH faster
+Toy_B_mat <- Toy_Use_mat %*% solve(diag(as.vector(Toy_Total_Industry_Output))) 
+colnames(Toy_B_mat) <- Toy_Sectors
+Toy_D_mat <- t(Toy_Supply_mat) %*% solve(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
+colnames(Toy_D_mat) <- Toy_Sectors
+Toy_C_mat <- Toy_Supply_mat %*% solve(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
+colnames(Toy_C_mat) <- Toy_Sectors
+
+# Direct 
+Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
+
+Toy_Direct_IndByInd_CT_mat <- solve(Toy_C_mat) %*% Toy_B_mat
+rownames(Toy_Direct_IndByInd_CT_mat) <- Toy_Sectors
+Toy_Direct_ComByCom_IT_mat <- Toy_B_mat %*% Toy_D_mat
+Toy_Direct_ComByCom_CT_mat <- Toy_B_mat %*% solve(Toy_C_mat)
+colnames(Toy_Direct_ComByCom_CT_mat) <- Toy_Sectors
+
+# Total 
+I <- diag(length(Toy_Sectors))
+Toy_Total_ComByCom_IT_mat <- solve(I - Toy_B_mat %*% Toy_D_mat)
+Toy_Total_IndByCom_IT_mat <- Toy_D_mat %*% solve(I - Toy_B_mat %*% Toy_D_mat)
+Toy_Total_IndByInd_IT_mat <- solve(I - Toy_D_mat %*% Toy_B_mat)
+Toy_Total_ComByInd_IT_mat <- solve(Toy_D_mat) %*% solve(I - Toy_D_mat %*% Toy_B_mat)
+  
+Toy_Total_ComByCom_CT_mat <- solve(I - Toy_B_mat %*% solve(Toy_C_mat))
+Toy_Total_IndByCom_CT_mat <- solve(Toy_C_mat) %*% solve(I - Toy_B_mat %*% solve(Toy_C_mat))
+Toy_Total_IndByInd_CT_mat <- solve(I - solve(Toy_C_mat) %*% Toy_B_mat)
+Toy_Total_ComByInd_CT_mat <- Toy_C_mat %*% solve(I - solve(Toy_C_mat) %*% Toy_B_mat)
+
+
+
+## Aggregate (commodity) Factor Demand
+## Intermediate (commodity) sales
+## Equivalent to Intermediate Commodity Output in a sector model
+## Equivalent to Use matrix row sum
+## called "InputNeeds" in previous generations
+Toy_FactorDemand <- Toy_Direct_IndByInd_IT_mat %*% Toy_Total_Industry_Output
+
+
+## Total (industry) Factor Cost
+## Intermediate (industry) purchases
+## Equivalent to Intermediate Industry Input in a sector model
+## Equivalent to Use matrix column sum
+Toy_FactorCost <-  Toy_Total_Industry_Output * (t(Toy_Direct_IndByInd_IT_mat) %*% i)
+
+
+
+
+
+# Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
+# 
+# Toy_Regional_FactorDemand - Toy_Regional_FactorCost = Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
+# 
+# Toy_Regional_FactorDemand - Toy_Regional_ValueAdded = Toy_Regional_FactorCost - Toy_Regional_FinalDemand
+# 
+# Toy_Regional_ValueAdded - Toy_Regional_FinalDemand - Toy_Regional_FactorDemand + Toy_Regional_ValueAdded 
+# Toy_Regional_ValueAdded  - Toy_Regional_FactorCost
+# Toy_Regional_FactorDemand - Toy_Regional_FinalDemand
 
 ```
 
-"Geographical Impedance matrix": $\mathbf{Q} = e^{-d^{rs}}$
-
-```{r}
-Toy_Lat <- c(42.3, 44.49, 41.84 )
-Toy_Lon <- c(-89.04, -88.03, -87.77)
-Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))/1000000
-colnames(Toy_Dist_mat) = rownames(Toy_Dist_mat) <-  c("Albany", "Brown", "Cook")
-
-#Toy_Q <- (1/(Toy_Dist_mat)^2)
-Toy_Q <- exp(-Toy_Dist_mat)
-
-Toy_Q  %>% round(3)
-```
-
-"Spatial Absorption matrix": $\mathbf{AQ}$
-
-```{r}
-(Toy_Queeg * Toy_Q ) %>% round(2)
-
-```
-
-"Spatial Normalized Absorption Shares": $\mathbf{\alpha Q}$
-
-```{r}
-
-(Toy_Queeg_R * Toy_Q ) %>% round(2)
-
-```
-
-"Connectedness Classification"
-
-```{r}
-(data.frame(County = colnames((Toy_Queeg_R * Toy_Q )), Match = colnames((Toy_Queeg_R * Toy_Q ))[apply((Toy_Queeg_R * Toy_Q ), 1, which.max)]))
-
-```
-
-```{r}
-#Direct Requirements
-D = Toy_Direct_mat
-D
-#Total Industry Output by region
-Y = Toy_X_mat
-Y
-#National Total Output
-Yi = as.matrix(rowSums(Toy_X_mat))
-Yi
-#National Intermediate Output
-DYi = Toy_Direct_mat %*% as.matrix(rowSums(Toy_X_mat)) 
-DYi
-#National Final Demand 
-Fd = as.matrix(rowSums(Toy_X_mat)) - Toy_Direct_mat %*% as.matrix(rowSums(Toy_X_mat)) 
-Fd
-#Intermediate Output by region
-DY = Toy_Direct_mat %*% Toy_X_mat
-DY
-#National Intermediate Inputs 
-YhD = rowSums(diag(rowSums(Toy_X_mat)) %*% t(Toy_Direct_mat))
-YhD
-#National Transactions Matrix 
-Z = Toy_Direct_mat %*% diag(rowSums(Toy_X_mat))
-Z
-#National Value Added 
-V = as.matrix(rowSums(Toy_X_mat)) - colSums(Toy_Direct_mat %*% diag(rowSums(Toy_X_mat)))
-V 
-
-
-#import needs by region: Necessary level of regional total output that needs to be imported to be able to produce the observed level of regional total output (assuming no cross hauling)
-pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)
-
-#exports (excess) by region: Available level of total output by region that can be exported to other regions
-pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)
-
-# Percentage that a regions available exports can satisfy the import needs of another region on per industry basis
-ExportPotentialAbsorptionPercentage <- vector(mode='list', length=ncol(Toy_X_mat))
-  names(ExportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
-for (i in 1:ncol(Toy_X_mat)){
-ExportPotentialAbsorptionPercentage[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(ExportPotentialAbsorptionPercentage[[i]])  <- rownames(Toy_X_mat)
-   colnames(ExportPotentialAbsorptionPercentage[[i]]) <- colnames(Toy_X_mat)
-}
-  for (i in 1:ncol(Toy_X_mat)){
-    for (j in 1:ncol(Toy_X_mat)){
-          ExportPotentialAbsorptionPercentage[[i]][,j]  <- pmin(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)[,i], pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,j])  /  pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,j] * 100 %>% round(2)
-    }
-  }
-ExportPotentialAbsorptionPercentage
-
-# Percentage that a regions overall available exports can satisfy the overall import needs of another region
-AverageExportPotentialAbsorptionPercentage <-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(AverageExportPotentialAbsorptionPercentage) = colnames(AverageExportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
-
-  for (i in 1:ncol(Toy_X_mat)){
-        AverageExportPotentialAbsorptionPercentage[i,]  <-  ExportPotentialAbsorptionPercentage[[i]] %>% colMeans(na.rm = TRUE)
-  }
- AverageExportPotentialAbsorptionPercentage
-
-# Percentage that a regions import needs are satisfy by the available exports of another region on per industry basis
-ImportPotentialAbsorptionPercentage <- vector(mode='list', length=ncol(Toy_X_mat))
-  names(ImportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
-for (i in 1:ncol(Toy_X_mat)){
-ImportPotentialAbsorptionPercentage[[i]] <- matrix(0, nrow = nrow(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(ImportPotentialAbsorptionPercentage[[i]])  <- rownames(Toy_X_mat)
-   colnames(ImportPotentialAbsorptionPercentage[[i]]) <- colnames(Toy_X_mat)
-}
-  for (i in 1:ncol(Toy_X_mat)){
-    for (j in 1:ncol(Toy_X_mat)){
-          ImportPotentialAbsorptionPercentage[[i]][,j]  <- pmin(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)[,j], pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,i])  /  pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)[,i] * 100 %>% round(2)
-    }
-  }
-ImportPotentialAbsorptionPercentage
-
-# Percentage that a regions overall import needs are satisfy by the overall available exports of another region
-AverageImportPotentialAbsorptionPercentage <-  matrix(0, nrow = ncol(Toy_X_mat), ncol = ncol(Toy_X_mat))
- rownames(AverageImportPotentialAbsorptionPercentage) = colnames(AverageImportPotentialAbsorptionPercentage) <- colnames(Toy_X_mat)
-
-  for (i in 1:ncol(Toy_X_mat)){
-        AverageImportPotentialAbsorptionPercentage[i,]  <-  ImportPotentialAbsorptionPercentage[[i]] %>% colMeans(na.rm = TRUE)
-  }
-AverageImportPotentialAbsorptionPercentage
-
-# Import susceptive (receptiveness, selectivity) (100 most to zero least)
-df <- AverageImportPotentialAbsorptionPercentage
-df[df == 0] <- NA
-rowMeans(df, na.rm=TRUE)
-
-# Export accommodating (compliant, adaptability) (100 most to zero least)
-df <- AverageExportPotentialAbsorptionPercentage
-df[df == 0] <- NA
-rowMeans(df, na.rm=TRUE)
-
-
-
-#Total Output Available as exports across all regions
-as.matrix(rowSums(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0)))
-
-#Total Output Needed as imports across all regions
-as.matrix(rowSums(pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)))
-
-#Net Exports of Total Output (equal to national final demand)
-as.matrix(rowSums(pmax(Toy_X_mat - Toy_Direct_mat %*% Toy_X_mat, 0))) - as.matrix(rowSums(pmax(Toy_Direct_mat %*% Toy_X_mat - Toy_X_mat, 0)))
-
-
-
-
-
-```
-
-## New Derivation
+# New Derivation
 
 **Interindustry Flows**
 
@@ -443,4 +1216,34 @@ Let superscript $r$ designate "region $r$" in the same way that subscript $i$ de
 One problem we face empirically is that only a national technical coefficients matrix, $\mathbf{A}$, is readily available. To start, we would like to have a matrix showing inputs from firms *in the region* to production *in that region*. Denote this matrix by $\mathbf{A^{rr}} = [a^{rr}_{ij}]$, where $a^{rr}_{ij}$ is the amount of input from sector $i$ in $r$ per dollar's worth of output of sector $j$ in $r$.
 
 For now, we assume that local producers use the same production recipes as the national coefficients table, meaning that the *technology* of production in each sector in region $r$ is the same as in the nation as a whole.
+
+Direct requirements table: The commodity-by-industry direct requirements table is derived from the use table by relating commodity inputs used by an industry to the industry's output. The values in this table, referred to as "direct requirements coefficients," are in ratio format and show the dollar amount of a commodity required directly by an industry to produce a dollar of the industry's output.
+
+Final uses: The consumption of the goods and services that are produced and distributed in the economy. In the I-O accounts, final-use transactions consist of the transactions that make up the final-expenditure components of GDP: Personal consumption expenditures; private fixed investment; change in private inventories; exports of goods and services; imports of goods and services; and Federal, state, and local government consumption expenditures and gross investment (including investment by government enterprises).
+
+Indirect requirements coefficients: Ratios that show the production required of an industry and of all other industries to meet that industry's initial demand for production. The coefficient can be calculated as the total requirements matrix less the identity matrix less the direct requirements matrix.
+
+Input coefficient: The dollar value of a commodity required directly by an industry to produce a dollar of output. It is also referred to as the direct requirement coefficient.
+
+Intermediate inputs: Purchases of goods and services---such as energy, materials, and purchased services---that are used for the production of other goods and services rather than for final consumption. These inputs are sometimes referred to as current-account expenditures. They do not include any capital-account purchases nor do they include the inputs from the primary factors of production (capital and labor) that are components of value added.
+
+Leontief matrix: The Leontief "A" matrix is a direct requirements table calculated from an industry-by-industry transactions table. The "I - A" matrix (where I is an identity matrix with ones in the diagonal cells and zeroes in other cells) can be inverted to calculate the inverse ((I - A)-1 ) or total requirements table. The elements of the inverse enable one to estimate both the direct and indirect impacts of a change in final uses.
+
+Make table: Matrix that shows the value in producers' prices of each commodity produced by each industry. The entries in a row represent the dollar value of commodities produced by the industry at the beginning of the row. The entries in a column represent the dollar value of production by each industry of the commodity at the top of the column. It is one of the two primary tables in the I-O accounts. The make table, together with the use table, is used to derive the I-O total requirements tables.
+
+Output requirements: Derived from the I-O total requirements tables, the output requirements show the amount of output required to satisfy a given level of final-use expenditures. For the commodity-by-commodity total requirements table, it is the production required both directly and indirectly of the commodity at the beginning of each row per dollar of delivery to final use of the commodity at the top of the column. For the industry-bycommodity total requirements table, it is the industry output required to deliver a dollar of a commodity to final users. For the industry-byindustry total requirements table, it is the industry output required to deliver a dollar of industry output to final users.
+
+Requirements tables: There are four I-O requirements tables: Commodity-by-industry direct requirements, commodity-by-commodity total requirements, industry-by-commodity total requirements, and industry-by-industry total requirements.
+
+Total requirements coefficients: I-O coefficients that estimate overall production required to produce a dollar of output. These coefficients (expressed as per dollar of output delivered to final demand) reflect (a) the initial final demand for the output of a given industry or commodity, and (b) both direct and indirect requirements resulting from the initial demand.
+
+Total requirements tables: Three I-O tables showing the output required to meet a given level of final use. The three tables are the commodity-by-commodity total requirements table, the industry-by-commodity total requirements table, and the industry-by-industry total requirements table. All three tables are calculated from the supplementary make and use tables.
+
+Use table: Matrix that shows the consumption of commodities by each industry or final user. The entries in a row represent the dollar value of the commodity consumed by each industry or final user. The total output of each commodity is the sum of all intermediate uses of the commodity by industries and all sales to final users, or the sum of the row entries. The entries in a column represent the dollar value of each commodity and value-added component used by the industry. The total output of each industry is the sum of all intermediate uses of all commodities and value added, or the sum of the column entries. For the economy as a whole, the total of all final uses of commodities equals the sum of all value added by all industries, or GDP. Use tables are produced for industries both before redefinitions and after redefinitions. It is one of the two primary tables in the I-O accounts. The use table, together with the make table, is used to derive the I-O total requirements tables.
+
+Value added The difference between an industry's or an establishment's total output and the cost of it's intermediate inputs. It equals gross output (sales or receipts and other operating income, plus inventory change) minus intermediate inputs (consumption of goods and services purchased from other industries or imported). Value added consists of compensation of employees, taxes on production and imports less subsidies (formerly indirect business taxes and nontax payments), and gross operating surplus (formerly "other value added").
+
+Homogeneity principle One of the three fundamental principles underlying the I-O accounts. Under this principle, each industry's output is produced with a unique set of inputs or a unique production function. The other two principles are consistency and proportionality
+
+By definition, we know that A is a non-negative matrix with aij ≥0 for all i and j. (This characteristic is often written as A≥0, where it is understood that not all aij = 0.)10 The sum of the elements in the jth column of Aindicates the dollars' worth of inputs from other sectors that are used in making a dollar's worth of output of sector j. In an open model, given the economically reasonable assumption that each sector uses some inputs from the payments sector (labor, other value added, etc.), then each of these column sums will be less than one (  n i=1 aij \<1 for all j). (We will see below, in section 2.6, that this column sum condition need not apply to tables based on physical, not monetary, measures of transactions and outputs.) For input--output coefficients matrices with these two characteristics -- aij ≥0 and  n i=1 aij \<1 for all j -- it is possible to approximate the gross output vector x associated with any final demand vector f without finding (I − A) −1.
 :::
