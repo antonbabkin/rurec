@@ -55,6 +55,8 @@ naics <- import("rurec.pubdata.naics")
 geography_cbsa <- import("rurec.pubdata.geography_cbsa")
 ag_output <- import("rurec.ag_output")
 
+if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {  dir.create(file.path(find_rstudio_root_file(), "data", "robjs"))}
+
 # Function to download  data
 data_getr <- function(FileURL,
                       DestDir){

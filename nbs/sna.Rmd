@@ -48,7 +48,7 @@ library(dplyr)
 library(qgraph)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_data.R"))
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 
 ```
 
@@ -77,9 +77,6 @@ Directed graphs have edges originating from one node and ending in another. If t
 #Year of CBP industry output (annual payroll), from ("1986" through "2020") 
 cbp_year <- "2017"
 
-#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020"), default == cbp_year
-tiger_year = "2013" 
-
 #TRUE or FALSE, is county-by-county absorption matrix normalized by column-sums of the NIS matrix, default == TRUE
 normalized = TRUE 
 #NULL, otherwise user specified impedance structure applied to absorption matrix, default == NULL
@@ -87,15 +84,14 @@ normalized = TRUE
 impedance = NULL
 #BEA industry level specification, one of ("det", "sum", "sec"), default == "det"
 ilevel = "det"
-#NULL for county level aggregation, or Year of cbsa concordance to aggregate shapefiles and industry output data, one of ("2020", "2018", "2017", "2015", "2013", "2009", "2008", "2007", "2006", "2005", "2004", "2003"), default == NULL
-cbsa_year = NULL 
+#TRUE or FALSE, to aggregate shapefiles and industry output data to start with cbsa clusters or counties
+cbsa_clust = FALSE 
 
-conmat <- connectedness_matrix(cbp_year = cbp_year,
+conmat <- absorption_matrix(cbp_year = cbp_year,
                            normalized = normalized,
-                           tiger_year = tiger_year,
                            impedance = impedance,
                            ilevel = ilevel,
-                           cbsa_year = cbsa_year)
+                           cbsa_clust = cbsa_clust)
 
 ```
 

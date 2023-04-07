@@ -237,6 +237,7 @@ absorption_map(df = df$Hierarchical_Connectedness_table$level_1,
 
 ```{r progressive distance impedance clust maps}
 folder = "national_progressive_impedance_cluster_bdist"
+dist = c("5", "10", "25", "50", "75", "100", "150", "200", "250", "300", "400", "500", "750", "1000", "1250", "1500", "2000", "2500", "3000")
 if(!file.exists(file.path(find_rstudio_root_file(), "data", folder, paste0(folder, ".gif")))){
 national_progressiveimpedance_gif(cbp_year,
                                    dist,
