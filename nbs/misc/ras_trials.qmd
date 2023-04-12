@@ -1,0 +1,234 @@
+---
+title: "RAS trials"
+format: html
+---
+
+In this notebook, we experiment with RAS algorithm that we want to use to balance county-to-county trade flows.
+It is a specialized implementation that balances the trade flow matrix `x0`, so that rows sum to `rs1` and columns sum to `cs1`.
+
+# Plain vanilla RAS
+
+This is a "naive" implementations of the RAS algorithm.
+
+```{r}
+ras1 <- function (x0, rs1, cs1, tol, maxiter, verbose = FALSE) 
+{
+  n <- dim(x0)[1]
+  if (!all.equal(sum(rs1), sum(cs1))) stop("sum(rs1) != sum(cs1)")
+  if (missing(tol)) {
+    tol <- 1e-06
+  }
+  if (missing(maxiter)) {
+    maxiter <- 10000
+  }
+  x <- x0
+  for (i in 1:maxiter) {
+    rs <- rowSums(x)
+    rs[rs == 0] <- 1
+    r <- diag(rs1 / rs)
+    x1 <- r %*% x
+    
+    cs <- colSums(x1)
+    cs[cs == 0] <- 1
+    s <- diag(cs1 / cs)
+    x1 <- x1 %*% s
+    
+    rmse <- sqrt(mean((x1 - x)^2))
+    if (verbose == TRUE) {
+      cat(paste("  Iteration:", i, "  RMSE:", rmse, "\n"))
+    }
+    if (rmse < tol) 
+        break
+    x <- x1
+  }
+  if (i == maxiter) {
+    warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.")
+  }
+  if (verbose == TRUE) {
+    cat(paste("Number of iterations:", i, "RMSE:", rmse, "\n"))
+  }
+  x
+}
+```
+
+
+
+Different prior leads to different result.
+
+
+```{r}
+n <- 3
+x1 <- list()
+for (i in 1:10) {
+  x0 <- matrix(runif(n*n), n, n)
+  x1[[i]] <- ras1(x0, 1:n, 1:n, tol=1e-10)
+}
+x1
+```
+
+
+Is it fast for big N?
+
+```{r}
+n <- 3000
+t0 <- matrix(runif(n*n), n, n)
+system.time({ t1 <- ras1(t0, 1:n, 1:n, tol = 0, maxiter = 1) })
+```
+
+One iteration took 80 seconds for N = 3000.
+This is very slow, can we make it better?
+
+# Optimization
+
+## matrix multiplication
+
+Multiplying each row (column) by a number can be written and implemented as matrix multiplication by a diagonal matrix, but with large matrices it is a slow operation. Element-by-element multiplication is significantly faster.
+
+```{r}
+n <- 3000
+x <- matrix(runif(n*n), n, n)
+r <- 1:n
+s <- 1:n
+
+# all.equal(diag(r) %*% x, matrix(r, n, n) * x)
+system.time({ diag(r) %*% x })
+system.time({ matrix(r, n, n) * x })
+# all.equal(x %*% diag(s), matrix(s, n, n, byrow = TRUE) * x)
+system.time({ x %*% diag(s) })
+system.time({ matrix(s, n, n, byrow = TRUE) * x })
+
+```
+
+RAS with element-by-element multiplication.
+
+```{r}
+ras2 <- function (x0, rs1, cs1, tol, maxiter, verbose = FALSE) 
+{
+  n <- dim(x0)[1]
+  if (!all.equal(sum(rs1), sum(cs1))) stop("sum(rs1) != sum(cs1)")
+  if (missing(tol)) {
+    tol <- 1e-06
+  }
+  if (missing(maxiter)) {
+    maxiter <- 10000
+  }
+  x <- x0
+  for (i in 1:maxiter) {
+    rs <- rowSums(x)
+    rs[rs == 0] <- 1
+    x1 <- matrix(rs1 / rs, n, n) * x
+    
+    cs <- colSums(x1)
+    cs[cs == 0] <- 1
+    x1 <- matrix(cs1 / cs, n, n, byrow = TRUE) * x1
+    
+    rmse <- sqrt(mean((x1 - x)^2))
+    if (verbose == TRUE) {
+      cat(paste("  Iteration:", i, "  RMSE:", rmse, "\n"))
+    }
+    if (rmse < tol) 
+        break
+    x <- x1
+  }
+  if (i == maxiter) {
+    warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.")
+  }
+  if (verbose == TRUE) {
+    cat(paste("Number of iterations:", i, "RMSE:", rmse, "\n"))
+  }
+  x
+}
+```
+
+Test one iteration runtime.
+
+```{r}
+n <- 3000
+x0 <- matrix(runif(n*n), n, n)
+system.time({ x1 <- ras2(x0, 1:n, 1:n, tol = 0, maxiter = 1) })
+```
+
+One iteration takes 0.6 seconds, this is much better.
+Although the process needs to be repeated for many iterations (more is more accurate, and we don't know convergence rate), and for 400+ commodities at IO detail industry level. At 20 iterations per commodity, this will take more than an hour. Reasonable if we only do it once per run.
+
+
+## sparse matrix
+
+In practice, for every given commodity many counties will not produce it (row = 0) or not need it (column = 0).
+This can be used to reduce matrix dimension before running the algorithm, accommodating the possibility of non-square matrix.
+
+Below code shows how to remove zero-valued rows and columns, and then add them back in correct locations.
+
+```{r}
+n <- 10
+t0 <- matrix(1, n, n)
+rs1 <- rbinom(n, 1, 0.5)
+cs1 <- rbinom(n, 1, 0.5)
+t0z <- t0[rs1 > 0, cs1 > 0]
+t1z <- t0z * 3 # RAS
+t1 <- matrix(0, n, n)
+t1[rs1 > 0, cs1 > 0] <- t1z
+rownames(t1) <- rs1
+colnames(t1) <- cs1
+t1
+```
+
+RAS for sparse matrix.
+
+```{r}
+ras3 <- function (x0, rs1, cs1, tol, maxiter, verbose = FALSE) 
+{
+  n <- dim(x0)[1]
+  if (!all.equal(sum(rs1), sum(cs1))) stop("sum(rs1) != sum(cs1)")
+  if (missing(tol)) {
+    tol <- 1e-06
+  }
+  if (missing(maxiter)) {
+    maxiter <- 10000
+  }
+  
+  # mask away all-zero rows and columns
+  x <- x0[rs1 > 0, cs1 > 0]
+  if (any(rowSums(x) == 0)) stop("Input matrix has zero rows not compatible with row sums.")
+  if (any(colSums(x) == 0)) stop("Input matrix has zero cols not compatible with col sums.")
+  nr <- nrow(x)
+  nc <- ncol(x)
+  rs <- rs1[rs1 > 0]
+  cs <- cs1[cs1 > 0]
+  
+  for (i in 1:maxiter) {
+    x1 <- matrix(rs / rowSums(x), nr, nc) * x
+    x1 <- matrix(cs / colSums(x1), nr, nc, byrow = TRUE) * x1
+    rmse <- sqrt(mean((x1 - x)^2))
+    if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, "\n"))
+    if (rmse < tol) break
+    x <- x1
+  }
+  if (i == maxiter) {
+    warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.")
+  }
+  if (verbose) cat(paste("Number of iterations:", i, "RMSE:", rmse, "\n"))
+  xz <- matrix(0, n, n)
+  xz[rs1 > 0, cs1 > 0] <- x
+  xz
+}
+```
+
+Test speed.
+
+```{r}
+n <- 3000
+x0 <- matrix(runif(n*n), n, n)
+rs1 <- rbinom(n, 1, 0.2)
+cs1 <- rbinom(n, 1, 0.2)
+cs1 <- cs1 / sum(cs1) * sum(rs1)
+
+system.time({ ras2(x0, rs1, cs1, maxiter = 10, tol = 0) })
+system.time({ ras3(x0, rs1, cs1, maxiter = 10, tol = 0) })
+```
+
+With half of rows and columns set to zero, 10 iterations take 4 seconds using previous version, and 1 second with sparse matrix optimization. If 80% of rows and columns are zero, ras2 time remains similar, but optimized ras3 is only 0.2 seconds.
+
+This last version will be used.
+
+
