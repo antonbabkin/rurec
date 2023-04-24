@@ -1,5 +1,6 @@
 ---
 title: "Connectedness and economic growth"
+format: html
 ---
 
 ```{r preamble}
