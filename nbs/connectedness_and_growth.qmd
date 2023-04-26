@@ -7,22 +7,18 @@ format: html
 
 library(tidyverse)
 library(ggplot2)
-library(ggExtra)
+library(ggside)
 
+library(reticulate)
+reticulate::use_condaenv("rurec")
 bea_io <- reticulate::import("rurec.pubdata.bds")
 bds <- reticulate::import("rurec.pubdata.bds")
 cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 geography <- reticulate::import("rurec.pubdata.geography")
 
-data_dir = file.path(rprojroot::find_rstudio_root_file(), "data", "robjs")
-source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
-
-```
-
-```{r data}
-
-df <- spatial_connectedness(cbp_year = "2012", ilevel = "det", tiger_year = "2020", impedance = hyper_impedance_mat("2020"))
-
+root_dir <- rprojroot::find_rstudio_root_file()
+# data_dir = file.path(rprojroot::find_rstudio_root_file(), "data", "robjs")
+source(file.path(root_dir, "nbs", "rural_typology_r_functions.R"))
 
 ```
 
@@ -60,13 +56,16 @@ Is absorption strongly correlated with weighted industry intermediate-ness?
 
 ```{r, preload-slow-data}
 io_use_det <- bea_io$get_use(2012L, 'det')
+county_industry_output <- total_output("2017", "det")
+county_output_sec <- total_output("2017", "sec")
+county_conn <- connectedness("2017")
 ```
 
 
 
 ```{r}
 # county-by-industry output
-df <- readRDS(file.path(data_dir, "Output_mat"))$Detail %>% 
+df <- county_industry_output %>% 
   as_tibble(rownames = "industry") %>%
   pivot_longer(!industry, names_to = "stcty", values_to = "output") %>%
   filter(output > 0) %>%
@@ -88,7 +87,7 @@ d <- io_use_det %>%
 df <- left_join(df, d, by = "industry")
 
 # missing: 23 (Construction) and 331314 (Secondary smelting and alloying of aluminum)
-df %>% filter(is.na(intermed_share)) %>% count(industry)
+# df %>% filter(is.na(intermed_share)) %>% count(industry)
 
 # missing replacement
 # "331314" is same commodity as "331313", but different industry
@@ -107,7 +106,7 @@ df <- df %>%
     TRUE ~ intermed_share
   ))
 
-stopifnot(!is.na(d1$intermed_share))
+stopifnot(!is.na(df$intermed_share))
 
 # average intermed share by county
 df <- df %>% 
@@ -115,17 +114,17 @@ df <- df %>%
   summarise(intermed_share = sum(intermed_share * output) / sum(output))
 
 # absorption
-d <- readRDS(file.path(data_dir, "Connectedness_table"))$Detail %>%
+d <- county_conn %>%
   ungroup() %>%
   rename(stcty = place) %>%
   select(stcty, max_absorption_alpha)
 df <- inner_join(df, d, by = "stcty")
 
-p <- ggplot(df) + 
-  geom_point(aes(intermed_share, max_absorption_alpha)) +
+ggplot(df, aes(intermed_share, max_absorption_alpha)) + 
+  geom_point() +
+  geom_xsidehistogram() +
+  geom_ysidehistogram() +
   coord_fixed(ratio = 1)
-p <- ggMarginal(p, type = "histogram")
-p
 ```
 
 
@@ -149,8 +148,8 @@ df <- bds$get_df("cty") %>%
   arrange(stcty, year)
 
 # add absorption shares
-d <- readRDS(file.path(data_dir, "Connectedness_table"))$Detail %>%
-  ungroup %>%
+d <- county_conn %>%
+  ungroup() %>%
   rename(stcty = place) %>%
   select(stcty, max_absorption_alpha, second_max_absorption_alpha)
 df <- inner_join(df, d, by = "stcty")
@@ -165,24 +164,22 @@ df <- left_join(df, d, by = "stcty") %>% mutate(rural = (metro_micro != "metro")
 
 
 # ag share of output
-d <- readRDS(file.path(data_dir, "Output_mat"))$Sector %>% t
+d <- county_output_sec %>% t()
 stcty <- rownames(d)
-d %<>% as_tibble
+d <- d %>% as_tibble()
 d$ag_share <- d[["11"]] / rowSums(d)
 d$stcty <- stcty
-d %<>% select(stcty, ag_share)
+d <- d %>% select(stcty, ag_share)
 df <- left_join(df, d, by = "stcty")
 
 # growth rates
-df %<>% group_by(stcty) %>% 
+df <- df %>%
+  group_by(stcty) %>% 
   mutate(
     est_gr = 2 * (est - lag(est, 4)) / (est + lag(est, 4)),
     emp_gr = 2 * (emp - lag(emp, 4)) / (emp + lag(emp, 4))
   ) %>% 
-  ungroup
-df %<>% drop_na(emp_gr)
-
-df
+  ungroup()
 
 ```
 
@@ -246,7 +243,7 @@ summary(m)
 
 
 ```{r}
-df %<>% cbind(margins::dydx(df, m, "max_absorption_alpha"))
+df <- cbind(df, margins::dydx(df, m, "max_absorption_alpha"))
 
 # marginal effect in Wisconsin counties
 d <- geography$get_county_df(geometry = FALSE) %>%
@@ -275,12 +272,4 @@ ggplot(dydx_wi,
 ```
 
 
-
-
-```{r}
-df <- readRDS("~/Downloads/CBP2012_Connected")
-d <- df %>% as.data.frame() %>% select(!c(geometry, center))
-write.csv(d, "~/Downloads/CBP2012_Connected.csv")
-  
-```
 

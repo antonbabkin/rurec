@@ -19,4 +19,7 @@ Imports:
   geosphere,
   spdep,
   REAT,
-  arrow
+  arrow,
+  matlib,
+  magick,
+  tmaptools
