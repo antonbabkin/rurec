@@ -1106,8 +1106,7 @@ In our example, Brown has at a maximum 35.21053 of Mining to export and Cook has
 
 What would the gravity look like if we permitted cross-hauling? 
 
-
-
+Can we derive a production possibilities frontier?
 
 
 
@@ -1126,6 +1125,227 @@ What can location quotients offer? What can gravity models offer?
 Irrespective of cross hauling, is does what a place has available for "export" its Industry Output minus (industry) Factor Cost? No.
 
 
+# Finding the problem
+
+Approach: Supply/Use framework, DirectRequirements, TotalRequirements
+In theory all equivalent* (only if supply is diagonal?) (issue if number of commodities != industries)
+
+```{r}
+## Economic sectors
+Toy_Sectors <- c("Agriculture", 
+                 "Mining",
+                 "Manufacturing")
+Toy_Industry_Sectors <- c("Agriculture", 
+                          "Mining",
+                          "Manufacturing")
+Toy_Industry_Sectors
+Toy_Commodity_Sectors <- c("Agriculture", 
+                           "Mining",
+                           "Manufacturing")
+Toy_Commodity_Sectors
+```
+
+```{r}
+## Supply Matrix in Dollars (cxi)
+Toy_Supply_mat <- rbind(c(365, 0, 0),
+                        c(1, 540, 0),
+                        c(7, 30, 490))
+rownames(Toy_Supply_mat) <- Toy_Commodity_Sectors
+colnames(Toy_Supply_mat) <- Toy_Industry_Sectors
+Toy_Supply_mat
+```
+
+```{r}
+## Use Matrix in Dollars (cxi)
+#Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) %*% Toy_Direct_mat %*% diag(as.vector(Toy_Total_Industry_Output))
+Toy_Use_mat <- rbind(c(10, 0, 9),
+                     c(11, 45, 20),
+                     c(7, 15, 35))
+rownames(Toy_Use_mat) <- Toy_Commodity_Sectors
+colnames(Toy_Use_mat) <- Toy_Industry_Sectors
+Toy_Use_mat
+```
+
+```{r}
+# Check for any negative FinalDemand/ValueAdded, pass if TRUE
+all(
+colSums(Toy_Supply_mat)>colSums(Toy_Use_mat),
+rowSums(Toy_Supply_mat)>rowSums(Toy_Use_mat)
+)
+```
+
+
+```{r}
+## B matrix (cxi)
+## The commodity/industry parallel to the sector technical coefficients matrix
+## column j represents the value of inputs of each commodity per dollar's worth of industry j's output
+Toy_B_mat <- Toy_Use_mat %*% diag(1/colSums(Toy_Supply_mat))
+rownames(Toy_B_mat) <- Toy_Commodity_Sectors
+colnames(Toy_B_mat) <- Toy_Industry_Sectors
+Toy_B_mat
+```
+
+```{r}
+## D matrix (ixc)
+## Industry Source of Commodity Outputs
+## Denotes  fraction of total commodity j output that was produced by industry i
+Toy_D_mat <- t(Toy_Supply_mat) %*% diag(1/rowSums(Toy_Supply_mat))
+rownames(Toy_D_mat) <- Toy_Industry_Sectors
+colnames(Toy_D_mat) <- Toy_Commodity_Sectors
+Toy_D_mat
+```
+
+```{r}
+## C matrix (cxi)
+## Commodity Composition of Industry Outputs
+## Denotes fraction of total industry i output that is in the form of commodity j
+Toy_C_mat <- Toy_Supply_mat %*% diag(1/colSums(Toy_Supply_mat))
+rownames(Toy_C_mat) <- Toy_Commodity_Sectors
+colnames(Toy_C_mat) <- Toy_Industry_Sectors
+Toy_C_mat
+```
+
+```{r}
+## National "Factor Ratio"
+## proportion of FinalDemand allocated to intermediate use
+Toy_National_FactorRatio <- rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)
+Toy_National_FactorRatio
+```
+
+
+```{r}
+## Regional places
+Toy_Places <- c("Albany", 
+                "Brown", 
+                "Cook")
+Toy_Places 
+```
+
+```{r}
+## Regional distribution of production (rows sum to one) (ensures sum of regional industry output == national industry output) (ixr)
+regdis <- rbind(c(.7, .2, .1),
+                c(0, .6, .4),
+                c(.1, .1, .8))
+```
+
+```{r}
+# Check that Total Regional production equals National production, pass if TRUE
+all(rowSums(regdis) == 1)
+```
+
+```{r}
+## Regional Total Industry Output (ixr)
+Toy_Regional_Industry_Output <- diag(colSums(Toy_Supply_mat)) %*% (regdis)
+rownames(Toy_Regional_Industry_Output) <- Toy_Industry_Sectors
+colnames(Toy_Regional_Industry_Output) <- Toy_Places
+Toy_Regional_Industry_Output
+```
+
+
+```{r}
+## Regional Factor Demand (cxr)
+Toy_B_mat %*% Toy_Regional_Industry_Output
+```
+
+```{r}
+# Check that Sum of Regional Factor Demand == National Factor Demand, by Commodity, pass if TRUE
+all(
+  rowSums(Toy_B_mat %*% Toy_Regional_Industry_Output) == rowSums(Toy_Use_mat)
+    )
+```
+
+```{r}
+## Regional Total Commodity Output (cxr)
+Toy_C_mat %*% Toy_Regional_Industry_Output
+```
+
+
+```{r}
+# Check that Sum of Regional Total Commodity Output == National Total Commodity Output, by Commodity, pass if TRUE
+all(
+  rowSums(Toy_C_mat %*% Toy_Regional_Industry_Output) == rowSums(Toy_Supply_mat)
+    )
+```
+
+
+```{r}
+# Check that Sum of Regional Commodity Output == Sum Regional Industry Output, pass if TRUE
+sum(Toy_C_mat %*% Toy_Regional_Industry_Output) == sum(Toy_Regional_Industry_Output)
+```
+
+
+```{r}
+## Regional "Factor Supply" (cxr)
+diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_C_mat %*% Toy_Regional_Industry_Output)
+
+### Above satisfies supply == demand, however
+### !problem that county has commodity supply but no industry output!
+### Below satisfies zero supply == zero output, however
+### !problem(s) supply != demand, and rows are "comodity factor demand ratio scaled gross industry outputs!
+diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_Regional_Industry_Output)
+```
+
+```{r}
+# Check that Sum of Regional "Factor Supply" == Sum of Regional Factor Demand, by Commodity, pass if TRUE
+all.equal(
+  rowSums(diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_C_mat %*% Toy_Regional_Industry_Output)),  
+  as.numeric(rowSums(Toy_B_mat %*% Toy_Regional_Industry_Output))
+  )
+```
+
+```{r}
+## Check that RAS economic requirement supply == demand 
+  sum_tol <- 0.001
+  sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
+  if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
+```
+
+
+# Emperical example
+
+```{r}
+tot <- total_output_tidy(cbp_year = "2012", ilevel = "det")
+cot <- commodity_output_tidy_matrix(cbp_year = "2012", ilevel = "det")
+
+bmat <- b_matrix(bea_year = "2012", ilevel = "det")
+cmat <- c_matrix(bea_year = "2012", ilevel = "det")
+fr <- factor_ratio(cbp_year = "2012", ilevel = "det")
+
+
+fsm <- factor_supply_matrix(cbp_year = "2012", ilevel = "det")
+fdm <- factor_demand_matrix(cbp_year = "2012", ilevel = "det")
+
+abs(rowSums(fsm)[1] - rowSums(fdm)[1]) / rowSums(fdm)[1]
+
+rtf <- ras_trade_lists(factor_supply = fsm, factor_demand = fdm, impedance_mat = NULL)
+
+
+## new BY commodity factor demand (cxi)(ixr)
+bmat[, rownames(tot)] %*% tot
+## old input needs factor demand (ixi)(ixr) (imputed industry-by-industry D from T, requires commodity==industry and negative values are made zeros)
+drm <- call_direct_requirements(bea_year = "2012", ilevel = "det")
+    con <- grep("^23", colnames(drm), value = TRUE)
+    cm <- matrix(sum(drm[con,con])/length(con), 
+                 dimnames = list(c("23"), c("23")))
+    cr <- t(matrix(colMeans(drm[con, ]), 
+                   dimnames = list(colnames(drm), c("23")) ))
+    cc <- matrix(rowMeans(drm[, con]), 
+                 dimnames = list(colnames(drm), c("23"))) 
+    drm <- cbind( rbind(cr, drm ), rbind(cm, cc )) 
+    drm <- drm[colnames(drm)[!colnames(drm) %in% con] , colnames(drm)[!colnames(drm) %in% con]]
+drm[rownames(tot), rownames(tot)] %*% tot
+
+## ? inv(C)BY or DBY commodity factor demand (ixc)(cxi)(ixr)
+
+
+```
+
+
+
+
+
+
+
 
 # Emperical calculations
 
@@ -1138,7 +1358,6 @@ Note: Ag Census is "Market Value of Agricultural Products Sold Including Landlor
 
 New labor share perspective:
 Output: From BLS: "gross value-added output" = "gross output minus intermediate inputs" "defined as total labor compensation over nominal GDP or gross value added" "The labor share is the nominal wage bill over nominal output or nominal GDP" "Nominal unit labor costs, are defined as the nominal wage bill over real output" Finally, note that all output and compensation data used to calculate the labor share are in current dollars.
-
 
 
 Average Total Labor Share from BEA in 2012 is 0.558.
