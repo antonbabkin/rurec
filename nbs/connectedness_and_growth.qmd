@@ -1,13 +1,25 @@
 ---
 title: "Connectedness and economic growth"
-format: html
+format: 
+  html:
+    toc: true
+    code-fold: true
+    df-print: paged
+    embed-resources: true
 ---
 
 ```{r preamble}
 
+print()
+
+select()
+
+sd <- sum(1:3)
+
 library(tidyverse)
 library(ggplot2)
 library(ggside)
+library(huxtable)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
@@ -22,14 +34,433 @@ source(file.path(root_dir, "nbs", "rural_typology_r_functions.R"))
 
 ```
 
+# Connectedness metric methodology
 
+Sensitivity of metric distribution to calculation methodology.
+
+```{r}
+
+conn <- list()
+conn[["max_abs_share"]] <- connectedness("2017")
+q <- dprox_mat(boundary_limit = miles2meters(100), tiger_year = "2017")
+conn[["max_abs_sh_dprox_100"]] <- connectedness("2017", impedance = q)
+q <- dprox_mat(boundary_limit = miles2meters(300), tiger_year = "2017")
+conn[["max_abs_sh_dprox_300"]] <- connectedness("2017", impedance = q)
+for (p in c(1/8, 1/4, 1/2)) {
+  q <- power_impedance_mat(decay_power = p, tiger_year = "2017")
+  conn[[glue("max_abs_sh_pow_{p}")]] <- connectedness("2017", impedance = q)
+}
+
+conn_meth <- conn
+
+```
+
+Distribution of the connectedness metric across counties.
+
+```{r}
+d <- conn[["max_abs_share"]] %>%
+  ungroup() %>%
+  select(place) %>% 
+  rename(stcty = place)
+for (n in names(conn)) {
+  d[[n]] <- conn[[n]]$max_absorption_alpha
+}
+d <- d %>%
+  select(!stcty) %>%
+  pivot_longer(everything())
+
+d %>%
+  group_by(name) %>%
+  summarize(across(value, list(mean = mean, sd = sd, min = min, q25 = ~ quantile(.x, 0.25),
+                               med = median, q75 = ~ quantile(.x, 0.75), max = max))) %>%
+  rename_with(~ str_remove(.x, "value_"))
+
+
+ggplot(d %>% filter(name != "max_abs_sh_pow_0.5", name != "max_abs_sh_pow_0.25")) +
+  geom_density(aes(value, color = name))
+```
+
+
+# Connectedness over time
+
+
+```{r}
+
+impedance_dprox_300 <- dprox_mat(boundary_limit = miles2meters(300), tiger_year = "2017")
+
+df_conn <- tibble()
+
+
+y <- 2009
+d <- connectedness(y) %>%
+  ungroup() %>%
+  rename(stcty = place, connectedness = max_absorption_alpha) %>%
+  select(stcty, connectedness) %>%
+  mutate(year = y, conn_method = "max_abs_share")
+df_conn <- rbind(df_conn, d)
+
+d <- connectedness(y, impedance = impedance_dprox_300) %>%
+  ungroup() %>%
+  rename(stcty = place, connectedness = max_absorption_alpha) %>%
+  select(stcty, connectedness) %>%
+  mutate(year = y, conn_method = "max_abs_sh_dprox_300")
+df_conn <- rbind(df_conn, d)
+
+y <- 2019
+d <- connectedness(y) %>%
+  ungroup() %>%
+  rename(stcty = place, connectedness = max_absorption_alpha) %>%
+  select(stcty, connectedness) %>%
+  mutate(year = y, conn_method = "max_abs_share")
+df_conn <- rbind(df_conn, d)
+
+d <- connectedness(y, impedance = impedance_dprox_300) %>%
+  ungroup() %>%
+  rename(stcty = place, connectedness = max_absorption_alpha) %>%
+  select(stcty, connectedness) %>%
+  mutate(year = y, conn_method = "max_abs_sh_dprox_300")
+df_conn <- rbind(df_conn, d)
+
+df_conn %>%
+  group_by(year, conn_method) %>%
+  summarize(across(connectedness, list(mean = mean, sd = sd, min = min, q25 = ~ quantile(.x, 0.25),
+                               med = median, q75 = ~ quantile(.x, 0.75), max = max)),
+            .groups = 'drop')
+
+ggplot(df_conn) +
+  geom_density(aes(connectedness, color = as.factor(year), linetype = conn_method))
+
+
+d <- df_conn %>%
+  pivot_wider(id_cols = c(stcty, conn_method), 
+              names_from = year, names_prefix = "connectedness_", 
+              values_from = connectedness) %>%
+  drop_na()
+
+ggplot(d) +
+  geom_point(aes(connectedness_2009, connectedness_2019)) +
+  facet_wrap(~conn_method)
+```
+
+
+
+# County employment
+
+
+```{r data}
+
+years <- c(2009, 2019)
+
+# load BDS county data
+df <- bds$get_df("cty") %>%
+  filter(year %in% years) %>%
+  mutate(stcty = str_c(st, cty)) %>%
+  select(year, stcty, estabs, emp) %>%
+  rename(est = estabs) %>%
+  arrange(stcty, year)
+
+# growth rates
+df <- df %>%
+  group_by(stcty) %>% 
+  mutate(
+    est_denom = (est + lag(est)) / 2,
+    est_gr = (est - lag(est)) / est_denom,
+    emp_denom = (emp + lag(emp)) / 2,
+    emp_gr = (emp - lag(emp)) / emp_denom
+  ) %>% 
+  ungroup()
+
+
+# add rural status
+d <- cbsa$get_cbsa_delin_df(2009) %>%
+  rename_with(str_to_lower) %>%
+  mutate(stcty = str_c(state_code, county_code)) %>%
+  select(stcty, metro_micro)
+df <- left_join(df, d, by = "stcty") %>% 
+  mutate(rural = replace_na(metro_micro != "metro", TRUE))
+
+# add absorption shares
+d <- df_conn %>%
+  filter(conn_method == "max_abs_share") %>%
+  rename(conn_unlim = connectedness)
+df <- left_join(df, d, by = c("stcty", "year"))
+df <- df %>%
+  group_by(stcty) %>% 
+  mutate(conn_unlim_lag = lag(conn_unlim), conn_unlim_gr = (conn_unlim - conn_unlim_lag)) %>% 
+  ungroup()
+
+d <- df_conn %>%
+  filter(conn_method == "max_abs_sh_dprox_300") %>%
+  rename(conn_drpox_300 = connectedness)
+df <- left_join(df, d, by = c("stcty", "year"))
+df <- df %>%
+  group_by(stcty) %>% 
+  mutate(conn_drpox_300_lag = lag(conn_drpox_300), conn_drpox_300_gr = (conn_drpox_300 - conn_drpox_300_lag)) %>% 
+  ungroup()
+
+
+
+
+```
+
+
+## Static
+
+### unlimited
+
+```{r}
+df <- df %>%
+  mutate(conn = conn_unlim, conn_lag = conn_unlim_lag, conn_gr = conn_unlim_gr)
+
+
+df %>%
+  group_by(year, rural) %>%
+  summarize(across(c(emp, conn), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))),
+            .groups = 'drop')
+
+ggplot(df) +
+  geom_point(aes(emp, conn)) +
+  scale_x_log10() +
+  facet_wrap(vars(year, rural))
+```
+
+### 300 miles
+
+```{r}
+df <- df %>%
+  mutate(conn = conn_drpox_300, conn_lag = conn_drpox_300_lag, conn_gr = conn_drpox_300_gr)
+
+
+df %>%
+  group_by(year, rural) %>%
+  summarize(across(c(emp, conn), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))),
+            .groups = 'drop')
+
+ggplot(df) +
+  geom_point(aes(emp, conn)) +
+  scale_x_log10() +
+  facet_wrap(vars(year, rural))
+```
+
+
+## Dynamic
+
+### unlimited
+
+```{r}
+df <- df %>%
+  mutate(conn = conn_unlim, conn_lag = conn_unlim_lag, conn_gr = conn_unlim_gr)
+
+df %>%
+  group_by(rural) %>%
+  summarize(across(c(emp_gr, conn_gr), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))))
+
+ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_lag, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  facet_wrap(vars(rural))
+
+ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_gr, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  facet_wrap(vars(rural))
+
+```
+
+
+### 300 miles
+
+```{r}
+df <- df %>%
+  mutate(conn = conn_drpox_300, conn_lag = conn_drpox_300_lag, conn_gr = conn_drpox_300_gr)
+
+df %>%
+  group_by(rural) %>%
+  summarize(across(c(emp_gr, conn_gr), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))))
+
+ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_lag, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  facet_wrap(vars(rural))
+
+ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_gr, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  facet_wrap(vars(rural))
+
+```
+
+
+# Growth 2015-2019
+
+```{r, preload-slow-data}
+io_use_det <- bea_io$get_use(2012L, "det")
+county_industry_output <- total_output("2017", "det")
+county_output_sec <- total_output("2017", "sec")
+
+```
+
+
+Compare 2017 max absorption and 2015-2019 county employment growth from BDS.
+
+
+```{r data}
+
+# load BDS county data
+df <- bds$get_df("cty") %>%
+  filter(year > 2014) %>%
+  mutate(stcty = str_c(st, cty)) %>%
+  select(year, stcty, estabs, emp) %>%
+  rename(est = estabs) %>%
+  arrange(stcty, year)
+
+# growth rates
+df <- df %>%
+  group_by(stcty) %>% 
+  mutate(
+    est_denom = (est + lag(est, 4)) / 2,
+    est_gr = (est - lag(est, 4)) / est_denom,
+    emp_denom = (emp + lag(emp, 4)) / 2,
+    emp_gr = (emp - lag(emp, 4)) / emp_denom
+  ) %>% 
+  ungroup() %>%
+  filter(year == 2019)
+
+# add absorption shares
+d <- county_conn %>%
+  ungroup() %>%
+  rename(stcty = place) %>%
+  select(stcty, max_absorption_alpha, second_max_absorption_alpha)
+df <- inner_join(df, d, by = "stcty")
+
+# add rural status
+d <- cbsa$get_cbsa_delin_df(2017) %>%
+  rename_with(str_to_lower) %>%
+  mutate(stcty = str_c(state_code, county_code)) %>%
+  select(stcty, metro_micro)
+df <- left_join(df, d, by = "stcty") %>% mutate(rural = (metro_micro != "metro") %>% replace_na(TRUE))
+
+
+
+# industry shares of output
+d <- county_output_sec %>% 
+  t() %>% 
+  as_tibble(rownames = "stcty")
+d$total_output <- rowSums(select(d, !stcty))
+d <- d %>% 
+  mutate(across(!c(stcty, total_output), ~ .x / total_output, .names = "share_{.col}")) %>%
+  select(stcty, starts_with("share"))
+df <- left_join(df, d, by = "stcty")
+
+
+```
+
+
+```{r}
+#| output: false
+d <- geography$get_county_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  rename(stcty = code, cty_name = name) %>%
+  select(stcty, cty_name)
+
+df %>% ungroup() %>%
+  filter(str_sub(stcty, 1, 2) == "55") %>%
+  left_join(d, by = "stcty")
+```
+
+
+
+Visually, relationship is negative both over full sample, and in the subset of rural counties.
+
+```{r viz}
+
+d <- df %>% drop_na(emp_gr)
+
+# rural have less growth and more absorption
+d %>% group_by(rural) %>% summarise(n(), mean(emp_gr), mean(max_absorption_alpha))
+
+# negative slope
+ggplot(d, mapping = aes(max_absorption_alpha, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+# also in rural subset
+ggplot(d %>% filter(rural), mapping = aes(max_absorption_alpha, emp_gr)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+
+```
+
+## regressions
+
+```{r reg}
+
+d <- df %>% drop_na(emp_gr) %>% rename(absor = max_absorption_alpha)
+
+ms <- list()
+
+# negative coef in rural sample
+ms[["rural"]] <- lm(emp_gr ~ absor, data = filter(d, rural))
+
+# smaller magnitude when weighted
+ms[["rural, wgt"]] <- lm(emp_gr ~ absor, data = filter(d, rural), weights = emp)
+
+# including non-metro counties with interaction: 
+# no significant difference between metro and non-metro
+ms[["absor*rural"]] <- lm(emp_gr ~ absor * rural, data = d, weights = emp)
+
+
+# adding ag share
+# careful! emp measure does not include farms
+ms[["absor * (rural + ind_share)"]] <- lm(emp_gr ~ absor * rural + absor * (
+  share_11+share_21+share_22+share_23+share_31G+share_42+share_44RT+share_48TW+share_51+share_FIRE+share_PROF+share_6+share_7+share_81
+  ), data = d, weights = emp)
+
+huxreg(ms)
+
+```
+
+
+```{r}
+m <- ms[["absor*rural + absor*ag"]]
+
+d1 <- cbind(df, margins::dydx(df, m, "max_absorption_alpha"))
+
+# marginal effect in Wisconsin counties
+d <- geography$get_county_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  rename(stcty = code, cty_name = name) %>%
+  select(stcty, cty_name)
+
+dydx_wi <- d1 %>% ungroup %>%
+  filter(str_sub(stcty, 1, 2) == "55") %>%
+  left_join(d, by = "stcty") %>%
+  select(cty_name, rural, emp, emp_gr, ag_share, max_absorption_alpha, dydx_max_absorption_alpha) %>%
+  arrange(dydx_max_absorption_alpha)
+
+# dydx_wi %>%
+#   filter(rural) %>%
+#   {rbind(head(., 5), tail(., 5))} %>%
+#   mutate_if(is.numeric, round, digits = 3)
+
+ggplot(dydx_wi, aes(ag_share, max_absorption_alpha, colour = dydx_max_absorption_alpha, shape = rural)) +
+  geom_point() +
+  labs(title = "Marginal effect of max_absorption_alpha in WI counties")
+
+
+```
+
+
+# Intermediatedness
 
 There is significant variation among sectors in the share of output that is used as intermediate input.
 
-The big difference in Retail and Wholesale trade sectors between "Total Commodity Output" in Supply table and "Total use of products" in Use table is "Trade margins".
+"Intermediatedness": share of county's output used as intermediate input.
 
-Total product supply (purchaser prices) = Total product supply (basic prices) + trade margins + taxes.
-
+*Side note about trade margins.*  
+The big difference in Retail and Wholesale trade sectors between "Total Commodity Output" in Supply table and "Total use of products" in Use table is "Trade margins".  
+Total product supply (purchaser prices) = Total product supply (basic prices) + trade margins + taxes.  
 Trade margins are huge negative numbers in trade, and big positive numbers in manufacturing.
 
 
@@ -53,14 +484,6 @@ d %>% arrange(desc(output_share))
 
 
 Is absorption strongly correlated with weighted industry intermediate-ness?
-
-```{r, preload-slow-data}
-io_use_det <- bea_io$get_use(2012L, 'det')
-county_industry_output <- total_output("2017", "det")
-county_output_sec <- total_output("2017", "sec")
-county_conn <- connectedness("2017")
-```
-
 
 
 ```{r}
@@ -128,148 +551,11 @@ ggplot(df, aes(intermed_share, max_absorption_alpha)) +
 ```
 
 
+Yes, there is strong correlation between absorption share and an output-weighted "intermediatedness".
+In other words, counties dominated by industries that are not much used as intermediate commodities do not have high absorption shares.
 
+This will all change once we switch from total output to factor supply.
 
-
-Correlation of absorption and industry shares.
-
-
-Prepare absorption share for all counties by running [notebook](national_connectedness.Rmd) up to `Connectedness_table <-` line, then `saver(Connectedness_table)`.
-
-
-```{r data}
-
-# load BDS county data
-df <- bds$get_df("cty") %>%
-  filter(year > 2014) %>%
-  mutate(stcty = str_c(st, cty)) %>%
-  select(year, stcty, estabs, emp) %>%
-  rename(est = estabs) %>%
-  arrange(stcty, year)
-
-# add absorption shares
-d <- county_conn %>%
-  ungroup() %>%
-  rename(stcty = place) %>%
-  select(stcty, max_absorption_alpha, second_max_absorption_alpha)
-df <- inner_join(df, d, by = "stcty")
-
-# add rural status
-d <- cbsa$get_cbsa_delin_df(2017) %>%
-  rename_with(str_to_lower) %>%
-  mutate(stcty = str_c(state_code, county_code)) %>%
-  select(stcty, metro_micro)
-df <- left_join(df, d, by = "stcty") %>% mutate(rural = (metro_micro != "metro") %>% replace_na(TRUE))
-
-
-
-# ag share of output
-d <- county_output_sec %>% t()
-stcty <- rownames(d)
-d <- d %>% as_tibble()
-d$ag_share <- d[["11"]] / rowSums(d)
-d$stcty <- stcty
-d <- d %>% select(stcty, ag_share)
-df <- left_join(df, d, by = "stcty")
-
-# growth rates
-df <- df %>%
-  group_by(stcty) %>% 
-  mutate(
-    est_gr = 2 * (est - lag(est, 4)) / (est + lag(est, 4)),
-    emp_gr = 2 * (emp - lag(emp, 4)) / (emp + lag(emp, 4))
-  ) %>% 
-  ungroup()
-
-```
-
-
-```{r}
-d <- geography$get_county_df(geometry = FALSE) %>%
-  rename_with(str_to_lower) %>%
-  rename(stcty = code, cty_name = name) %>%
-  select(stcty, cty_name)
-
-df %>% ungroup() %>%
-  filter(str_sub(stcty, 1, 2) == "55") %>%
-  left_join(d, by = "stcty")
-```
-
-
-
-Visual relationship between max absorption and growth rate.
-
-```{r viz}
-
-d <- df %>% drop_na(emp_gr)
-
-# rural have less growth and more absorption
-d %>% group_by(rural) %>% summarise(n(), mean(emp_gr), mean(max_absorption_alpha))
-
-# negative slope
-ggplot(d, mapping = aes(max_absorption_alpha, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-# also in rural subset
-ggplot(d %>% filter(rural), mapping = aes(max_absorption_alpha, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-
-```
-
-
-```{r reg}
-# negative coef in rural sample
-m <- lm(emp_gr ~ max_absorption_alpha, data = filter(df, rural))
-summary(m)
-
-# smaller magnitude when weighted
-m <- lm(emp_gr ~ max_absorption_alpha, data = filter(df, rural), weights = emp)
-summary(m)
-
-# including non-metro counties with interaction: 
-# no significant difference between metro and non-metro
-m <- lm(emp_gr ~ max_absorption_alpha * rural, data = df, weights = emp)
-summary(m)
-
-# adding ag share
-# careful! emp measure does not include farms
-m <- lm(emp_gr ~ max_absorption_alpha * rural + max_absorption_alpha * ag_share, data = df, weights = emp)
-summary(m)
-
-```
-
-
-```{r}
-df <- cbind(df, margins::dydx(df, m, "max_absorption_alpha"))
-
-# marginal effect in Wisconsin counties
-d <- geography$get_county_df(geometry = FALSE) %>%
-  rename_with(str_to_lower) %>%
-  rename(stcty = code, cty_name = name) %>%
-  select(stcty, cty_name)
-
-dydx_wi <- df %>% ungroup %>%
-  filter(str_sub(stcty, 1, 2) == "55") %>%
-  left_join(d, by = "stcty") %>%
-  select(cty_name, rural, emp, emp_gr, ag_share, max_absorption_alpha, dydx_max_absorption_alpha) %>%
-  arrange(dydx_max_absorption_alpha)
-
-dydx_wi %>%
-  filter(rural) %>%
-  {rbind(head(., 5), tail(., 5))} %>%
-  mutate_if(is.numeric, round, digits = 3)
-
-ggplot(dydx_wi, 
-       aes(ag_share, max_absorption_alpha, colour = dydx_max_absorption_alpha, shape = rural)
-       ) +
-  geom_point() +
-  labs(title = "Marginal effect of max_absorption_alpha in WI counties")
-
-
-```
 
 
 
