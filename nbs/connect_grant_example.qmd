@@ -13,11 +13,14 @@ editor: visual
 ```{r packages and libraries, include = FALSE}
 library(tidyr)
 library(geosphere)
+library(matlib)
+library(rprojroot)
 
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
 ```
 
 ::: panel-tabset
-# The Principle Setup
+# Principle Setup
 
 ## Commodity/Industry economic sectors
 
@@ -29,15 +32,6 @@ Toy_Sectors <- c("Agriculture",
 Toy_Sectors
 ```
 
-## Make Matrix (industry-by-commodity in Dollars): $\mathbf{V}$
-
-Shows the industry i output value of commodity j
-
-```{r}
-## Make Matrix (industry-by-commodity in Dollars)
-Toy_Make_mat <- t(Toy_Supply_mat)
-Toy_Make_mat
-```
 
 ## Supply Matrix (commodity-by-industry in Dollars): $\mathbf{V^{'}}$
 
@@ -54,6 +48,16 @@ Toy_Supply_mat <- rbind(c(80, 0, 0),
                         c(0, 0, 190))
 rownames(Toy_Supply_mat) = colnames(Toy_Supply_mat) <- Toy_Sectors
 Toy_Supply_mat
+```
+
+## Make Matrix (industry-by-commodity in Dollars): $\mathbf{V}$
+
+Shows the industry i output value of commodity j
+
+```{r}
+## Make Matrix (industry-by-commodity in Dollars)
+Toy_Make_mat <- t(Toy_Supply_mat)
+Toy_Make_mat
 ```
 
 ## Total Commodity Output Vector: $\mathbf{q}$
@@ -321,28 +325,54 @@ Toy_Direct_IndByInd_CT_mat
 
 Given a Use matrix and Supply matrix can we recover the direct and total requirements matrices?
 
+## Use matrix (commodity by industry)
 ```{r}
-# Use matrix (commodity by industry )
 Toy_Use_mat
+```
 
-# Supply matrix (commodity by industry )
+## Supply matrix (commodity by industry)
+```{r}
 Toy_Supply_mat
+```
+## Total_Commodity_Output
+```{r}
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
+Toy_Total_Commodity_Output
+```
 
+## Total_Industry_Output
+```{r}
+i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
+Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
+Toy_Total_Industry_Output
+```
+
+## B_Matrix 
+The commodity/industry framework parallel to the ordinary technical coefficients (Direct Requirements) matrix
+```{r}
+Toy_B_mat <- Toy_Use_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) 
+colnames(Toy_B_mat) <- Toy_Sectors
+Toy_B_mat
+```
+
+## D_Matrix
+commodity output proportions
+```{r}
+Toy_D_mat <- t(Toy_Supply_mat) %*% inv(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
+colnames(Toy_D_mat) <- Toy_Sectors
+Toy_D_mat
+```
+
+## C_Matrix
+industry output proportions
+```{r}
+Toy_C_mat <- Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
+colnames(Toy_C_mat) <- Toy_Sectors
+Toy_C_mat
 ```
 
 ```{r}
-
-i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
-Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
-Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
-
-Toy_B_mat <- Toy_Use_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) 
-colnames(Toy_B_mat) <- Toy_Sectors
-Toy_D_mat <- t(Toy_Supply_mat) %*% inv(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
-colnames(Toy_D_mat) <- Toy_Sectors
-Toy_C_mat <- Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
-colnames(Toy_C_mat) <- Toy_Sectors
-
 # Direct 
 Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
 Toy_Direct_IndByInd_CT_mat <- inv(Toy_C_mat) %*% Toy_B_mat
@@ -350,20 +380,52 @@ rownames(Toy_Direct_IndByInd_CT_mat) <- Toy_Sectors
 Toy_Direct_ComByCom_IT_mat <- Toy_B_mat %*% Toy_D_mat
 Toy_Direct_ComByCom_CT_mat <- Toy_B_mat %*% inv(Toy_C_mat)
 colnames(Toy_Direct_ComByCom_CT_mat) <- Toy_Sectors
+```
 
+## Direct Requirements family
+```{r}
+Toy_Direct_IndByInd_IT_mat
+Toy_Direct_IndByInd_CT_mat
+Toy_Direct_ComByCom_IT_mat
+Toy_Direct_ComByCom_CT_mat
+```
+
+```{r}
 # Total 
 I <- diag(length(Toy_Sectors))
 Toy_Total_ComByCom_IT_mat <- inv(I - Toy_B_mat %*% Toy_D_mat)
+rownames(Toy_Total_ComByCom_IT_mat) = colnames(Toy_Total_ComByCom_IT_mat) <- Toy_Sectors
 Toy_Total_IndByCom_IT_mat <- Toy_D_mat %*% inv(I - Toy_B_mat %*% Toy_D_mat)
+rownames(Toy_Total_IndByCom_IT_mat) = colnames(Toy_Total_IndByCom_IT_mat) <- Toy_Sectors
 Toy_Total_IndByInd_IT_mat <- inv(I - Toy_D_mat %*% Toy_B_mat)
+rownames(Toy_Total_IndByInd_IT_mat) = colnames(Toy_Total_IndByInd_IT_mat) <- Toy_Sectors
 Toy_Total_ComByInd_IT_mat <- inv(Toy_D_mat) %*% inv(I - Toy_D_mat %*% Toy_B_mat)
+rownames(Toy_Total_ComByInd_IT_mat) = colnames(Toy_Total_ComByInd_IT_mat) <- Toy_Sectors
   
 Toy_Total_ComByCom_CT_mat <- inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+rownames(Toy_Total_ComByCom_CT_mat) = colnames(Toy_Total_ComByCom_CT_mat) <- Toy_Sectors
 Toy_Total_IndByCom_CT_mat <- inv(Toy_C_mat) %*% inv(I - Toy_B_mat %*% inv(Toy_C_mat))
+rownames(Toy_Total_IndByCom_CT_mat) = colnames(Toy_Total_IndByCom_CT_mat) <- Toy_Sectors
 Toy_Total_IndByInd_CT_mat <- inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+rownames(Toy_Total_IndByInd_CT_mat) = colnames(Toy_Total_IndByInd_CT_mat) <- Toy_Sectors
 Toy_Total_ComByInd_CT_mat <- Toy_C_mat %*% inv(I - inv(Toy_C_mat) %*% Toy_B_mat)
+rownames(Toy_Total_ComByInd_CT_mat) = colnames(Toy_Total_ComByInd_CT_mat) <- Toy_Sectors
 
+```
 
+## Total Requirements family
+```{r}
+Toy_Total_ComByCom_IT_mat
+Toy_Total_IndByCom_IT_mat
+Toy_Total_IndByInd_IT_mat
+Toy_Total_ComByInd_IT_mat
+Toy_Total_ComByCom_CT_mat
+Toy_Total_IndByCom_CT_mat
+Toy_Total_IndByInd_CT_mat
+Toy_Total_ComByInd_CT_mat
+```
+
+```{r}
 # ##back to direct from total test 
 # Toy_Total_IndByInd_mat <- inv(I - Toy_Direct_IndByInd_IT_mat) 
 # test <- diag(length(Toy_Sectors)) - inv(Toy_Total_IndByInd_mat)
@@ -407,7 +469,7 @@ Toy_Places <- c("Albany",
 Toy_Places 
 ```
 
-## Industry-by-County Total Output Table
+## Industry-by-Region Total Industry Output Table
 
 Shows the value of the output of industry i that is produced by county j
 
@@ -421,9 +483,9 @@ colnames(Toy_Regional_Industry_Output) <- Toy_Places
 Toy_Regional_Industry_Output
 ```
 
-## Sub-national Total Commodity Output (Commodity-by-County)
+## Region specific  Total Commodity Output (Commodity-by-Region)
 
-Shows the value of the output of commodity i that is produced by county j
+Shows the value of the output of commodity i that is produced by region j
 
 ```{r}
 ## Sub-national Total Commodity Output (Commodity-by-County)
@@ -525,56 +587,7 @@ Toy_Regional_FinalDemand
 ```
 
 
-
-What do these metrics mean at the regional level? What can we say about a county's "input needs"?
-
-
-
-We know Albany has a total output of \$50 Agriculture, \$0 Mining, and \$35 Manufacturing; what inputs did it use to satisfy this output?
-Looking at its region specific Use table or its Factor Demand, we see that Albany used \$7.907895 of Agriculture, \$10.559212 of Mining, and \$10.822371 of Manufacturing; where did it get these inputs?
-
-Similarly, we can observe the national Total Industry Output as \$80 Agriculture, \$120 Mining, and \$190 Manufacturing and derive the national Total Factor Demand as \$19 Agriculture, \$76 Mining, and \$57 Manufacturing. So where did these inputs come from? 
-
-Conjecture: Factor Demand inputs are sourced from Total Commodity Outputs. 
-
-By definition, sum of Total Industry Output = sum of Total Commodity Output which gives, sum of Total Factor Demand plus Total Final Demand = sum of Total Factor Cost plus Total Value Added. Likewise, sum of Total Final Demand = sum of Total Value Added along with sum of Total Factor Demand = sum of Total Factor Cost. (i.e., all production is consumed and all inputs are outputs of something else.)
-
-What does this tell us? 
-
-sum((19, 76, 57) + (61, 44, 133)) = sum((28, 60, 64) + (52, 60, 126))
-
-Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
-
-Toy_Regional_FactorDemand  = Toy_Regional_FactorCost + Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
-
-
-Toy_Regional_FactorDemand - Toy_Regional_FactorCost = (-9, 16, -7)
-
-Toy_Regional_FinalDemand - Toy_Regional_FactorDemand = (42, -32, 76)
-
-Toy_Regional_ValueAdded - Toy_Regional_FactorDemand = (33, -16, 69)
-
-
-Conjecture: Final Demand less Factor Demand is ?
-
-In a completely "closed" extended I-O model, all sectors in final demand are transmuted into the interindustry coefficients matrix, meaning the final demand vector is zero, which is to say all outputs are accounted for as inputs somewhere, and the system is completely closed without any exogenous sectors. In this situation we could say Total Factor Demand is Total Commodity Output. Likewise, Total Factor Cost is Total Industry Output. Thus (assuming a diagonal Make matrix), Total Factor Cost = Total Factor Demand. In other words, the total value of output from a sector must be equal to the total value of its inputs. In other other words, all inputs to a sector come from all outputs of all other sectors. What does this mean in the context of a non-completely closed model, and what does it mean when we do not observe Total Factor Cost and Total Factor Demand equivalence at the sector level? 
-
-First, we have shown that the source of Factor Demand inputs are Total Commodity Outputs. Thus the available export pool for Albany or any region is its Total Commodity Outputs less its Factor Demand A.K.A Final Demand. At the moment this Final Demand includes both what is consumed locally and what is exported to satisfy the national balance of accounts, without distinction. 
-
-Conjecture: If we observe a county with a negative Final Demand component, we know that it must be importing at least that must to satisfy the balance of accounts. I.e., NID: pmax(Toy_Regional_FactorDemand - Toy_Regional_Industry_Output, 0) is that lower bound value. Simalarly, NIS: pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorDemand, 0) represents the upper bound value of a counties availible exports 
-
-In our example, Albany needs to import at least \$10.559212 of Mining. Brown has at a maximum \$35.21053 of Mining to export and Cook has at a maximum \$19.348687 of Mining to export. Note this model inherently assumes that if a region needs an input and can produce that input it will use up all that local production before seeking imports. In other words, the available \$35.21053 of Mining that Brown has to export already has its own input needs of \$34.789466 accounted for. 
-
-So from which place and how much from each will Albany import its Mining needs from?
-
-Proposition: (Gravity Model) The interregional trade of (Mining) from Brown to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times BrownFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$35.21053) /(\$44) = Q_AB times \$8.449897. Similarly, the interregional trade of (Mining) from Cook to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times CookFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$19.348687) /(\$44) = Q_AB times \$4.643338.
-
-
-
-
-
-
-## National metrics from Regional
+## Recovered National metrics from Regional
 
 ```{r}
 
@@ -639,6 +652,57 @@ Toy_National_FinalDemand
 
 ```
 
+
+*Notes and loose ends*
+
+What do these metrics mean at the regional level? What can we say about a county's "input needs"?
+
+We know Albany has a total output of \$50 Agriculture, \$0 Mining, and \$35 Manufacturing; what inputs did it use to satisfy this output?
+Looking at its region specific Use table or its Factor Demand, we see that Albany used \$7.907895 of Agriculture, \$10.559212 of Mining, and \$10.822371 of Manufacturing; where did it get these inputs?
+
+Similarly, we can observe the national Total Industry Output as \$80 Agriculture, \$120 Mining, and \$190 Manufacturing and derive the national Total Factor Demand as \$19 Agriculture, \$76 Mining, and \$57 Manufacturing. So where did these inputs come from? 
+
+
+To be able to satisfy the exogenous final demand consumption the Ag industry must produce what? Total Commodity Output? or is that double counting? To satisfy Ag finaldemand 61, Ag will produce a total of 80 commodity output, of which 28 Ag factorcost will go into the economy as intermediate inputs? BUT you are short by 9 in Ag, what process translates (the excess mining) into ag consumption?
+
+
+Conjecture: Factor Demand inputs are sourced from Total Commodity Outputs. 
+
+By definition, sum of Total Industry Output = sum of Total Commodity Output which gives, sum of Total Factor Demand plus Total Final Demand = sum of Total Factor Cost plus Total Value Added. Likewise, sum of Total Final Demand = sum of Total Value Added along with sum of Total Factor Demand = sum of Total Factor Cost. (i.e., all production is consumed and all inputs are outputs of something else.)
+
+What does this tell us? 
+
+sum((19, 76, 57) + (61, 44, 133)) = sum((28, 60, 64) + (52, 60, 126))
+
+Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
+
+Toy_Regional_FactorDemand  = Toy_Regional_FactorCost + Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
+
+
+Toy_Regional_FactorDemand - Toy_Regional_FactorCost = (-9, 16, -7)
+
+Toy_Regional_FinalDemand - Toy_Regional_FactorDemand = (42, -32, 76)
+
+Toy_Regional_ValueAdded - Toy_Regional_FactorDemand = (33, -16, 69)
+
+
+Conjecture: Final Demand less Factor Demand is ?
+
+In a completely "closed" extended I-O model, all sectors in final demand are transmuted into the interindustry coefficients matrix, meaning the final demand vector is zero, which is to say all outputs are accounted for as inputs somewhere, and the system is completely closed without any exogenous sectors. In this situation we could say Total Factor Demand is Total Commodity Output. Likewise, Total Factor Cost is Total Industry Output. Thus (assuming a diagonal Make matrix), Total Factor Cost = Total Factor Demand. In other words, the total value of output from a sector must be equal to the total value of its inputs. In other other words, all inputs to a sector come from all outputs of all other sectors. What does this mean in the context of a non-completely closed model, and what does it mean when we do not observe Total Factor Cost and Total Factor Demand equivalence at the sector level? 
+
+First, we have shown that the source of Factor Demand inputs are Total Commodity Outputs. Thus the available export pool for Albany or any region is its Total Commodity Outputs less its Factor Demand A.K.A Final Demand. At the moment this Final Demand includes both what is consumed locally and what is exported to satisfy the national balance of accounts, without distinction. 
+
+Conjecture: If we observe a county with a negative Final Demand component, we know that it must be importing at least that must to satisfy the balance of accounts. I.e., NID: pmax(Toy_Regional_FactorDemand - Toy_Regional_Industry_Output, 0) is that lower bound value. Simalarly, NIS: pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorDemand, 0) represents the upper bound value of a counties available exports 
+
+In our example, Albany needs to import at least \$10.559212 of Mining. Brown has at a maximum \$35.21053 of Mining to export and Cook has at a maximum \$19.348687 of Mining to export. Note this model inherently assumes that if a region needs an input and can produce that input it will use up all that local production before seeking imports. In other words, the available \$35.21053 of Mining that Brown has to export already has its own input needs of \$34.789466 accounted for. 
+
+So from which place and how much from each will Albany import its Mining needs from?
+
+Proposition: (Gravity Model) The interregional trade of (Mining) from Brown to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times BrownFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$35.21053) /(\$44) = Q_AB times \$8.449897. Similarly, the interregional trade of (Mining) from Cook to Albany is given by Q_AB times (AlbanyFinalDemand_Mining times CookFinalDemand_Mining)/(NationalFinalDemand_Mining?) = Q_AB times (\$10.559212 times \$19.348687) /(\$44) = Q_AB times \$4.643338. But 8.449897 + 4.643338 = 13.09323
+
+
+# Regional cont. Metrics
+
 ## NID (Net Input Demand): $\max \{\mathbf{DB}\mathbf{X} - \mathbf{X}, 0\}$
 
 ```{r}
@@ -653,21 +717,100 @@ NID
 ##exports (excess) by region
 NIS <- pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorDemand, 0)
 NIS
-
 ```
 
-County $r$ Absorption matrix: $\mathbf{A}^{r} = \min\{\text{NIE}^{r}, \textbf{NIS} \}$
+## Region $r$ Absorption matrix: $\mathbf{A}^{r} = \min\{\text{NID}^{r}, \textbf{NIS} \}$
 
-"Total Absorption matrix": $\mathbf{A} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \}~ \forall ~ r$
+Total Absorption matrix: $\mathbf{A} = \mathbf{i'}\min\{\text{NID}^{r}, \textbf{NIS} \}~ \forall ~ r$
+```{r}
+SAS <- stacked_absorption_share(NIS, NID) 
+SAS
+```
 
-"Normalized Absorption Shares": $\mathbf{\alpha} = \mathbf{i'}\min\{\text{NIE}^{r}, \textbf{NIS} \} / \text{NIE}^{r} ~ \forall ~ r$
+## Normalized Absorption Shares: $\mathbf{\alpha} = \mathbf{i'}\min\{\text{NID}^{r}, \textbf{NIS} \} / \text{NIS}^{r} ~ \forall ~ r$
+```{r}
+NAS <- normalized_absorption_share(SAS, NIS)
+NAS
+```
+## Absorption Potential Matching (alpha max)
 
-"Geographical Impedance matrix": $\mathbf{Q} = e^{-d^{rs}}$
+ECA (Economic Catchment Area) Matching (based on row-wise maximum Absorption with a non-zero isolation threshold minimum): 
+  row max < threshold → Isolated (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand)
+  row max > threshold → Cluster Source (ECA match = rowMax column county)
+    (at least one county could import your positive Final Demand given its NID)
+    (Matched to county that could import more than any other county what you have available as positive Final Demand)
+  row max > threshold, but also a sink (rowMax county) for another county → Cluster Sink (ECA match = Self Match)
+    (at least one county could import your positive Final Demand, but you are also the max import sink for at least one other county)
+  row max < threshold, but also a sink (rowMax county) for another county → Isolated, Cluster Sink (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand, but you are also the max import sink for at least one other county)
+    
 
-"Spatial Absorption matrix": $\mathbf{AQ}$
+```{r}
+AMM <- absorption_maximum_match(NAS)
+AMM[colnames(AMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
 
-"Spatial Normalized Absorption Shares": $\mathbf{\alpha Q}$
+## Geographical Distance matrix
+```{r}
+Toy_Lat <- c(42.3, 44.49, 41.84 )
+Toy_Lon <- c(-89.04, -88.03, -87.77)
+Toy_Dist_mat <- distm(cbind(Toy_Lon, Toy_Lat))
+colnames(Toy_Dist_mat) = rownames(Toy_Dist_mat) <-  Toy_Places
+Toy_Dist_mat
+```
 
+## Geographical Impedance matrix: $\mathbf{Q}$
+
+For example: bi-square, hyperbolic secant, Gaussian, exponential, power, distance proximity, boarder proximity, neighbor-of-neighbor proximity, 
+```{r}
+decay_function = c("bisquare", "hyper", "gaus", "expo", "power", "distance")[4]
+
+if(decay_function == "bisquare"){
+  boundary_limit <- miles2meters(200)
+  Toy_Q <- ifelse(Toy_Dist_mat > boundary_limit, 0, (1-(Toy_Dist_mat/boundary_limit)^2)^2)
+}
+if(decay_function == "hyper"){
+  hyper_decay_constant <- miles2meters(200)
+  Toy_Q <- 2/(exp(-(Toy_Dist_mat/hyper_decay_constant)) + exp(Toy_Dist_mat/hyper_decay_constant))
+}
+if(decay_function == "gaus"){
+  rms_width = miles2meters(200)
+  Toy_Q <- exp(-.5*(Toy_Dist_mat/rms_width)^2) 
+}
+if(decay_function == "expo"){
+  expo_decay_constant <- miles2meters(200)
+  Toy_Q <- exp(-(Toy_Dist_mat/expo_decay_constant)) 
+}
+if(decay_function == "power"){
+  decay_power = 1/2
+  scaler_constant = 10^(nchar(trunc(trunc(max(Toy_Dist_mat))^(decay_power)))-1)
+  Toy_Q <- ifelse(Toy_Dist_mat == 0, 1, (1*scaler_constant/(Toy_Dist_mat)^(decay_power)))
+}
+if(decay_function == "distance"){
+  decay_power = 1
+  scaler_constant = 10^(nchar(trunc(trunc(max(Toy_Dist_mat))^(decay_power)))-1)
+  Toy_Q <- ifelse(Toy_Dist_mat == 0, 1, (1*scaler_constant/(Toy_Dist_mat)^(decay_power)))
+}
+```
+
+`r decay_function`
+```{r}
+Toy_Q %>% round(4)
+```
+
+
+## Spatial Absorption matrix: $\mathbf{AQ}$
+```{r}
+SNAS <- (NAS * Toy_Q) 
+SNAS %>% round(4)
+```
+
+## Spatial Absorption Potential Matching (alpha max)
+```{r}
+SAMM <- absorption_maximum_match(SNAS)
+SAMM[colnames(SAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
 
 ## Alternatives?
 ```{r}
@@ -681,6 +824,521 @@ pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorCost, 0)
 ```
 
 
+## RAS trade balance
+
+Biproportional scaling also known as the RAS technique 
+
+Instead of using the RAS procedure to adjust coefficient matrices across time (the updating problem), it is used to adjust coefficient matrices across space (the regionalization problem).
+
+We apply the same RAS principles, where we utilize a (relatively up-to-date) national input–output table, $\mathbf{A}^{n}$, and current marginal information about regional economic activity – $\mathbf{x}^{r}$, $\mathbf{u}^{r}$, and $\mathbf{v}^{r}$.
+
+## National_FactorRatio: NationalFactorDemand/NationalCommodity_Output
+```{r}
+Toy_National_FactorRatio <- Toy_National_FactorDemand/Toy_National_Commodity_Output
+Toy_National_FactorRatio
+```
+
+## Regional_FactorSupply: National_FactorRatio x Regional_Commodity_Output
+```{r}
+Toy_Regional_FactorSupply <- diag(as.vector(Toy_National_FactorRatio)) %*% Toy_Regional_Commodity_Output
+rownames(Toy_Regional_FactorSupply) <- Toy_Sectors
+Toy_Regional_FactorSupply
+```
+
+
+**Detour**
+
+## Alt. NID 
+```{r}
+aNID <- pmax(Toy_Regional_FactorDemand - Toy_Regional_FactorSupply, 0)
+aNID
+```
+
+## Alt. NIS
+```{r}
+aNIS <- pmax(Toy_Regional_FactorSupply - Toy_Regional_FactorDemand, 0)
+aNIS
+```
+
+## Alt. Absorption Shares
+```{r}
+aSAS <- stacked_absorption_share(aNIS, aNID)
+aSAS
+```
+
+## Alt. Normalized Absorption Shares
+```{r}
+aNAS <- normalized_absorption_share(aSAS, aNIS)
+aNAS
+```
+
+## Alt. Absorption Potential Matching (alpha max)
+```{r}
+aAMM <- absorption_maximum_match(aNAS)
+aAMM[colnames(aAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
+
+
+
+## RAS
+
+*Starting position of trade matrix (with impedance factor)*
+```{r}
+#Starting position of trade matrix 
+df <- list()
+for (i in Toy_Sectors){
+  df[[i]] <- (t(Toy_Regional_FactorSupply[i,, drop=F]) %*% Toy_Regional_FactorDemand[i,, drop=F]) * (Toy_Q)
+}
+df
+```
+## RAS trade matrices
+
+```{r}
+source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+tf <- list()
+for (i in Toy_Sectors){
+  x = df[[i]]
+  r = Toy_Regional_FactorSupply[i,, drop=F]
+  c = Toy_Regional_FactorDemand[i,, drop=F]
+  tf[[i]] <- ras_trade_flows(x0 = x,
+                               rs1 = r, 
+                               cs1 = c)
+  colnames(tf[[i]]) = rownames(tf[[i]]) = Toy_Places
+}
+tf
+```
+
+## Total Trade Matrix 
+```{r}
+#Total trade matrix 
+ttf <- tf$Agriculture + tf$Mining + tf$Manufacturing
+ttf
+```
+
+## Absorption Potential Matching (ttf max)
+```{r}
+tAMM <- absorption_maximum_match(ttf)
+tAMM[colnames(tAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
+
+## Absorption Potential Matching (ttf max hedonic trade censoring)
+```{r}
+cttf <- ttf
+diag(cttf) <- 0
+ctAMM <- absorption_maximum_match(cttf)
+ctAMM[colnames(ctAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
+
+## RAS with Alt. Unit Starting position of trade matrix
+
+```{r}
+#RAS trade matrix 
+#Alternative Starting position of unit trade matrix
+tf <- list()
+for (i in Toy_Sectors){
+  x = matrix(1, length(Toy_Sectors), length(Toy_Sectors))
+  r = Toy_Regional_FactorSupply[i,, drop=F]
+  c = Toy_Regional_FactorDemand[i,, drop=F]
+  tf[[i]] <- ras_trade_flows(x0 = x,
+                               rs1 = r, 
+                               cs1 = c)
+  colnames(tf[[i]]) = rownames(tf[[i]]) = Toy_Places
+}
+tf
+```
+
+## Alt. Unit Total Trade Matrix 
+```{r}
+#Total trade matrix 
+ttf <- tf$Agriculture + tf$Mining + tf$Manufacturing
+ttf
+```
+
+## Alt. Unit Absorption Potential Matching (ttf max)
+```{r}
+tAMM <- absorption_maximum_match(ttf)
+tAMM[colnames(tAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
+
+## Alt. Unit Absorption Potential Matching (ttf max hedonic trade censoring)
+```{r}
+cttf <- ttf
+diag(cttf) <- 0
+ctAMM <- absorption_maximum_match(cttf)
+ctAMM[colnames(ctAMM) %in% c("place", "max_absorption_alpha", "match", "cluster_category", "eca_membership")]
+```
+
+
+
+```{r}
+
+#Alternative Starting position of trade matrix with min/max trading 
+
+# NIS[2,, drop=F]
+#   x = t(matrix(pmin(rowSums(NID), NIS), nrow(NIS), ncol(NIS))[2,, drop=F]) %*% NID[2,, drop=F]
+#   r = matrix(pmin(rowSums(NID), NIS), nrow(NIS), ncol(NIS))[2,, drop=F]/max(colSums(x !=0))
+#   c = NID[2,, drop=F]/max(rowSums(x !=0))
+#   ras_trade_flows(x0 = x,
+#                   rs1 = r, 
+#                   cs1 = c)
+# 
+# t(NIS[2,, drop=F]) %*%  NID[2,, drop=F] * (Toy_Q)
+
+```
+
+
+
+# Q&A
+
+What do we know?
+
+ 1. Gross Industry Output by industry sector by region.
+ 
+ 2. Technology of Production at the national level i.e., the Direct Requirements matrix. (In future we may want to use Location Quotients to specify localized Direct Requirements matrices.)
+
+To recover Gross Industry Output from CBP payroll we scale by “payroll’s share of gross output”. We use the ratio of National-level CBP payroll to the BEA’s T018-Total Industry Output (Gross Industry Output) at the appropriate corresponding industry level (Sector, Summary, Detail). This industry specific payroll’s share of gross output is then applied to the county-level to scale CBP payroll into a gross (industry) output value. AgCensus comes almost ready in Gross Industry Output form. In future we may want to adjust it for Inventories, Taxes, and Subsidies to get an even more precise figure. 
+
+ With just this information we impute the industry by region Factor Demand. Factor Demand is the level of inputs needed to satisfy the observed level of Gross Output (assuming goods are not merely imported for direct final consumption).
+ By definition Gross Output is the sum of Factor Demand and Final Demand, thus we can also derive Final Demand.
+ Final Demand is composed of both final consumption within a region AND "exports" of commodities to other regions.
+ In addition we can derive Regional Use matrices, Regional Supply matrices, Regional Total Factor Cost, and Regional Value Added.
+ 
+ Are we generating Factor Demand and Final Demand correctly? What is the interpretation of (I-inv(i-by-i TotalRequirements))(Gross Industry Output)? 
+ Strictly speaking we have been interchanging DBX, Final Demand, and BX when they all are not necessarily equal.
+We know that (B_matrix)(Gross Industry Output) = Gross Commodity Output - Commodity Final Demand = Commodity Factor Demand, where the B_matrix = (Use Matrix)(inv(hat(Gross Industry Output))) is the core commodity-by-industry technical coefficient matrix, the commodity/industry framework parallel to the ordinary technical coefficients matrix.  
+Note: BEA provides both "Direct Requirements/After Redefinitions/Producer Value" and "Domestic Direct Requirements/After Redefinitions/Producer Value" tables. Should we use them directly instead of transforming the Total Requirements? Would the domestic tables in particular be best for our purposes? 
+
+
+New proposed metrics:
+  NID (Net Input Demand): max(Regional Factor Demand - Regional Gross Output, 0) == max(-Regional Final Demand, 0)
+  NIS (Net Input Supply): max(Regional Gross Output - Regional Factor Demand, 0) == max(Regional Final Demand, 0)
+  Total Absorption matrix: colSum(min(NID_r, NIS)) for all r
+  Normalized Absorption Shares: colSum(min(NID_r, NIS))/NID_r for all r
+
+ECA (Economic Catchment Area) Matching (based on row-wise maximum Absorption with a non-zero isolation threshold minimum): 
+
+  row max < threshold → Isolated (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand)
+    
+  row max > threshold → Cluster Source (ECA match = rowMax column county)
+    (at least one county could import your positive Final Demand given its NID)
+    (Matched to county that could import more than any other county what you have available as positive Final Demand)
+    
+  row max > threshold, but also a sink (rowMax county) for another county → Cluster Sink (ECA match = Self Match)
+    (at least one county could import your positive Final Demand, but you are also the max import sink for at least one other county)
+    
+  row max < threshold, but also a sink (rowMax county) for another county → Isolated, Cluster Sink (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand, but you are also the max import sink for at least one other county)
+    
+ The problem: We have no way to directly observe or derive intraindustry intraregional trade flows.
+ Specifically we wish to know what proportion of Final Demand is final consumption within a region and what proportion is sent to other regions?
+ 
+ Why do we care? 
+ First, the supply chain connectedness of places boils down to what and how much is/could be sent between regions. It is essential to specify the upper and lower bounds of this activity and maybe even propose a single imputed estimate. At the moment what we have proposed using is the Greatest Lower Bound of Region specific Exports applied to pair-wise only intraregional trade flows. 
+ Second, under the current connectedness specification we are tacitly imposing a no-cross hauling assumption on top of a pair-wise only absorption matching scheme which implicitly permits a cluster sink to "absorb" in aggregate more than needs or it even could possibly need given its known Gross Output/Factor Demand. The problem does not necessarily lie with pair-wise only absorption, which is at least internally consistent, but aggregating pair-wise only absorption matching to generate unrealistic ECAs. 
+ 
+ 
+ We are able to derive the block diagonal elements of the intraindustry intraregional trade flows matrix in the form of Regional Use matrices, but not the off diagonal block elements.
+ We may collapse the intraindustry dimension by way of industry input needs (rowsums) which is equivalent to regional Factor Demand, but we are still left with unknown intraregional trade flow components.
+ That is to say, how much does each industry export to each other region (and conversely how much does each region import of each commodity)?
+
+We can observe the boundary conditions of intraregional trade flows, holding Gross Output by region constant (and assuming goods are not merely imported for final consumption).
+
+  Lower Bound of Gross Exports by sector: rowSum(max(Regional Final Demand, 0)) - National Final Demand
+  Upper Bound of Gross Exports by sector: National Factor Demand
+  Lower Bound of Region specific Exports by sector: ????
+  Greatest Lower Bound of Region specific Exports by sector: min(max(Regional Final Demand, 0),  max(-Regional Final Demand, 0)[,r]) for all r   {min(NIS, NID_r) for all r}
+  Upper Bound of Region specific Exports by sector: min(max(Regional Final Demand, 0)[,r], National Factor Demand - Regional Factor Demand[,r] ) for all r  {min(NIS_r, RFD_!r) for all r}
+  
+  Lower Bound of Gross Imports by sector: ????
+  Upper Bound of Gross Imports by sector: National Factor Demand
+  Lower Bound of Region specific Imports by sector: max(-Regional Final Demand, 0) {i.e., NID}
+  Upper Bound of Region specific Imports by sector: Regional Factor Demand
+  
+Open Question: How do we derive quantities and locations of intraregional trade flows? Minimium? Maximium? Constant Proportionality? and How does spatial impedance and relative economic gravity scale these flows? (Should there ever be cross hauling under a spatial impedance regime?) (Should/How do we scale for heterogeneous populations and consumption preferences)
+
+One specification of Constant Proportionality is to assume the National level ratio of Factor Demand to Gross Output holds at the region level and is constant. This factor ratio is used to scale Regional Gross Output to derive a "Factor Supply". What does a "Regional Factor Supply" mean economically? In practice what we have done is to redistribute the National Factor Demand (i.e., aggregate of regional factor demand) holding the level constant. We have not yet imposed the location of where any given regional industry will source/supply its factor "endowment". 
+
+For each sector we have a known Factor Demand vector and Factor Supply vector, which we can use to derive sector specific intraregional trade flows using biproportional scaling a.k.a RAS. Even given specific row and column sums (Factor Demand and Factor Supply vectors) the final intraregional trade flows are sensitive to starting conditions, a feature we can utilize to incorporate spatial impedance and heterogeneous population factors. 
+
+Now with just Regional Factor Demand and Regional Factor Supply we can use our existing methods to calculate Stacked Absorption Shares, Normalized Absorption Shares and Absorption Maximum Matching (after masking to prevent persistent self matching if imputing directly?). As such specific intraregional trade flows do not enter into the absorption/connectedness metrics, so what is gained by performing the RAS step? 
+
+How do we generate a Net Regional Factor Supply and Demand?
+Alt NID: max(Regional Factor Demand - Regional Factor Supply, 0)?
+Alt NIS: max(Regional Factor Supply - Regional Factor Demand , 0)?
+These specifications implicitly impose a no-cross hauling restriction in so much as a region will satisfy its own Factor Demand first and export any excess endowment to other regions. 
+
+What do you do with the RAS trade matrix to derive absorption/connectedness? 
+ What would an "ECA" look like under an imputed intraregional trade flow regime?  
+ i.e., we generate a region-by-region matrix of total trade value by aggregating each industry specific trade matrix, how does one rank the intraregional absorption to construct connectedness measures? Is it merely row-wise maximums again (absorption_maximum_match)? Do we impose any normalization? 
+ What would happen if industry sectors had non uniform aggregation weights? 
+Industry specific trade flows opens the possibility to generate absorption/connectedness for only certain industries.
+Does the aggregate trade flows matrix (e.g., Trade Flow Agriculture + Trade Flow Mining + Trade Flow Manufacturing) permit us to use absorption_maximum_match directly? If so should we permit self matching? (It may not always be true that aggregate trade flow is hedonic)
+
+Is Constant Proportionality of Supply consistent with the assumption that goods are not merely imported for direct final consumption? No
+
+Note: In practice we only have regional Gross Industry Output, however, to apply the Constant Proportionality of Supply factor ratio method, we need to know regional Gross Commodity Output which is not the same. 
+Is there a way to translate Industry Output into Commodity Output?  Yes, Cx=q or Dq=x where C=(SupplyMatrix)(inv(hat(NationalIndustryOutput))) and D=(MakeMatrix)(inv(hat(NationalCommodityOutput)))
+
+What if instead we used a ratio of NationalCommodityOutput to NationalIndustryOutput to scale regional IndustryOutput into regional CommodityOutput? (Only works if commodities == industries which is not necessarily true, in fact they can be totally independent)
+
+Is Gross Output from the CBP and AgCensus commodity or industry output? Industry.
+What does it imply if "331314" is present in the "industry output" generated from CBP?
+"331314" is the only sector that is an industry at the detail level but not a commodity outside of the Used and Other Sector categories ("S00401" "S00402" "S00300" "S00900" "S00101" "S00201" "S00202")
+In the CBP 93 counties have at least one "331314" establishment, however, only "17031" has sufficient size to show up in the annual payroll estimates and accounts for under 5 percent of the national total. 
+Do we need to start distributing some portion of the national aggregate across counties with suppression?
+
+Are we accounting for the difference in Commodity Output and Industry Output in the empirical examples? In particular, is the technology of production matrix (direct requirements) appropriately generated, and the resulting "Factor Demand/ Final Demand in correct industry/commodity terms? 
+
+What are the consequences of using the commodity-by-industry B_matrix to generate "industry input" a.k.a Commodity Factor Demand versus using the industry-by-industry Direct Requirements matrix imputed from the industry-by-industry Total Requirements matrix (note that this process results nonsensical negative values which are forced to be zeros and assumes that industry and commodities are interchangeable)? What about using the BEA commodity-by-industry Direct Requirements directly? Note BEA Direct Requirements are only available for 2021 at the Sector and Summary level and 2007/2012 for Detail, however, Domestic Direct Requirements exist for all typical years. 
+
+Does it comport to have NID = pmax(CommodityFactorDemand - GrossIndustryOutput, 0) and NIS = pmax(GrossIndustryOutput - CommodityFactorDemand, 0)? No, Industries != Commodities, but it is what we have setup. Possible fix: use Cx=q or Dq=x to get GrossCommodityOutput from GrossIndustryOutput. 
+
+What is the economic reason for Constant Proportionality of Supply? Why would a region to import a commodity, especially if there are transportation costs, if that commodity is known to be available as part of Final Demand? What are the economic conditions that would cause final consumers to out compete industries for their primary inputs?
+For example, we know that the agriculture industry in Brown produces \$20 of Gross Output, which implies a Total agricultural Factor Demand of \$5.1 and \$14.9 of Final Demand. Under Constant Proportionality of Supply, the factor ratio of agriculture is 0.24, which implies a Total agricultural Factor Supply of \$4.8 meaning the agriculture industry in Brown will need at least \$0.3 of inputs. But in reality, using RAS, the agriculture industry in Brown is importing \$3.8 of total input value and exporting \$3.5 worth of agriculture commodities. Broadly speaking, the agriculture industry in Brown at a maximum could export up \$13.9 or as little as \$0 worth of commodities. 
+
+And conversely is true that the agriculture industry in Brown at a maximum could import at least the whole of its Factor Demand and as little as \$0. 
+
+
+We can just use a gravity specification directly to recover the location and quantity of any negative FinalDemands i.e., FactorDemands not satisfied by local endowments. For example, given Gross Industry Output of Albany (50 Agriculture, 0 Mining, and 35 Manufacturing) and a fixed technology of production, we can recover a Regional Use matrix. To satisfy the fixed Output we see the purchases of commodity i by industry j, as such the Albany Agriculture Industry must purchase 6.875 of Mining Commodity value, the Mining Industry must purchase 0 of Mining Commodity value, and the Manufacturing Industry must purchase 3.684212 of Mining Commodity value, for a total of 10.55921 Mining Commodity Factor Demand. However, Albany has no local Mining Industry, so it must acquire this input from either Brown or Cook or some mix of both. In a Gravity model frame work the interregional trade of is given by the the dollar flow of goods in county a to county b in the form of Z_ab(i) = Q_ab * (x_a.(i) * x_.b(i))/(x_national(i)), where Q_ab is the impedance  between the counties (e.g., 1/distance), x_a.(i) is the “supply pool” of i in county a, x_.b(i) is the “demand pool” of i in county b, and x_national(i) is the “total production” in the system. 
+
+In our example, Brown has at a maximum 35.21053 of Mining to export and Cook has at a maximum 19.348687 of Mining to export. Note that the model inherently assumes that if a region needs an input and can produce that input it will use up all that local production before seeking imports. In other words, the available 35.21053 of Mining that Brown has to export already has its own input needs of 34.789466 accounted for similarly the available 19.348687 of Mining that Cook has to export already has its own input needs of 30.651313 accounted for. And the total available in the system is the sum of positive Mining Final Demands (i.e., NIS). Therefore Albany will import (10.55921 * 35.21053)/54.55922 = 6.814529 from Brown and (10.55921 * 19.348687)/54.55922 = 3.744681 from Cook. Unfortunately, the calculation breaks down if we wish to include an impedance factor.  
+
+What would the gravity look like if we permitted cross-hauling? 
+
+Can we derive a production possibilities frontier?
+
+
+
+*notes*
+Do we need to calculate GDP across counties? 
+Do we need a better way of describing the "excess" and "durth" of regions? 
+What are the total factor cost incurred by each industry in the county to be able to satisfy total output?
+Is our CBP "output" actually output?
+How do (DirectRequirements)(IndustryOutput) and FactorDemand relate when DirectRequirements is ind-by-ind?
+If (DirectRequirements)(IndustryOutput)-IndustryOutput and IndustryOutput-(DirectRequirements)(IndustryOutput) are needs and excesses, then at the national level they should be zero? Do we want to instead describe the difference between final demand and intermediate inputs/outputs?
+Do we need to allow for cross hauling in the analysis, for the system to be closed?
+Can we try treating the regional model as just a big national model with a block diagonal direct requirements?
+How do we translate Industry Output into Commodity? Answer: with inv(Dmat) or Cmat How do we translate Value Added into Final Demand?
+How do we go from v to x to e to q to v to iU to Ui? 
+What can location quotients offer? What can gravity models offer?
+Irrespective of cross hauling, is does what a place has available for "export" its Industry Output minus (industry) Factor Cost? No.
+
+
+# Finding the problem
+
+Approach: Supply/Use framework, DirectRequirements, TotalRequirements
+In theory all equivalent* (only if supply is diagonal?) (issue if number of commodities != industries)
+
+```{r}
+## Economic sectors
+Toy_Sectors <- c("Agriculture", 
+                 "Mining",
+                 "Manufacturing")
+Toy_Industry_Sectors <- c("Agriculture", 
+                          "Mining",
+                          "Manufacturing")
+Toy_Industry_Sectors
+Toy_Commodity_Sectors <- c("Agriculture", 
+                           "Mining",
+                           "Manufacturing")
+Toy_Commodity_Sectors
+```
+
+```{r}
+## Supply Matrix in Dollars (cxi)
+Toy_Supply_mat <- rbind(c(365, 0, 0),
+                        c(1, 540, 0),
+                        c(7, 30, 490))
+rownames(Toy_Supply_mat) <- Toy_Commodity_Sectors
+colnames(Toy_Supply_mat) <- Toy_Industry_Sectors
+Toy_Supply_mat
+```
+
+```{r}
+## Use Matrix in Dollars (cxi)
+#Toy_Supply_mat %*% inv(diag(as.vector(Toy_Total_Industry_Output))) %*% Toy_Direct_mat %*% diag(as.vector(Toy_Total_Industry_Output))
+Toy_Use_mat <- rbind(c(10, 0, 9),
+                     c(11, 45, 20),
+                     c(7, 15, 35))
+rownames(Toy_Use_mat) <- Toy_Commodity_Sectors
+colnames(Toy_Use_mat) <- Toy_Industry_Sectors
+Toy_Use_mat
+```
+
+```{r}
+# Check for any negative FinalDemand/ValueAdded, pass if TRUE
+all(
+colSums(Toy_Supply_mat)>colSums(Toy_Use_mat),
+rowSums(Toy_Supply_mat)>rowSums(Toy_Use_mat)
+)
+```
+
+
+```{r}
+## B matrix (cxi)
+## The commodity/industry parallel to the sector technical coefficients matrix
+## column j represents the value of inputs of each commodity per dollar's worth of industry j's output
+Toy_B_mat <- Toy_Use_mat %*% diag(1/colSums(Toy_Supply_mat))
+rownames(Toy_B_mat) <- Toy_Commodity_Sectors
+colnames(Toy_B_mat) <- Toy_Industry_Sectors
+Toy_B_mat
+```
+
+```{r}
+## D matrix (ixc)
+## Industry Source of Commodity Outputs
+## Denotes  fraction of total commodity j output that was produced by industry i
+Toy_D_mat <- t(Toy_Supply_mat) %*% diag(1/rowSums(Toy_Supply_mat))
+rownames(Toy_D_mat) <- Toy_Industry_Sectors
+colnames(Toy_D_mat) <- Toy_Commodity_Sectors
+Toy_D_mat
+```
+
+```{r}
+## C matrix (cxi)
+## Commodity Composition of Industry Outputs
+## Denotes fraction of total industry i output that is in the form of commodity j
+Toy_C_mat <- Toy_Supply_mat %*% diag(1/colSums(Toy_Supply_mat))
+rownames(Toy_C_mat) <- Toy_Commodity_Sectors
+colnames(Toy_C_mat) <- Toy_Industry_Sectors
+Toy_C_mat
+```
+
+```{r}
+## National "Factor Ratio"
+## proportion of FinalDemand allocated to intermediate use
+Toy_National_FactorRatio <- rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)
+Toy_National_FactorRatio
+```
+
+
+```{r}
+## Regional places
+Toy_Places <- c("Albany", 
+                "Brown", 
+                "Cook")
+Toy_Places 
+```
+
+```{r}
+## Regional distribution of production (rows sum to one) (ensures sum of regional industry output == national industry output) (ixr)
+regdis <- rbind(c(.7, .2, .1),
+                c(0, .6, .4),
+                c(.1, .1, .8))
+```
+
+```{r}
+# Check that Total Regional production equals National production, pass if TRUE
+all(rowSums(regdis) == 1)
+```
+
+```{r}
+## Regional Total Industry Output (ixr)
+Toy_Regional_Industry_Output <- diag(colSums(Toy_Supply_mat)) %*% (regdis)
+rownames(Toy_Regional_Industry_Output) <- Toy_Industry_Sectors
+colnames(Toy_Regional_Industry_Output) <- Toy_Places
+Toy_Regional_Industry_Output
+```
+
+
+```{r}
+## Regional Factor Demand (cxr)
+Toy_B_mat %*% Toy_Regional_Industry_Output
+```
+
+```{r}
+# Check that Sum of Regional Factor Demand == National Factor Demand, by Commodity, pass if TRUE
+all(
+  rowSums(Toy_B_mat %*% Toy_Regional_Industry_Output) == rowSums(Toy_Use_mat)
+    )
+```
+
+```{r}
+## Regional Total Commodity Output (cxr)
+Toy_C_mat %*% Toy_Regional_Industry_Output
+```
+
+
+```{r}
+# Check that Sum of Regional Total Commodity Output == National Total Commodity Output, by Commodity, pass if TRUE
+all(
+  rowSums(Toy_C_mat %*% Toy_Regional_Industry_Output) == rowSums(Toy_Supply_mat)
+    )
+```
+
+
+```{r}
+# Check that Sum of Regional Commodity Output == Sum Regional Industry Output, pass if TRUE
+sum(Toy_C_mat %*% Toy_Regional_Industry_Output) == sum(Toy_Regional_Industry_Output)
+```
+
+
+```{r}
+## Regional "Factor Supply" (cxr)
+diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_C_mat %*% Toy_Regional_Industry_Output)
+
+### Above satisfies supply == demand, however
+### !problem that county has commodity supply but no industry output!
+### Below satisfies zero supply == zero output, however
+### !problem(s) supply != demand, and rows are "comodity factor demand ratio scaled gross industry outputs!
+diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_Regional_Industry_Output)
+```
+
+```{r}
+# Check that Sum of Regional "Factor Supply" == Sum of Regional Factor Demand, by Commodity, pass if TRUE
+all.equal(
+  rowSums(diag(rowSums(Toy_Use_mat)/rowSums(Toy_Supply_mat)) %*% (Toy_C_mat %*% Toy_Regional_Industry_Output)),  
+  as.numeric(rowSums(Toy_B_mat %*% Toy_Regional_Industry_Output))
+  )
+```
+
+```{r}
+## Check that RAS economic requirement supply == demand 
+  sum_tol <- 0.001
+  sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
+  if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
+```
+
+
+# Emperical example
+
+```{r}
+tot <- total_output_tidy(cbp_year = "2012", ilevel = "det")
+cot <- commodity_output_tidy_matrix(cbp_year = "2012", ilevel = "det")
+
+bmat <- b_matrix(bea_year = "2012", ilevel = "det")
+cmat <- c_matrix(bea_year = "2012", ilevel = "det")
+fr <- factor_ratio(cbp_year = "2012", ilevel = "det")
+
+
+fsm <- factor_supply_matrix(cbp_year = "2012", ilevel = "det")
+fdm <- factor_demand_matrix(cbp_year = "2012", ilevel = "det")
+
+abs(rowSums(fsm)[1] - rowSums(fdm)[1]) / rowSums(fdm)[1]
+
+rtf <- ras_trade_lists(factor_supply = fsm, factor_demand = fdm, impedance_mat = NULL)
+
+
+## new BY commodity factor demand (cxi)(ixr)
+bmat[, rownames(tot)] %*% tot
+## old input needs factor demand (ixi)(ixr) (imputed industry-by-industry D from T, requires commodity==industry and negative values are made zeros)
+drm <- call_direct_requirements(bea_year = "2012", ilevel = "det")
+    con <- grep("^23", colnames(drm), value = TRUE)
+    cm <- matrix(sum(drm[con,con])/length(con), 
+                 dimnames = list(c("23"), c("23")))
+    cr <- t(matrix(colMeans(drm[con, ]), 
+                   dimnames = list(colnames(drm), c("23")) ))
+    cc <- matrix(rowMeans(drm[, con]), 
+                 dimnames = list(colnames(drm), c("23"))) 
+    drm <- cbind( rbind(cr, drm ), rbind(cm, cc )) 
+    drm <- drm[colnames(drm)[!colnames(drm) %in% con] , colnames(drm)[!colnames(drm) %in% con]]
+drm[rownames(tot), rownames(tot)] %*% tot
+
+## ? inv(C)BY or DBY commodity factor demand (ixc)(cxi)(ixr)
+
+
+```
 
 
 
@@ -689,7 +1347,18 @@ pmax(Toy_Regional_Industry_Output - Toy_Regional_FactorCost, 0)
 
 
 
-## Emperical calculations
+# Emperical calculations
+
+If in sector/Z framework: intermediate inputs = i'Z and intermediate outputs = Zi. 
+If in commodity/industry Use/Make framework: intermediate (industry) purchases = i'U and intermediate (commodity) sales = Ui
+
+Note: Ag Census is "Market Value of Agricultural Products Sold Including Landlord's Share and Direct Sales" aka "Market Value of Agricultural Products Sold Including Food Marketing Practices and Value-Added Products"
+
+"Market value of agricultural products sold. This category represents the gross market value before taxes and production expenses of all agricultural products sold or removed from the place in 2017 regardless of who received the payment. It is equivalent to total sales and it includes sales by the producers as well as the value of any shares received by partners, landlords, contractors, or others associated with the operation. It includes value of organic sales, direct sales and the value of commodities placed in the Commodity Credit Corporation (CCC) loan program. Market value of agricultural products sold does not include payments received for participation in other Federal farm programs. It does not include income from farm-related sources such as customwork and other agricultural services, or income from nonfarm sources. The value of crops sold in 2017 does not necessarily represent the sales from crops harvested in 2017. Data may include sales from crops produced in earlier years and may exclude some crops produced in 2017 but held in storage and not sold. For commodities such as sugarbeets and wool sold through a co-op that made payments in several installments, respondents were requested to report the total value received in 2017. The value of agricultural products sold was requested of all producers. If the producers failed to report this information, estimates were made based on the amount of crops harvested, livestock or poultry inventory, or number sold."
+
+New labor share perspective:
+Output: From BLS: "gross value-added output" = "gross output minus intermediate inputs" "defined as total labor compensation over nominal GDP or gross value added" "The labor share is the nominal wage bill over nominal output or nominal GDP" "Nominal unit labor costs, are defined as the nominal wage bill over real output" Finally, note that all output and compensation data used to calculate the labor share are in current dollars.
+
 
 Average Total Labor Share from BEA in 2012 is 0.558.
 
@@ -880,212 +1549,8 @@ Labor Share needed for BEA non-farm GDP and CBP derived GDP to be equal
 nonfarmPayroll / TruenonfarmGDP
 ```
 
-## Next steps
 
-Calculate GDP across counties We need a better way of describing the "excess" and "durth" of regions what are the total factor cost incurred by each industry in the county to be able to satisfy total output?
-
-Is our CBP "output" actually output or is it value added? A: it is GDp but not very well measured. 
-
-How do DY and Intermediate_Output relate when D is ind-by-ind?
-
-If DY-Y and Y-DY are needs and excesses then at the national level they should be zero. Do we want to instead describe the difference between final demand and intermediate inputs/outputs
-
-If in sector/Z framework: intermediate inputs = i'Z and intermediate outputs = Zi If in commodity/industry Use/Make framework: intermediate (industry) purchases = i'U and intermediate (commodity) sales = Ui
-
-!Must compare Ag Census to Total Industry Supply (T017 from Supply Table aka T018 from Use Table)! Currently off by \~\$18 Billion Should we adjust for inventories (F03000 from Use Table)? Note: Ag Census is "Market Value of Agricultural Products Sold Including Landlord's Share and Direct Sales" aka "Market Value of Agricultural Products Sold Including Food Marketing Practices and Value-Added Products"
-
-"Market value of agricultural products sold. This category represents the gross market value before taxes and production expenses of all agricultural products sold or removed from the place in 2017 regardless of who received the payment. It is equivalent to total sales and it includes sales by the producers as well as the value of any shares received by partners, landlords, contractors, or others associated with the operation. It includes value of organic sales, direct sales and the value of commodities placed in the Commodity Credit Corporation (CCC) loan program. Market value of agricultural products sold does not include payments received for participation in other Federal farm programs. It does not include income from farm-related sources such as customwork and other agricultural services, or income from nonfarm sources. The value of crops sold in 2017 does not necessarily represent the sales from crops harvested in 2017. Data may include sales from crops produced in earlier years and may exclude some crops produced in 2017 but held in storage and not sold. For commodities such as sugarbeets and wool sold through a co-op that made payments in several installments, respondents were requested to report the total value received in 2017. The value of agricultural products sold was requested of all producers. If the producers failed to report this information, estimates were made based on the amount of crops harvested, livestock or poultry inventory, or number sold."
-
-Need new labor share perspective:
-
-Output: "gross value-added output" = "gross output minus intermediate inputs" "defined as total labor compensation over nominal GDP or gross value added" "The labor share is the nominal wage bill over nominal output or nominal GDP" "Nominal unit labor costs, are defined as the nominal wage bill over real output" Finally, note that all output and compensation data used to calculate the labor share are in current dollars.
-
-Should we be turning CBP annual payroll into (Industry) Value Added Output?
-
-What does is mean to have Direct requirements times Value Added Output?
-
-Do we need to allow for cross hauling in the analysis, for the system to be closed?
-
-Can we try treating the regional model as just a big national model with a block diagonal direct requirements?
-
-!CBP is Industry Sector Output but we need Industry and Commodity Output! How do we translate Industry Output into Commodity? Answer: with inv(Dmat) or Cmat How do we translate Value Added into Final Demand?
-
-!(without cross hauling) what a place has available for "export" is Industry Output minus (industry) Factor Cost!
-
-Need example with how to go from v \> x \> e \> q \> v \> iU \> Ui and what L and A and iA and Ai mean How do we add Ag and CBP when we know they may not be gdp or even on equivalent/addible scales? Set up toy at national level where 0=0 and then go sub-national. See IO book on trade on page 150. What can RAS offer? What can location quotients offer? What can gravity models offer?
-
-Irrespective of cross hauling, is does what a place has available for "export" its Industry Output minus (industry) Factor Cost? No.
-
-!(without cross hauling) what a place has available for "export" is Industry Output minus (industry) Factor Cost!: NO Toy_National_ValueAdded - Toy_National_FactorDemand
-
-Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
-
-Toy_Regional_FactorDemand - Toy_Regional_FactorCost = Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
-
-Toy_Regional_FactorDemand - Toy_Regional_ValueAdded = Toy_Regional_FactorCost - Toy_Regional_FinalDemand
-
-Toy_Regional_ValueAdded - Toy_Regional_FinalDemand - Toy_Regional_FactorDemand + Toy_Regional_ValueAdded Toy_Regional_ValueAdded - Toy_Regional_FactorCost Toy_Regional_FactorDemand - Toy_Regional_FinalDemand
-
-To be able to satisfy the exogenous final demand consumption the Ag industry must produce what? Total Commodity Output? or is that double counting? To satisfy Ag finaldemand 61, Ag will produce a total of 80 commodity output, of which 28 Ag factorcost will go into the economy as intermediate inputs
-
-BUT you are short by 9 in Ag, what process translates (the excess mining) into ag consumption?
-
-!!"output" in practice from the data is GDP, but we are treating it like Total Output in the model!!!
-
-```{r}
-## county specific InputNeeds
-## row sum of InputNeeds == National_Intermediate_Output == Aggregate_Factor_Demand == row sum Use matrix
-Toy_Use_mat
-i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
-cin <- Toy_Direct_IndByInd_IT_mat %*% Toy_Regional_Industry_Output
-cin
-Toy_Direct_IndByInd_IT_mat %*% Toy_Regional_Industry_Output  %*% i
-
-## cin[, 1] - what are the total factor cost incurred by each industry in the county to be able to satisfy total output
-
-
-```
-
-```{r}
-## county specific Intermediate Input 
-## row sum of county specific Intermediate Input == National_Intermediate_Input == Total_Factor_Cost == column sum Use matrix
-Toy_Use_mat
-i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
-cii <- diag(as.vector( t(i) %*% Toy_Direct_IndByInd_IT_mat )) %*% Toy_Regional_Industry_Output 
-rownames(cii) <- Toy_Sectors
-cii
-diag(as.vector( t(i) %*% Toy_Direct_IndByInd_IT_mat )) %*% Toy_Regional_Industry_Output %*% as.matrix(rep(c(1), each=length(Toy_Places)))
-
-## cii[, 1] - what are the total factor cost incurred by each industry in the county to be able to satisfy total output
-
-```
-
-```{r}
-
-Toy_Absorb <- vector(mode='list', length=ncol(Toy_Regional_Industry_Output))
-  names(Toy_Absorb) <- colnames(Toy_Regional_Industry_Output)
-
-for (i in 1:ncol(Toy_Regional_Industry_Output)){
-Toy_Absorb[[i]] <- matrix(0, nrow = nrow(Toy_Regional_Industry_Output), ncol = ncol(Toy_Regional_Industry_Output))
- rownames(Toy_Absorb[[i]])  <- rownames(Toy_Regional_Industry_Output)
-   colnames(Toy_Absorb[[i]]) <- colnames(Toy_Regional_Industry_Output)
-}
-
-  for (i in 1:ncol(Toy_Regional_Industry_Output)){
-    for (j in 1:ncol(Toy_Regional_Industry_Output)){
-        Toy_Absorb[[i]][,j]  <-   pmin(pmax(Toy_Regional_Industry_Output - cin, 0)[,i], pmax(cin - Toy_Regional_Industry_Output, 0)[,j])  %>% round(2)
-    }
-  }
-
-Toy_Absorb  
-
-```
-
-```{r}
-## absorption
-absorption <- stacked_absorption_share(nis_matrix = pmax(Toy_Regional_Industry_Output - cin, 0),
-                          nid_matrix = pmax(cin - Toy_Regional_Industry_Output, 0))
-
-absorption
-
-nabsorption <-  normalized_absorption_share(sas_matrix = absorption, 
-                                        nis_matrix = pmax(Toy_Regional_Industry_Output - cin, 0))
-
-nabsorption
-
-```
-
-Toy Example: National first Lets assume we have a setup with a Use, Supply, IxC_Total, CxC_Total, and IxI_Total as givens along with some some form of "external" aggregate output data. What can we say about our system and what do we want to know? As a production technology function: What does the Total Requirements matrix do? What does the Direct Requirements matrix do? What does the Requirements matrices column/row total coefficients do? Does it matter what the Requirements matrices represent in the I/O framework if we are merely using them to model production technology? Answer: No(?) not necessarily If Y is GDP what does DY and DY-Y mean? if Y is TotalOutput what does DY and DY-Y mean?
-
-```{r}
-# Get raw Supply and Use tables
-Toy_Use_mat <- bea_io$get_use(strtoi("2012"), "det") %>% as.matrix()
-Toy_Use_mat[is.na(Toy_Use_mat)] = 0
-
-Toy_Supply_mat <- bea_io$get_sup(strtoi("2012"), "det") %>% as.matrix()
-Toy_Supply_mat[is.na(Toy_Supply_mat)] = 0
-
-# Sector names
-Toy_Sectors <- intersect(intersect(rownames(Toy_Use_mat), rownames(Toy_Supply_mat)), intersect(colnames(Toy_Use_mat), colnames(Toy_Supply_mat)))
-Toy_Sectors <- Toy_Sectors[!(Toy_Sectors %in% c("4200ID", "814000"))]
-
-# Use matrix (commodity by industry )
-Toy_Use_mat <- Toy_Use_mat[Toy_Sectors, Toy_Sectors]
-
-# Supply matrix (commodity by industry )
-Toy_Supply_mat <- Toy_Supply_mat[Toy_Sectors, Toy_Sectors]
-
-
-i = as.matrix(rep(c(1), each=length(Toy_Sectors)))
-## Total Commodity Output Vector
-## The row sum of the Supply matrix and the transposed column sum of the Make matrix
-Toy_Total_Commodity_Output <- Toy_Supply_mat %*% i
-## Total Industry Output Vector
-## The transposed column sum of the Supply matrix and the row sum of the Make matrix
-Toy_Total_Industry_Output <- t(t(i) %*% Toy_Supply_mat)
-
-##In tests inv() gave more accurate results but solve() was MUCH faster
-Toy_B_mat <- Toy_Use_mat %*% solve(diag(as.vector(Toy_Total_Industry_Output))) 
-colnames(Toy_B_mat) <- Toy_Sectors
-Toy_D_mat <- t(Toy_Supply_mat) %*% solve(diag(as.vector(Toy_Total_Commodity_Output)), fractions=TRUE)
-colnames(Toy_D_mat) <- Toy_Sectors
-Toy_C_mat <- Toy_Supply_mat %*% solve(diag(as.vector(Toy_Total_Industry_Output)), fractions=TRUE)
-colnames(Toy_C_mat) <- Toy_Sectors
-
-# Direct 
-Toy_Direct_IndByInd_IT_mat <- Toy_D_mat %*% Toy_B_mat
-
-Toy_Direct_IndByInd_CT_mat <- solve(Toy_C_mat) %*% Toy_B_mat
-rownames(Toy_Direct_IndByInd_CT_mat) <- Toy_Sectors
-Toy_Direct_ComByCom_IT_mat <- Toy_B_mat %*% Toy_D_mat
-Toy_Direct_ComByCom_CT_mat <- Toy_B_mat %*% solve(Toy_C_mat)
-colnames(Toy_Direct_ComByCom_CT_mat) <- Toy_Sectors
-
-# Total 
-I <- diag(length(Toy_Sectors))
-Toy_Total_ComByCom_IT_mat <- solve(I - Toy_B_mat %*% Toy_D_mat)
-Toy_Total_IndByCom_IT_mat <- Toy_D_mat %*% solve(I - Toy_B_mat %*% Toy_D_mat)
-Toy_Total_IndByInd_IT_mat <- solve(I - Toy_D_mat %*% Toy_B_mat)
-Toy_Total_ComByInd_IT_mat <- solve(Toy_D_mat) %*% solve(I - Toy_D_mat %*% Toy_B_mat)
-  
-Toy_Total_ComByCom_CT_mat <- solve(I - Toy_B_mat %*% solve(Toy_C_mat))
-Toy_Total_IndByCom_CT_mat <- solve(Toy_C_mat) %*% solve(I - Toy_B_mat %*% solve(Toy_C_mat))
-Toy_Total_IndByInd_CT_mat <- solve(I - solve(Toy_C_mat) %*% Toy_B_mat)
-Toy_Total_ComByInd_CT_mat <- Toy_C_mat %*% solve(I - solve(Toy_C_mat) %*% Toy_B_mat)
-
-
-
-## Aggregate (commodity) Factor Demand
-## Intermediate (commodity) sales
-## Equivalent to Intermediate Commodity Output in a sector model
-## Equivalent to Use matrix row sum
-## called "InputNeeds" in previous generations
-Toy_FactorDemand <- Toy_Direct_IndByInd_IT_mat %*% Toy_Total_Industry_Output
-
-
-## Total (industry) Factor Cost
-## Intermediate (industry) purchases
-## Equivalent to Intermediate Industry Input in a sector model
-## Equivalent to Use matrix column sum
-Toy_FactorCost <-  Toy_Total_Industry_Output * (t(Toy_Direct_IndByInd_IT_mat) %*% i)
-
-
-
-
-
-# Toy_Regional_FactorDemand + Toy_Regional_FinalDemand = Toy_Regional_FactorCost + Toy_Regional_ValueAdded
-# 
-# Toy_Regional_FactorDemand - Toy_Regional_FactorCost = Toy_Regional_ValueAdded - Toy_Regional_FinalDemand
-# 
-# Toy_Regional_FactorDemand - Toy_Regional_ValueAdded = Toy_Regional_FactorCost - Toy_Regional_FinalDemand
-# 
-# Toy_Regional_ValueAdded - Toy_Regional_FinalDemand - Toy_Regional_FactorDemand + Toy_Regional_ValueAdded 
-# Toy_Regional_ValueAdded  - Toy_Regional_FactorCost
-# Toy_Regional_FactorDemand - Toy_Regional_FinalDemand
-
-```
-
-# New Derivation
+# Derivation
 
 **Interindustry Flows**
 
