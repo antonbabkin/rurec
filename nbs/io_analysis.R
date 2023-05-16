@@ -14,7 +14,7 @@
 #' 
 #' @examples
 #' ras_trade_flows(matrix(1, 3, 3), c(0,2,3), c(3,0,2))
-ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-6, maxiter = 1000, verbose = FALSE) 
+ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-2, maxiter = 1000, verbose = FALSE) 
 {
   # test if targets sum to same total, within 0.1% tolerance
   sum_tol <- 0.001
@@ -22,14 +22,13 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-6, maxiter = 1000, verbose =
   if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
 
   # mask away all-zero rows and columns
-  x <- x0[rs1 > 0, cs1 > 0]
-  if (any(rowSums(x) == 0)) stop("Input matrix has zero rows not compatible with row sums.")
-  if (any(colSums(x) == 0)) stop("Input matrix has zero cols not compatible with col sums.")
-
+  rpos <- (rs1 > 0) & (rowSums(x0) > 0)
+  cpos <- (cs1 > 0) & (colSums(x0) > 0)
+  x <- x0[rpos, cpos, drop=F]
   nr <- nrow(x)
   nc <- ncol(x)
-  rs <- rs1[rs1 > 0]
-  cs <- cs1[cs1 > 0]
+  rs <- rs1[rpos]
+  cs <- cs1[cpos]
   
   for (i in 1:maxiter) {
     # scale rows
@@ -46,7 +45,7 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-6, maxiter = 1000, verbose =
   
   # return zero rows and cols back
   xz <- matrix(0, nrow(x0), ncol(x0))
-  xz[rs1 > 0, cs1 > 0] <- x
+  xz[rpos, cpos] <- x
   xz
 }
 

@@ -1,0 +1,445 @@
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  county_fips: "17099"
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+```
+
+```{r parameters, include = FALSE}
+#Initialize parameter values
+params
+
+#Year of shapefile boundary data, one of ("2000", "2010", or "2013" through "2020")
+tiger_year = "2020" 
+
+#Get county and state names of params:county_fips
+t <- call_tiger(tiger_year, 
+                geometry = FALSE)
+
+county_name <- t$NAME[t$place == params$county_fips]
+state_name <- t$STATE[t$place == params$county_fips]
+
+```
+
+::: panel-tabset
+
+# Notation
+
+**Sector Framework**
+
+Assume that the economy can be categorized into $n$ sectors
+
+$\underset{(n \times n)}{\mathbf{Z}} = [z_{ij}]$ - monetary transactions between pairs of sectors, from sector $i$ to sector $j$
+
+$\underset{(n \times 1)}{\mathbf{f}} = [f_{i}]$ - *total final demand* for sector $i$'s product
+
+$\underset{(n \times 1)}{\mathbf{x}} = [x_{i}]$ - *total gross output* of sector $i$, $\mathbf{x} = \mathbf{Zi} + \mathbf{f} = \left[\sum^{n}_{j=1} z_{ij} + f_{i}\right]$
+
+$\underset{(n \times n)}{\mathbf{A}} = \mathbf{Z\hat{x}}^{-1} \Rightarrow [a_{ij}] = [z_{ij} / x_{j}]$ - the *direct requirements matrix* or *technical coefficient* ratio of the quantity of the output of sector $i$ absorbed by sector $j$ per unit of $j$'s total output, $\mathbf{A} = \mathbf{Z\hat{x}}^{-1}$
+
+Let $\mathbf{x} = \mathbf{Ax} + \mathbf{f}$ such that $\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$
+
+$\underset{(n \times n)}{\mathbf{L}} = \left(\mathbf{I} - \mathbf{A}\right)^{-1} \Rightarrow [l_{ij}]$ - the *total requirements matrix* or *Leontief inverse* is the overall production required to produce a dollar of gross output
+
+
+
+**Regional Framework**
+
+Assume that the economy consists of $r$ sub-national regional economies
+
+$\underset{(n \times n)}{\mathbf{Z}^{rr}} = [z^{rr}_{ij}]$ - the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $r$
+
+$\underset{(n \times n)}{\mathbf{Z}^{rs}} = [z^{rs}_{ij}]$ - the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $s$
+
+$\underset{(n \times n)}{\mathbf{Z}^{sr}} = [z^{sr}_{ij}]$ - the dollar flow of goods from sector $i$ in region $s$ to sector $j$ in region $r$
+
+$\underset{(n \times n)}{\mathbf{Z}^{ss}} = [z^{ss}_{ij}]$ - the dollar flow of goods from sector $i$ in region $s$ to sector $j$ in region $s$
+
+$\underset{(n \times 1)}{\mathbf{f}^{r}} = [f^{r}_{i}]$ - *total final demand* for sector $i$'s product in region $r$
+
+$\underset{(n \times 1)}{\mathbf{x}^{r}} = [x^{r}_{i}]$ - *total gross output* of sector $i$ in region $r$
+
+$\underset{(n \times n)}{\mathbf{A}^{rr}} = [a^{rr}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
+
+$\underset{(n \times n)}{\mathbf{A}^{rs}} = [a^{rs}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
+
+$\underset{(n \times n)}{\mathbf{A}^{sr}} = [a^{sr}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
+
+$\underset{(n \times n)}{\mathbf{A}^{ss}} = [a^{ss}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
+
+$a^{rr}_{ij} = (\gamma^{r}_{ij}) (a^{n}_{ij})$ - estimate the regional input coefficient from national technical coefficient, with $\gamma^{r}_{ij} = (\alpha^{r}_{ij}) (\beta^{r}_{ij})$
+
+$a^{r}_{ij} = (\alpha^{r}_{ij}) (a^{n}_{ij})$ - estimate a regional technical coefficient from national technical coefficient, with $\alpha^{r}_{ij} \geq 0$
+
+$a^{rr}_{ij} = (\beta^{r}_{ij}) (a^{r}_{ij})$ - estimate the regional input coefficient from regional technical coefficient, with ($0 \leq \beta^{r}_{ij} \leq 1$)
+
+$a^{r}_{ij} \equiv a^{n}_{ij}$ if region $r$ and national production recipes are identical
+
+$\beta^{r}_{ij} = p^{r}_{i}$ if each regional purchaser, $j$, of input $i$ buys the same proportion of those inputs from within the region 
+
+$p^{r}_{i}$ - the ratio of total regional output, less exports, of sector $i$, to the total output, less exports, plus imports, of sector $i$, $p^{r}_{i} = 1$ when none of good $i$ is imported
+
+
+**Commodity/Industry Framework**
+
+Assume that the economy consists of industries, $i$ that use commodities, $c$ to make commodities, $c$
+
+$\underset{(n \times 1)}{\mathbf{x}} = [x_{j}]$ - *total gross industry output* of industry $j$
+
+$\underset{(m \times 1)}{\mathbf{q}} = [q_{i}]$ - *total gross commodity output* of commodity $i$
+
+$\underset{(n \times 1)}{\mathbf{v}} = [v_{j}]$ - *industry value added* by industry $j$
+
+$\underset{(m \times 1)}{\mathbf{e}} = [e_{i}]$ - *commodity final demand* of commodity $i$
+
+$\underset{(c \times i)}{\mathbf{U}} = [u_{ij}]$ - the *Use matrix* of the value of purchases of commodity $i$ by industry $j$, intermediate sales of a commodity to an industry or intermediate purchases of a commodity by an industry
+
+The accounting identities are $\mathbf{q} = \mathbf{Ui} + \mathbf{e}$ and $\mathbf{x'} = \mathbf{i'U} + \mathbf{v'}$
+
+$\underset{(c \times i)}{\mathbf{B}}= \mathbf{U\hat{x}}^{-1} \Rightarrow [b_{ij}] = [u_{ij} / x_{j}]$ - the value of commodity $i$'s input per dollar's worth of industry $j$'s output, the commodity/industry parallel to the technical coefficients matrix
+
+$\underset{(i \times c)}{\mathbf{V}} = [v_{ij}]$ - the *Make matrix* of the value of the output of commodity $j$ that is produced by industry $i$
+
+$\underset{(c \times i)}{\mathbf{V^{'}}}$ - the *Supply matrix* is the transpose of the Make matrix
+
+The accounting identities are $\mathbf{x} = \mathbf{Vi}$ and $\mathbf{q'} = \mathbf{i'V}$ or $\mathbf{q} = \mathbf{V'i}$
+
+$\underset{(c \times i)}{\mathbf{C}} = \mathbf{V'\hat{x}}^{-1}$ - the *Commodity Composition of Industry Outputs* is the fraction of total industry $i$ output that is in the form of commodity $j$
+
+$\underset{(i \times c)}{\mathbf{D}} = \mathbf{V\hat{q}}^{-1}$ - the *Industry Source of Commodity Outputs* is the fraction of total commodity $j$ output that was produced by industry $i$
+
+
+$\underset{(i \times i)}{\mathbf{A}_{C}}  = \mathbf{C}^{-1}\mathbf{B}$ - the commodity technology model of industry inputs per dollar’s worth of industry output
+
+$\underset{(i \times i)}{\mathbf{A}_{I}}  = \mathbf{D}\mathbf{B}$ - the industry technology model of industry inputs per dollar’s worth of industry output
+
+$\underset{(c \times c)}{\mathbf{A}_{C}}  = \mathbf{B}\mathbf{C}^{-1}$ - the commodity technology model of commodity inputs per dollar’s worth of commodity output
+
+$\underset{(c \times c)}{\mathbf{A}_{I}}  = \mathbf{B}\mathbf{D}$  - the industry technology model of commodity inputs per dollar’s worth of commodity output
+
+
+
+$\underset{(c \times c)}{\mathbf{L}_{I}}  = \left(\mathbf{I} - \mathbf{BD}\right)^{-1}$ - industry technology commodity-by-commodity total requirements commodity-demand driven model
+
+$\underset{(c \times c)}{\mathbf{L}_{C}}  =  \left(\mathbf{I} - \mathbf{BC^{-1}}\right)^{-1}$ - commodity technology commodity-by-commodity total requirements commodity-demand driven model
+
+$\underset{(i \times c)}{\mathbf{L}_{I}}  = \mathbf{D}\left(\mathbf{I} - \mathbf{BD}\right)^{-1}$ - industry technology industry-by-commodity total requirements commodity-demand driven model
+
+$\underset{(i \times c)}{\mathbf{L}_{C}}  = \mathbf{C}^{-1}(\mathbf{I} - \mathbf{BC}^{-1})^{-1}$ - commodity technology industry-by-commodity total requirements commodity-demand driven model
+
+$\underset{(i \times i)}{\mathbf{L}_{I}}  = \left(\mathbf{I} - \mathbf{DB}\right)^{-1}$ - industry technology industry-by-industry total requirements industry-demand driven model
+
+$\underset{(i \times i)}{\mathbf{L}_{C}}  =  \left(\mathbf{I} - \mathbf{C^{-1}B}\right)^{-1}$ - commodity technology industry-by-industry total requirements industry-demand driven model
+
+$\underset{(c \times i)}{\mathbf{L}_{I}}  = \mathbf{D}^{-1}\left(\mathbf{I} - \mathbf{DB}\right)^{-1}$ - industry technology commodity-by-industry total requirements industry-demand driven model
+
+$\underset{(c \times i)}{\mathbf{L}_{C}}  = \mathbf{C}(\mathbf{I} - \mathbf{C}^{-1}\mathbf{B})^{-1}$ - commodity technology commodity-by-industry total requirements industry-demand driven model
+
+
+**RAS Framework**
+
+$\mathbf{A^{n}}$ - national input--output table
+
+$\mathbf{A^{r}}$ - regional table to be estimated
+
+$\mathbf{x^{r}}$ - regional total gross outputs
+
+$\mathbf{u^{r}}$ - regional total intermediate sales
+
+$\mathbf{v^{r}}$ - regional total intermediate purchases
+
+Step 1: Assume $\mathbf{A^{r}} = \mathbf{A^{r}}$ such that $\mathbf{Z^{0}} = \mathbf{A^{n}\hat{x}^{r}}$, where zero superscript denotes the base iteration
+
+Step 2: Ask does $\mathbf{Z^{0}i} = \mathbf{u^{r}}$ and $\mathbf{iZ^{0}} = \mathbf{v^{r}}$? 
+If yes to both, then $\mathbf{Z^{0}} = \mathbf{Z^{r}}$ and $\mathbf{A^{n}} = \mathbf{A^{r}}$
+If no to either, then $\mathbf{A^{1}} = \mathbf{\hat{r}^{1}A^{n}}$, where $\mathbf{\hat{r}^{1}} = [\mathbf{\hat{u}^{r}}](\mathbf{\hat{Z}^{0}i})^{-1}$ and $\mathbf{u^{r}} = \mathbf{Z^{1}i} = [\mathbf{\hat{r}^{1}A^{n}\hat{x}^{r}}]\mathbf{i}$
+
+Step 3: Ask does $\mathbf{iZ^{1}} = \mathbf{v^{r}}$? 
+If yes, then $\mathbf{Z^{1}} = \mathbf{Z^{r}}$ and $\mathbf{Z^{1}\hat{x}^{r}} = \mathbf{A^{r}}$
+If no, then $\mathbf{A^{2}} = \mathbf{A^{1}\hat{s}^{1}}$, where $\mathbf{\hat{s}^{1}} = [\mathbf{\hat{v}^{r}}](\mathbf{iZ^{1}})^{-1}$ and $\mathbf{\hat{v}^{r}} = (\mathbf{Z^{2}})'\mathbf{i} = [\mathbf{A^{2}\hat{x}^{r}}]'\mathbf{i}$
+
+Step 4: Specify a value $\epsilon$ such that $[|\mathbf{u^{r}} - \mathbf{u^{t}}|]$ and $[|\mathbf{v^{r}} - \mathbf{v^{t}}|]$ are no more than $\epsilon$ 
+
+
+**Gravity Framework**
+
+$x^{r \cdot}_{i}$ - the "supply pool" of good $i$ in region $r$
+
+$x^{\cdot s}_{i}$ - the "demand pool" of good $i$ in region $s$
+
+$x^{\cdot \cdot}_{i}$ - the total production of commodity $i$ in the system
+
+$Q^{rs}_{i}$ - the measure of "impedance" between region $r$ and region $s$, assuming $Q^{rs}_{i} > 0$
+
+$z^{rs}_{i} = \frac{x^{r \cdot}_{i}x^{\cdot s}_{i}} {x^{\cdot \cdot}_{i}} Q^{rs}_{i}$ - gravity estimate of the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $s$
+
+**rurec equations**
+
+$\mathbf{NID} = \text{arg max}(Regional Commodity Factor Demand - Regional Gross Commodity Output, 0)$ - import needs by region
+$\mathbf{NIS} = \text{arg max}(Regional Gross Commodity Output - Regional Commodity Factor Demand, 0)$ - export excess by region
+
+$\mathbf{A} = \mathbf{i'}\min\{\text{NID}^{r}, \textbf{NIS} \}~ \forall ~ r$ - Nominal Absorption matrix
+
+$\mathbf{\alpha} = \mathbf{i'}\min\{\text{NID}^{r}, \textbf{NIS} \} / \text{NIS}^{r} ~ \forall ~ r$ - Normalized Absorption matrix
+
+$sum(Regional Commodity Factor Demand)/ sum(Regional Commodity Gross Output)$ - National "Factor Ratio" is the proportion of FinalDemand allocated to intermediate use
+
+
+**Absorption Potential Matching (alpha max)**
+
+ECA (Economic Catchment Area) Matching (based on row-wise maximum Absorption with a non-zero isolation threshold minimum): 
+  row max < threshold → Isolated (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand)
+    
+  row max > threshold → Cluster Source (ECA match = rowMax column county)
+    (at least one county could import your positive Final Demand given its NID)
+    (Matched to county that could import more than any other county what you have available as positive Final Demand)
+    
+  row max > threshold, but also a sink (rowMax county) for another county → Cluster Sink (ECA match = Self Match)
+    (at least one county could import your positive Final Demand, but you are also the max import sink for at least one other county)
+    
+  row max < threshold, but also a sink (rowMax county) for another county → Isolated, Cluster Sink (ECA match = Self Match)
+    (no one imports enough of what you have available as positive Final Demand, but you are also the max import sink for at least one other county)
+    
+
+# Methods
+
+$\mathbf{x}$ = Gross Industry Output (ixr) = (CBP-regional_industry_payroll/CBP-national_industry_payroll)*BEA-total_industry_output(T018 or T017)
+
+$\mathbf{B} = \mathbf{U\hat{x}}^{-1}$ = Commodity/Industry technical coefficients (cxi), where $\mathbf{U}$ is BEA-Use_matrix
+
+$\mathbf{Bx}$ = Commodity Factor Demand (cxr)
+
+$\mathbf{D} = \mathbf{V\hat{q}}^{-1}$ = Industry Source of Commodity Outputs (ixc), where $\mathbf{V}$ is the transpose of BEA-Supply_matrix and $\mathbf{q}$ is BEA-total_commodity_output(T007)
+
+$\mathbf{DB}$ = Industry Technology Technological Coeffecients (ixi)
+
+$\mathbf{C} = \mathbf{V'\hat{x}}^{-1}$ = Commodity Composition of Industry Outputs (cxi), where $\mathbf{V'}$ is the BEA-Supply_matrix
+
+$\mathbf{Cx}$ = Gross Commodity Output (cxr)
+
+$cfr = \mathbf{Bxi} / \mathbf{Cxi}$  = Commodity Factor Ratio (cx1)
+
+$cfr \cdot \mathbf{Cx}$ = Commodity Factor Supply 
+
+$\mathbf{DBx}$ = Industry Factor Demand (ixr)
+
+$ifr = \mathbf{DBxi} / \mathbf{xi}$  = Industry Factor Ratio (ix1)
+
+$ifr \cdot \mathbf{x}$ = Industry Factor Supply 
+
+
+# RAS Trade Flows
+
+```{r}
+
+cbp_year = "2012"
+ilevel = "sec"
+industryflow = TRUE
+impedance_mat = NULL
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = NULL
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      verbose = TRUE)
+
+```
+
+```{r}
+sector = "FIRE"
+inbound2outbound_map(df, sector = sector)
+```
+
+```{r}
+# temp <- absorption_maximum_match(df[["11"]])
+sector = "11"
+inbound2outbound_map(df, sector = sector)
+```
+
+
+```{r}
+# 
+# temp <- call_imputed_tradeflows(cbp_year = "2012",
+#                                 ilevel = "det",
+#                                 industryflow = T,
+#                                 impedance_mat = NULL,
+#                                 subsectors = unique(ilevel_concord("det")[1])[1:13,],
+#                                 verbose = TRUE,
+#                                 totaled = TRUE)
+# 
+# inbound2outbound_map(temp)
+```
+
+
+
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+
+
+
+
+ 
+
+```{r }
+
+cbp_year = "2012"
+ilevel = "sec"
+industryflow = TRUE
+impedance_mat =  gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+impedance_call = "gaus200"
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      verbose = TRUE)
+
+```
+
+```{r}
+impedance_distribution_map(decay_function = "gaus", 
+                           rms_width = 200,
+                           year = "2012",
+                           central_place = params$county_fips)
+```
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+
+
+```{r}
+
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+
+
+
+ECA clusters: sink and source membership tally 
+```{r}
+geog_year = "2013"
+inner_join(call_geog(geog_year), 
+           absorption_maximum_match(Reduce('+', df)), 
+           by = "place") %>% clustmember_map()
+```
+
+
+ECA clusters: qualitative and clickable
+```{r}
+inner_join(call_geog(geog_year), 
+           absorption_maximum_match(Reduce('+', df)), 
+           by = "place") %>% aqual_map()
+```
+
+:::
+
+
+
+
+
