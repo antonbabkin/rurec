@@ -210,6 +210,26 @@ call_industry_concordance <- function(){
   return(df)
 }
 
+beacode2description <- function(code){
+  #arbitrary selection
+  ilevel = "det"
+  year = "2012"
+  bea_year <- year2bea(year, ilevel)
+  sec <- data.frame("code" = names(bea_io$get_sup(strtoi(bea_year), "sec", FALSE)), 
+                  "description" = names(bea_io$get_sup(strtoi(bea_year), "sec", TRUE))
+                  )
+  sum <- data.frame("code" = names(bea_io$get_sup(strtoi(bea_year), "sum", FALSE)), 
+                    "description" = names(bea_io$get_sup(strtoi(bea_year), "sum", TRUE))
+  )
+  det <- data.frame("code" = names(bea_io$get_sup(strtoi(bea_year), "det", FALSE)), 
+                    "description" = names(bea_io$get_sup(strtoi(bea_year), "det", TRUE))
+  )
+  x <- rbind(sec, sum, det)
+  df <- x["description"][x["code"] == code]
+  return(df)
+}
+
+
 ###### Get specific industry NAICS to BEA concordance
 ilevel_concord <- function(ilevel = c("det", "sum", "sec"), ...){
   ilevel <- match.arg(ilevel)
@@ -310,6 +330,7 @@ power_impedance_mat <- function(decay_power = 2,
   #ifelse(df == 0, 1, (1/(df)^decay_power))
   df <- (1/(df)^decay_power)
   df[is.infinite(df)] = 1
+  #diag(df) <- 1
   return(df)
 }
 
@@ -377,6 +398,12 @@ call_cbp <- function(cbp_year,
                    strtoi(cbp_year))
   if(cbp_scale == "county"){
     df$place <- paste0(df$fipstate, df$fipscty)
+  }
+  if(cbp_scale == "state"){
+    df$place <- df$fipstate
+  }
+  if(cbp_scale == "us"){
+    df$place <- "usa"
   }
   n <- c("lfo", "fipstate", "fipscty", "place", "industry", "emp", "qp1", "ap", "est")
   df <- df[names(df) %in% n] %>% 
@@ -472,37 +499,68 @@ cbsa_spatial_cluster <- function(...){
   return(df)
 }
 
+### Call geographic features
+call_geog <- function(year,
+                      cbsa_clust = FALSE, 
+                      ...){
+  if(isFALSE(cbsa_clust)){
+    tiger_year <- year2tiger(year, ...)
+    df <- call_tiger(tiger_year, ...) 
+  } else {
+    cbsa_year <- year2cbsa(year, ...)
+    df <- cbsa_spatial_cluster(cbsa_year, ...)
+    df <- rename(df, place = CBSA_CODE)
+    df <- rename(df, NAME = CBSA_TITLE)
+  }
+  return(df)
+}
+
+
+
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
-place_industry_economy_long <- function(...){
+place_industry_economy_long <- function(cbp_scale = c("county", "state", "us"), ...){
+  cbp_scale <- match.arg(cbp_scale)
   conc <- ilevel_concord(...)
   n <- names(conc)[1]
-  cbp_dat <- call_cbp(..., cbp_scale = "county")
+  cbp_dat <- call_cbp(..., cbp_scale = cbp_scale)
+  if (cbp_scale != "county"){
+    cbp_dat <- cbp_dat %>% filter(.[["lfo"]] == "-")
+  }
   x <- left_join(cbp_dat, conc, by = "NAICS") 
   x <- x %>%
     filter(.[dim(x)[2]] != "NULL") %>%
     group_by(place, .[dim(x)[2]]) %>%
     summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
     as.data.frame()
-  x <- x %>%
-    group_by(place) %>%
-    arrange(factor(x[[2]], levels = unique(conc[[1]])), .by_group = TRUE) %>%
-    as.data.frame()
-    df <- x %>% pivot_wider(id_cols = n, names_from = "place", values_from = c("emp", "qp1", "ap", "est"), names_sep = ".", values_fill = 0)
-    df <- df %>% pivot_longer(-n, names_to = c(".value", "place"), names_pattern = "([^\\.]*)\\.*(\\d+)") %>% as.data.frame()
-    df <- df %>% group_by(df[[2]]) %>% arrange(factor(df[[1]], levels = unique(conc[[1]])), .by_group = TRUE)
-  names(df)[1] <- "indcode"
+  if (cbp_scale != "us"){
+    x <- x %>%
+      group_by(place) %>%
+      arrange(factor(x[[2]], levels = unique(conc[[1]])), .by_group = TRUE) %>%
+      as.data.frame()
+      df <- x %>% pivot_wider(id_cols = n, names_from = "place", values_from = c("emp", "qp1", "ap", "est"), names_sep = ".", values_fill = 0)
+      df <- df %>% pivot_longer(-n, names_to = c(".value", "place"), names_pattern = "([^\\.]*)\\.*(\\d+)") %>% as.data.frame()
+      df <- df %>% group_by(df[[2]]) %>% arrange(factor(df[[1]], levels = unique(conc[[1]])), .by_group = TRUE)
+    names(df)[1] <- "indcode"
+  } else {
+    df <- x %>% arrange(factor(x[[2]], levels = unique(conc[[1]])), .by_group = TRUE)
+    names(df)[2] <- "indcode"
+  }
   df <- df[1:6]
   return(df)
 }
 
 #Generate industry output ("ap", "emp", "qp1", or "est") by location (county) from CBP in terms of BEA industry codes ("det_cord", "sum_cord", or "sec_cord") for any available year
 industry_output_by_place <- function(output_metric = c("ap", "emp", "qp1", "est"),
+                                     cbp_scale = c("county", "state", "us"),
                                      ...){
   output_metric <- match.arg(output_metric)
-  df <- place_industry_economy_long(...) %>% .[, c("indcode", "place", output_metric)] 
-  df <- df %>% pivot_wider(id_cols = "indcode", names_from = "place", values_from = output_metric) %>% as.data.frame()
-  rownames(df) <- df[,1]
-  df <- df[, colnames(df) != "indcode"] %>% as.matrix()
+  cbp_scale <- match.arg(cbp_scale)
+  df <- place_industry_economy_long(cbp_scale = cbp_scale, ...) %>% .[, c("indcode", "place", output_metric)]
+  if (cbp_scale != "us"){
+    df <- df %>% pivot_wider(id_cols = "indcode", names_from = "place", values_from = output_metric) %>% as.data.frame()
+  } 
+  rownames(df) <- df$indcode
+  df <- df[, !colnames(df) %in% c("indcode","place"), drop=F] %>% as.matrix()
   return(df)
 }
 
@@ -520,6 +578,20 @@ call_use_table <- function(bea_year,
   return(df)
 }
 
+############ Call and clean pubdata BEA IO Supply table
+call_supply_table <- function(bea_year,
+                              ilevel = c("det", "sum", "sec"),
+                              ...){
+  ilevel <- match.arg(ilevel)
+  if(ilevel == "det"){
+    x <- bea_year %in% c("2007", "2012")
+    stopifnot("BEA detail level tables only exist for years 2007 and 2012" = x == TRUE)
+  }
+  df <- bea_io$get_sup(strtoi(bea_year), ilevel) %>% as.matrix()
+  df[is.na(df)] = 0
+  return(df)
+}
+
 ############ Derive the industry labor shares by year and industry scale
 labor_share <- function(...){
   df <- call_use_table(...)
@@ -532,24 +604,25 @@ labor_share <- function(...){
 }
 
 ############ Derive the Factor Ratio of National Commodity Factor Demand to National Gross Commodity Output
-factor_ratio <- function(cbp_year,
+factor_ratio <- function(bea_year,
                          ilevel = c("det", "sum", "sec"),
                          ...){
   ilevel <- match.arg(ilevel)
-  ut <- year2bea(cbp_year, ilevel, ...) %>% 
-    call_use_table(., ilevel = ilevel, ...)
-  df <- ut[,"T001", drop=F]/ut[,"T019", drop=F]
+  ut <- call_use_table(bea_year, ilevel = ilevel, ...)
+  st <- call_supply_table(bea_year, ilevel = ilevel, ...)
+  #df <- ut[1:(which(rownames(ut) == "T005")-1),"T001", drop=F]/st[1:(nrow(st)-1),"T007", drop=F]
+  df <- ut[1:(which(rownames(ut) == "T005")-1),"T001", drop=F]/st[1:(nrow(st)-1),"T016", drop=F]
   colnames(df) <- "factor_ratio"
-  df <- df[1:(which(rownames(df) == "T005")-1), , drop=F]
   if(ilevel == "det"){
-    ind_names <- rownames(df)[!rownames(df) %in% grep("^23", rownames(df), value = TRUE)] %>% append("23", after = 24)
-    cn <- sum(ut[grep("^23", rownames(ut), value = TRUE), "T001"]) / sum(ut[grep("^23", rownames(ut), value = TRUE), "T019"]) %>% 
+    ind_names <- rownames(df)[!rownames(df) %in%  c(grep("^23", rownames(df), value = TRUE), "4200ID")] %>% append("23", after = 24)
+    cn <- sum(ut[grep("^23", rownames(ut), value = TRUE), "T001"]) / sum(st[grep("^23", rownames(ut), value = TRUE), "T007"]) %>% 
       matrix(dimnames = list(c("23"), c("factor_ratio")) ) 
     nc <- df[!grepl("^23", rownames(df)), , drop = FALSE]  
     df <- rbind(cn, nc)[ind_names, , drop=F]
   }
   return(df)
 }
+
 
 ############ Derive the national level, industry specific, payroll share of gross output by year and industry scale
 payroll_share <- function(cbp_year,
@@ -564,7 +637,7 @@ payroll_share <- function(cbp_year,
     nc <- indout %>% .[, !grepl("^23", colnames(.)), drop = FALSE]  
     indout <- cbind(cn, nc) 
   }
-  conc <- ilevel_concord(...)
+  conc <- ilevel_concord(ilevel = ilevel, ...)
   cbp_dat <- call_cbp(..., cbp_year = cbp_year, cbp_scale = "us")
   ap <- left_join(cbp_dat, conc, by = "NAICS") %>% 
     filter(.[dim(.)[2]] != "NULL" & .[["lfo"]] == "-")
@@ -591,8 +664,12 @@ call_agoutput <- function(ag_year = c("2017", "2012", "2007", "2002"),
   df <- ag_output$get_farm_sales_by_bea_detail(strtoi(ag_year), geo_level) %>% as.data.frame()
   place <- c(place = rownames(df))
   df <- sapply(df, function(x)x/1000) %>% as.data.frame()
-  df <- cbind(place, df)
-  rownames(df) <- 1:nrow(df)
+  if(geo_level == "county" | geo_level == "state"){
+    df <- cbind(place, df)
+    rownames(df) <- 1:nrow(df)
+  } else {
+    df <- t(df)
+  }
   return(df)
 }
 
@@ -703,8 +780,8 @@ b_matrix <- function(bea_year,
     cc <- matrix(rowSums(u[, con]), 
                  dimnames = list(rownames(u), c("23"))) 
     
-    com_names <- rownames(u)[!rownames(u) %in% con] %>% append("23", after = 24)
-    ind_names <- colnames(u)[!colnames(u) %in% con] %>% append("23", after = 24)
+    com_names <- rownames(u)[!rownames(u) %in% c(con, "4200ID")] %>% append("23", after = 24)
+    ind_names <- colnames(u)[!colnames(u) %in% c(con, "4200ID")] %>% append("23", after = 24)
     u <- cbind(rbind(cr, u), rbind(cm, cc )) 
     u <- u[com_names, ind_names] 
     x <- cbind(matrix(sum(x[con]), dimnames = list(c("T018"), c("23"))), x[colnames(x)[!colnames(x) %in% con]])
@@ -735,8 +812,8 @@ c_matrix <- function(bea_year,
                    dimnames = list(colnames(supply_mat), c("23")) ))
     cc <- matrix(rowSums(supply_mat[, con]), 
                  dimnames = list(colnames(supply_mat), c("23"))) 
-    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% con] %>% append("23", after = 24)
-    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% con] %>% append("23", after = 24)
+    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
+    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
     supply_mat <- cbind(rbind(cr, supply_mat), rbind(cm, cc )) 
     supply_mat <- supply_mat[com_names, ind_names] 
     ind_supply <- cbind(matrix(sum(ind_supply[con]), dimnames = list(c("T017"), c("23"))), ind_supply[colnames(ind_supply)[!colnames(ind_supply) %in% con]])
@@ -750,6 +827,77 @@ c_matrix <- function(bea_year,
   }
   return(df)
 }
+
+
+#### Industry Source of Commodity Outputs
+d_matrix <- function(bea_year,
+                     ilevel = c("det", "sum", "sec"),
+                     ...){
+  ilevel <- match.arg(ilevel)
+  #bea_year <- year2bea(cbp_year, ilevel, ...)
+  df <- bea_io$get_sup(strtoi(bea_year), ilevel, F)
+  df[is.na(df)] = 0
+  com_supply <- df[1:(nrow(df)-1), "T007", drop=F] %>% as.matrix()
+  supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
+  
+  if(ilevel == "det"){ 
+    con <- grep("^23", rownames(supply_mat), value = TRUE)
+    cm <- matrix(sum(supply_mat[con,con]), 
+                 dimnames = list(c("23"), c("23")))
+    cr <- t(matrix(colSums(supply_mat[con, ]), 
+                   dimnames = list(colnames(supply_mat), c("23")) ))
+    cc <- matrix(rowSums(supply_mat[, con]), 
+                 dimnames = list(colnames(supply_mat), c("23"))) 
+    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
+    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
+    supply_mat <- cbind(rbind(cr, supply_mat), rbind(cm, cc )) 
+    supply_mat <- supply_mat[com_names, ind_names] 
+    com_supply <- rbind(matrix(sum(com_supply[con,]), dimnames = list(c("23"), c("T007"))), com_supply[rownames(com_supply)[!rownames(com_supply) %in% con], , drop=F])
+    com_supply <- com_supply[com_names, , drop=F] 
+  }
+  df <- t(supply_mat) %*% diag(as.vector(1/com_supply))
+  #temp fix needs correction in rurec.pubdata.bea_io module
+  if (ilevel == "sec") {
+    colnames(df) <- c(colnames(supply_mat), "Used", "Other")
+  } else {
+    colnames(df) <- rownames(supply_mat)
+  }
+  return(df)
+}
+
+####Commodity Output Supply Ratio - ratio of domestic total commodity output to total product supply
+cos_ratio <- function(bea_year,
+                      ilevel = c("det", "sum", "sec"),
+                      ...){
+  ilevel <- match.arg(ilevel)
+  #bea_year <- year2bea(cbp_year, ilevel, ...)
+  sup <- bea_io$get_sup(strtoi(bea_year), ilevel, F)
+  sup[is.na(sup)] = 0
+  com_supply <- sup[1:(nrow(sup)-1), "T007", drop = F] %>% as.matrix()
+  pro_supply <- sup[1:(nrow(sup)-1), "T016", drop = F] %>% as.matrix()
+  if(ilevel == "det"){ 
+    con <- grep("^23", rownames(sup), value = TRUE)
+    com_names <- rownames(sup)[1:(nrow(sup)-1)][!rownames(sup)[1:(nrow(sup)-1)] %in% c(con, "4200ID")] %>% append("23", after = 24)
+    com_supply <- rbind(matrix(sum(com_supply[con,]), dimnames = list(c("23"), c("T007"))), com_supply[rownames(com_supply)[!rownames(com_supply) %in% con], , drop=F])
+    com_supply <- com_supply[com_names, , drop=F] 
+    pro_supply <- rbind(matrix(sum(pro_supply[con,]), dimnames = list(c("23"), c("T007"))), pro_supply[rownames(pro_supply)[!rownames(pro_supply) %in% con], , drop=F])
+    pro_supply <- pro_supply[com_names, , drop=F] 
+  }
+  df <- pro_supply / com_supply
+  colnames(df) <- "cos_ratio"
+  #temp fix needs correction in rurec.pubdata.bea_io module
+  if (ilevel == "sec") {
+    rownames(df) <- c(colnames(sup)[1:(which(colnames(sup) == "T007")-1)], "Used", "Other")
+  }
+  return(df)
+}
+
+
+
+
+
+
+
 
 # Aggregate industry output of each CBSA members in a cluster
 cbsa_aggregate_industry_output <- function(cbp_year,
@@ -868,23 +1016,18 @@ stacked_absorption_share <- function(nis_matrix,
   ## Check counties match between nis_matrix and nid_matrix
   df <- identical(colnames(d), colnames(s))
   stopifnot(df)
- 
   print(paste(list_names, "Absorption calculation started", Sys.time() ))
-  
     df <-  matrix(0, nrow = ncol(s), 
                        ncol = ncol(s) )
     rownames(df) = colnames(df) <- colnames(s)
-  
     for (i in 1:ncol(s)){
       for (j in 1:ncol(s)){
         df[i,j] <- 
           (x %*% pmin(s[,i], d[,j]))
       }
     }
-    
  print(paste(list_names, "Absorption calculation finished", Sys.time() ))
  invisible(df)
-
 }
 
 ############ Normalized Absorption Share
@@ -1002,31 +1145,9 @@ one_direct_connect <- function(technical_coefficients_matrix, industry_output_ma
   df <- absorption_maximum_match(normalized_absorption_share(stacked_absorption_share(net_input_supply(io, industry_input(tc, io)), net_input_demand(io, industry_input(tc, io))), net_input_supply(io, industry_input(tc, io))), threshold)  
 }
 
-############ Call tidy Gross Commodity Output
-commodity_output_tidy_matrix <- function(cbp_year,
-                                         ilevel = c("det", "sum", "sec"),
-                                         ...){
-  ilevel <- match.arg(ilevel)
-  bea_year <- year2bea(cbp_year, ilevel, ...)
-  cm <- c_matrix(bea_year, ilevel, ...)
-  tot <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
-  df <- commodity_output(cm[, rownames(tot)], tot)
-  }
-  
-  
-############ Call Factor Supply
-factor_supply_matrix <- function(cbp_year,
-                                 ilevel = c("det", "sum", "sec"),
-                                 ...){
-  co <- commodity_output_tidy_matrix(cbp_year, ilevel, ...)
-  fr <- factor_ratio(cbp_year, ilevel, ...)
-  df <- diag(as.vector(fr)) %*% co
-  rownames(df) <- rownames(fr)
-  return(df)
-}
 
-############ Call Factor Demand
-factor_demand_matrix <- function(cbp_year,
+############ Call Commodity Factor Demand
+commodity_factor_demand_tidy_matrix <- function(cbp_year,
                                  ilevel = c("det", "sum", "sec"),
                                  ...){
   ilevel <- match.arg(ilevel)
@@ -1037,6 +1158,82 @@ factor_demand_matrix <- function(cbp_year,
   return(df)
 }
 
+############ Call Industry Factor Demand
+industry_factor_demand_tidy_matrix <- function(cbp_year,
+                                                ilevel = c("det", "sum", "sec"),
+                                                ...){
+  ilevel <- match.arg(ilevel)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  df <- bea_io$get_sup(strtoi(bea_year), ilevel, F)[,"T007", drop=F]
+  df[is.na(df)] = 0
+  rownames(df)[df == 0]
+  dm <- d_matrix(bea_year, ilevel, ...)
+  bm <- b_matrix(bea_year, ilevel, ...)
+  d <- (dm[,setdiff(colnames(dm), rownames(df)[df == 0])] %*% bm[setdiff(colnames(dm), rownames(df)[df == 0]),])[rownames(o), rownames(o)]
+  df <- industry_input(d, o)
+  return(df)
+}
+
+
+############ Call tidy Gross Commodity Output
+commodity_output_tidy_matrix <- function(cbp_year,
+                                         ilevel = c("det", "sum", "sec"),
+                                         ...){
+  ilevel <- match.arg(ilevel)
+  bea_year <- year2bea(cbp_year, ilevel, ...)
+  cm <- c_matrix(bea_year, ilevel, ...)
+  tot <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  df <- commodity_output(cm[, rownames(tot)], tot)
+}
+
+############ Derive the Factor Ratio of National Commodity Factor Demand to National Gross Commodity Output
+commodity_region_factor_ratio <- function(cbp_year,
+                                ilevel = c("det", "sum", "sec"),
+                                ...){
+  ilevel <- match.arg(ilevel)
+  fd <- commodity_factor_demand_tidy_matrix(cbp_year, ilevel, ...)
+  co <- commodity_output_tidy_matrix(cbp_year, ilevel, ...)
+  df <- rowSums(fd)/rowSums(co) %>% as.matrix()
+  colnames(df) <- "factor_ratio"
+  
+  return(df)
+}
+
+############ Derive the Factor Ratio of National Industry Factor Demand to National Gross Industry Output
+industry_region_factor_ratio <- function(cbp_year,
+                                          ilevel = c("det", "sum", "sec"),
+                                          ...){
+  ilevel <- match.arg(ilevel)
+  fd <- industry_factor_demand_tidy_matrix(cbp_year, ilevel, ...)
+  io <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  df <- rowSums(fd)/rowSums(io) %>% as.matrix()
+  colnames(df) <- "factor_ratio"
+  
+  return(df)
+}
+ 
+############ Call Commodity Factor Supply
+commodity_factor_supply_tidy_matrix <- function(cbp_year,
+                                 ilevel = c("det", "sum", "sec"),
+                                 ...){
+  co <- commodity_output_tidy_matrix(cbp_year, ilevel, ...)
+  fr <- commodity_region_factor_ratio(cbp_year, ilevel, ...)
+  df <- diag(as.vector(fr)) %*% co
+  rownames(df) <- rownames(fr)
+  return(df)
+}
+
+############ Call Industry Factor Supply
+industry_factor_supply_tidy_matrix <- function(cbp_year,
+                                                ilevel = c("det", "sum", "sec"),
+                                                ...){
+  io <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  fr <- industry_region_factor_ratio(cbp_year, ilevel, ...)
+  df <- diag(as.vector(fr)) %*% io
+  rownames(df) <- rownames(fr)
+  return(df)
+}
 
 #RAS trade matrix
 ras_trade_lists <- function(factor_supply,
@@ -1045,7 +1242,7 @@ ras_trade_lists <- function(factor_supply,
                             ...){
   
   df <- setequal(rownames(factor_supply), rownames(factor_demand))
-  stopifnot("Commodity names do not match" = df == TRUE)
+  stopifnot("Commodity/Industry names do not match" = df == TRUE)
   
   if(!is.null(impedance_mat)){ 
     rn <- colnames(factor_supply)
@@ -1060,7 +1257,13 @@ ras_trade_lists <- function(factor_supply,
   
   #Starting position of trade matrix 
   x <- list()
-  for (i in rownames(factor_demand)){
+  y <- intersect(
+    names(which(!is.na(rowSums(factor_demand)) & 
+                !rowSums(factor_demand) == 0 )), 
+    names(which(!is.na(rowSums(factor_supply)) & 
+                !rowSums(factor_supply) == 0 ))
+    )
+  for (i in y){
     if(!is.null(impedance_mat)){
       x[[i]] <- (t(factor_supply[i, , drop=F]) %*% factor_demand[i, , drop=F]) * (impedance_mat[rn, cn])
     } else {
@@ -1075,20 +1278,147 @@ ras_trade_lists <- function(factor_supply,
     c1 = factor_demand[i, , drop=F]
     df[[i]] <- ras_trade_flows(x0 = x0,
                                rs1 = r1, 
-                               cs1 = c1)
+                               cs1 = c1, ...)
     colnames(df[[i]]) = rownames(df[[i]]) = colnames(factor_demand)
   }
   return(df)
 }
 
+
+############ Call matrices of commodity or industry imputed trade flows from RAS procedure
+call_imputed_tradeflows <- function(cbp_year,
+                                    ilevel,
+                                    industryflow = TRUE,
+                                    impedance_mat = NULL,
+                                    subsectors = NULL,
+                                    totaled = FALSE,
+                                    ...){
+  if(!"ras_trade_fls" %in% c(lsf.str())){
+    source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+  }
+  if(isTRUE(industryflow)){
+    fs <- industry_factor_supply_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel,
+                                              ...)
+    fd <- industry_factor_demand_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel,
+                                              ...)
+  } else {
+    fs <- commodity_factor_supply_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel,
+                                              ...)
+    fd <- commodity_factor_demand_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel,
+                                              ...)
+  }
+  df <- setequal(rownames(fs), rownames(fd))
+  stopifnot("Commodity/Industry names do not match" = df == TRUE)
+  if(!is.null(subsectors)){
+    fs <- fs[subsectors, , drop = FALSE]
+    fd <- fd[subsectors, , drop = FALSE]
+  }
+  y <- intersect(
+    names(which(!is.na(rowSums(fd)) & 
+                  !rowSums(fd) == 0 )), 
+    names(which(!is.na(rowSums(fs)) & 
+                  !rowSums(fs) == 0 ))
+  )
+  if(!is.null(impedance_mat)){
+    rn <- colnames(fs)
+    cn <- colnames(fd)
+    df <- all(
+      setequal(rn, cn),
+      setequal(rn, rownames(impedance_mat[rn, cn])),
+      setequal(cn, colnames(impedance_mat[rn, cn]))
+    )
+    stopifnot("Place names do not match" = df == TRUE)
+  }
+  temp <- tempdir()
+  for (i in y){
+    if(!is.null(impedance_mat)){
+      x0 <- (t(fs[i, , drop=F]) %*% fd[i, , drop=F]) * (impedance_mat[rn, cn])
+    } else {
+      x0 <- (t(fs[i, , drop=F]) %*% fd[i, , drop=F])
+    }
+    r1 <- fs[i, , drop=F]
+    c1 <- fd[i, , drop=F]
+    tf <- ras_trade_flows(x0 = x0,
+                          rs1 = r1, 
+                          cs1 = c1,
+                          ...)
+    colnames(tf) = colnames(c1)
+    rownames(tf) = colnames(r1)
+    saveRDS(tf, file = file.path(temp, i))
+    rm(tf, x0, r1, c1)
+  }
+  df <- lapply(file.path(temp, y), readRDS)
+  names(df) <- y 
+  if(isTRUE(totaled)){
+   df <- Reduce('+', df)
+  }
+  return(df)
+}
+
+
+load_tradeflows <- function(cbp_year,
+                            ilevel,
+                            industryflow = TRUE,
+                            impedance_mat = NULL,
+                            subsectors = NULL,
+                            totaled = FALSE,
+                            data_dir = file.path("data", "robjs"),
+                            impedance_call = NULL, 
+                            ...){
   
+  if(!is.null(impedance_mat) & is.null(impedance_call)){warning("Impedance is applied without a specific description to save/load")}
+  
+  rasf <- paste0("ras", "_", ilevel,"class", "_", cbp_year, "cbp", "_", if(isTRUE(industryflow)){"industries"}else{"commodities"}, "_", if(is.null(subsectors)){"all"}else{subsectors}, "sectors", "_", if(is.null(impedance_mat)){"NA"}else{impedance_call}, "impedance")
+  stop
+  if (file.exists(file.path(find_rstudio_root_file(), data_dir, rasf) ) ){ 
+    df <- readRDS(file.path(find_rstudio_root_file(), data_dir, rasf))
+  } else {
+    df <- call_imputed_tradeflows(cbp_year,
+                                  ilevel,
+                                  industryflow,
+                                  impedance_mat,
+                                  subsectors,
+                                  totaled,
+                                  ...)
+    saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, rasf) )
+  }
+  return(df)
+}
 
 
 
+### Summarize data from trade flow matrix
+inbound2outbound <- function(trade_matrix){
+  df <- data.frame("place" = rownames(trade_matrix),
+                   "inbound" = colSums(trade_matrix), 
+                   "outbound" = rowSums(trade_matrix), 
+                   "out2in" = rowSums(trade_matrix)/colSums(trade_matrix), 
+                   "out_less_in" = rowSums(trade_matrix)-colSums(trade_matrix)
+                   )
+  return(df)
+}
 
 
+matrix2edgelist <- function(x){
+  df <- do.call(cbind, 
+                lapply(list("row_index" = row(x), 
+                            "col_index" = col(x), 
+                            "value" = x), 
+                       as.vector))
+}
 
-
+edgelist2matrix <- function(x){
+  df <- matrix(x[,3], 
+               nrow = length(unique(x[,1])), 
+               ncol = length(unique(x[,2])), 
+               dimnames = list(unique(x[,1]), 
+                               unique(x[,2])))
+  return(df)
+}
 
 
 
@@ -2086,6 +2416,167 @@ place_absorption_map <- function(central_place,
                         offx = 0, offy = 330) ))
 }
 
+
+############ Map place-centric trade flows for a county (takes county-to-county matrix or sector list of county-to-county matrices as data inputs)
+place_trade_map <- function(df,
+                            central_place,
+                            sector = NULL,
+                            export_flows = TRUE, 
+                            geog_year = "2013",
+                            censor_scale_lowerbound = 0,
+                            ...){
+  df <- if(is.null(sector)){
+    if(isTRUE(export_flows)){
+      t(df[central_place, , drop = F] )
+    } else {
+        df[, central_place, drop = F]
+    }
+  } else {
+      if(isTRUE(export_flows)){
+        t(df[[sector]][central_place, , drop = F] )
+      } else {
+          df[[sector]][, central_place, drop = F]
+      }
+    } 
+    df <- df %>% 
+      as_tibble(rownames = "place") %>%
+    rename("trade" = central_place)
+  geog <- call_geog(geog_year)
+  df <- join_space_with_connectedness(df, geog, ...)
+  tfl <- if(isTRUE(export_flows)){
+    "Outbound Trade"
+  } else {
+    "Inbound Trade"
+    }
+  g <- ggplot(df) + 
+    geom_sf_interactive(aes(fill = (round(trade, 2)), 
+                              tooltip = if("STATE" %in% names(df)){
+                                glue("{NAME}, {STATE}\nFIPS: {place}\nQuantity: {round(trade, 2)}")
+                              }else{
+                                glue("{NAME}\nFIPS: {place}\nQuantity: {round(trade, 2)}")
+                              }, 
+                              data_id = place),
+                          color = NA) + 
+    guides(alpha = "none") +
+    coord_sf() +
+    theme_void() + 
+      scale_fill_viridis(direction = -1, 
+                         limits = c(floor(censor_scale_lowerbound), 
+                                    ceiling(max(df$trade)))) +
+    geom_sf_interactive(data = df[df$place==central_place,], fill = "#8b0000", color = NA) +
+    labs(fill = if("STATE" %in% names(df)){
+      glue("{df[df$place==central_place,]$NAME}, {df[df$place==central_place,]$STATE} \n{tfl}")
+    }else{
+      glue("{df[df$place==central_place,]$NAME} \n{tfl}")
+    } )  +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+          legend.key.size = unit(.2, "cm"),
+          legend.title = element_text(size = rel(0.5)), 
+          legend.text = element_text(size = rel(0.5)),
+          legend.position = c(0.9, 0.3),
+          plot.caption = element_text(hjust = 0.9, size = rel(0.5)) ) +
+    {
+      if(is.null(sector)){
+        labs(caption = "Aggregate Trade Flows") 
+      } else { 
+        labs(caption = glue(sector, ": ", beacode2description(code = sector), " trade flow")) 
+      }
+    }
+
+  girafe(ggobj = g, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                           background-color:gray;
+                                           color:white;
+                                           padding:10px;
+                                           border-radius:5px;",
+                        use_cursor_pos = FALSE,
+                        offx = 0, offy = 330) ))
+}
+
+
+
+############ Map Outbound to Inbound trade flows (takes county-to-county matrix or sector list of county-to-county matrices as data inputs)
+inbound2outbound_map <- function(df,
+                                 sector = NULL,
+                                 geog_year = "2013",
+                                 ...){
+  df <- if(is.null(sector)){
+    inbound2outbound(df)
+  } else { 
+    inbound2outbound(df[[sector]])
+  }
+  geog <- call_geog(geog_year)
+  df <- join_space_with_connectedness(df, geog, ...)
+  g <- ggplot() +
+    geom_sf_interactive(aes(fill = round(log(-out_less_in), 2), 
+                            tooltip = if("STATE" %in% names(df)){
+                              glue("{NAME}, {STATE}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                            }else{
+                              glue("{NAME}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                            },
+                            data_id = place), 
+                        color = NA,
+                        data = subset(df, out_less_in < 0)) +
+    scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
+    labs(fill = "Net Sink (log)") +
+    new_scale_fill() +
+    geom_sf_interactive(aes(fill = round(log(out_less_in), 2), 
+                            tooltip = if("STATE" %in% names(df)){
+                              glue("{NAME}, {STATE}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                            }else{
+                              glue("{NAME}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                            },
+                            data_id = place), 
+                        color = NA,
+                        data = subset(df, out_less_in > 0)) +
+    scale_fill_gradient(low = "#feb24c", high = "#f03b20") +
+    labs(fill = "Net Source (log)") +
+  coord_sf() +
+    theme_void() +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+          legend.key.size = unit(.2, "cm"),
+          legend.title = element_text(size = rel(0.5)), 
+          legend.text = element_text(size = rel(0.5)),
+          legend.position = c(0.9, 0.2),
+          plot.caption = element_text(hjust = 0.9, size = rel(0.5))) +
+    {
+      if(is.null(sector)){
+        labs(caption = "Aggregate Sector Provenance") 
+      } else { 
+        labs(caption = glue(sector, ": ", beacode2description(code = sector), " provenance")) 
+      }
+    }
+  
+  girafe(ggobj = g, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                           background-color:gray;
+                                           color:white;
+                                           padding:10px;
+                                           border-radius:5px;",
+                        use_cursor_pos = FALSE,
+                        offx = 0, offy = 330),
+           opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
+}
+
+
+
+
+
+
 ############ Map ratio of NIS to NID
 nis2nid_map <- function(df){
   g <- ggplot(df) +
@@ -2250,9 +2741,10 @@ impedance_distribution_map <- function(year = "2012",
                                 ceiling(1))) +
     theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
            legend.key.size = unit(.2, "cm"),
-           legend.title = element_text(size = rel(0.75)), 
-           legend.text = element_text(size = rel(0.75)),
-           legend.position = c(0.9, 0.3)) + 
+           legend.title = element_text(size = rel(0.5)), 
+           legend.text = element_text(size = rel(0.5)),
+           legend.position = c(0.9, 0.3),
+           plot.caption = element_text(hjust = 0.9, size = rel(0.5))) + 
     labs(caption = caption)
   girafe(ggobj = g, 
          options = list(
