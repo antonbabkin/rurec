@@ -23,12 +23,20 @@ cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 geography <- reticulate::import("rurec.pubdata.geography")
 
 root_dir <- rprojroot::find_rstudio_root_file()
-source(file.path(root_dir, "nbs", "rural_typology_r_functions.R"))
-source(file.path(root_dir, "rurec", "reseng.R"), local = (reseng <- new.env()))
+source(file.path(root_dir, "nbs/rural_typology_r_functions.R"))
+source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
 
 ggplot2::theme_set(theme_minimal())
 
+
+```
+
+```{r}
+
+source("rurec/reseng.R")
+tiger_year <- 1999
+conn() #
 
 ```
 
@@ -161,6 +169,8 @@ ggplot(df, aes(year, value, color = source)) +
 
 ## Farm labor by county
 
+"Hired labor" from ag census 2002, 2007, 2012 and 2017. Linear interpolation between censal years, repeated values 3 years before (1999-2001) and 2 years after (2018-2020).
+
 
 ```{r}
 
@@ -179,8 +189,23 @@ ggplot(df, aes(year, value, color = source)) +
       short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp_farm"
     )) %>% 
     pivot_wider(names_from = short_desc)
+
+  y_min <- 2002
+  y_max <- 2017
+  d <- expand.grid(list(year = (y_min - 3):(y_max + 3), stcty = unique(df$stcty)))
+  df <- left_join(d, df, by = c("year", "stcty"))
+  
+  # interpolate and extrapolate intra-censal years
+  # if only one non-NA value exists in the entire history, it will be still propagated regardless of gap length
+  df <- df %>% 
+    group_by(stcty) %>% 
+    mutate(
+      emp_farm = round(zoo::na.approx(emp_farm, year, na.rm = FALSE, rule = 2)),
+      est_farm = round(zoo::na.approx(est_farm, year, na.rm = FALSE, rule = 2)))
+  
   return(df)
 }
+# file.remove(file.path(root_dir, "cache/county_farm_emp.rds"))
 county_farm_emp <- reseng$simplecache(.county_farm_emp, file.path(root_dir, "cache/county_farm_emp.rds"))
 
 ```

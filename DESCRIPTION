@@ -22,4 +22,5 @@ Imports:
   arrow,
   matlib,
   magick,
-  tmaptools
+  tmaptools,
+  zoo
