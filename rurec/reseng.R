@@ -2,8 +2,33 @@
 
 root_dir <- rprojroot::find_rstudio_root_file()
 
-simplecache <- function(f, filename) {
+#' Cache function output to a file
+#' 
+#' filename may include references to function arguments using glue syntax.
+#' Limitation: fn <- cache(fn, ...) creates infinite recursive reference to fn.
+#' To avoid, either use distinct names: fn <- cache(.fn, ...)
+#' Or pass anonymous function: fn <- cache(function(x) {x}, ...)
+#'
+#' @param f Function to be cached.
+#' @param filename Where to save cache.
+#' @return Function with automatic caching.
+#' 
+#' @examples
+#' slow_fun <- function(t) {Sys.sleep(t); t}
+#' fast_fun <- cache(slow_fun, "cache/slow_fun.rds")
+cache <- function(f, filename) {
   wrapper <- function(...) {
+    
+    # create unevaluated function call
+    c0 <- rlang::call2(f, ...)
+    # call with arguments specified by their full names
+    c1 <- rlang::call_match(c0, f)
+    # list of named arguments
+    e <- rlang::call_args(c1)
+    # substitute call args into filename template
+    filename <- glue::glue(filename, .envir = e)
+    
+    
     if (file.exists(filename)) {
       print(paste("read from cache", filename))
       res <- readRDS(filename)
