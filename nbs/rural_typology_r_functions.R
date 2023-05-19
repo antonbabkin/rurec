@@ -39,6 +39,8 @@ library(magick)
 
 library(tmaptools)
 
+library(parallel)
+
 
 # Display start time
 log_info("Define functions start")
@@ -1239,6 +1241,8 @@ industry_factor_supply_tidy_matrix <- function(cbp_year,
 ras_trade_lists <- function(factor_supply,
                             factor_demand, 
                             impedance_mat = NULL,
+                            core_count = 10,
+                            data_dir = file.path("data", "robjs"),
                             ...){
   
   df <- setequal(rownames(factor_supply), rownames(factor_demand))
@@ -1271,16 +1275,48 @@ ras_trade_lists <- function(factor_supply,
     }
   }
   
-  df <- list()
-  for (i in names(x)){
+  # df <- list()
+  # for (i in names(x)){
+  #   x0 = x[[i]]
+  #   r1 = factor_supply[i, , drop=F]
+  #   c1 = factor_demand[i, , drop=F]
+  #   df[[i]] <- ras_trade_flows(x0 = x0,
+  #                              rs1 = r1,
+  #                              cs1 = c1, ...)
+  #   colnames(df[[i]]) = rownames(df[[i]]) = colnames(factor_demand)
+  # }
+  
+  unlink(file.path(find_rstudio_root_file(), data_dir, "temp"), recursive = TRUE)
+  dir.create(file.path(find_rstudio_root_file(), data_dir, "temp"))
+
+mclapply(names(x), function(i) {
     x0 = x[[i]]
     r1 = factor_supply[i, , drop=F]
     c1 = factor_demand[i, , drop=F]
-    df[[i]] <- ras_trade_flows(x0 = x0,
-                               rs1 = r1, 
-                               cs1 = c1, ...)
-    colnames(df[[i]]) = rownames(df[[i]]) = colnames(factor_demand)
-  }
+    tf <- ras_trade_flows(x0 = x0,
+                          rs1 = r1,
+                          cs1 = c1,
+                          ...)
+    colnames(tf) = colnames(c1)
+    rownames(tf) = colnames(r1)
+    saveRDS(tf, file = file.path(find_rstudio_root_file(), data_dir, "temp", i))
+    rm(x0,r1,c1,tf)
+    return(invisible(NULL))
+  }, mc.cores = core_count)
+return(names(x))
+}
+
+ras_trade_listsx <- function(factor_supply,
+                             factor_demand,
+                             impedance_mat = NULL,
+                             data_dir = file.path("data", "robjs"),
+                             ...){
+  x <- ras_trade_lists(factor_supply = factor_supply,
+                        factor_demand = factor_demand,
+                        impedance_mat = impedance_mat,
+                        ...)
+  df <- lapply(file.path(find_rstudio_root_file(), data_dir, "temp", x), readRDS)
+  names(df) <- x
   return(df)
 }
 
@@ -1292,6 +1328,7 @@ call_imputed_tradeflows <- function(cbp_year,
                                     impedance_mat = NULL,
                                     subsectors = NULL,
                                     totaled = FALSE,
+                                    crosshaul = TRUE,
                                     ...){
   if(!"ras_trade_fls" %in% c(lsf.str())){
     source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
@@ -1317,42 +1354,17 @@ call_imputed_tradeflows <- function(cbp_year,
     fs <- fs[subsectors, , drop = FALSE]
     fd <- fd[subsectors, , drop = FALSE]
   }
-  y <- intersect(
-    names(which(!is.na(rowSums(fd)) & 
-                  !rowSums(fd) == 0 )), 
-    names(which(!is.na(rowSums(fs)) & 
-                  !rowSums(fs) == 0 ))
-  )
-  if(!is.null(impedance_mat)){
-    rn <- colnames(fs)
-    cn <- colnames(fd)
-    df <- all(
-      setequal(rn, cn),
-      setequal(rn, rownames(impedance_mat[rn, cn])),
-      setequal(cn, colnames(impedance_mat[rn, cn]))
-    )
-    stopifnot("Place names do not match" = df == TRUE)
+  if(isTRUE(crosshaul)){
+    fsx <- fs
+    fdx <- fd
+  } else {
+    fsx <- pmax(fs - fd, 0)
+    fdx <- pmax(fd - fs, 0)
   }
-  temp <- tempdir()
-  for (i in y){
-    if(!is.null(impedance_mat)){
-      x0 <- (t(fs[i, , drop=F]) %*% fd[i, , drop=F]) * (impedance_mat[rn, cn])
-    } else {
-      x0 <- (t(fs[i, , drop=F]) %*% fd[i, , drop=F])
-    }
-    r1 <- fs[i, , drop=F]
-    c1 <- fd[i, , drop=F]
-    tf <- ras_trade_flows(x0 = x0,
-                          rs1 = r1, 
-                          cs1 = c1,
-                          ...)
-    colnames(tf) = colnames(c1)
-    rownames(tf) = colnames(r1)
-    saveRDS(tf, file = file.path(temp, i))
-    rm(tf, x0, r1, c1)
-  }
-  df <- lapply(file.path(temp, y), readRDS)
-  names(df) <- y 
+  df <- ras_trade_listsx(factor_supply = fsx,
+                         factor_demand = fdx, 
+                         impedance_mat = impedance_mat, 
+                         ...)
   if(isTRUE(totaled)){
    df <- Reduce('+', df)
   }
@@ -1366,14 +1378,17 @@ load_tradeflows <- function(cbp_year,
                             impedance_mat = NULL,
                             subsectors = NULL,
                             totaled = FALSE,
+                            crosshaul = TRUE,
                             data_dir = file.path("data", "robjs"),
                             impedance_call = NULL, 
                             ...){
   
-  if(!is.null(impedance_mat) & is.null(impedance_call)){warning("Impedance is applied without a specific description to save/load")}
-  
-  rasf <- paste0("ras", "_", ilevel,"class", "_", cbp_year, "cbp", "_", if(isTRUE(industryflow)){"industries"}else{"commodities"}, "_", if(is.null(subsectors)){"all"}else{subsectors}, "sectors", "_", if(is.null(impedance_mat)){"NA"}else{impedance_call}, "impedance")
-  stop
+  if(!is.null(impedance_mat) & 
+     is.null(impedance_call)
+     ){
+    warning("Impedance is applied without a specific description to save/load")
+    }
+  rasf <- paste0("ras", "_", ilevel,"class", "_", cbp_year, "cbp", "_", if(isTRUE(industryflow)){"industries"}else{"commodities"}, "_", if(isTRUE(crosshaul)){"xhaul"}else{"nohaul"}, "_", if(is.null(subsectors)){"all"}else{subsectors}, "sectors", "_", if(is.null(impedance_mat)){"NA"}else{impedance_call}, "impedance")
   if (file.exists(file.path(find_rstudio_root_file(), data_dir, rasf) ) ){ 
     df <- readRDS(file.path(find_rstudio_root_file(), data_dir, rasf))
   } else {
@@ -1383,6 +1398,7 @@ load_tradeflows <- function(cbp_year,
                                   impedance_mat,
                                   subsectors,
                                   totaled,
+                                  crosshaul,
                                   ...)
     saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, rasf) )
   }
@@ -2504,9 +2520,11 @@ place_trade_map <- function(df,
 
 ############ Map Outbound to Inbound trade flows (takes county-to-county matrix or sector list of county-to-county matrices as data inputs)
 inbound2outbound_map <- function(df,
+                                 fill = c("out_less_in", "out2in", "inbound", "outbound"), 
                                  sector = NULL,
                                  geog_year = "2013",
                                  ...){
+  fill <- match.arg(fill)
   df <- if(is.null(sector)){
     inbound2outbound(df)
   } else { 
@@ -2514,8 +2532,10 @@ inbound2outbound_map <- function(df,
   }
   geog <- call_geog(geog_year)
   df <- join_space_with_connectedness(df, geog, ...)
-  g <- ggplot() +
-    geom_sf_interactive(aes(fill = round(log(-out_less_in), 2), 
+  
+  g <- ggplot() + {
+    if(fill == "out_less_in" | fill == "out2in"){
+    geom_sf_interactive(aes(fill = round(if(fill == "out_less_in"){log(-.data[[fill]])}else{.data[[fill]]}, 2), 
                             tooltip = if("STATE" %in% names(df)){
                               glue("{NAME}, {STATE}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
                             }else{
@@ -2523,11 +2543,9 @@ inbound2outbound_map <- function(df,
                             },
                             data_id = place), 
                         color = NA,
-                        data = subset(df, out_less_in < 0)) +
-    scale_fill_gradient(low = "#56B1F7", high = "#132B43") +
-    labs(fill = "Net Sink (log)") +
-    new_scale_fill() +
-    geom_sf_interactive(aes(fill = round(log(out_less_in), 2), 
+                        data = subset(df, out_less_in < 0)) 
+  } else {
+    geom_sf_interactive(aes(fill = round(log(.data[[fill]]), 2), 
                             tooltip = if("STATE" %in% names(df)){
                               glue("{NAME}, {STATE}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
                             }else{
@@ -2535,9 +2553,35 @@ inbound2outbound_map <- function(df,
                             },
                             data_id = place), 
                         color = NA,
-                        data = subset(df, out_less_in > 0)) +
-    scale_fill_gradient(low = "#feb24c", high = "#f03b20") +
-    labs(fill = "Net Source (log)") +
+                        data = df) 
+  }
+    } + {
+      if(fill == "out_less_in"){
+        scale_fill_gradient(low = "#56B1F7", high = "#132B43") 
+      } else if(fill == "out2in"){
+        scale_fill_gradient(low = "#132B43", high = "#56B1F7") 
+      } else {
+        scale_fill_viridis(direction = -1)
+      } 
+                          } +
+    labs(fill = if(fill == "out_less_in"){"Net Sink (log)"} else if(fill == "out2in"){"Sink Ratio"} else if(fill == "inbound"){"Inbound Volume (log)"} else if(fill == "outbound"){"Outbound Volume (log)"}) + 
+    new_scale_fill() + {
+      if(fill == "out_less_in" | fill == "out2in"){
+          geom_sf_interactive(aes(fill = round(if(fill == "out_less_in"){log(.data[[fill]])}else{.data[[fill]]}, 2), 
+                                  tooltip = if("STATE" %in% names(df)){
+                                    glue("{NAME}, {STATE}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                                  }else{
+                                    glue("{NAME}\nFIPS: {place}\nInbound: {round(inbound, 2)}\nOutbound: {round(outbound, 2)}\nRatio: {round(out2in, 2)}\nNet: {round(out_less_in, 2)}")
+                                  },
+                                  data_id = place), 
+                              color = NA,
+                              data = subset(df, out_less_in > 0))
+      }
+    } + {
+      if(fill == "out_less_in" | fill == "out2in"){ scale_fill_gradient(low = "#feb24c", high = "#f03b20") }
+    } + {
+      if(fill == "out_less_in" | fill == "out2in"){ labs(fill = if(fill == "out_less_in"){"Net Source (log)"} else if(fill == "out2in"){"Source Ratio"}) }
+    } +
   coord_sf() +
     theme_void() +
     theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
