@@ -9,7 +9,7 @@ format:
     code_download: yes
     latex_engine: pdflatex
 params:
-  county_fips: "17099"
+  county_fips: "39099"
 ---
 
 ```{r preamble, include = FALSE}
@@ -49,6 +49,8 @@ t <- call_tiger(tiger_year,
 
 county_name <- t$NAME[t$place == params$county_fips]
 state_name <- t$STATE[t$place == params$county_fips]
+
+rm(t)
 
 ```
 
@@ -260,8 +262,70 @@ $ifr = \mathbf{DBxi} / \mathbf{xi}$  = Industry Factor Ratio (ix1)
 $ifr \cdot \mathbf{x}$ = Industry Factor Supply 
 
 
-# RAS Trade Flows
+# RAS Trade Flows Sector
 
+```{r, include = FALSE}
+#benchmarking effect of impedance on RAS
+cbp_year = "2012"
+ilevel = "det"
+
+fs <- industry_factor_supply_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
+fd <- industry_factor_demand_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
+
+system.time(
+  rx1 <- ras_trade_lists(factor_supply = fs, factor_demand = fd)
+  )
+
+system.time(
+  test <- ras_trade_listsx(factor_supply = fs, factor_demand = fd)
+  )
+
+i = 1
+
+impedance_mat <- dprox_mat(tiger_year = year2tiger(cbp_year),
+                    boundary_limit = miles2meters(200))
+    diag(impedance_mat) <- 1
+impedance_mat =  gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+sprintf("%.64f", impedance_mat[1,2])
+
+
+
+
+x0 = (t(fs[i, , drop=F]) %*% fd[i, , drop=F])
+
+system.time(
+  r1 <- ras_trade_flows(x0 = x0,
+                        rs1 = fs[i, , drop=F], 
+                        cs1 = fd[i, , drop=F],
+                        verbose = TRUE,
+                        maxiter = 3)
+  )
+
+x0 = (t(fs[i, , drop=F]) %*% fd[i, , drop=F]) * (impedance_mat[colnames(fs), colnames(fd)])
+
+system.time(
+  rx <- ras_trade_flows(x0 = x0,
+                        rs1 = fs[i, , drop=F], 
+                        cs1 = fd[i, , drop=F],
+                        verbose = TRUE,
+                        maxiter = 3)
+  )
+
+
+  y <- intersect(
+    names(which(!is.na(rowSums(fd)) & 
+                !rowSums(fd) == 0 )), 
+    names(which(!is.na(rowSums(fs)) & 
+                !rowSums(fs) == 0 ))
+    )
+
+df <- lapply(file.path(find_rstudio_root_file(), "data", "robjs", "temp", y), readRDS)
+names(df) <- y
+
+```
+
+## Sector level, industries, xcross haul, no impedance
 ```{r}
 
 cbp_year = "2012"
@@ -271,6 +335,7 @@ impedance_mat = NULL
 #unique(ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = NULL
+crosshaul = TRUE
 
 df <- load_tradeflows(cbp_year = cbp_year,
                       ilevel = ilevel,
@@ -278,45 +343,42 @@ df <- load_tradeflows(cbp_year = cbp_year,
                       impedance_mat = impedance_mat,
                       subsectors = subsectors, 
                       impedance_call = impedance_call,
-                      verbose = TRUE)
-
-```
-
-```{r}
-sector = "FIRE"
-inbound2outbound_map(df, sector = sector)
-```
-
-```{r}
-# temp <- absorption_maximum_match(df[["11"]])
-sector = "11"
-inbound2outbound_map(df, sector = sector)
+                      crosshaul = crosshaul)
 ```
 
 
 ```{r}
-# 
-# temp <- call_imputed_tradeflows(cbp_year = "2012",
-#                                 ilevel = "det",
-#                                 industryflow = T,
-#                                 impedance_mat = NULL,
-#                                 subsectors = unique(ilevel_concord("det")[1])[1:13,],
-#                                 verbose = TRUE,
-#                                 totaled = TRUE)
-# 
-# inbound2outbound_map(temp)
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector)
 ```
 
 
-
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
 
 ```{r}
-sector = "11"
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
 central_place = params$county_fips
 export_flows = T
 censor_scale_lowerbound = 1
 
-place_trade_map(df = df,
+place_trade_map(df = Reduce('+', df),
                 sector = sector,
                 central_place = central_place,
                 export_flows = export_flows,
@@ -338,23 +400,17 @@ place_trade_map(df = df,
 
 ```
 
-
-
-
-
- 
-
-```{r }
+## Sector level, industries, no cross haul, no impedance
+```{r}
 
 cbp_year = "2012"
 ilevel = "sec"
 industryflow = TRUE
-impedance_mat =  gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
-                                    rms_width = miles2meters(200))
-impedance_call = "gaus200"
+impedance_mat = NULL
 #unique(ilevel_concord(ilevel)[1])
 subsectors = NULL
-
+impedance_call = NULL
+crosshaul = F
 
 df <- load_tradeflows(cbp_year = cbp_year,
                       ilevel = ilevel,
@@ -362,9 +418,422 @@ df <- load_tradeflows(cbp_year = cbp_year,
                       impedance_mat = impedance_mat,
                       subsectors = subsectors, 
                       impedance_call = impedance_call,
-                      verbose = TRUE)
+                      crosshaul = crosshaul)
+```
+
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
 
 ```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+## Sector level, industries, xcross haul, gauss impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "sec"
+industryflow = T
+impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = "gaus200"
+crosshaul = T
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+
+
+
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+## Sector level, industries, no cross haul, gauss impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "sec"
+industryflow = T
+impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = "gaus200"
+crosshaul = F
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+
+
+
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+# RAS Trade Flows Detail
+
+## Detail level, industries, xcross haul, no impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "det"
+industryflow = T
+impedance_mat = NULL
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = NULL
+crosshaul = TRUE
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector)
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+
+## Detail level, industries, no cross haul, no impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "det"
+industryflow = T
+impedance_mat = NULL
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = NULL
+crosshaul = F
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+## Detail level, industries, xcross haul, gauss impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "det"
+industryflow = T
+impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = "gaus200"
+crosshaul = T
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+
+
+
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+## Detail level, industries, no cross haul, gauss impedance
+```{r}
+
+cbp_year = "2012"
+ilevel = "det"
+industryflow = T
+impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+#unique(ilevel_concord(ilevel)[1])
+subsectors = NULL
+impedance_call = "gaus200"
+crosshaul = F
+
+df <- load_tradeflows(cbp_year = cbp_year,
+                      ilevel = ilevel,
+                      industryflow = industryflow,
+                      impedance_mat = impedance_mat,
+                      subsectors = subsectors, 
+                      impedance_call = impedance_call,
+                      crosshaul = crosshaul)
+
+
+
+```
+
+```{r}
+sector = NULL
+inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = NULL
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = Reduce('+', df),
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+
+```{r}
+geog_year = "2013"
+inner_join(call_geog(geog_year), 
+           absorption_maximum_match(Reduce('+', df)), 
+           by = "place") %>% clustmember_map()
+```
+
+```{r}
+inner_join(call_geog(geog_year), 
+           absorption_maximum_match(Reduce('+', df)), 
+           by = "place") %>% aqual_map()
+```
+
+```{r}
+# 
+# temp <- call_imputed_tradeflows(cbp_year = "2012",
+#                                 ilevel = "det",
+#                                 industryflow = T,
+#                                 impedance_mat = NULL,
+#                                 subsectors = unique(ilevel_concord("det")[1])[1:13,],
+#                                 verbose = TRUE,
+#                                 totaled = TRUE)
+# 
+# inbound2outbound_map(temp)
+```
+
+
+
 
 ```{r}
 impedance_distribution_map(decay_function = "gaus", 
@@ -400,24 +869,6 @@ place_trade_map(df = df,
                 censor_scale_lowerbound = censor_scale_lowerbound)
 
 ```
-
-
-
-```{r}
-
-sector = NULL
-central_place = params$county_fips
-export_flows = T
-censor_scale_lowerbound = 1
-
-place_trade_map(df = Reduce('+', df),
-                sector = sector,
-                central_place = central_place,
-                export_flows = export_flows,
-                censor_scale_lowerbound = censor_scale_lowerbound)
-
-```
-
 
 
 
