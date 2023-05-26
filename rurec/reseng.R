@@ -19,6 +19,9 @@ root_dir <- rprojroot::find_rstudio_root_file()
 cache <- function(f, filename) {
   wrapper <- function(...) {
     
+    # PROBLEM! does not work if optional argument is not given
+    # try (cache(function(x, y=1) {}))(1)
+    
     # create unevaluated function call
     c0 <- rlang::call2(f, ...)
     # call with arguments specified by their full names
@@ -30,13 +33,13 @@ cache <- function(f, filename) {
     
     
     if (file.exists(filename)) {
-      print(paste("read from cache", filename))
+      rlog::log_debug(paste("read from cache", filename))
       res <- readRDS(filename)
     } else {
       res <- f(...)
       dir.create(dirname(filename), showWarnings = FALSE, recursive = TRUE)
       saveRDS(res, filename)
-      print(paste("saved to cache", filename))
+      rlog::log_debug(paste("saved to cache", filename))
     }
     return(res)
   }
