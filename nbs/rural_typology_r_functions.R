@@ -40,6 +40,7 @@ library(magick)
 library(tmaptools)
 
 library(parallel)
+library(igraph)
 
 
 # Display start time
@@ -64,11 +65,15 @@ if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {
   dir.create(file.path(find_rstudio_root_file(), "data", "robjs"))
 }
 
+if (!file.exists(file.path(find_rstudio_root_file(), "data", "raw"))) {
+  dir.create(file.path(find_rstudio_root_file(), "data", "raw"))
+}
+
 # Function to download  data
 data_getr <- function(FileURL,
                       DestDir){
   local({
-    destfile <- FileURL %>% basename() %>% path(DestDir, .)
+    destfile <- FileURL %>% basename() %>% file.path(DestDir, .)
     if (!file.exists(destfile)) {
       download.file(url=FileURL, destfile=destfile, quiet=TRUE, overwrite = TRUE)
     }
@@ -85,7 +90,7 @@ data_zipr <- function(ZipURL,
       dir.create(zip_dir)
     }
     
-    DestFile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% path(DestDir, ., ext = FileExt)
+    DestFile <- ZipURL %>% basename() %>% file_path_sans_ext() %>% file.path(DestDir, ., ext = FileExt)
     ZipDest <- ZipURL %>% basename() %>% file_path_sans_ext() %>% file.path(zip_dir,  .)
     if (!file.exists(ZipDest)) {
       download.file(url=ZipURL, destfile=ZipDest, quiet=TRUE)
@@ -245,6 +250,8 @@ ilevel_concord <- function(ilevel = c("det", "sum", "sec"), ...){
   if(ilevel == "sum"){
     df <- x %>% select(SUMMARY, NAICS) 
     df$NAICS <- substr(df$NAICS, 1,3)
+    df$SUMMARY[df$NAICS == "336"] = "336"
+    df$SUMMARY[df$NAICS == "541"] = "541"
     df <- df[!duplicated(df), ]
     rownames(df) <- 1:nrow(df)
   }
@@ -520,8 +527,6 @@ call_geog <- function(year,
   return(df)
 }
 
-
-
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
 place_industry_economy_long <- function(cbp_scale = c("county", "state", "us"), ...){
   cbp_scale <- match.arg(cbp_scale)
@@ -597,35 +602,18 @@ call_supply_table <- function(bea_year,
   return(df)
 }
 
-############ Derive the industry labor shares by year and industry scale
-labor_share <- function(...){
-  df <- call_use_table(...)
-  ext <- grep("^(F|T)[0-9]", colnames(df), value = TRUE)
-  df <- df[, !colnames(df) %in% ext]
-  lcv <- grep("^V001", rownames(df), value = TRUE)
-  df <- (df[lcv, , drop = FALSE] / df["T018", , drop = FALSE]) 
-  rownames(df) <- "LaborShare"
-  return(df)
-}
-
-############ Derive the Factor Ratio of National Commodity Factor Demand to National Gross Commodity Output
-factor_ratio <- function(bea_year,
-                         ilevel = c("det", "sum", "sec"),
-                         ...){
-  ilevel <- match.arg(ilevel)
-  ut <- call_use_table(bea_year, ilevel = ilevel, ...)
-  st <- call_supply_table(bea_year, ilevel = ilevel, ...)
-  #df <- ut[1:(which(rownames(ut) == "T005")-1),"T001", drop=F]/st[1:(nrow(st)-1),"T007", drop=F]
-  df <- ut[1:(which(rownames(ut) == "T005")-1),"T001", drop=F]/st[1:(nrow(st)-1),"T016", drop=F]
-  colnames(df) <- "factor_ratio"
-  if(ilevel == "det"){
-    ind_names <- rownames(df)[!rownames(df) %in%  c(grep("^23", rownames(df), value = TRUE), "4200ID")] %>% append("23", after = 24)
-    cn <- sum(ut[grep("^23", rownames(ut), value = TRUE), "T001"]) / sum(st[grep("^23", rownames(ut), value = TRUE), "T007"]) %>% 
-      matrix(dimnames = list(c("23"), c("factor_ratio")) ) 
-    nc <- df[!grepl("^23", rownames(df)), , drop = FALSE]  
-    df <- rbind(cn, nc)[ind_names, , drop=F]
-  }
-  return(df)
+#### Add specified rows and columns of a vector matrix
+vector_collapse <- function(vector, 
+                            collapse_names, 
+                            new_name){
+  vec <- vector
+  cl <- collapse_names
+  nn <- new_name
+  vec <- cbind(rowSums(vec[, which(colnames(vec) %in% cl), drop=F]), vec[, which(!colnames(vec) %in% cl), drop=F ] )
+  colnames(vec)[1] <- nn
+  cn <- colnames(vector)[!colnames(vector) %in% cl] %>% append(nn, after = (min(which(colnames(vector) %in% cl)) - 1))
+  vec <- vec[,cn, drop=F] 
+  return(vec)
 }
 
 
@@ -637,10 +625,11 @@ payroll_share <- function(cbp_year,
   indout <- year2bea(cbp_year, ilevel, ...) %>% 
     call_use_table(ilevel, ...) %>% 
     .["T018", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE]*1000000
+  if(ilevel == "sum"){
+    indout <-  vector_collapse(indout, grep("^336", colnames(indout), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+  }
   if(ilevel == "det"){
-    cn <- indout %>% .[, grep("^23", colnames(.), value = TRUE)] %>% sum() %>% matrix(dimnames = list(rownames(indout), c("23")) ) 
-    nc <- indout %>% .[, !grepl("^23", colnames(.)), drop = FALSE]  
-    indout <- cbind(cn, nc) 
+    indout <-  vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23")
   }
   conc <- ilevel_concord(ilevel = ilevel, ...)
   cbp_dat <- call_cbp(..., cbp_year = cbp_year, cbp_scale = "us")
@@ -762,6 +751,24 @@ total_output <- function (cbp_year,
   return(df)
 }
 
+#### Add specified rows and columns of a matrix
+matrix_collapse <- function(matrix, 
+                            collapse_names, 
+                            new_name){
+  mat <- matrix
+  cl <- collapse_names
+  nn <- new_name
+  mat <- rbind(colSums(mat[which(rownames(mat) %in% cl), ]), mat[which(!rownames(mat) %in% cl), ] )
+  mat <- cbind(rowSums(mat[, which(colnames(mat) %in% cl)]), mat[, which(!colnames(mat) %in% cl) ] )
+  rownames(mat)[1] <- nn
+  colnames(mat)[1] <- nn
+    rn <- rownames(matrix)[!rownames(matrix) %in% cl] %>% append(nn, after = (min(which(rownames(matrix) %in% cl)) - 1))
+    cn <- colnames(matrix)[!colnames(matrix) %in% cl] %>% append(nn, after = (min(which(colnames(matrix) %in% cl)) - 1))
+    mat <- mat[rn, cn] 
+  return(mat)
+}
+
+
 #### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
 b_matrix <- function(bea_year,
                      ilevel = c("det", "sum", "sec"),
@@ -776,27 +783,22 @@ b_matrix <- function(bea_year,
   df[is.na(df)] = 0
   u <- df[1:(which(rownames(df) == "T005")-1), 1:(which(colnames(df) == "T001")-1)] %>% as.matrix()
   x <- df["T018", 1:(which(colnames(df) == "T001")-1)]
+  if(ilevel == "sum"){ 
+    u <- matrix_collapse(u, grep("^336", colnames(u), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    x <- vector_collapse(x, grep("^336", colnames(x), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+  }
   if(ilevel == "det"){ 
-    con <- grep("^23", colnames(u), value = TRUE)
-    cm <- matrix(sum(u[con,con]), 
-                 dimnames = list(c("23"), c("23")))
-    cr <- t(matrix(colSums(u[con, ]), 
-                   dimnames = list(colnames(u), c("23")) ))
-    cc <- matrix(rowSums(u[, con]), 
-                 dimnames = list(rownames(u), c("23"))) 
-    
-    com_names <- rownames(u)[!rownames(u) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    ind_names <- colnames(u)[!colnames(u) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    u <- cbind(rbind(cr, u), rbind(cm, cc )) 
+    u <- matrix_collapse(u, grep("^23", colnames(u), value = TRUE), "23") 
+    com_names <- rownames(u)[!rownames(u) %in% c("4200ID")]
+    ind_names <- colnames(u)[!colnames(u) %in% c("4200ID")]
     u <- u[com_names, ind_names] 
-    x <- cbind(matrix(sum(x[con]), dimnames = list(c("T018"), c("23"))), x[colnames(x)[!colnames(x) %in% con]])
+    x <- vector_collapse(x, grep("^23", colnames(x), value = TRUE), "23")
     x <- x[ind_names] 
   }
   df <- u %*% diag(1/x)
   colnames(df) <- colnames(x)
   return(df)
 }
-
 
 ####Commodity Composition of Industry Outputs
 c_matrix <- function(bea_year,
@@ -808,20 +810,16 @@ c_matrix <- function(bea_year,
   df[is.na(df)] = 0
   ind_supply <- df[nrow(df), 1:(which(colnames(df) == "T007")-1), drop=F]
   supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
-  
+  if(ilevel == "sum"){ 
+    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    ind_supply <- vector_collapse(ind_supply, grep("^336", colnames(ind_supply), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+  }
   if(ilevel == "det"){ 
-    con <- grep("^23", colnames(supply_mat), value = TRUE)
-    cm <- matrix(sum(supply_mat[con,con]), 
-                 dimnames = list(c("23"), c("23")))
-    cr <- t(matrix(colSums(supply_mat[con, ]), 
-                   dimnames = list(colnames(supply_mat), c("23")) ))
-    cc <- matrix(rowSums(supply_mat[, con]), 
-                 dimnames = list(colnames(supply_mat), c("23"))) 
-    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    supply_mat <- cbind(rbind(cr, supply_mat), rbind(cm, cc )) 
+    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") 
+    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
+    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
     supply_mat <- supply_mat[com_names, ind_names] 
-    ind_supply <- cbind(matrix(sum(ind_supply[con]), dimnames = list(c("T017"), c("23"))), ind_supply[colnames(ind_supply)[!colnames(ind_supply) %in% con]])
+    ind_supply <- vector_collapse(ind_supply, grep("^23", colnames(ind_supply), value = TRUE), "23")
     ind_supply <- ind_supply[ind_names] 
   }
   df <- supply_mat %*% diag(1/ind_supply)
@@ -844,20 +842,16 @@ d_matrix <- function(bea_year,
   df[is.na(df)] = 0
   com_supply <- df[1:(nrow(df)-1), "T007", drop=F] %>% as.matrix()
   supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
-  
+  if(ilevel == "sum"){ 
+    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    com_supply <- vector_collapse(t(com_supply), grep("^336", colnames(t(com_supply)), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")  %>% t()
+  }
   if(ilevel == "det"){ 
-    con <- grep("^23", rownames(supply_mat), value = TRUE)
-    cm <- matrix(sum(supply_mat[con,con]), 
-                 dimnames = list(c("23"), c("23")))
-    cr <- t(matrix(colSums(supply_mat[con, ]), 
-                   dimnames = list(colnames(supply_mat), c("23")) ))
-    cc <- matrix(rowSums(supply_mat[, con]), 
-                 dimnames = list(colnames(supply_mat), c("23"))) 
-    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c(con, "4200ID")] %>% append("23", after = 24)
-    supply_mat <- cbind(rbind(cr, supply_mat), rbind(cm, cc )) 
+    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") 
+    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
+    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
     supply_mat <- supply_mat[com_names, ind_names] 
-    com_supply <- rbind(matrix(sum(com_supply[con,]), dimnames = list(c("23"), c("T007"))), com_supply[rownames(com_supply)[!rownames(com_supply) %in% con], , drop=F])
+    com_supply <- t(vector_collapse(t(com_supply), grep("^23", colnames(t(com_supply)), value = TRUE), "23"))
     com_supply <- com_supply[com_names, , drop=F] 
   }
   df <- t(supply_mat) %*% diag(as.vector(1/com_supply))
@@ -869,40 +863,6 @@ d_matrix <- function(bea_year,
   }
   return(df)
 }
-
-####Commodity Output Supply Ratio - ratio of domestic total commodity output to total product supply
-cos_ratio <- function(bea_year,
-                      ilevel = c("det", "sum", "sec"),
-                      ...){
-  ilevel <- match.arg(ilevel)
-  #bea_year <- year2bea(cbp_year, ilevel, ...)
-  sup <- bea_io$get_sup(strtoi(bea_year), ilevel, F)
-  sup[is.na(sup)] = 0
-  com_supply <- sup[1:(nrow(sup)-1), "T007", drop = F] %>% as.matrix()
-  pro_supply <- sup[1:(nrow(sup)-1), "T016", drop = F] %>% as.matrix()
-  if(ilevel == "det"){ 
-    con <- grep("^23", rownames(sup), value = TRUE)
-    com_names <- rownames(sup)[1:(nrow(sup)-1)][!rownames(sup)[1:(nrow(sup)-1)] %in% c(con, "4200ID")] %>% append("23", after = 24)
-    com_supply <- rbind(matrix(sum(com_supply[con,]), dimnames = list(c("23"), c("T007"))), com_supply[rownames(com_supply)[!rownames(com_supply) %in% con], , drop=F])
-    com_supply <- com_supply[com_names, , drop=F] 
-    pro_supply <- rbind(matrix(sum(pro_supply[con,]), dimnames = list(c("23"), c("T007"))), pro_supply[rownames(pro_supply)[!rownames(pro_supply) %in% con], , drop=F])
-    pro_supply <- pro_supply[com_names, , drop=F] 
-  }
-  df <- pro_supply / com_supply
-  colnames(df) <- "cos_ratio"
-  #temp fix needs correction in rurec.pubdata.bea_io module
-  if (ilevel == "sec") {
-    rownames(df) <- c(colnames(sup)[1:(which(colnames(sup) == "T007")-1)], "Used", "Other")
-  }
-  return(df)
-}
-
-
-
-
-
-
-
 
 # Aggregate industry output of each CBSA members in a cluster
 cbsa_aggregate_industry_output <- function(cbp_year,
@@ -926,7 +886,7 @@ cbsa_aggregate_industry_output <- function(cbp_year,
 
 #Need to adjust to not use tiger
 ############ Derive clean Output Matrix 
-total_output_tidy <- function(cbp_year,
+industry_output_tidy_matrix <- function(cbp_year,
                               cbsa_clust = FALSE, 
                               ...){
   t <- year2tiger(cbp_year, ...)  %>% call_tiger(...)
@@ -1045,6 +1005,7 @@ normalized_absorption_share <- function(sas_matrix,
   return(df)
 }
 
+#need to combine row and column in same output 
 ############ Row-wise Absorption Potential Maximum and Match
 absorption_maximum_match <- function(absorption_matrix, 
                                      threshold = .05,
@@ -1157,7 +1118,7 @@ commodity_factor_demand_tidy_matrix <- function(cbp_year,
                                  ...){
   ilevel <- match.arg(ilevel)
   bea_year <- year2bea(cbp_year, ilevel, ...)
-  o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  o <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, ...)
   d <- b_matrix(bea_year, ilevel, ...)[, rownames(o)]
   df <- industry_input(d, o)
   return(df)
@@ -1169,7 +1130,7 @@ industry_factor_demand_tidy_matrix <- function(cbp_year,
                                                 ...){
   ilevel <- match.arg(ilevel)
   bea_year <- year2bea(cbp_year, ilevel, ...)
-  o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  o <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, ...)
   df <- bea_io$get_sup(strtoi(bea_year), ilevel, F)[,"T007", drop=F]
   df[is.na(df)] = 0
   rownames(df)[df == 0]
@@ -1188,7 +1149,7 @@ commodity_output_tidy_matrix <- function(cbp_year,
   ilevel <- match.arg(ilevel)
   bea_year <- year2bea(cbp_year, ilevel, ...)
   cm <- c_matrix(bea_year, ilevel, ...)
-  tot <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  tot <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, ...)
   df <- commodity_output(cm[, rownames(tot)], tot)
 }
 
@@ -1211,7 +1172,7 @@ industry_region_factor_ratio <- function(cbp_year,
                                           ...){
   ilevel <- match.arg(ilevel)
   fd <- industry_factor_demand_tidy_matrix(cbp_year, ilevel, ...)
-  io <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  io <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, ...)
   df <- rowSums(fd)/rowSums(io) %>% as.matrix()
   colnames(df) <- "factor_ratio"
   
@@ -1233,7 +1194,7 @@ commodity_factor_supply_tidy_matrix <- function(cbp_year,
 industry_factor_supply_tidy_matrix <- function(cbp_year,
                                                 ilevel = c("det", "sum", "sec"),
                                                 ...){
-  io <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, ...)
+  io <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, ...)
   fr <- industry_region_factor_ratio(cbp_year, ilevel, ...)
   df <- diag(as.vector(fr)) %*% io
   rownames(df) <- rownames(fr)
@@ -1448,28 +1409,40 @@ absorption_matrix <- function(cbp_year,
                               ilevel = c("det", "sum", "sec"),
                               cbsa_clust = FALSE, 
                               normalized = TRUE,
-                              impedance = NULL, 
+                              industryflow = TRUE,
+                              impedance = NULL,
+                              factor_supply = TRUE, 
                               data_dir = file.path("data", "robjs"),
                               ...){
   ilevel <- match.arg(ilevel)
-  ag_year <- year2agcensus(cbp_year, ...)
-  bea_year <- year2bea(cbp_year, ilevel, ...)
   cbsa_year <- year2cbsa(cbp_year, ...)  %>% suppressWarnings() 
-  tiger_year <- year2tiger(cbp_year, ...) %>% suppressWarnings()
-  o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
-  d <- b_matrix(bea_year, ilevel, ...)[, rownames(o)]
-  i <- industry_input(d, o)
-  oc <- c_matrix(bea_year, ilevel, ...)[, rownames(o)]
-  co <- commodity_output(oc, o)
-  sasf <- paste0("sas", "_", match.arg(ilevel),"class", "_", cbp_year, "cbp", "_", bea_year, "bea", "_", ag_year, "ag", "_", tiger_year, "tiger", "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa")
+  if(isTRUE(industryflow)){
+    fd <- industry_factor_demand_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    if(isTRUE(factor_supply)){
+      out <- industry_factor_supply_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    }else{
+      out <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    }
+  }else{
+    fd <- commodity_factor_demand_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    if(isTRUE(factor_supply)){
+      out <- commodity_factor_supply_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    }else{
+      out <- commodity_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    }
+  }
+  y <- names(which(!is.na(rowSums(out)) & !rowSums(out) == 0))
+  fd <- fd[y, , drop=F]
+  out <- out[y, , drop=F]
+  sasf <- paste0("sas", "_", match.arg(ilevel),"class", "_", cbp_year, "year", "_", if(isTRUE(industryflow)){"industries"}else{"commodities"}, "_", if(isTRUE(cbsa_clust)){cbsa_year}else{"NA"}, "cbsa","_", if(isTRUE(factor_supply)){"factor"}else{"gross"})
   if (file.exists(file.path(find_rstudio_root_file(), data_dir, sasf) ) ){ 
     df <- readRDS(file.path(find_rstudio_root_file(), data_dir, sasf))
   } else {
-    df <- stacked_absorption_share(net_input_supply(co, i), net_input_demand(co, i))
+    df <- stacked_absorption_share(net_input_supply(out, fd), net_input_demand(out, fd))
     saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, sasf) )
   }
   if(isTRUE(normalized)){
-    df <- normalized_absorption_share(df, net_input_supply(co, i))
+    df <- normalized_absorption_share(df, net_input_supply(out, fd))
   }
   if(!is.null(impedance)){
     df <- df * impedance[colnames(df), rownames(df)]
@@ -1490,6 +1463,8 @@ connectedness <- function (cbp_year,
   return(df)
 }
 
+
+### need to update with C_matrix/B_matrix capability and adjust for factor supply /demand /RAS and "ilevel_concord"/"beacode2description" function 
 ############ industry (output, input, nid, nis) distributions by county
 industry_distribution <- function(industry_aggregate_class = c("sec", "sum", "det"),
                                   cbp_year,
@@ -1684,6 +1659,7 @@ cluster_spatial_connectedness <- function (cbp_year,
   return(df)
 }
 
+### need to update with C_matrix B_matrix capability and adjust for factor supply /demand /RAS
 ############ Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
 one_hierarchical_connectedness <- function(cbp_year,
                                            ilevel = c("det", "sum", "sec"),
@@ -1702,7 +1678,7 @@ one_hierarchical_connectedness <- function(cbp_year,
   if (file.exists(file.path(find_rstudio_root_file(), data_dir, sasf) ) ){ 
     df <- readRDS(file.path(find_rstudio_root_file(), data_dir, sasf))
   } else {
-    o <- total_output_tidy(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+    o <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
     d <- call_direct_requirements(bea_year, ilevel, ...)
     if(ilevel == "det"){ 
       con <- grep("^23", colnames(d), value = TRUE)
@@ -2843,6 +2819,108 @@ hierarchy_of_neighbors_map <- function(year,
                                                border-radius:5px;") ))
 }
 
+
+
+############ Map SNA metrics from county-by-county absorption matrix
+sna_value_map <- function(df,
+                          metric = c("eigen_centrality", 
+                                     "alpha_centrality", 
+                                     "closeness", 
+                                     "harmonic_centrality", 
+                                     "hub_score", 
+                                     "authority_score", 
+                                     "page_rank", 
+                                     "strength"),
+                          normalize = c("none", "row", "column"),
+                          scale = FALSE,
+                          mode = c("total", "in", "out", "all"),
+                          geog_year = "2013",
+                          ...){
+  geog <- call_geog(geog_year)
+  metric <- match.arg(metric)
+  mode <- match.arg(mode)
+  normalize <- match.arg(normalize)
+  if(normalize == "row"){
+    df <- df %>% apply(1, rescale) %>% t()
+  }
+  if(normalize == "column"){
+    df <- df %>% apply(2, rescale)
+  }
+  df <- df %>% graph_from_adjacency_matrix(weighted = TRUE,
+                                           mode = "directed")
+  if(metric == "eigen_centrality"){
+    df <- df %>% eigen_centrality(directed = TRUE, scale = scale) %>% .[[1]]
+  }
+  if(metric == "alpha_centrality"){
+    df <- df %>% alpha_centrality(loops = TRUE)
+  }
+  if(metric == "closeness"){
+    df <- df %>% closeness(mode = mode)
+  }
+  if(metric == "harmonic_centrality"){
+    df <- df %>% harmonic_centrality()
+  }
+  if(metric == "hub_score"){
+    df <- df %>% hub_score(scale = scale) %>% .[[1]]
+  }
+  if(metric == "authority_score"){
+    df <- df %>% authority_score(scale = scale) %>% .[[1]]
+  }
+  if(metric == "page_rank"){
+    df <- df %>% page_rank(directed = TRUE) %>% .[[1]]
+  }
+  if(metric == "strength"){
+    df <- df %>% strength(mode = mode)
+  }
+  df <- as_tibble(df, rownames = "place") %>% 
+    join_space_with_connectedness(., geog, ...)
+  g <- ggplot(df) +
+    geom_sf_interactive(aes(fill = (round(value, 5)),
+                            tooltip = if("STATE" %in% names(df)){
+                              glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round(value, 5)}")
+                            }else{
+                              glue("{NAME}\nFIPS: {place}\nValue: {round(value, 5)}")
+                            },
+                            data_id = place),
+                        color = NA) +
+    guides(alpha = "none") +
+    coord_sf() +
+    theme_void() +
+    scale_fill_viridis(direction = -1) +
+    labs(fill = 
+         if(metric == "eigen_centrality"){"Eigen Centrality"} else 
+           if(metric == "alpha_centrality"){"Alpha Centrality"} else 
+             if(metric == "closeness"){"Closeness"} else 
+               if(metric == "harmonic_centrality"){"Harmonic Centrality"} else 
+                 if(metric == "hub_score"){"Hub Score"} else 
+                   if(metric == "authority_score"){"Authority Score"} else 
+                     if(metric == "page_rank"){"Page Rank"} else 
+                       if(metric == "strength"){"Strength"}
+         ) +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+          legend.key.size = unit(.2, "cm"),
+          legend.title = element_text(size = rel(0.5)),
+          legend.text = element_text(size = rel(0.5)),
+          legend.position = c(0.9, 0.3),
+          plot.caption = element_text(hjust = 0.9, size = rel(0.5)) )
+
+  girafe(ggobj = g,
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;",
+                        use_cursor_pos = FALSE,
+                        offx = 0, offy = 330),
+           opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
+}
 
 ################################### 
 ################################### 
