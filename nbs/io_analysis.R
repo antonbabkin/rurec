@@ -36,9 +36,10 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-2, maxiter = 1000, verbose =
     # scale cols
     x1 <- matrix(cs / colSums(x1), nr, nc, byrow = TRUE) * x1
     rmse <- sqrt(mean((x1 - x)^2))
+    #rmse <- max(abs(rowSums(x1) - rs) + abs(colSums(x1) - cs))
+    x <- x1
     if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, "\n"))
     if (rmse < tol) break
-    x <- x1
   }
   if (i == maxiter) warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.\n")
   if (verbose) cat(paste("Number of iterations:", i, "RMSE:", rmse, "\n"))

@@ -1,0 +1,314 @@
+
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+```
+
+```{r}
+
+cbp_comb <- expand_grid(year = 1986:2020,
+                        geog_scale = c("national", "state", "county"),
+                        data_type = c("employment_count", "quarter_payroll", "annual_payroll", "establishment_count"))
+
+temp <- c()
+for(x in c("us", "state", "county")){
+  for(y in 1986:2020){
+   temp <- rbind(temp, cbind("geog_scale" = x, "year" = y, "NAICS_count" = length(unique(cbp$get_df(x, as.integer(y))$industry))) )
+  }
+}
+
+
+bea_comb <- expand_grid(year = 1997:2021,
+                   sector_level = c("sector", "summary", "detail")) %>% 
+  .[.$sector_level %in% c("sector", "summary") | .$year %in% c("2007", "2012"),]
+
+
+io_tables = c("supply_matrix", "use_matrix", "make_matrix", "total_matrix", "direct_matrix", "b_matrix", "c_matrix", "d_matrix")
+
+rurec_metrics = c("nis", "nid", "absorption", "normalized")
+
+agcensus_comb <- expand_grid(year = c(2002, 2007, 2012, 2017),
+                             geog_scale = c("national", "state", "county"))
+                        
+geog_comb <- expand_grid(year = c(2000, 2007:2020),
+                         scale = c("20m", "500k", "5m"))
+
+master_comb <- expand_grid(cbp_comb, 
+                           bea_comb,
+                           agcensus_comb,
+                           geog_comb,
+                           econ_metric = c("gross_output", "factor_demand", "factor_supply", "final_demand", "value_added", "payroll_share"),
+                           sector_class = c("industry", "commodity"),
+                           geog_unit = c("county", "CBSA"))
+
+
+
+```
+
+```{r}
+cbp_year = "2012"
+ilevel = "det"
+
+impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
+                                    rms_width = miles2meters(200))
+
+  fd <- industry_factor_demand_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
+  go <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
+  fs <- industry_factor_supply_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
+  
+  y <- names(which(!is.na(rowSums(fs)) & !rowSums(fs) == 0 ))
+
+  df_a <- normalized_absorption_share(stacked_absorption_share(net_input_supply(go, fd), net_input_demand(go, fd)), net_input_supply(go, fd)) 
+  df_a <- df_a * impedance_mat[rownames(df_a), colnames(df_a)]
+  df_b <- normalized_absorption_share(stacked_absorption_share(net_input_supply(fs[y, , drop=F], fd[y, , drop=F]), net_input_demand(fs[y, , drop=F], fd[y, , drop=F])), net_input_supply(fs[y, , drop=F], fd[y, , drop=F])) 
+  df_b <- df_b * impedance_mat[rownames(df_b), colnames(df_b)]
+  df_c <- Reduce('+', load_tradeflows(cbp_year = cbp_year, ilevel = ilevel) ) 
+  df_b <- df_b * impedance_mat[rownames(df_b), colnames(df_b)]
+  
+```
+
+```{r}
+  
+  tempr <- list()
+for(i in 1:10){
+  tempr[[i]] <- as.matrix(apply(df_a, 1, function(x){sort(x, decreasing = T)[i] }))
+}
+
+tempc <- list()
+for(i in 1:10){
+  tempc[[i]] <- as.matrix(apply(df_a, 2, function(x){sort(x, decreasing = T)[i] }))
+}
+
+      abs_a <- cbind(place = rownames(df_a), 
+                     match_out_1 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[1]])})],
+                      match_out_2 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[2]])})],
+                      match_out_3 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[3]])})],
+                      match_out_4 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[4]])})],
+                      match_out_5 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[5]])})],
+                      match_out_6 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[6]])})],
+                      match_out_7 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[7]])})],
+                      match_out_8 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[8]])})],
+                      match_out_9 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[9]])})],
+                      match_out_10 = colnames(df_a)[apply(df_a, 1, function(x){which(x %in% tempr[[10]])})],
+                     match_in_1 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[1]])})],
+                      match_in_2 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[2]])})],
+                      match_in_3 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[3]])})],
+                      match_in_4 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[4]])})],
+                      match_in_5 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[5]])})],
+                      match_in_6 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[6]])})],
+                      match_in_7 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[7]])})],
+                      match_in_8 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[8]])})],
+                      match_in_9 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[9]])})],
+                      match_in_10 = rownames(df_a)[apply(df_a, 2, function(x){which(x %in% tempc[[10]])})]
+                     )
+      
+      
+        
+  tempr <- list()
+for(i in 1:10){
+  tempr[[i]] <- as.matrix(apply(df_b, 1, function(x){sort(x, decreasing = T)[i] }))
+}
+
+tempc <- list()
+for(i in 1:10){
+  tempc[[i]] <- as.matrix(apply(df_b, 2, function(x){sort(x, decreasing = T)[i] }))
+}
+
+      abs_b <- cbind(place = rownames(df_b), 
+                     match_out_1 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[1]])})],
+                      match_out_2 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[2]])})],
+                      match_out_3 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[3]])})],
+                      match_out_4 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[4]])})],
+                      match_out_5 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[5]])})],
+                      match_out_6 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[6]])})],
+                      match_out_7 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[7]])})],
+                      match_out_8 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[8]])})],
+                      match_out_9 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[9]])})],
+                      match_out_10 = colnames(df_b)[apply(df_b, 1, function(x){which(x %in% tempr[[10]])})],
+                     match_in_1 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[1]])})],
+                      match_in_2 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[2]])})],
+                      match_in_3 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[3]])})],
+                      match_in_4 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[4]])})],
+                      match_in_5 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[5]])})],
+                      match_in_6 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[6]])})],
+                      match_in_7 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[7]])})],
+                      match_in_8 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[8]])})],
+                      match_in_9 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[9]])})],
+                      match_in_10 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[10]])})]
+                     )
+      
+      
+              
+  tempr <- list()
+for(i in 1:10){
+  tempr[[i]] <- as.matrix(apply(df_c, 1, function(x){sort(x, decreasing = T)[i] }))
+}
+
+tempc <- list()
+for(i in 1:10){
+  tempc[[i]] <- as.matrix(apply(df_c, 2, function(x){sort(x, decreasing = T)[i] }))
+}
+
+      abs_c <- cbind(place = rownames(df_c), 
+                     match_out_1 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[1]])})],
+                      match_out_2 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[2]])})],
+                      match_out_3 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[3]])})],
+                      match_out_4 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[4]])})],
+                      match_out_5 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[5]])})],
+                      match_out_6 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[6]])})],
+                      match_out_7 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[7]])})],
+                      match_out_8 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[8]])})],
+                      match_out_9 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[9]])})],
+                      match_out_10 = colnames(df_c)[apply(df_c, 1, function(x){which(x %in% tempr[[10]])})],
+                     match_in_1 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[1]])})],
+                      match_in_2 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[2]])})],
+                      match_in_3 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[3]])})],
+                      match_in_4 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[4]])})],
+                      match_in_5 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[5]])})],
+                      match_in_6 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[6]])})],
+                      match_in_7 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[7]])})],
+                      match_in_8 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[8]])})],
+                      match_in_9 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[9]])})],
+                      match_in_10 = rownames(df_c)[apply(df_c, 2, function(x){which(x %in% tempc[[10]])})]
+                     )
+
+      colnames(abs_a)[2:21] <- paste(colnames(abs_a)[2:21], "a", sep = '.')
+      colnames(abs_b)[2:21] <- paste(colnames(abs_b)[2:21], "b", sep = '.')
+      colnames(abs_c)[2:21] <- paste(colnames(abs_c)[2:21], "c", sep = '.')
+
+df <- inner_join(inner_join(as.data.frame(abs_a), as.data.frame(abs_b), by = "place"), as.data.frame(abs_c), by = "place")
+
+```
+
+```{r}
+
+barplot(table(df$match_out_1.a == df$match_out_1.b))
+barplot(table(df$match_out_1.a == df$match_out_1.c))
+barplot(table(df$match_out_1.b == df$match_out_1.c))
+
+barplot(table(df$match_in_1.a == df$match_in_1.b))
+barplot(table(df$match_in_1.a == df$match_in_1.c))
+barplot(table(df$match_in_1.b == df$match_in_1.c))
+
+```
+
+```{r}
+
+
+a_b <- list()
+for(i in 1:dim(df)[1]){
+  a_b[[i]] <- intersect(cbind(df$match_out_1.a, df$match_out_2.a, df$match_out_3.a, df$match_out_4.a)[i,] , cbind(df$match_out_1.b, df$match_out_2.b, df$match_out_3.b, df$match_out_4.b)[i,]) %>% length()
+}    
+a_b <- as.data.frame(t(data.frame(a_b)))
+colnames(a_b) <- "a_b"
+ggplot(a_b, aes(x=a_b)) + geom_bar()
+a_c <- list()
+for(i in 1:dim(df)[1]){
+  a_c[[i]] <- intersect(cbind(df$match_out_1.a, df$match_out_2.a, df$match_out_3.a, df$match_out_4.a)[i,] , cbind(df$match_out_1.c, df$match_out_2.c, df$match_out_3.c, df$match_out_4.c)[i,]) %>% length()
+}    
+a_c <- as.data.frame(t(data.frame(a_c)))
+colnames(a_c) <- "a_c"
+ggplot(a_c, aes(x=a_c)) + geom_bar()
+b_c <- list()
+for(i in 1:dim(df)[1]){
+  b_c[[i]] <- intersect(cbind(df$match_out_1.b, df$match_out_2.b, df$match_out_3.b, df$match_out_4.b)[i,] , cbind(df$match_out_1.c, df$match_out_2.c, df$match_out_3.c, df$match_out_4.c)[i,]) %>% length()
+}    
+b_c <- as.data.frame(t(data.frame(b_c)))
+colnames(b_c) <- "b_c"
+ggplot(b_c, aes(x=b_c)) + geom_bar()
+
+
+a_b <- list()
+for(i in 1:dim(df)[1]){
+  a_b[[i]] <- intersect(cbind(df$match_in_1.a, df$match_in_2.a, df$match_in_3.a, df$match_in_4.a)[i,] , cbind(df$match_in_1.b, df$match_in_2.b, df$match_in_3.b, df$match_in_4.b)[i,]) %>% length()
+}    
+a_b <- as.data.frame(t(data.frame(a_b)))
+colnames(a_b) <- "a_b"
+ggplot(a_b, aes(x=a_b)) + geom_bar()
+a_c <- list()
+for(i in 1:dim(df)[1]){
+  a_c[[i]] <- intersect(cbind(df$match_in_1.a, df$match_in_2.a, df$match_in_3.a, df$match_in_4.a)[i,] , cbind(df$match_in_1.c, df$match_in_2.c, df$match_in_3.c, df$match_in_4.c)[i,]) %>% length()
+}    
+a_c <- as.data.frame(t(data.frame(a_c)))
+colnames(a_c) <- "a_c"
+ggplot(a_c, aes(x=a_c)) + geom_bar()
+b_c <- list()
+for(i in 1:dim(df)[1]){
+  b_c[[i]] <- intersect(cbind(df$match_in_1.b, df$match_in_2.b, df$match_in_3.b, df$match_in_4.b)[i,] , cbind(df$match_in_1.c, df$match_in_2.c, df$match_in_3.c, df$match_in_4.c)[i,]) %>% length()
+}    
+b_c <- as.data.frame(t(data.frame(b_c)))
+colnames(b_c) <- "b_c"
+ggplot(b_c, aes(x=b_c)) + geom_bar()
+
+
+```
+
+```{r}
+
+
+
+a_b <- list()
+for(i in 1:dim(df)[1]){
+  a_b[[i]] <- intersect(cbind(df$match_out_1.a, df$match_out_2.a, df$match_out_3.a, df$match_out_4.a, df$match_out_5.a, df$match_out_6.a, df$match_out_7.a, df$match_out_8.a, df$match_out_9.a, df$match_out_10.a)[i,] , cbind(df$match_out_1.b, df$match_out_2.b, df$match_out_3.b, df$match_out_4.b, df$match_out_5.b, df$match_out_6.b, df$match_out_7.b, df$match_out_8.b, df$match_out_9.b, df$match_out_10.b)[i,]) %>% length()
+}    
+a_b <- as.data.frame(t(data.frame(a_b)))
+colnames(a_b) <- "a_b"
+ggplot(a_b, aes(x=a_b)) + geom_bar()
+a_c <- list()
+for(i in 1:dim(df)[1]){
+  a_c[[i]] <- intersect(cbind(df$match_out_1.a, df$match_out_2.a, df$match_out_3.a, df$match_out_4.a, df$match_out_5.a, df$match_out_6.a, df$match_out_7.a, df$match_out_8.a, df$match_out_9.a, df$match_out_10.a)[i,] , cbind(df$match_out_1.c, df$match_out_2.c, df$match_out_3.c, df$match_out_4.c, df$match_out_5.c, df$match_out_6.c, df$match_out_7.c, df$match_out_8.c, df$match_out_9.c, df$match_out_10.c)[i,]) %>% length()
+}    
+a_c <- as.data.frame(t(data.frame(a_c)))
+colnames(a_c) <- "a_c"
+ggplot(a_c, aes(x=a_c)) + geom_bar()
+b_c <- list()
+for(i in 1:dim(df)[1]){
+  b_c[[i]] <- intersect(cbind(df$match_out_1.b, df$match_out_2.b, df$match_out_3.b, df$match_out_4.b, df$match_out_5.b, df$match_out_6.b, df$match_out_7.b, df$match_out_8.b, df$match_out_9.b, df$match_out_10b_c)[i,] , cbind(df$match_out_1.c, df$match_out_2.c, df$match_out_3.c, df$match_out_4.c, df$match_out_5.c, df$match_out_6.c, df$match_out_7.c, df$match_out_8.c, df$match_out_9.c, df$match_out_10.c)[i,]) %>% length()
+}    
+b_c <- as.data.frame(t(data.frame(b_c)))
+colnames(b_c) <- "b_c"
+ggplot(b_c, aes(x=b_c)) + geom_bar()
+
+
+a_b <- list()
+for(i in 1:dim(df)[1]){
+  a_b[[i]] <- intersect(cbind(df$match_in_1.a, df$match_in_2.a, df$match_in_3.a, df$match_in_4.a, df$match_in_5.a, df$match_in_6.a, df$match_in_7.a, df$match_in_8.a, df$match_in_9.a, df$match_in_10.a)[i,] , cbind(df$match_in_1.b, df$match_in_2.b, df$match_in_3.b, df$match_in_4.b, df$match_in_5.b, df$match_in_6.b, df$match_in_7.b, df$match_in_8.b, df$match_in_9.b, df$match_in_10.b)[i,]) %>% length()
+}    
+a_b <- as.data.frame(t(data.frame(a_b)))
+colnames(a_b) <- "a_b"
+ggplot(a_b, aes(x=a_b)) + geom_bar()
+a_c <- list()
+for(i in 1:dim(df)[1]){
+  a_c[[i]] <- intersect(cbind(df$match_in_1.a, df$match_in_2.a, df$match_in_3.a, df$match_in_4.a, df$match_in_5.a, df$match_in_6.a, df$match_in_7.a, df$match_in_8.a, df$match_in_9.a, df$match_in_10.a)[i,] , cbind(df$match_in_1.c, df$match_in_2.c, df$match_in_3.c, df$match_in_4.c, df$match_in_5.c, df$match_in_6.c, df$match_in_7.c, df$match_in_8.c, df$match_in_9.c, df$match_in_10.c)[i,]) %>% length()
+}    
+a_c <- as.data.frame(t(data.frame(a_c)))
+colnames(a_c) <- "a_c"
+ggplot(a_c, aes(x=a_c)) + geom_bar()
+b_c <- list()
+for(i in 1:dim(df)[1]){
+  b_c[[i]] <- intersect(cbind(df$match_in_1.b, df$match_in_2.b, df$match_in_3.b, df$match_in_4.b, df$match_in_5.b, df$match_in_6.b, df$match_in_7.b, df$match_in_8.b, df$match_in_9.b, df$match_in_10b_c)[i,] , cbind(df$match_in_1.c, df$match_in_2.c, df$match_in_3.c, df$match_in_4.c, df$match_in_5.c, df$match_in_6.c, df$match_in_7.c, df$match_in_8.c, df$match_in_9.c, df$match_in_10.c)[i,]) %>% length()
+}    
+b_c <- as.data.frame(t(data.frame(b_c)))
+colnames(b_c) <- "b_c"
+ggplot(b_c, aes(x=b_c)) + geom_bar()
+
+
+
+```

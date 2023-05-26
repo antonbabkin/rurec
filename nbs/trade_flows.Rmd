@@ -264,7 +264,7 @@ $ifr \cdot \mathbf{x}$ = Industry Factor Supply
 
 # RAS Trade Flows Sector
 
-```{r, include = FALSE}
+```{r, include = FALSE eval = FALSE}
 #benchmarking effect of impedance on RAS
 cbp_year = "2012"
 ilevel = "det"
@@ -288,8 +288,6 @@ impedance_mat <- dprox_mat(tiger_year = year2tiger(cbp_year),
 impedance_mat =  gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
 sprintf("%.64f", impedance_mat[1,2])
-
-
 
 
 x0 = (t(fs[i, , drop=F]) %*% fd[i, , drop=F])
@@ -325,6 +323,7 @@ names(df) <- y
 
 ```
 
+
 ## Sector level, industries, xcross haul, no impedance
 ```{r}
 
@@ -344,6 +343,112 @@ df <- load_tradeflows(cbp_year = cbp_year,
                       subsectors = subsectors, 
                       impedance_call = impedance_call,
                       crosshaul = crosshaul)
+```
+
+
+```{r}
+#Eigenvector centrality scores correspond to the values of the first eigenvector of the graph adjacency matrix; these scores may, in turn, be interpreted as arising from a reciprocal process in which the centrality of each actor is proportional to the sum of the centralities of those actors to whom he or she is connected. In general, vertices with high eigenvector centralities are those which are connected to many other vertices which are, in turn, connected to many others (and so on). This implies that the largest values will be obtained by individuals in large cliques (or high-density substructures.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[1]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+
+```{r}
+#Bonacich alpha centrality scores of network positions
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[2]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#Closeness centrality measures how many steps is required to access every other vertex from a given vertex.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[3]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#The harmonic centrality of a vertex is the mean inverse distance to all other vertices.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[4]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#The hub scores of the vertices are defined as the principal eigenvector of At(A) where A is the adjacency matrix of the graph.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[5]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#The authority scores of the vertices are defined as the principal eigenvector of t(A)A where A is the adjacency matrix of the graph.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[6]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#Calculates the Google PageRank for the specified vertices.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[7]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
+```
+
+```{r}
+#Summing up the edge weights of the adjacent edges for each vertex.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[8]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric)
 ```
 
 
@@ -479,10 +584,63 @@ df <- load_tradeflows(cbp_year = cbp_year,
 
 
 ```
+```{r}
+#Eigenvector centrality scores correspond to the values of the first eigenvector of the graph adjacency matrix; these scores may, in turn, be interpreted as arising from a reciprocal process in which the centrality of each actor is proportional to the sum of the centralities of those actors to whom he or she is connected. In general, vertices with high eigenvector centralities are those which are connected to many other vertices which are, in turn, connected to many others (and so on). This implies that the largest values will be obtained by individuals in large cliques (or high-density substructures.
+metric = c("eigen_centrality", 
+           "alpha_centrality", 
+           "closeness", 
+           "harmonic_centrality", 
+           "hub_score", 
+           "authority_score", 
+           "page_rank", 
+           "strength")[1]
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric, scale = T)
+```
+
+```{r}
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric, normalize = "row", scale = T)
+```
+
+```{r}
+df %>% Reduce('+', .) %>% sna_value_map(metric = metric, normalize = "column", scale = T)
+```
+
+
+
+
 
 ```{r}
 sector = NULL
 inbound2outbound_map(Reduce('+', df), sector = sector, fill = "out2in" )
+```
+
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = F
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
+```
+
+```{r}
+sector = "11"
+central_place = params$county_fips
+export_flows = T
+censor_scale_lowerbound = 1
+
+place_trade_map(df = df,
+                sector = sector,
+                central_place = central_place,
+                export_flows = export_flows,
+                censor_scale_lowerbound = censor_scale_lowerbound)
+
 ```
 
 ```{r}
