@@ -22,52 +22,12 @@ source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"
 ```
 
 ```{r}
-
-cbp_comb <- expand_grid(year = 1986:2020,
-                        geog_scale = c("national", "state", "county"),
-                        data_type = c("employment_count", "quarter_payroll", "annual_payroll", "establishment_count"))
-
-temp <- c()
-for(x in c("us", "state", "county")){
-  for(y in 1986:2020){
-   temp <- rbind(temp, cbind("geog_scale" = x, "year" = y, "NAICS_count" = length(unique(cbp$get_df(x, as.integer(y))$industry))) )
-  }
-}
-
-
-bea_comb <- expand_grid(year = 1997:2021,
-                   sector_level = c("sector", "summary", "detail")) %>% 
-  .[.$sector_level %in% c("sector", "summary") | .$year %in% c("2007", "2012"),]
-
-
-io_tables = c("supply_matrix", "use_matrix", "make_matrix", "total_matrix", "direct_matrix", "b_matrix", "c_matrix", "d_matrix")
-
-rurec_metrics = c("nis", "nid", "absorption", "normalized")
-
-agcensus_comb <- expand_grid(year = c(2002, 2007, 2012, 2017),
-                             geog_scale = c("national", "state", "county"))
-                        
-geog_comb <- expand_grid(year = c(2000, 2007:2020),
-                         scale = c("20m", "500k", "5m"))
-
-master_comb <- expand_grid(cbp_comb, 
-                           bea_comb,
-                           agcensus_comb,
-                           geog_comb,
-                           econ_metric = c("gross_output", "factor_demand", "factor_supply", "final_demand", "value_added", "payroll_share"),
-                           sector_class = c("industry", "commodity"),
-                           geog_unit = c("county", "CBSA"))
-
-
-
-```
-
-```{r}
 cbp_year = "2012"
 ilevel = "det"
 
 impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
+impedance_call = "gaus200"
 
   fd <- industry_factor_demand_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
   go <- industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel)
@@ -75,16 +35,120 @@ impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year),
   
   y <- names(which(!is.na(rowSums(fs)) & !rowSums(fs) == 0 ))
 
-  df_a <- normalized_absorption_share(stacked_absorption_share(net_input_supply(go, fd), net_input_demand(go, fd)), net_input_supply(go, fd)) 
-  df_a <- df_a * impedance_mat[rownames(df_a), colnames(df_a)]
-  df_b <- normalized_absorption_share(stacked_absorption_share(net_input_supply(fs[y, , drop=F], fd[y, , drop=F]), net_input_demand(fs[y, , drop=F], fd[y, , drop=F])), net_input_supply(fs[y, , drop=F], fd[y, , drop=F])) 
-  df_b <- df_b * impedance_mat[rownames(df_b), colnames(df_b)]
-  df_c <- Reduce('+', load_tradeflows(cbp_year = cbp_year, ilevel = ilevel) ) 
-  df_b <- df_b * impedance_mat[rownames(df_b), colnames(df_b)]
+  if (file.exists(file.path(find_rstudio_root_file(), "data", "robjs", "df_a"))){ 
+    df_a <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "df_a"))
+  } else {
+    df_a <- normalized_absorption_share(stacked_absorption_share(net_input_supply(go, fd), net_input_demand(go, fd)), net_input_supply(go, fd)) 
+    saveRDS(df_a, file = file.path(find_rstudio_root_file(), "data", "robjs", "df_a"))
+  }
   
+    if (file.exists(file.path(find_rstudio_root_file(), "data", "robjs", "df_b"))){ 
+    df_b <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "df_b"))
+  } else {
+    df_b <- normalized_absorption_share(stacked_absorption_share(net_input_supply(fs[y, , drop=F], fd[y, , drop=F]), net_input_demand(fs[y, , drop=F], fd[y, , drop=F])), net_input_supply(fs[y, , drop=F], fd[y, , drop=F])) 
+    saveRDS(df_b, file = file.path(find_rstudio_root_file(), "data", "robjs", "df_b"))
+  }
+  
+    if (file.exists(file.path(find_rstudio_root_file(), "data", "robjs", "df_c"))){ 
+    df_c <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "df_c"))
+  } else {
+    df_c <- Reduce('+', load_tradeflows(cbp_year = cbp_year, ilevel = ilevel, impedance_call = impedance_call, impedance_mat = impedance_mat) ) %>% sweep( 1, rowSums(.), FUN="/")
+    saveRDS(df_c, file = file.path(find_rstudio_root_file(), "data", "robjs", "df_c"))
+  }
+  
+  
+
+```
+
+#Density plot of a and b (row) max absorption (normalized) values 
+```{r}
+  df <- rbind(noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat), 
+              noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat))
+ggplot(df, aes(x = ab_max, color = id)) + geom_density()
+
+```
+#Scatter plot of (log) industry gross output to a and b (row) max absorption (normalized) values
+```{r}
+
+ outp <- colSums(industry_output_tidy_matrix(cbp_year = cbp_year, ilevel = ilevel))
+  df <- rbind(cbind(noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat), 
+                    outp),
+              cbind(noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat), 
+                    outp))
+ggplot(df, aes(x = ab_max, y = log(outp), color = id)) + geom_point()
+
+```
+#Scatter plot of b to a (row) max absorption (normalized) values by county
+```{r}
+  df <- cbind(noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat), 
+              noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat), 
+              outp)
+
+colnames(df) <- c("a_abs", "id", "b_abs", "id2", "outp")
+g <- ggplot(df, aes(x = a_abs, y = b_abs, tooltip = rownames(df), data_id = rownames(df))) + geom_point_interactive()
+
+girafe(ggobj = g)
+
+```
+
+
+
+#Density plot of a, b and c (row) max absorption (normalized) values 
+```{r}
+
+  df <- noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat)
+  df <- rbind(df, noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat))
+  df <- rbind(df, noimpedance_absorption_maximum(df_c, impedance_mat = matrix(data = 1, nrow = dim(df_c)[1], ncol = dim(df_c)[2], dimnames = list(rownames(df_c), colnames(df_c))) ))
+ggplot(df, aes(x = ab_max, color = id)) + geom_density()
+
+```
+#Scatter plot of (log) industry gross output to a, b and c (row) max absorption (normalized) values
+```{r}
+
+  df <- rbind(cbind(noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat), 
+                    outp),
+              cbind(noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat), 
+                    outp),
+              cbind(noimpedance_absorption_maximum(df_c, impedance_mat = matrix(data = 1, nrow = dim(df_c)[1], ncol = dim(df_c)[2], dimnames = list(rownames(df_c), colnames(df_c)))), 
+                    outp))
+ggplot(df, aes(x = ab_max, y = log(outp), color = id)) + geom_point(alpha = 1/5)
+
+```
+
+#Scatter plot of c to a (row) max absorption (normalized) values by county
+```{r}
+  df <- cbind(noimpedance_absorption_maximum(df_a, impedance_mat = impedance_mat), 
+              noimpedance_absorption_maximum(df_c, impedance_mat = matrix(data = 1, nrow = dim(df_c)[1], ncol = dim(df_c)[2], dimnames = list(rownames(df_c), colnames(df_c)))), 
+              outp)
+
+colnames(df) <- c("a_abs", "id", "c_abs", "id2", "outp")
+g <- ggplot(df, aes(x = a_abs, y = c_abs, tooltip = rownames(df), data_id = rownames(df))) + geom_point_interactive()
+
+girafe(ggobj = g)
+
+```
+
+#Scatter plot of c to b (row) max absorption (normalized) values by county
+```{r}
+  df <- cbind(noimpedance_absorption_maximum(df_b, impedance_mat = impedance_mat), 
+              noimpedance_absorption_maximum(df_c, impedance_mat = matrix(data = 1, nrow = dim(df_c)[1], ncol = dim(df_c)[2], dimnames = list(rownames(df_c), colnames(df_c)))), 
+              outp)
+
+colnames(df) <- c("b_abs", "id", "c_abs", "id2", "outp")
+g <- ggplot(df, aes(x = b_abs, y = c_abs, tooltip = rownames(df), data_id = rownames(df))) + geom_point_interactive()
+
+girafe(ggobj = g)
+
 ```
 
 ```{r}
+
+if (file.exists(file.path(find_rstudio_root_file(), "data", "robjs", "abc_top"))){ 
+    df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "abc_top"))
+  } else {
+
+  df_a <- df_a * impedance_mat[rownames(df_a), colnames(df_a)]
+  df_b <- df_b * impedance_mat[rownames(df_b), colnames(df_b)]
   
   tempr <- list()
 for(i in 1:10){
@@ -154,8 +218,6 @@ for(i in 1:10){
                       match_in_10 = rownames(df_b)[apply(df_b, 2, function(x){which(x %in% tempc[[10]])})]
                      )
       
-      
-              
   tempr <- list()
 for(i in 1:10){
   tempr[[i]] <- as.matrix(apply(df_c, 1, function(x){sort(x, decreasing = T)[i] }))
@@ -194,9 +256,12 @@ for(i in 1:10){
       colnames(abs_c)[2:21] <- paste(colnames(abs_c)[2:21], "c", sep = '.')
 
 df <- inner_join(inner_join(as.data.frame(abs_a), as.data.frame(abs_b), by = "place"), as.data.frame(abs_c), by = "place")
+saveRDS(df, file = file.path(find_rstudio_root_file(), "data", "robjs", "abc_top"))
+}
 
 ```
 
+#Bar plot of top 1 max absorption (normalized) location overlap
 ```{r}
 
 barplot(table(df$match_out_1.a == df$match_out_1.b))
@@ -208,7 +273,7 @@ barplot(table(df$match_in_1.a == df$match_in_1.c))
 barplot(table(df$match_in_1.b == df$match_in_1.c))
 
 ```
-
+#Bar plot of top 4 max absorption (normalized) location overlap
 ```{r}
 
 
@@ -259,7 +324,7 @@ ggplot(b_c, aes(x=b_c)) + geom_bar()
 
 
 ```
-
+#Bar plot of top 10 max absorption (normalized) location overlap
 ```{r}
 
 
