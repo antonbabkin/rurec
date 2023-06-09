@@ -6,11 +6,14 @@ format:
     code-fold: true
     df-print: paged
     embed-resources: true
+    warning: false
 ---
 
-# preamble
+Exploring relationship between county economic growth and different measures of supply chain connectedness.
+
 
 ```{r preamble}
+#| output: false
 library(rlog)
 library(tidyverse)
 library(ggplot2)
@@ -21,160 +24,31 @@ library(margins)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
-bea_io <- reticulate::import("rurec.pubdata.bea_io")
-bds <- reticulate::import("rurec.pubdata.bds")
-cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
-geography <- reticulate::import("rurec.pubdata.geography")
+
 pubdata <- new.env()
+pubdata$geography <- reticulate::import("rurec.pubdata.geography")
+pubdata$cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 pubdata$bea_nipa <- reticulate::import("rurec.pubdata.bea_nipa")
 
 root_dir <- rprojroot::find_rstudio_root_file()
-# S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries
+
 source(file.path(root_dir, "rurec/reticulate_extras.R"))
 source(file.path(root_dir, "nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
 source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
 
 ggplot2::theme_set(theme_minimal())
+Sys.setenv("LOG_LEVEL" = "INFO")
 
-Sys.setenv("LOG_LEVEL" = "DEBUG")
-
-# number of cores to use in parallel code 
-options("mc.cores" = 4L)
 
 ```
 
-
-
-
-# Agricultural employment
-
-Employment in NAICS-11 is not covered well by CBP or BDS.
-In this section, we compare total agricultural employment across alternative sources.
-
-```{r}
-bds <- reticulate::import("rurec.pubdata.bds")
-cbp <- reticulate::import("rurec.pubdata.cbp")
-qcew <- reticulate::import("rurec.pubdata.qcew")
-agcen <- reticulate::import("rurec.pubdata.agcensus")
-```
-
-
-## BDS
-
-BDS only covers non-farm activity.
-National data available down to 4-digit NAICS, county data only at 2-digit (sector).
-
-```{r}
-#| output: false
-d0 <- bds$get_df("sec")
-df_bds <- d0 %>%
-  filter(sector == "11") %>%
-  rename(est = estabs) %>%
-  select(year, est, emp) %>% 
-  pivot_longer(c(est, emp))
-
-ggplot(df_bds, aes(year, value)) + geom_line() +  ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
-```
-
-## CBP
-
-CBP switches from SIC to NAICS in 1998. Why such discontinuity??
-
-
-```{r}
-#| output: false
-dn <- cbp$get_parquet("us")
-
-df <- dn %>%
-  filter(lfo == "-", (year < 1998 & industry == "07") | (year >= 1998 & industry == "11")) %>%
-  select(year, emp, est) %>%
-  pivot_longer(c(emp, est))
-
-df_cbp <- df
-rm(dn, df)
-
-ggplot(df_cbp, aes(year, value)) + geom_line() + ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
-```
-
-## QCEW
-
-```{r}
-#| output: false
-ds <- arrow::open_dataset(as.character(qcew$PATH$proc), partitioning = c("year"))
-df_qcew <- ds %>%
-  filter(agglvl_code == "14", # National, by NAICS Sector -- by ownership sector
-         own_code == "5", # Private
-         industry_code == "11") %>%
-  select(year, annual_avg_estabs, annual_avg_emplvl) %>%
-  rename(est = annual_avg_estabs, emp = annual_avg_emplvl) %>%
-  collect() %>%
-  pivot_longer(c(est, emp))
-
-rm(ds)
-ggplot(df_qcew, aes(year, value)) + geom_line() + ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
-```
-
-
-## Ag census
-
-We begin by looking at farms with hired workers - count and number of workers.
-Other variables to consider are number of farm operators, unpaid labor and contract labor.
-
-```{r}
-#| output: false
-
-ds <- arrow::open_dataset(as.character(agcen$PATH$proc), partitioning = c("YEAR"))
-d0 <- ds %>%
-  rename_with(str_to_lower) %>%
-  filter(agg_level_desc == "NATIONAL", domain_desc == "TOTAL") %>%
-  select(year, short_desc, value) %>%
-  collect()
-
-df_agcen <- d0 %>% filter(short_desc %in% c(
-  "LABOR, HIRED - OPERATIONS WITH WORKERS",
-  "LABOR, HIRED - NUMBER OF WORKERS"
-  )) %>%
-  mutate(short_desc = case_when(
-    short_desc == "LABOR, HIRED - OPERATIONS WITH WORKERS" ~ "est",
-    short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp"
-  )) %>%
-  rename(name = short_desc)
-
-rm(ds, d0)
-df_agcen
-```
-
-
-## Summary
-
-- Establishments: CBP/BDS = 20k, QCEW = 100k, farms = 500k.
-- Employment: CBP/BDS = 170k, QCEW = 1.2m, farms = 2.7m.
-
-QCEW will be used as source of county employment data, with addition of farm labor from ag census.
-
-```{r}
-df <- rbind(mutate(df_bds, source = "BDS"),
-            mutate(df_cbp, source = "CBP"),
-            mutate(df_qcew, source = "QCEW"),
-            mutate(df_agcen, source = "AgCen"))
-
-options(scipen=999)
-
-df %>% 
-  filter(year %in% seq(2002, 2017, 5)) %>%
-  pivot_wider(id_cols = c(year, source)) %>%
-  arrange(year, source)
-
-ggplot(df, aes(year, value, color = source)) +
-  geom_line() +
-  ylim(c(0, NA)) +
-  facet_wrap(vars(name), scale = "free_y")
-```
 
 
 
 # Data prep
+
+Prepare parts that will be combined into analysis dataframe.
 
 ## county id
 
@@ -182,12 +56,12 @@ ggplot(df, aes(year, value, color = source)) +
 data_prep_county_id <- function() {
   # county fips and name
   year <- 2013L
-  df <- geography$get_county_df(year = year, geometry = FALSE) %>%
+  df <- pubdata$geography$get_county_df(year = year, geometry = FALSE) %>%
     rename_with(str_to_lower) %>%
     rename(stcty = code, cty_name = name, st = state_code)
   
   # state name and abbr
-  d <- geography$get_state_df(geometry = FALSE) %>%
+  d <- pubdata$geography$get_state_df(geometry = FALSE) %>%
     rename_with(str_to_lower) %>%
     select(code, name, abbr) %>%
     rename(st = code, st_name = name, st_abbr = abbr)
@@ -293,7 +167,7 @@ data_prep_rurality <- function() {
   
   # CBSA counties
   cbsa_delin_year <- 2009
-  d <- cbsa$get_cbsa_delin_df(cbsa_delin_year) %>%
+  d <- pubdata$cbsa$get_cbsa_delin_df(cbsa_delin_year) %>%
     rename_with(str_to_lower) %>%
     mutate(stcty = str_c(state_code, county_code)) %>%
     select(stcty, cbsa_code, cbsa_title, metro_micro)
@@ -339,7 +213,6 @@ head(data_prep_county_output())
 ## connectedness
 
 ```{r}
-
 data_prep_imped <- reseng$cache(function(kind, par) {
   tiger_year = 2017
   if (kind == "dprox") {
@@ -369,17 +242,20 @@ data_prep_conn <- reseng$cache(function(year, imped_key) {
     rename(stcty = place) %>%
     mutate(year = year, .before = stcty)
 }, file.path(root_dir, "cache/conn/{year}_{imped_key}.rds"))
+```
 
 
+```{r}
+#| eval: false
 # pre-calculate and cache
-# for (y in c(2002, 2007, 2012, 2017)) {
-#   x <- data_prep_conn(y, "none")
-#   for (i in c("dprox", "gauss")) {
-#     for (p in c(100, 300, 500)) {
-#       x <- data_prep_conn(y, glue("{i}-{p}"))
-#     }
-#   }
-# }
+for (y in c(2002, 2007, 2012, 2017)) {
+  x <- data_prep_conn(y, "none")
+  for (i in c("dprox", "gauss")) {
+    for (p in c(100, 300, 500)) {
+      x <- data_prep_conn(y, glue("{i}-{p}"))
+    }
+  }
+}
 
 ```
 
@@ -390,6 +266,7 @@ data_prep_conn <- reseng$cache(function(year, imped_key) {
 ## distribution by method
 
 `max_absorption_alpha`:
+
 - distance restriction shifts distribution to the left
 - distributions are almost identical between binary ("dprox") and Gaussian impedance
 
@@ -507,6 +384,20 @@ dfa_conn[["output, max abs, dprox-300"]] <- years %>%
   select(year, stcty, max_absorption_alpha) %>%
   rename(conn = max_absorption_alpha) %>%
   f()
+```
+
+
+```{r}
+#| eval: false
+# save dataframe for use in other analyses
+
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, no imped"]], c("year", "stcty")) %>%
+  rename(conn_maxabs_noimp = conn, conn_maxabs_noimp_gr = conn_gr) %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
+  rename(conn_maxabs_dprox300 = conn, conn_maxabs_dprox300_gr = conn_gr)
+
+write.csv(d, file.path(root_dir, "data/conn_growth_analysis.csv"), row.names = FALSE)
 ```
 
 
@@ -722,7 +613,27 @@ ggplot(d, aes(conn, emp_gr)) +
 
 
 
-# Intermediatedness
+
+
+# Future ideas
+
+- Include other conn methods: factor supply and trade balancing.
+- Second level ECA connectedness.
+- Include intermediatedness as explanatory variable.
+- Robust standard errors for panel reg.
+- County fixed effects.
+- Total output as control variable, change to real dollars.
+
+
+```{r}
+#| eval: false
+c1 <- one_hierarchical_connectedness("2017")
+```
+
+
+# Exploration and scratch work
+
+## Intermediatedness
 
 There is significant variation among sectors in the share of output that is used as intermediate input.
 
@@ -735,6 +646,9 @@ Trade margins are huge negative numbers in trade, and big positive numbers in ma
 
 
 ```{r, bea-sectors}
+#| eval: false
+bea_io <- reticulate::import("rurec.pubdata.bea_io")
+
 y <- 2021L
 d1 <- bea_io$get_sup(y, 'sec', TRUE)[1:15, ] %>%
   as_tibble(rownames = "commodity") %>%
@@ -757,6 +671,7 @@ Is absorption strongly correlated with weighted industry intermediate-ness?
 
 
 ```{r}
+#| eval: false
 # county-by-industry output
 df <- county_industry_output %>% 
   as_tibble(rownames = "industry") %>%
@@ -827,17 +742,125 @@ In other words, counties dominated by industries that are not much used as inter
 This will all change once we switch from total output to factor supply.
 
 
-# Future ideas
+## Agricultural employment
 
-- Include other conn methods: factor supply and trade balancing.
-- Second level ECA connectedness.
-- Include intermediatedness as explanatory variable.
-- Robust standard errors for panel reg.
-- County fixed effects.
-- Total output as control variable.
+Employment in NAICS-11 is not covered well by CBP or BDS.
+In this section, we compare total agricultural employment across alternative sources.
+
+### BDS
+
+BDS only covers non-farm activity.
+National data available down to 4-digit NAICS, county data only at 2-digit (sector).
+
+```{r}
+#| eval: false
+bds <- reticulate::import("rurec.pubdata.bds")
+d0 <- bds$get_df("sec")
+df_bds <- d0 %>%
+  filter(sector == "11") %>%
+  rename(est = estabs) %>%
+  select(year, est, emp) %>% 
+  pivot_longer(c(est, emp))
+
+ggplot(df_bds, aes(year, value)) + geom_line() +  ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
+```
+
+### CBP
+
+CBP switches from SIC to NAICS in 1998. Why such discontinuity??
 
 
 ```{r}
-# c1 <- one_hierarchical_connectedness("2017")
+#| eval: false
+cbp <- reticulate::import("rurec.pubdata.cbp")
+dn <- cbp$get_parquet("us")
+
+df <- dn %>%
+  filter(lfo == "-", (year < 1998 & industry == "07") | (year >= 1998 & industry == "11")) %>%
+  select(year, emp, est) %>%
+  pivot_longer(c(emp, est))
+
+df_cbp <- df
+rm(dn, df)
+
+ggplot(df_cbp, aes(year, value)) + geom_line() + ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
 ```
+
+### QCEW
+
+```{r}
+#| eval: false
+qcew <- reticulate::import("rurec.pubdata.qcew")
+ds <- arrow::open_dataset(as.character(qcew$PATH$proc), partitioning = c("year"))
+df_qcew <- ds %>%
+  filter(agglvl_code == "14", # National, by NAICS Sector -- by ownership sector
+         own_code == "5", # Private
+         industry_code == "11") %>%
+  select(year, annual_avg_estabs, annual_avg_emplvl) %>%
+  rename(est = annual_avg_estabs, emp = annual_avg_emplvl) %>%
+  collect() %>%
+  pivot_longer(c(est, emp))
+
+rm(ds)
+ggplot(df_qcew, aes(year, value)) + geom_line() + ylim(c(0, NA)) + facet_wrap(vars(name), scales = "free_y")
+```
+
+
+### Ag census
+
+We begin by looking at farms with hired workers - count and number of workers.
+Other variables to consider are number of farm operators, unpaid labor and contract labor.
+
+```{r}
+#| eval: false
+agcen <- reticulate::import("rurec.pubdata.agcensus")
+ds <- arrow::open_dataset(as.character(agcen$PATH$proc), partitioning = c("YEAR"))
+d0 <- ds %>%
+  rename_with(str_to_lower) %>%
+  filter(agg_level_desc == "NATIONAL", domain_desc == "TOTAL") %>%
+  select(year, short_desc, value) %>%
+  collect()
+
+df_agcen <- d0 %>% filter(short_desc %in% c(
+  "LABOR, HIRED - OPERATIONS WITH WORKERS",
+  "LABOR, HIRED - NUMBER OF WORKERS"
+  )) %>%
+  mutate(short_desc = case_when(
+    short_desc == "LABOR, HIRED - OPERATIONS WITH WORKERS" ~ "est",
+    short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp"
+  )) %>%
+  rename(name = short_desc)
+
+rm(ds, d0)
+df_agcen
+```
+
+
+### Summary
+
+- Establishments: CBP/BDS = 20k, QCEW = 100k, farms = 500k.
+- Employment: CBP/BDS = 170k, QCEW = 1.2m, farms = 2.7m.
+
+QCEW will be used as source of county employment data, with addition of farm labor from ag census.
+
+```{r}
+#| eval: false
+df <- rbind(mutate(df_bds, source = "BDS"),
+            mutate(df_cbp, source = "CBP"),
+            mutate(df_qcew, source = "QCEW"),
+            mutate(df_agcen, source = "AgCen"))
+
+options(scipen=999)
+
+df %>% 
+  filter(year %in% seq(2002, 2017, 5)) %>%
+  pivot_wider(id_cols = c(year, source)) %>%
+  arrange(year, source)
+
+ggplot(df, aes(year, value, color = source)) +
+  geom_line() +
+  ylim(c(0, NA)) +
+  facet_wrap(vars(name), scale = "free_y")
+```
+
 
