@@ -8,37 +8,42 @@ format:
     embed-resources: true
 ---
 
-```{r preamble}
+# preamble
 
+```{r preamble}
+library(rlog)
 library(tidyverse)
 library(ggplot2)
 library(ggside)
 library(huxtable)
+library(patchwork)
+library(margins)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
-bea_io <- reticulate::import("rurec.pubdata.bds")
+bea_io <- reticulate::import("rurec.pubdata.bea_io")
 bds <- reticulate::import("rurec.pubdata.bds")
 cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 geography <- reticulate::import("rurec.pubdata.geography")
+pubdata <- new.env()
+pubdata$bea_nipa <- reticulate::import("rurec.pubdata.bea_nipa")
 
 root_dir <- rprojroot::find_rstudio_root_file()
-source(file.path(root_dir, "nbs/rural_typology_r_functions.R"))
+# S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries
+source(file.path(root_dir, "rurec/reticulate_extras.R"))
+source(file.path(root_dir, "nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
 source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
 
 ggplot2::theme_set(theme_minimal())
 
+Sys.setenv("LOG_LEVEL" = "DEBUG")
+
+# number of cores to use in parallel code 
+options("mc.cores" = 4L)
 
 ```
 
-```{r}
-
-source("rurec/reseng.R")
-tiger_year <- 1999
-conn() #
-
-```
 
 
 
@@ -167,14 +172,48 @@ ggplot(df, aes(year, value, color = source)) +
   facet_wrap(vars(name), scale = "free_y")
 ```
 
-## Farm labor by county
+
+
+# Data prep
+
+## county id
+
+```{r}
+data_prep_county_id <- function() {
+  # county fips and name
+  year <- 2013L
+  df <- geography$get_county_df(year = year, geometry = FALSE) %>%
+    rename_with(str_to_lower) %>%
+    rename(stcty = code, cty_name = name, st = state_code)
+  
+  # state name and abbr
+  d <- geography$get_state_df(geometry = FALSE) %>%
+    rename_with(str_to_lower) %>%
+    select(code, name, abbr) %>%
+    rename(st = code, st_name = name, st_abbr = abbr)
+  df <- left_join(df, d, "st")
+  
+  df <- df %>%
+    select(stcty, st_name, st_abbr, cty_name)
+  
+  df
+}
+
+head(data_prep_county_id())
+```
+
+
+## employment
+
+
+### farm labor
 
 "Hired labor" from ag census 2002, 2007, 2012 and 2017. Linear interpolation between censal years, repeated values 3 years before (1999-2001) and 2 years after (2018-2020).
 
 
 ```{r}
 
-.county_farm_emp <- function() {
+.prep_data_county_farm_emp <- function() {
   ds <- arrow::open_dataset(as.character(agcen$PATH$proc), partitioning = c("YEAR"))
   df <- ds %>%
     rename_with(str_to_lower) %>%
@@ -185,8 +224,8 @@ ggplot(df, aes(year, value, color = source)) +
     select(year, stcty, short_desc, value) %>%
     collect() %>%
     mutate(short_desc = case_when(
-      short_desc == "LABOR, HIRED - OPERATIONS WITH WORKERS" ~ "est_farm",
-      short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp_farm"
+      short_desc == "LABOR, HIRED - OPERATIONS WITH WORKERS" ~ "est",
+      short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp"
     )) %>% 
     pivot_wider(names_from = short_desc)
 
@@ -200,435 +239,487 @@ ggplot(df, aes(year, value, color = source)) +
   df <- df %>% 
     group_by(stcty) %>% 
     mutate(
-      emp_farm = round(zoo::na.approx(emp_farm, year, na.rm = FALSE, rule = 2)),
-      est_farm = round(zoo::na.approx(est_farm, year, na.rm = FALSE, rule = 2)))
+      emp = round(zoo::na.approx(emp, year, na.rm = FALSE, rule = 2)),
+      est = round(zoo::na.approx(est, year, na.rm = FALSE, rule = 2)))
   
   return(df)
 }
-# file.remove(file.path(root_dir, "cache/county_farm_emp.rds"))
-county_farm_emp <- reseng$simplecache(.county_farm_emp, file.path(root_dir, "cache/county_farm_emp.rds"))
+# file.remove(file.path(root_dir, "cache/prep_data_county_farm_emp.rds"))
+prep_data_county_farm_emp <- reseng$cache(.prep_data_county_farm_emp, file.path(root_dir, "cache/prep_data_county_farm_emp.rds"))
+
+```
+
+
+Total employment, including farm labor.
+
+
+```{r}
+
+.data_prep_county_emp <- function() {
+  ds <- arrow::open_dataset(as.character(qcew$PATH$proc), partitioning = c("year"))
+  years <- 2001:2020
+  df <- ds %>%
+    filter(agglvl_code == "71", # County, Total -- by ownership sector
+           own_code == "5", # Private
+           year %in% years) %>%
+    select(year, area_fips, annual_avg_estabs, annual_avg_emplvl) %>%
+    rename(stcty = area_fips, est = annual_avg_estabs, emp = annual_avg_emplvl) %>%
+    collect()
+  
+  d <- prep_data_county_farm_emp()
+  df <- left_join(df, d, by = c("year", "stcty"), suffix = c("", "_farm"))
+  df <- df %>%
+    mutate(est = est + est_farm, emp = emp + emp_farm) %>%
+    select(!c(est_farm, emp_farm))
+  df
+}
+# file.remove(file.path(root_dir, "cache/data_prep_county_emp.rds"))
+data_prep_county_emp <- reseng$cache(.data_prep_county_emp, file.path(root_dir, "cache/data_prep_county_emp.rds"))
+
+head(data_prep_county_emp())
+```
+
+## rurality
+
+CBSA definition, rural = non-metro.
+
+```{r}
+
+data_prep_rurality <- function() {
+  
+  # full list of county FIPS
+  df <- data_prep_county_id() %>%
+    select(stcty)
+  
+  # CBSA counties
+  cbsa_delin_year <- 2009
+  d <- cbsa$get_cbsa_delin_df(cbsa_delin_year) %>%
+    rename_with(str_to_lower) %>%
+    mutate(stcty = str_c(state_code, county_code)) %>%
+    select(stcty, cbsa_code, cbsa_title, metro_micro)
+  
+  df <- left_join(df, d, "stcty") %>%
+    mutate(rural = replace_na(metro_micro != "metro", TRUE))
+  
+  df
+}
+
+head(data_prep_rurality())
+```
+
+
+## sector output
+
+Note that this output is in nominal dollars.
+
+```{r}
+..data_prep_county_output <- function(year, ilevel) {
+  d <- conn$total_output(as.character(year), ilevel)
+  d <- d %>%
+    as_tibble(rownames = "ind") %>%
+    pivot_longer(!ind, names_to = "stcty", values_to = "output_nom") %>%
+    mutate(year = year) %>%
+    select(year, stcty, ind, output_nom)
+  d
+}
+.data_prep_county_output <- reseng$cache(..data_prep_county_output, file.path(root_dir, "cache/county_output_{ilevel}_{year}.rds"))
+
+data_prep_county_output <- reseng$cache(function() {
+  years <- 2001:2020
+  d <- lapply(years, .data_prep_county_output, ilevel = "sec")
+  # parallel execution on 4 CPUs is not much faster
+  # d <- parallel::mclapply(years, .data_prep_county_output, ilevel = "sec")
+  d <- do.call(rbind, d)
+  d
+}, "cache/county_output.rds")
+
+head(data_prep_county_output())
+```
+
+## connectedness
+
+```{r}
+
+data_prep_imped <- reseng$cache(function(kind, par) {
+  tiger_year = 2017
+  if (kind == "dprox") {
+    dist <- conn_fns$miles2meters(as.integer(par))
+    x <- conn_fns$dprox_mat(tiger_year = tiger_year, boundary_limit = dist)
+  } else if (kind == "gauss") {
+    dist <- conn_fns$miles2meters(as.integer(par))
+    x <- conn_fns$gaus_impedance_mat(tiger_year = tiger_year, rms_width = dist)
+  }
+  x
+}, file.path(root_dir, "cache/imped/{kind}_{par}.rds"))
+
+#' Calculate connectedness, ECA-1 class and match
+#' @param year Year of county output.
+#' @param imped_key Impedance key of form "kind-par", e.g. "dprox-300".
+#' Use "none" for no impedance.
+data_prep_conn <- reseng$cache(function(year, imped_key) {
+  if (imped_key == "none") {
+    imped_mat <- NULL
+  } else {
+    x <- str_split_1(imped_key, "-")
+    imped_mat <- data_prep_imped(x[1], x[2])
+  }
+  # todo: why connectedness() needs tiger_year and scale?
+  conn_fns$connectedness(cbp_year = as.character(year), impedance = imped_mat, tiger_year = 2017, scale = "20m") %>%
+    ungroup() %>%
+    rename(stcty = place) %>%
+    mutate(year = year, .before = stcty)
+}, file.path(root_dir, "cache/conn/{year}_{imped_key}.rds"))
+
+
+# pre-calculate and cache
+# for (y in c(2002, 2007, 2012, 2017)) {
+#   x <- data_prep_conn(y, "none")
+#   for (i in c("dprox", "gauss")) {
+#     for (p in c(100, 300, 500)) {
+#       x <- data_prep_conn(y, glue("{i}-{p}"))
+#     }
+#   }
+# }
 
 ```
 
 
 
-# Connectedness metric methodology
+# Connectedness metric
 
-Sensitivity of metric distribution to calculation methodology.
+## distribution by method
 
-
-```{r}
-
-conn <- list()
-conn[["max_abs_share"]] <- connectedness("2017")
-q <- dprox_mat(boundary_limit = miles2meters(100), tiger_year = "2017")
-conn[["max_abs_sh_dprox_100"]] <- connectedness("2017", impedance = q)
-q <- dprox_mat(boundary_limit = miles2meters(300), tiger_year = "2017")
-conn[["max_abs_sh_dprox_300"]] <- connectedness("2017", impedance = q)
-for (p in c(1/8, 1/4, 1/2)) {
-  q <- power_impedance_mat(decay_power = p, tiger_year = "2017")
-  conn[[glue("max_abs_sh_pow_{p}")]] <- connectedness("2017", impedance = q)
-}
-
-conn_meth <- conn
-
-```
-
-Distribution of the connectedness metric across counties.
+`max_absorption_alpha`:
+- distance restriction shifts distribution to the left
+- distributions are almost identical between binary ("dprox") and Gaussian impedance
 
 ```{r}
-d <- conn[["max_abs_share"]] %>%
-  ungroup() %>%
-  select(place) %>% 
-  rename(stcty = place)
-for (n in names(conn)) {
-  d[[n]] <- conn[[n]]$max_absorption_alpha
-}
-d <- d %>%
-  select(!stcty) %>%
-  pivot_longer(everything())
+d <- c("none", "dprox-300", "gauss-300", "dprox-100", "gauss-100") %>%
+  map(~ (data_prep_conn(year = 2017, imped_key = .x) %>%
+           mutate(conn_meth = .x, .before = year))) %>%
+  do.call(rbind, .)
 
 d %>%
-  group_by(name) %>%
-  summarize(across(value, list(mean = mean, sd = sd, min = min, q25 = ~ quantile(.x, 0.25),
+  group_by(conn_meth) %>%
+  summarize(across(max_absorption_alpha, list(mean = mean, sd = sd, min = min, q25 = ~ quantile(.x, 0.25),
                                med = median, q75 = ~ quantile(.x, 0.75), max = max))) %>%
-  rename_with(~ str_remove(.x, "value_"))
+  rename_with(~ str_remove(.x, "max_absorption_alpha_"))
 
-
-ggplot(d %>% filter(name != "max_abs_sh_pow_0.5", name != "max_abs_sh_pow_0.25")) +
-  geom_density(aes(value, color = name))
+ggplot(d, aes(max_absorption_alpha)) + geom_density(aes(color = conn_meth))
 ```
 
 
-# Connectedness over time
+## change over time
+
+- grows from 2002 to 2007, then falls in 2012, then grows again to 2017
+- same trend by impedance type
+- same trend by rurality
+- might be driven by changing CBP data suppression methods
+- rural areas are more connected
+- trend not uniform, a lot of counties go in either direction
 
 
 ```{r}
+d <- list()
+for (y in c(2002, 2007, 2012, 2017)) {
+  for (i in c("none", "dprox-300")) {
+    d[[length(d) + 1]] <- data_prep_conn(year = y, imped_key = i) %>%
+      mutate(conn_meth = i, .before = year)
+  }
+}
+d <- do.call(rbind, d)
+d1 <- data_prep_rurality() %>% select(stcty, rural)
+d <- inner_join(d, d1, "stcty")
 
-impedance_dprox_300 <- dprox_mat(boundary_limit = miles2meters(300), tiger_year = "2017")
+ggplot(d) + geom_density(aes(max_absorption_alpha, color = as.factor(year), linetype = conn_meth))
 
-df_conn <- tibble()
+d1 <- d %>% filter(conn_meth == "dprox-300")
+ggplot(d1) + geom_density(aes(max_absorption_alpha, color = as.factor(year), linetype = rural))
 
-
-y <- 2009
-d <- connectedness(y) %>%
-  ungroup() %>%
-  rename(stcty = place, connectedness = max_absorption_alpha) %>%
-  select(stcty, connectedness) %>%
-  mutate(year = y, conn_method = "max_abs_share")
-df_conn <- rbind(df_conn, d)
-
-d <- connectedness(y, impedance = impedance_dprox_300) %>%
-  ungroup() %>%
-  rename(stcty = place, connectedness = max_absorption_alpha) %>%
-  select(stcty, connectedness) %>%
-  mutate(year = y, conn_method = "max_abs_sh_dprox_300")
-df_conn <- rbind(df_conn, d)
-
-y <- 2019
-d <- connectedness(y) %>%
-  ungroup() %>%
-  rename(stcty = place, connectedness = max_absorption_alpha) %>%
-  select(stcty, connectedness) %>%
-  mutate(year = y, conn_method = "max_abs_share")
-df_conn <- rbind(df_conn, d)
-
-d <- connectedness(y, impedance = impedance_dprox_300) %>%
-  ungroup() %>%
-  rename(stcty = place, connectedness = max_absorption_alpha) %>%
-  select(stcty, connectedness) %>%
-  mutate(year = y, conn_method = "max_abs_sh_dprox_300")
-df_conn <- rbind(df_conn, d)
-
-df_conn %>%
-  group_by(year, conn_method) %>%
-  summarize(across(connectedness, list(mean = mean, sd = sd, min = min, q25 = ~ quantile(.x, 0.25),
-                               med = median, q75 = ~ quantile(.x, 0.75), max = max)),
-            .groups = 'drop')
-
-ggplot(df_conn) +
-  geom_density(aes(connectedness, color = as.factor(year), linetype = conn_method))
-
-
-d <- df_conn %>%
-  pivot_wider(id_cols = c(stcty, conn_method), 
-              names_from = year, names_prefix = "connectedness_", 
-              values_from = connectedness) %>%
+d1 <- d %>%
+  pivot_wider(id_cols = c(stcty, conn_meth, rural), 
+              names_from = year, names_prefix = "conn_", 
+              values_from = max_absorption_alpha) %>%
   drop_na()
+ggplot(d1) + geom_point(aes(conn_2007, conn_2017, color = rural), size = 0.2) + facet_wrap(vars(conn_meth))
+```
+
+
+# Analysis
+
+## dataframe
+
+```{r}
+# county characteristics
+years <- seq(2002, 2017, 5)
+df <- data_prep_county_emp() %>%
+  filter(year %in% years)
+
+d <- data_prep_county_id()
+df <- inner_join(df, d, "stcty")
+
+d <- data_prep_rurality()
+df <- inner_join(df, d, "stcty")
+
+## share of ag in total output
+d <- data_prep_county_output() %>%
+  filter(year %in% years) %>%
+  group_by(year, stcty) %>%
+  mutate(output = sum(output_nom), output_share_ind11 = 100 * output_nom / output) %>%
+  filter(ind == "11") %>%
+  select(year, stcty, output, output_share_ind11)
+df <- inner_join(df, d, c("year", "stcty"))
+
+# annualized growth rates
+df <- df %>%
+  arrange(stcty, year) %>%
+  group_by(stcty) %>%
+  mutate(across(c(est, emp), 
+                ~ 100 * (1 + 2 * (lead(.x) - .x) / (lead(.x) + .x)) ^ (1 / (lead(year) - year)) - 100, 
+                .names = "{.col}_gr")) %>%
+  ungroup()
+
+dfa_stub <- df
+
+# connectedness
+dfa_conn <- list()
+
+f <- function(d) {
+  d %>%
+  arrange(stcty, year) %>%
+  group_by(stcty) %>%
+  mutate(conn_gr = (lead(conn) - conn) / (lead(year) - year)) %>%
+  ungroup()
+}
+  
+## max output absorption with no impedance
+dfa_conn[["output, max abs, no imped"]] <- years %>%
+  map(~ data_prep_conn(year = .x, imped_key = "none")) %>%
+  do.call(rbind, .) %>%
+  select(year, stcty, max_absorption_alpha) %>%
+  rename(conn = max_absorption_alpha) %>%
+  f()
+
+# max output absorption with dprox-300 impedance
+dfa_conn[["output, max abs, dprox-300"]] <- years %>%
+  map(~ data_prep_conn(year = .x, imped_key = "dprox-300")) %>%
+  do.call(rbind, .) %>%
+  select(year, stcty, max_absorption_alpha) %>%
+  rename(conn = max_absorption_alpha) %>%
+  f()
+```
+
+
+## correlations
+
+- negative emp vs rural and ag share
+- positive rural vs ag share and conn
+- negative emp vs conn
+
+```{r}
+df <- dfa_stub
+d <- dfa_conn[["output, max abs, no imped"]] %>%
+  rename(conn_noimp = conn)
+df <- inner_join(df, d, c("year", "stcty"))
+d <- dfa_conn[["output, max abs, dprox-300"]] %>%
+  rename(conn_dprox300 = conn)
+df <- inner_join(df, d, c("year", "stcty"))
+df <- df %>%
+  select(est, emp, rural, output_share_ind11, conn_noimp, conn_dprox300)
+cor(df, use = "complete.obs")
+```
+
+## conn and size
+
+Scatterplots of connectedness metrics vs county employment.
+
+- big counties are always metro and have low connectedness
+- significant variation in smaller counties, which can be both metro and nonmetro
+- negative correlation is weaker with impedance
+- no notable visual difference between years
+
+
+```{r}
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, no imped"]], c("year", "stcty")) %>%
+  filter(year == 2017)
+
+ggplot(d, aes(emp, conn, color = rural)) + 
+  geom_point(size = 0.2) +
+  geom_smooth() +
+  scale_x_log10() +
+  labs(title = "no imped")
+
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
+  filter(year == 2017)
+
+ggplot(d, aes(emp, conn, color = rural)) + 
+  geom_point(size = 0.2) +
+  geom_smooth() +
+  scale_x_log10() +
+  labs(title = "dprox-300")
+
+```
+
+
+## conn and agriculture
+
+- ag output share is larger in rural
+- high ag counties are smaller
+- high ag are more connected
+
+```{r}
+d <- dfa_stub %>%
+  filter(year == 2017) %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty"))
 
 ggplot(d) +
-  geom_point(aes(connectedness_2009, connectedness_2019)) +
-  facet_wrap(~conn_method)
-```
+  geom_density(aes(output_share_ind11, color = rural))
 
+cor(select(d, emp, output_share_ind11, conn), use = "complete.obs") %>% round(2)
 
+ggplot(d, aes(output_share_ind11, emp, color=rural)) + 
+  geom_point(size = 0.4) +
+  geom_smooth() +
+  scale_y_log10()
 
-# County employment
-
-
-```{r data}
-
-years <- c(2009, 2019)
-
-# load BDS county data
-df <- bds$get_df("cty") %>%
-  filter(year %in% years) %>%
-  mutate(stcty = str_c(st, cty)) %>%
-  select(year, stcty, estabs, emp) %>%
-  rename(est = estabs) %>%
-  arrange(stcty, year)
-
-# growth rates
-df <- df %>%
-  group_by(stcty) %>% 
-  mutate(
-    est_denom = (est + lag(est)) / 2,
-    est_gr = (est - lag(est)) / est_denom,
-    emp_denom = (emp + lag(emp)) / 2,
-    emp_gr = (emp - lag(emp)) / emp_denom
-  ) %>% 
-  ungroup()
-
-
-# add rural status
-d <- cbsa$get_cbsa_delin_df(2009) %>%
-  rename_with(str_to_lower) %>%
-  mutate(stcty = str_c(state_code, county_code)) %>%
-  select(stcty, metro_micro)
-df <- left_join(df, d, by = "stcty") %>% 
-  mutate(rural = replace_na(metro_micro != "metro", TRUE))
-
-# add absorption shares
-d <- df_conn %>%
-  filter(conn_method == "max_abs_share") %>%
-  rename(conn_unlim = connectedness)
-df <- left_join(df, d, by = c("stcty", "year"))
-df <- df %>%
-  group_by(stcty) %>% 
-  mutate(conn_unlim_lag = lag(conn_unlim), conn_unlim_gr = (conn_unlim - conn_unlim_lag)) %>% 
-  ungroup()
-
-d <- df_conn %>%
-  filter(conn_method == "max_abs_sh_dprox_300") %>%
-  rename(conn_drpox_300 = connectedness)
-df <- left_join(df, d, by = c("stcty", "year"))
-df <- df %>%
-  group_by(stcty) %>% 
-  mutate(conn_drpox_300_lag = lag(conn_drpox_300), conn_drpox_300_gr = (conn_drpox_300 - conn_drpox_300_lag)) %>% 
-  ungroup()
-
-
-
+ggplot(d, aes(output_share_ind11, conn, color=rural)) + 
+  geom_point(size = 0.4) +
+  geom_smooth()
 
 ```
 
+## estab avg size
 
-## Static
-
-### unlimited
+Counties with smaller average establishments are more connected, but this is likely because these are also smaller counties.
 
 ```{r}
-df <- df %>%
-  mutate(conn = conn_unlim, conn_lag = conn_unlim_lag, conn_gr = conn_unlim_gr)
+d <- dfa_stub %>%
+  filter(year == 2017) %>%
+  mutate(est_size = emp / est) %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty"))
 
+ggplot(d) +
+  geom_density(aes(est_size, color = rural))
 
-df %>%
-  group_by(year, rural) %>%
-  summarize(across(c(emp, conn), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))),
-            .groups = 'drop')
+cor(select(d, rural, est, emp, est_size, conn), use = "complete.obs") %>% round(2)
 
-ggplot(df) +
-  geom_point(aes(emp, conn)) +
-  scale_x_log10() +
-  facet_wrap(vars(year, rural))
+ggplot(d, aes(est_size, emp, color=rural)) + 
+  geom_point(size = 0.3) +
+  geom_smooth() +
+  scale_x_continuous(limits = c(0, 30)) +
+  scale_y_log10()
+
+ggplot(d, aes(est_size, conn, color=rural)) + 
+  geom_point(size = 0.3) +
+  scale_x_continuous(limits = c(0, 30)) +
+  geom_smooth()
+
 ```
 
-### 300 miles
+
+## growth
+
+Annualized employment growth over 5 years following t.
+
+- Relationship between connectedness and growth is usually negative.
+- Exception in 2007 with slightly positive slope, more so in metro, and U-shaped in rural.
 
 ```{r}
-df <- df %>%
-  mutate(conn = conn_drpox_300, conn_lag = conn_drpox_300_lag, conn_gr = conn_drpox_300_gr)
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
+  drop_na(conn, est_gr, emp_gr)
 
+rbind(
+  d %>% group_by(year) %>%
+    summarize(as.data.frame(as.list(summary(emp_gr))), .groups = "drop") %>%
+    mutate(rural = "ALL", .after = year),
+  d %>% group_by(year, rural) %>%
+    summarize(as.data.frame(as.list(summary(emp_gr))), .groups = "drop")
+)
 
-df %>%
-  group_by(year, rural) %>%
-  summarize(across(c(emp, conn), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))),
-            .groups = 'drop')
+ggplot(d) + 
+  geom_density(aes(emp_gr, color = as.factor(year))) + 
+  xlim(-10, 10)
 
-ggplot(df) +
-  geom_point(aes(emp, conn)) +
-  scale_x_log10() +
-  facet_wrap(vars(year, rural))
-```
-
-
-## Dynamic
-
-### unlimited
-
-```{r}
-df <- df %>%
-  mutate(conn = conn_unlim, conn_lag = conn_unlim_lag, conn_gr = conn_unlim_gr)
-
-df %>%
-  group_by(rural) %>%
-  summarize(across(c(emp_gr, conn_gr), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))))
-
-ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_lag, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "loess") +
-  facet_wrap(vars(rural))
-
-ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_gr, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "loess") +
-  facet_wrap(vars(rural))
-
-```
-
-
-### 300 miles
-
-```{r}
-df <- df %>%
-  mutate(conn = conn_drpox_300, conn_lag = conn_drpox_300_lag, conn_gr = conn_drpox_300_gr)
-
-df %>%
-  group_by(rural) %>%
-  summarize(across(c(emp_gr, conn_gr), list(mean = ~mean(.x, na.rm = TRUE), med = ~median(.x, na.rm = TRUE), sd = ~sd(.x, na.rm = TRUE))))
-
-ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_lag, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "loess") +
-  facet_wrap(vars(rural))
-
-ggplot(filter(df, year == years[2]) %>% drop_na(), aes(conn_gr, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "loess") +
-  facet_wrap(vars(rural))
-
-```
-
-
-# Growth 2015-2019
-
-```{r, preload-slow-data}
-io_use_det <- bea_io$get_use(2012L, "det")
-county_industry_output <- total_output("2017", "det")
-county_output_sec <- total_output("2017", "sec")
-
-```
-
-
-Compare 2017 max absorption and 2015-2019 county employment growth from BDS.
-
-
-```{r data}
-
-# load BDS county data
-df <- bds$get_df("cty") %>%
-  filter(year > 2014) %>%
-  mutate(stcty = str_c(st, cty)) %>%
-  select(year, stcty, estabs, emp) %>%
-  rename(est = estabs) %>%
-  arrange(stcty, year)
-
-# growth rates
-df <- df %>%
-  group_by(stcty) %>% 
-  mutate(
-    est_denom = (est + lag(est, 4)) / 2,
-    est_gr = (est - lag(est, 4)) / est_denom,
-    emp_denom = (emp + lag(emp, 4)) / 2,
-    emp_gr = (emp - lag(emp, 4)) / emp_denom
-  ) %>% 
-  ungroup() %>%
-  filter(year == 2019)
-
-# add absorption shares
-d <- county_conn %>%
-  ungroup() %>%
-  rename(stcty = place) %>%
-  select(stcty, max_absorption_alpha, second_max_absorption_alpha)
-df <- inner_join(df, d, by = "stcty")
-
-# add rural status
-d <- cbsa$get_cbsa_delin_df(2017) %>%
-  rename_with(str_to_lower) %>%
-  mutate(stcty = str_c(state_code, county_code)) %>%
-  select(stcty, metro_micro)
-df <- left_join(df, d, by = "stcty") %>% mutate(rural = (metro_micro != "metro") %>% replace_na(TRUE))
-
-
-
-# industry shares of output
-d <- county_output_sec %>% 
-  t() %>% 
-  as_tibble(rownames = "stcty")
-d$total_output <- rowSums(select(d, !stcty))
-d <- d %>% 
-  mutate(across(!c(stcty, total_output), ~ .x / total_output, .names = "share_{.col}")) %>%
-  select(stcty, starts_with("share"))
-df <- left_join(df, d, by = "stcty")
+ggplot(d, aes(conn, emp_gr, color = rural)) +
+  geom_point(size = .2) +
+  geom_smooth() +
+  scale_y_continuous(limits = c(-10, 10)) +
+  facet_wrap(vars(year)) +
+  theme(legend.position = c(.9, .9))
 
 
 ```
+
+
+
+
+# Growth regressions
+
+Connectedness is bad for growth when growth is positive (2002-2007 and 2012-2017), but good when negative (2007-2012).
+
 
 
 ```{r}
-#| output: false
-d <- geography$get_county_df(geometry = FALSE) %>%
-  rename_with(str_to_lower) %>%
-  rename(stcty = code, cty_name = name) %>%
-  select(stcty, cty_name)
-
-df %>% ungroup() %>%
-  filter(str_sub(stcty, 1, 2) == "55") %>%
-  left_join(d, by = "stcty")
-```
-
-
-
-Visually, relationship is negative both over full sample, and in the subset of rural counties.
-
-```{r viz}
-
-d <- df %>% drop_na(emp_gr)
-
-# rural have less growth and more absorption
-d %>% group_by(rural) %>% summarise(n(), mean(emp_gr), mean(max_absorption_alpha))
-
-# negative slope
-ggplot(d, mapping = aes(max_absorption_alpha, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-# also in rural subset
-ggplot(d %>% filter(rural), mapping = aes(max_absorption_alpha, emp_gr)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-
-
-```
-
-## regressions
-
-```{r reg}
-
-d <- df %>% drop_na(emp_gr) %>% rename(absor = max_absorption_alpha)
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
+  drop_na(conn, est_gr, emp_gr) %>%
+  mutate(year = as.factor(year))
 
 ms <- list()
 
-# negative coef in rural sample
-ms[["rural"]] <- lm(emp_gr ~ absor, data = filter(d, rural))
-
-# smaller magnitude when weighted
-ms[["rural, wgt"]] <- lm(emp_gr ~ absor, data = filter(d, rural), weights = emp)
-
-# including non-metro counties with interaction: 
-# no significant difference between metro and non-metro
-ms[["absor*rural"]] <- lm(emp_gr ~ absor * rural, data = d, weights = emp)
-
-
-# adding ag share
-# careful! emp measure does not include farms
-ms[["absor * (rural + ind_share)"]] <- lm(emp_gr ~ absor * rural + absor * (
-  share_11+share_21+share_22+share_23+share_31G+share_42+share_44RT+share_48TW+share_51+share_FIRE+share_PROF+share_6+share_7+share_81
-  ), data = d, weights = emp)
-
+ms[["base"]] <- lm(emp_gr ~ 0 + year * rural, data = d, weights = emp)
+ms[["conn"]] <- lm(emp_gr ~ 0 + year * (rural + conn), data = d, weights = emp)
+ms[["rural*conn"]] <- lm(emp_gr ~ 0 + year * rural * conn, data = d, weights = emp)
+ms[["conn*ag"]] = lm(emp_gr ~ 0 + year * (rural + conn) + conn * output_share_ind11, data = d, weights = emp)
+ms[["ag"]] = lm(emp_gr ~ 0 + year * (rural + conn) + year * output_share_ind11, data = d, weights = emp)
+ms[["ag*conn*year"]] = lm(emp_gr ~ 0 + year * (rural + conn) + year * output_share_ind11 * conn, data = d, weights = emp)
 huxreg(ms)
 
 ```
 
+Marginal effects of connectedness in different specifications are very much the same.
 
 ```{r}
-m <- ms[["absor*rural + absor*ag"]]
 
-d1 <- cbind(df, margins::dydx(df, m, "max_absorption_alpha"))
+me <- list()
+for (m in c("conn", "rural*conn", "ag", "conn*ag", "ag*conn*year")) {
+  me[[m]] <- margins_summary(ms[[m]], variables = "conn", at = list(year = levels(d$year))) %>%
+    select(year, AME, lower, upper) %>%
+    mutate(model = m)
+}
+me <- do.call(rbind, me)
 
-# marginal effect in Wisconsin counties
-d <- geography$get_county_df(geometry = FALSE) %>%
-  rename_with(str_to_lower) %>%
-  rename(stcty = code, cty_name = name) %>%
-  select(stcty, cty_name)
-
-dydx_wi <- d1 %>% ungroup %>%
-  filter(str_sub(stcty, 1, 2) == "55") %>%
-  left_join(d, by = "stcty") %>%
-  select(cty_name, rural, emp, emp_gr, ag_share, max_absorption_alpha, dydx_max_absorption_alpha) %>%
-  arrange(dydx_max_absorption_alpha)
-
-# dydx_wi %>%
-#   filter(rural) %>%
-#   {rbind(head(., 5), tail(., 5))} %>%
-#   mutate_if(is.numeric, round, digits = 3)
-
-ggplot(dydx_wi, aes(ag_share, max_absorption_alpha, colour = dydx_max_absorption_alpha, shape = rural)) +
-  geom_point() +
-  labs(title = "Marginal effect of max_absorption_alpha in WI counties")
-
-
+me
+ggplot(me, aes(year)) +
+  geom_boxplot(aes(middle = AME, ymax = upper, upper = upper, ymin = lower, lower = lower), stat = "identity") +
+  facet_wrap(vars(model))
 ```
+
+
+## quantile reg
+
+It looks like effect of connectedness on growth may be different when growth is negative and positive.
+Quantile regression can be used to evaluate this.
+
+Quantile regression shows that the negative effect of connectedness is stronger for slower growing counties.
+This is particularly visible in 2007, where faster growing counties grow even faster if they are more strongly connected.
+
+```{r}
+d <- dfa_stub %>%
+  inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
+  drop_na(conn, est_gr, emp_gr) %>%
+  mutate(year = as.factor(year))
+
+ggplot(d, aes(conn, emp_gr)) +
+  geom_point(size = 0.1) +
+  ylim(-10, 10) +
+  geom_quantile(quantiles = 1:4/5) +
+  facet_wrap(vars(year))
+```
+
 
 
 # Intermediatedness
@@ -736,13 +827,17 @@ In other words, counties dominated by industries that are not much used as inter
 This will all change once we switch from total output to factor supply.
 
 
-# Second level ECA
+# Future ideas
+
+- Include other conn methods: factor supply and trade balancing.
+- Second level ECA connectedness.
+- Include intermediatedness as explanatory variable.
+- Robust standard errors for panel reg.
+- County fixed effects.
+- Total output as control variable.
 
 
 ```{r}
-# second-level connectedness
 # c1 <- one_hierarchical_connectedness("2017")
-
-
 ```
 
