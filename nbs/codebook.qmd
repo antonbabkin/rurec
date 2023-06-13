@@ -1,0 +1,57 @@
+---
+title: "Variables codebook"
+format: 
+  html:
+    toc: true
+    code-fold: true
+    df-print: paged
+    embed-resources: true
+---
+
+```{r}
+library(tidyverse)
+
+root_dir <- rprojroot::find_rstudio_root_file()
+```
+
+
+# Connectedness and growth
+
+
+```{r}
+# load dataframe saved from "connectedness_and_growth.qmd"
+df <- read.csv(file.path(root_dir, "data/conn_growth_analysis.csv"))
+```
+
+**emp**  
+County employment from QCEW, including hired labor from AgCensus.
+
+```{r}
+df$emp %>% summary()
+```
+
+
+**emp_gr**  
+Annualized growth rate of county employment from t-5.
+
+```{r}
+df$emp_gr %>% summary()
+```
+
+**conn_maxabs_noimp**  
+County connectedness metric, calculated as maximum absorption, normalized by county's total output.
+No spatial impedance.
+
+```{r}
+df$conn_maxabs_noimp %>% summary()
+```
+
+
+**conn_maxabs_dprox300**  
+County connectedness metric, calculated as maximum absorption, normalized by county's total output.
+Trade impedance: no trade beyond 300-mile distance from the county.
+
+```{r}
+df$conn_maxabs_dprox300 %>% summary()
+```
+
