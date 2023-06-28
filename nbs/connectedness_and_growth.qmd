@@ -29,6 +29,7 @@ pubdata <- new.env()
 pubdata$geography <- reticulate::import("rurec.pubdata.geography")
 pubdata$cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
 pubdata$bea_nipa <- reticulate::import("rurec.pubdata.bea_nipa")
+pubdata$bea_io <- reticulate::import("rurec.pubdata.bea_io")
 
 root_dir <- rprojroot::find_rstudio_root_file()
 
@@ -38,12 +39,30 @@ source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
 
 ggplot2::theme_set(theme_minimal())
-Sys.setenv("LOG_LEVEL" = "INFO")
+Sys.setenv("LOG_LEVEL" = "DEBUG")
 
 
+# Convert between nominal and real dollars.
+.deflator <- pubdata$bea_nipa$get_price_index_df() %>%
+  rename(deflator = purchases_price_index) %>%
+  select(deflator) %>%
+  mutate(deflator = deflator / .["2020", "deflator"])
+
+nom2real <- function(nom, year) {
+  nom / .deflator[as.character(year), "deflator"]
+}
+
+real2nom <- function(real, year) {
+  real * .deflator[as.character(year), "deflator"]
+}
+
+# test
+# y <- rep(2019:2021, 2)
+# n <- rep(100, length(y))
+# r <- nom2real(n, y)
+# n1 <- real2nom(r, y)
+# n == n1
 ```
-
-
 
 
 # Data prep
@@ -53,7 +72,9 @@ Prepare parts that will be combined into analysis dataframe.
 ## county id
 
 ```{r}
-data_prep_county_id <- function() {
+data_prep <- new.env()
+
+data_prep$county_id <- function() {
   # county fips and name
   year <- 2013L
   df <- pubdata$geography$get_county_df(year = year, geometry = FALSE) %>%
@@ -73,7 +94,7 @@ data_prep_county_id <- function() {
   df
 }
 
-head(data_prep_county_id())
+head(data_prep$county_id())
 ```
 
 
@@ -87,7 +108,7 @@ head(data_prep_county_id())
 
 ```{r}
 
-.prep_data_county_farm_emp <- function() {
+data_prep$county_farm_emp <- reseng$cache(function() {
   ds <- arrow::open_dataset(as.character(agcen$PATH$proc), partitioning = c("YEAR"))
   df <- ds %>%
     rename_with(str_to_lower) %>%
@@ -117,10 +138,10 @@ head(data_prep_county_id())
       est = round(zoo::na.approx(est, year, na.rm = FALSE, rule = 2)))
   
   return(df)
-}
-# file.remove(file.path(root_dir, "cache/prep_data_county_farm_emp.rds"))
-prep_data_county_farm_emp <- reseng$cache(.prep_data_county_farm_emp, file.path(root_dir, "cache/prep_data_county_farm_emp.rds"))
+}, file.path(root_dir, "cache/data_prep_county_farm_emp.rds"))
+# file.remove(file.path(root_dir, "cache/data_prep_county_farm_emp.rds"))
 
+head(data_prep$county_farm_emp())
 ```
 
 
@@ -129,7 +150,7 @@ Total employment, including farm labor.
 
 ```{r}
 
-.data_prep_county_emp <- function() {
+data_prep$county_emp <- reseng$cache(function() {
   ds <- arrow::open_dataset(as.character(qcew$PATH$proc), partitioning = c("year"))
   years <- 2001:2020
   df <- ds %>%
@@ -146,11 +167,10 @@ Total employment, including farm labor.
     mutate(est = est + est_farm, emp = emp + emp_farm) %>%
     select(!c(est_farm, emp_farm))
   df
-}
+}, file.path(root_dir, "cache/data_prep_county_emp.rds"))
 # file.remove(file.path(root_dir, "cache/data_prep_county_emp.rds"))
-data_prep_county_emp <- reseng$cache(.data_prep_county_emp, file.path(root_dir, "cache/data_prep_county_emp.rds"))
 
-head(data_prep_county_emp())
+head(data_prep$county_emp())
 ```
 
 ## rurality
@@ -159,7 +179,7 @@ CBSA definition, rural = non-metro.
 
 ```{r}
 
-data_prep_rurality <- function() {
+data_prep$rurality <- function() {
   
   # full list of county FIPS
   df <- data_prep_county_id() %>%
@@ -178,42 +198,117 @@ data_prep_rurality <- function() {
   df
 }
 
-head(data_prep_rurality())
+head(data_prep$rurality())
 ```
 
 
-## sector output
-
-Note that this output is in nominal dollars.
+## output
 
 ```{r}
-..data_prep_county_output <- function(year, ilevel) {
-  d <- conn$total_output(as.character(year), ilevel)
+data_prep$county_output_by_year <- reseng$cache(function(year, ilevel) {
+  d <- conn_fns$total_output(as.character(year), ilevel)
   d <- d %>%
     as_tibble(rownames = "ind") %>%
     pivot_longer(!ind, names_to = "stcty", values_to = "output_nom") %>%
     mutate(year = year) %>%
-    select(year, stcty, ind, output_nom)
+    select(year, stcty, ind, output_nom) %>%
+    mutate(output = nom2real(output_nom, year))
   d
-}
-.data_prep_county_output <- reseng$cache(..data_prep_county_output, file.path(root_dir, "cache/county_output_{ilevel}_{year}.rds"))
+}, file.path(root_dir, "cache/county_output/{ilevel}_{year}.rds"))
+# file.remove(file.path(root_dir, "cache/county_output/det_2020.rds"))
 
-data_prep_county_output <- reseng$cache(function() {
+data_prep$county_output <- reseng$cache(function(ilevel) {
   years <- 2001:2020
-  d <- lapply(years, .data_prep_county_output, ilevel = "sec")
-  # parallel execution on 4 CPUs is not much faster
-  # d <- parallel::mclapply(years, .data_prep_county_output, ilevel = "sec")
+  d <- lapply(years, data_prep$county_output_by_year, ilevel = ilevel)
   d <- do.call(rbind, d)
   d
-}, "cache/county_output.rds")
+}, file.path(root_dir, "cache/county_output/{ilevel}.rds"))
+# file.remove(file.path(root_dir, "cache/county_output/det.rds"))
 
-head(data_prep_county_output())
+head(data_prep$county_output("sec"))
+
 ```
+
+## intermediate S&D
+
+County supply and demand for intermediate commodities.
+
+```{r}
+
+#' County intermediate supply by BEA industry (sector, summary or detail)
+data_prep$intermed_supply_by_ind <- reseng$cache(function(year, ilevel) {
+  d <- conn_fns$commodity_factor_supply_tidy_matrix(as.character(year), ilevel)
+  d %>%
+    as_tibble(rownames = "ind") %>%
+    pivot_longer(!ind, names_to = "stcty", values_to = "intermed_supply_nom") %>%
+    mutate(year = year) %>%
+    select(year, stcty, ind, intermed_supply_nom) %>%
+    mutate(intermed_supply = nom2real(intermed_supply_nom, year))
+}, file.path(root_dir, "cache/intermed_supply/{ilevel}_{year}.rds"))
+
+
+#' County intermediate demand by BEA industry (sector, summary or detail)
+data_prep$intermed_demand_by_ind <- reseng$cache(function(year, ilevel) {
+  d <- conn_fns$commodity_factor_demand_tidy_matrix(as.character(year), ilevel)
+  d %>%
+    as_tibble(rownames = "ind") %>%
+    pivot_longer(!ind, names_to = "stcty", values_to = "intermed_demand_nom") %>%
+    mutate(year = year) %>%
+    select(year, stcty, ind, intermed_demand_nom) %>%
+    mutate(intermed_demand = nom2real(intermed_demand_nom, year))
+}, file.path(root_dir, "cache/intermed_demand/{ilevel}_{year}.rds"))
+
+#' County intermediate supply and demand, total and agriculture&mining, aggregated from BEA detail industry
+data_prep$intermed_sup_dem <- reseng$cache(function() {
+  one_year <- function(year) {
+    d1 <- data_prep$intermed_demand_by_ind(year, "det") %>%
+      select(stcty, ind, intermed_demand)
+    d2 <- data_prep$intermed_supply_by_ind(year, "det") %>%
+      select(stcty, ind, intermed_supply)
+    d <- inner_join(d1, d2, c("stcty", "ind"))
+    d <- d %>% 
+      replace_na(list(intermed_supply = 0, intermed_demand = 0)) %>%
+      mutate(
+        excess_intermed_supply = pmax(0, intermed_supply - intermed_demand),
+        excess_intermed_demand = pmax(0, intermed_demand - intermed_supply),
+        agmine = str_starts(ind, "11") | str_starts(ind, "21")
+      )
+    d1 <- d %>%
+      group_by(stcty) %>%
+      summarize(
+        intermed_supply = sum(intermed_supply),
+        intermed_demand = sum(intermed_demand),
+        excess_intermed_supply = sum(excess_intermed_supply),
+        excess_intermed_demand = sum(excess_intermed_demand)
+      )
+    d2 <- d %>%
+      filter(str_starts(ind, "11") | str_starts(ind, "21")) %>%
+      group_by(stcty) %>%
+      summarize(
+        agmine_excess_intermed_supply = sum(excess_intermed_supply),
+        agmine_excess_intermed_demand = sum(excess_intermed_demand)
+      )
+    inner_join(d1, d2, "stcty") %>% 
+      mutate(year = year)
+  }
+  
+  years <- 2001:2020
+  d <- lapply(years, one_year)
+  do.call(rbind, d)
+}, file.path(root_dir, "cache/intermed_sup_dem_2001-2020.rds"))
+# file.remove(file.path(root_dir, "cache/intermed_sup_dem_2001-2020.rds"))
+
+
+head(data_prep$intermed_sup_dem())
+```
+
+
+
 
 ## connectedness
 
 ```{r}
-data_prep_imped <- reseng$cache(function(kind, par) {
+data_prep$imped <- reseng$cache(function(kind, par) {
   tiger_year = 2017
   if (kind == "dprox") {
     dist <- conn_fns$miles2meters(as.integer(par))
@@ -229,12 +324,12 @@ data_prep_imped <- reseng$cache(function(kind, par) {
 #' @param year Year of county output.
 #' @param imped_key Impedance key of form "kind-par", e.g. "dprox-300".
 #' Use "none" for no impedance.
-data_prep_conn <- reseng$cache(function(year, imped_key) {
+data_prep$conn <- reseng$cache(function(year, imped_key) {
   if (imped_key == "none") {
     imped_mat <- NULL
   } else {
     x <- str_split_1(imped_key, "-")
-    imped_mat <- data_prep_imped(x[1], x[2])
+    imped_mat <- data_prep$imped(x[1], x[2])
   }
   # todo: why connectedness() needs tiger_year and scale?
   conn_fns$connectedness(cbp_year = as.character(year), impedance = imped_mat, tiger_year = 2017, scale = "20m") %>%
@@ -242,6 +337,8 @@ data_prep_conn <- reseng$cache(function(year, imped_key) {
     rename(stcty = place) %>%
     mutate(year = year, .before = stcty)
 }, file.path(root_dir, "cache/conn/{year}_{imped_key}.rds"))
+
+head(data_prep$conn(2007, "none"))
 ```
 
 
@@ -327,32 +424,41 @@ ggplot(d1) + geom_point(aes(conn_2007, conn_2017, color = rural), size = 0.2) + 
 ## dataframe
 
 ```{r}
-# county characteristics
+# employment and estabs
 years <- seq(2002, 2017, 5)
-df <- data_prep_county_emp() %>%
+df <- data_prep$county_emp() %>%
   filter(year %in% years)
 
-d <- data_prep_county_id()
+# names and FIPS
+d <- data_prep$county_id()
 df <- inner_join(df, d, "stcty")
 
-d <- data_prep_rurality()
+# CBSA rurality
+d <- data_prep$rurality()
 df <- inner_join(df, d, "stcty")
 
-## share of ag in total output
-d <- data_prep_county_output() %>%
+# total and agmine output
+d <- data_prep$county_output("sec") %>%
   filter(year %in% years) %>%
-  group_by(year, stcty) %>%
-  mutate(output = sum(output_nom), output_share_ind11 = 100 * output_nom / output) %>%
-  filter(ind == "11") %>%
-  select(year, stcty, output, output_share_ind11)
+  group_by(year, stcty)
+d1 <- d %>%
+  summarize(output = sum(output), .groups = "drop")
+df <- inner_join(df, d1, c("year", "stcty"))
+d1 <- d %>%
+  filter(ind %in% c("11", "21")) %>%
+  summarize(agmine_output = sum(output), .groups = "drop")
+df <- inner_join(df, d1, c("year", "stcty"))
+
+# intermediates
+d <- data_prep$intermed_sup_dem()
 df <- inner_join(df, d, c("year", "stcty"))
 
 # annualized growth rates
 df <- df %>%
   arrange(stcty, year) %>%
   group_by(stcty) %>%
-  mutate(across(c(est, emp), 
-                ~ 100 * (1 + 2 * (lead(.x) - .x) / (lead(.x) + .x)) ^ (1 / (lead(year) - year)) - 100, 
+  mutate(across(c(est, emp, output), 
+                ~ 100 * (1 + 2 * (.x - lag(.x)) / (.x + lag(.x))) ^ (1 / (year - lag(year))) - 100, 
                 .names = "{.col}_gr")) %>%
   ungroup()
 
@@ -365,21 +471,21 @@ f <- function(d) {
   d %>%
   arrange(stcty, year) %>%
   group_by(stcty) %>%
-  mutate(conn_gr = (lead(conn) - conn) / (lead(year) - year)) %>%
+  mutate(conn_gr = (conn - lag(conn)) / (year - lag(year))) %>%
   ungroup()
 }
   
 ## max output absorption with no impedance
 dfa_conn[["output, max abs, no imped"]] <- years %>%
-  map(~ data_prep_conn(year = .x, imped_key = "none")) %>%
+  map(~ data_prep$conn(year = .x, imped_key = "none")) %>%
   do.call(rbind, .) %>%
   select(year, stcty, max_absorption_alpha) %>%
   rename(conn = max_absorption_alpha) %>%
   f()
 
-# max output absorption with dprox-300 impedance
+## max output absorption with dprox-300 impedance
 dfa_conn[["output, max abs, dprox-300"]] <- years %>%
-  map(~ data_prep_conn(year = .x, imped_key = "dprox-300")) %>%
+  map(~ data_prep$conn(year = .x, imped_key = "dprox-300")) %>%
   do.call(rbind, .) %>%
   select(year, stcty, max_absorption_alpha) %>%
   rename(conn = max_absorption_alpha) %>%
@@ -392,10 +498,8 @@ dfa_conn[["output, max abs, dprox-300"]] <- years %>%
 # save dataframe for use in other analyses
 
 d <- dfa_stub %>%
-  inner_join(dfa_conn[["output, max abs, no imped"]], c("year", "stcty")) %>%
-  rename(conn_maxabs_noimp = conn, conn_maxabs_noimp_gr = conn_gr) %>%
   inner_join(dfa_conn[["output, max abs, dprox-300"]], c("year", "stcty")) %>%
-  rename(conn_maxabs_dprox300 = conn, conn_maxabs_dprox300_gr = conn_gr)
+  rename(conn_maxabs_output = conn, conn_maxabs_output_gr = conn_gr)
 
 write.csv(d, file.path(root_dir, "data/conn_growth_analysis.csv"), row.names = FALSE)
 ```
@@ -419,6 +523,16 @@ df <- df %>%
   select(est, emp, rural, output_share_ind11, conn_noimp, conn_dprox300)
 cor(df, use = "complete.obs")
 ```
+
+
+## intermediatedness
+
+`total_intermed_supply / total_output`
+
+## excess S&D
+
+`total_excess_intermed_supply` and `total_excess_intermed_demand`
+
 
 ## conn and size
 
