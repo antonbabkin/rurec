@@ -62,17 +62,15 @@ rm(t)
 
 Assume that the economy can be categorized into $n$ sectors
 
-$\underset{(n \times n)}{\mathbf{Z}} = [z_{ij}]$ - monetary transactions between pairs of sectors, from sector $i$ to sector $j$
+$\underset{(n \times n)}{\mathbf{Z}} = [z_{ij}]$ - monetary transactions matrix between pairs of sectors, from row sector $i$ to column sector $j$
 
-$\underset{(n \times 1)}{\mathbf{f}} = [f_{i}]$ - *total final demand* for sector $i$'s product
+$\underset{(n \times 1)}{\mathbf{f}} = [f_{i}]$ - total final demand vector for sector $i$'s product
 
-$\underset{(n \times 1)}{\mathbf{x}} = [x_{i}]$ - *total gross output* of sector $i$, $\mathbf{x} = \mathbf{Zi} + \mathbf{f} = \left[\sum^{n}_{j=1} z_{ij} + f_{i}\right]$
+$\underset{(n \times 1)}{\mathbf{x}} = [x_{i}]$ - total gross output vector of sector $i$'s product. Note $\mathbf{x} = \mathbf{Zi} + \mathbf{f} = \left[\sum^{n}_{j=1} z_{ij} + f_{i}\right]$
 
-$\underset{(n \times n)}{\mathbf{A}} = \mathbf{Z\hat{x}}^{-1} \Rightarrow [a_{ij}] = [z_{ij} / x_{j}]$ - the *direct requirements matrix* or *technical coefficient* ratio of the quantity of the output of sector $i$ absorbed by sector $j$ per unit of $j$'s total output, $\mathbf{A} = \mathbf{Z\hat{x}}^{-1}$
+$\underset{(n \times n)}{\mathbf{A}} = [a_{ij}]$ - the direct requirements matrix a.k.a. the technical coefficients matrix of the quantity of sector $i$'s product absorbed by sector $j$ per unit of $j$'s total output. Note $\mathbf{A} = \mathbf{Z\hat{x}}^{-1} = [z_{ij} / x_{j}]$
 
-Let $\mathbf{x} = \mathbf{Ax} + \mathbf{f}$ such that $\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$
-
-$\underset{(n \times n)}{\mathbf{L}} = \left(\mathbf{I} - \mathbf{A}\right)^{-1} \Rightarrow [l_{ij}]$ - the *total requirements matrix* or *Leontief inverse* is the overall production required to produce a dollar of gross output
+$\underset{(n \times n)}{\mathbf{L}} = [l_{ij}]$ - the total requirements matrix a.k.a. the Leontief inverse matrix of the quantity of sector $i$'s overall production required to produce a dollar of sector $j$'s gross output. Note $\mathbf{x} = \mathbf{Ax} + \mathbf{f}$ such that $\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$ and $\mathbf{L} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}$
 
 
 
@@ -80,37 +78,35 @@ $\underset{(n \times n)}{\mathbf{L}} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}
 
 Assume that the economy consists of $r$ sub-national regional economies
 
-$\underset{(n \times n)}{\mathbf{Z}^{rr}} = [z^{rr}_{ij}]$ - the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $r$
+$\underset{(n \times n)}{\mathbf{Z}^{rr}} = [z^{rr}_{ij}]$ - monetary transactions matrix between pairs of sectors, from sector $i$ in region $r$ to sector $j$ in region $r$
 
-$\underset{(n \times n)}{\mathbf{Z}^{rs}} = [z^{rs}_{ij}]$ - the dollar flow of goods from sector $i$ in region $r$ to sector $j$ in region $s$
+$\underset{(n \times n)}{\mathbf{Z}^{rs}} = [z^{rs}_{ij}]$ - monetary transactions matrix between pairs of sectors, from sector $i$ in region $r$ to sector $j$ in region $s$
 
-$\underset{(n \times n)}{\mathbf{Z}^{sr}} = [z^{sr}_{ij}]$ - the dollar flow of goods from sector $i$ in region $s$ to sector $j$ in region $r$
+$\underset{(n \times n)}{\mathbf{Z}^{sr}} = [z^{sr}_{ij}]$ - monetary transactions matrix between pairs of sectors, from sector $i$ in region $s$ to sector $j$ in region $r$
 
-$\underset{(n \times n)}{\mathbf{Z}^{ss}} = [z^{ss}_{ij}]$ - the dollar flow of goods from sector $i$ in region $s$ to sector $j$ in region $s$
+$\underset{(n \times n)}{\mathbf{Z}^{ss}} = [z^{ss}_{ij}]$ - monetary transactions matrix between pairs of sectors, from sector $i$ in region $s$ to sector $j$ in region $s$
 
-$\underset{(n \times 1)}{\mathbf{f}^{r}} = [f^{r}_{i}]$ - *total final demand* for sector $i$'s product in region $r$
+$\underset{(n \times 1)}{\mathbf{f}^{r}} = [f^{r}_{i}]$ - total final demand vector for sector $i$'s product in region $r$
 
-$\underset{(n \times 1)}{\mathbf{x}^{r}} = [x^{r}_{i}]$ - *total gross output* of sector $i$ in region $r$
+$\underset{(n \times 1)}{\mathbf{x}^{r}} = [x^{r}_{i}]$ - total gross output vector of sector $i$'s product in region $r$
 
-$\underset{(n \times n)}{\mathbf{A}^{rr}} = [a^{rr}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
+$\underset{(n \times n)}{\mathbf{A}^{rr}} = [a^{rr}_{ij}]$ - direct requirements matrix of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
 
-$\underset{(n \times n)}{\mathbf{A}^{rs}} = [a^{rs}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
+$\underset{(n \times n)}{\mathbf{A}^{rs}} = [a^{rs}_{ij}]$ - direct requirements matrix of the quantity of the output from sector $i$ in region $r$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
 
-$\underset{(n \times n)}{\mathbf{A}^{sr}} = [a^{sr}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
+$\underset{(n \times n)}{\mathbf{A}^{sr}} = [a^{sr}_{ij}]$ - direct requirements matrix of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $r$
 
-$\underset{(n \times n)}{\mathbf{A}^{ss}} = [a^{ss}_{ij}]$ - ratio of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
+$\underset{(n \times n)}{\mathbf{A}^{ss}} = [a^{ss}_{ij}]$ - direct requirements matrix of the quantity of the output from sector $i$ in region $s$ absorbed by sector $j$ per unit of $j$'s total output in region $s$
 
-$a^{rr}_{ij} = (\gamma^{r}_{ij}) (a^{n}_{ij})$ - estimate the regional input coefficient from national technical coefficient, with $\gamma^{r}_{ij} = (\alpha^{r}_{ij}) (\beta^{r}_{ij})$
+$\hat{a}^{rr}_{ij} = (\gamma^{r}_{ij}) (a^{n}_{ij})$ - estimate of regional input coefficient from national technical coefficient, where $\gamma^{r}_{ij} = (\alpha^{r}_{ij}) (\beta^{r}_{ij})$
 
-$a^{r}_{ij} = (\alpha^{r}_{ij}) (a^{n}_{ij})$ - estimate a regional technical coefficient from national technical coefficient, with $\alpha^{r}_{ij} \geq 0$
+Let $\hat{a}^{r}_{ij} = (\alpha^{r}_{ij}) (a^{n}_{ij})$ - estimate of regional technical coefficient from national technical coefficient, where $\alpha^{r}_{ij} \geq 0$
 
-$a^{rr}_{ij} = (\beta^{r}_{ij}) (a^{r}_{ij})$ - estimate the regional input coefficient from regional technical coefficient, with ($0 \leq \beta^{r}_{ij} \leq 1$)
+Let $\hat{a}^{rr}_{ij} = (\beta^{r}_{ij}) (a^{r}_{ij})$ - estimate of regional input coefficient from the regional technical coefficient, where ($0 \leq \beta^{r}_{ij} \leq 1$)
 
-$a^{r}_{ij} \equiv a^{n}_{ij}$ if region $r$ and national production recipes are identical
+Note $a^{r}_{ij} \equiv a^{n}_{ij}$ if region $r$ and national production recipes are identical
 
-$\beta^{r}_{ij} = p^{r}_{i}$ if each regional purchaser, $j$, of input $i$ buys the same proportion of those inputs from within the region 
-
-$p^{r}_{i}$ - the ratio of total regional output, less exports, of sector $i$, to the total output, less exports, plus imports, of sector $i$, $p^{r}_{i} = 1$ when none of good $i$ is imported
+Let $\beta^{r}_{ij} = p^{r}_{i}$ if each regional purchaser, $j$, of input $i$ buys the same proportion of those inputs from within the region, where $p^{r}_{i}$ - the ratio of total regional output, less exports, of sector $i$, to the total output, less exports, plus imports, of sector $i$, and $p^{r}_{i} = 1$ when none of good $i$ is imported
 
 
 **Commodity/Industry Framework**
@@ -984,8 +980,7 @@ inner_join(call_geog(geog_year),
 #                                 industryflow = T,
 #                                 impedance_mat = NULL,
 #                                 subsectors = unique(ilevel_concord("det")[1])[1:13,],
-#                                 verbose = TRUE,
-#                                 totaled = TRUE)
+#                                 verbose = TRUE)
 # 
 # inbound2outbound_map(temp)
 ```
@@ -1044,6 +1039,300 @@ ECA clusters: qualitative and clickable
 inner_join(call_geog(geog_year), 
            absorption_maximum_match(Reduce('+', df)), 
            by = "place") %>% aqual_map()
+```
+
+
+
+# RAS Trade Flows Sector
+
+The preferred globally balanced industry specific county-to-county potential trade flow permits all places to trade all goods to each other. Given CBP payroll and AgCensus output data we derive county specific factor demand and factor supply using BEA technological requirements coefficients. The RAS balancing procedure imputes a globally balanced county-to-county trade flow potential matrix within a prespecified error and iteration tolerance. The final derived trade flow potential matrix is sensitive to initial starting conditions which are established by a seemingly arbitrary and infinite set of trade impedance distance functions which serve as a proxy for transportation costs. The current method uses a Gaussian impedance distance functional form. For each industry the smallest Gaussian RMS which satisfied the error and iteration tolerance is selected from the infinite set of trade impedance distance functions to derive the trade flow potential matrix. 
+
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25")), by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+Summary of Gauss impedance RMS distances by sector
+```{r}
+# tapply(imped_dist$impedance, imped_dist$group, summary)
+```
+
+```{r}
+# ggplot(imped_dist, aes(x = impedance)) + 
+#   geom_density() +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Density")
+```
+
+```{r}
+# ggplot(imped_dist, aes(impedance, fill = group)) +
+#   geom_density(position = "stack") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Density", fill = "Sector") 
+```
+
+Given a set of globally balanced detail-level industry specific county-to-county potential trade flows, we aggregate the 365 detail-level industries into their respective 14 sector-level industry groups. The distribution and density of each industry varies from a 75 to 375 Gaussian RMS width. The lower the RMS the more cost an industry could endure and still balance its tradeflows. 
+
+```{r}
+ggplot(imped_dist, aes(impedance, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+# ggplot(imped_dist, aes(impedance, stat(count), fill = group)) +
+#   geom_density(position = "fill") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+ggplot(imped_dist, aes(impedance, fill = group)) +
+  geom_bar() +
+  labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+ggplot(imped_dist, aes(x = impedance, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = "Gauss Impedance RMS Distance", y = "Sector Cluster")
+```
+
+
+
+```{r}
+# ggplot(imped_dist, aes(x = impedance, y = group, fill = group)) + 
+#   geom_density_ridges(stat = "binline", bins = 13, scale = 0.95, draw_baseline = FALSE) +
+#   theme(legend.position = "none") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Sector Cluster")
+
+```
+
+
+
+A Gaussian impedance distance functional form with variable RMS has desirable properties as a proxy for transportation costs, namely continuous and nonlinear across space. This allows for all counties to be able to trade among each other while imposing a higher and higher costs for longer and longer trade. However, an RMS width is not directly initiative or interpretable. 
+
+Instead, one might wish to know: What is the maximum distance at which 95% or 90% or 50% of the market still clears? (Given a set of globally balanced detail-level industry specific county-to-county potential trade flows.)
+
+```{r}
+
+dist_mat <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "dist_mat"))
+ 
+dis_list <- data.frame()
+
+y <- list.files(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "min_dis"))
+
+for(i in y){
+  print(paste("Industry:", i))
+  df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "min_dis", i))
+  sf <- dist_mat[rownames(df), colnames(df)]
+  tot_df <- sum(df)
+  
+  itstep = 50
+  flag90 <- FALSE
+  flag95 <- FALSE
+   for(d in seq(3000, 0, by = -itstep) ){
+    #print(paste("Distance Trail:", d))
+    sf[sf > miles2meters(d)] <- 0
+    x <- df
+    x[sf <= 0] <- 0
+    if(sum(x, na.rm = T)/tot_df < .50){
+      mcd_50 <- d+itstep
+      #print(paste(">50% Market Clearing Distance:", d+itstep))
+      break
+      }
+    else if(sum(x, na.rm = T)/tot_df < .90 && !flag90){
+      mcd_90 <- d+itstep
+      #print(paste(">90% Market Clearing Distance:", d+itstep))
+      flag90 <- TRUE
+    }
+    else if(sum(x, na.rm = T)/tot_df < .95 && !flag95){
+      mcd_95 <- d+itstep
+      #print(paste(">95% Market Clearing Distance:", d+itstep))
+      flag95 <- TRUE
+    }
+  }
+  dis_list <- rbind(dis_list, 
+                    data.frame(
+                              "sector" = i, 
+                              "mcd_95" = mcd_95,
+                              "mcd_90" = mcd_90,
+                              "mcd_50" = mcd_50))
+}
+saveRDS(dis_list, file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "mcd_detail_2012_industry_gaus_by25"))
+
+```
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "mcd_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(df, by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+```{r}
+# tapply(imped_dist$mcd_95, imped_dist$group, summary)
+# tapply(imped_dist$mcd_90, imped_dist$group, summary)
+# tapply(imped_dist$mcd_50, imped_dist$group, summary)
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_95, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_95)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_90, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_90)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_50, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_50)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_95, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_95)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+```{r}
+ggplot(imped_dist, aes(x = mcd_90, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_90)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_50, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_50)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+
+In addition to being continuous and nonlinear across space another desirable property of the Gaussian impedance distance functional form is that global balancing converges faster and within a "smaller" distance over non-continuous alternatives due to many more non-zero cells in the trade potential matrix that give more degrees of freedom. However, these values may be very very small and well below any economically relevant value or any statically meaningful level giving the measurement and suppression error in the raw data. 
+
+An related but alternative question for deriving interpretable distances is therefore to ask: What is the maximum potential trade distance ignoring all imputed trade flows below \$1, \$10, \$100, \$1000, \$10,000, \$100,000, or \$1,000,000? (Given a set of globally balanced detail-level industry specific county-to-county potential trade flows.)
+
+
+```{r}
+dist_mat <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "dist_mat"))
+ 
+dis_list <- data.frame()
+
+y <- list.files(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "min_dis"))
+
+for(i in y){
+  print(paste("Industry:", i))
+  df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "min_dis", i))
+  
+  sf <- dist_mat[rownames(df), colnames(df)]
+  sf[df < 0.001] <- 0
+  med_1 <- max(sf) %>% meters2miles() %>% round() 
+  sf[df < 0.01] <- 0
+  med_10 <- max(sf) %>% meters2miles() %>% round() 
+  sf[df < 0.1] <- 0
+  med_100 <- max(sf) %>% meters2miles() %>% round() 
+  sf[df < 1] <- 0
+  med_1000 <- max(sf) %>% meters2miles() %>% round() 
+  sf[df < 10] <- 0
+  med_10000 <- max(sf) %>% meters2miles() %>% round() 
+  sf[df < 100] <- 0
+  med_100000 <- max(sf) %>% meters2miles() %>% round()
+  sf[df < 1000] <- 0
+  med_1000000 <- max(sf) %>% meters2miles() %>% round()
+  dis_list <- rbind(dis_list, 
+                    data.frame(
+                              "sector" = i, 
+                              "med_1" = med_1,
+                              "med_10" = med_10,
+                              "med_100" = med_100,
+                              "med_1000" = med_1000,
+                              "med_10000" = med_10000,
+                              "med_100000" = med_100000,
+                              "med_1000000" = med_1000000))
+}
+saveRDS(dis_list, file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "med_detail_2012_industry_gaus_by25"))
+
+
+```
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "med_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(df, by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_1, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1)), 5, nchar(deparse(substitute(mcd_1))))), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_1000, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000)), 5, nchar(deparse(substitute(mcd_1000))))), y = "Count", fill = "Sector") 
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_1000000, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000000)), 5, nchar(deparse(substitute(mcd_1000000))))), y = "Count", fill = "Sector") 
+```
+
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1)), 5, nchar(deparse(substitute(mcd_1))))), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1000, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000)), 5, nchar(deparse(substitute(mcd_1000))))), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1000000, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000000)), 5, nchar(deparse(substitute(mcd_1000000))))), y = "Sector Cluster")
 ```
 
 :::
