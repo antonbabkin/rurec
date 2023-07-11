@@ -42,6 +42,8 @@ library(tmaptools)
 library(parallel)
 library(igraph)
 
+library(ggridges)
+
 
 # Display start time
 log_info("Define functions start")
@@ -288,6 +290,12 @@ call_tiger <- function(tiger_year,
 # Convert miles to meters
 miles2meters <- function(miles){
   df <- as.integer(miles)*1609.344
+  return(df)
+}
+
+# Convert miles to meters
+meters2miles <- function(meters){
+  df <- as.integer(meters)/1609.344
   return(df)
 }
 
@@ -1291,7 +1299,6 @@ call_imputed_tradeflows <- function(cbp_year,
                                     industryflow = TRUE,
                                     impedance_mat = NULL,
                                     subsectors = NULL,
-                                    totaled = FALSE,
                                     crosshaul = TRUE,
                                     ...){
   if(!"ras_trade_fls" %in% c(lsf.str())){
@@ -1329,19 +1336,14 @@ call_imputed_tradeflows <- function(cbp_year,
                          factor_demand = fdx, 
                          impedance_mat = impedance_mat, 
                          ...)
-  if(isTRUE(totaled)){
-   df <- Reduce('+', df)
-  }
   return(df)
 }
-
 
 load_tradeflows <- function(cbp_year,
                             ilevel,
                             industryflow = TRUE,
                             impedance_mat = NULL,
                             subsectors = NULL,
-                            totaled = FALSE,
                             crosshaul = TRUE,
                             data_dir = file.path("data", "robjs"),
                             impedance_call = NULL, 
@@ -1361,7 +1363,6 @@ load_tradeflows <- function(cbp_year,
                                   industryflow,
                                   impedance_mat,
                                   subsectors,
-                                  totaled,
                                   crosshaul,
                                   ...)
     saveRDS(df,  file = file.path(find_rstudio_root_file(), data_dir, rasf) )
@@ -1369,7 +1370,22 @@ load_tradeflows <- function(cbp_year,
   return(df)
 }
 
+### Aggregate list of sector specific trade flow matrices into single matrix
+aggregate_sector_list <- function(sector_list){
+  df <- Reduce('+', sector_list)
+  return(df)
+}
 
+### Normalize trade flow matrix by total county outbound factor supply (rows) or inbound factor demand (cols)
+normalize_tradeflow <- function(tradeflow_matrix, 
+                                  byrow = TRUE){
+  if(isTRUE(byrow)){
+    df <- tradeflow_matrix %>% sweep(1, rowSums(.), FUN="/")
+  } else {
+    df <- tradeflow_matrix %>% sweep(2, colSums(.), FUN="/")
+  }
+  return(df)
+}
 
 ### Summarize data from trade flow matrix
 inbound2outbound <- function(trade_matrix){
@@ -1382,7 +1398,7 @@ inbound2outbound <- function(trade_matrix){
   return(df)
 }
 
-
+### Create edgelist from a matrix
 matrix2edgelist <- function(x){
   df <- do.call(cbind, 
                 lapply(list("row_index" = row(x), 
@@ -1391,6 +1407,7 @@ matrix2edgelist <- function(x){
                        as.vector))
 }
 
+### Create matrix from an edgelist
 edgelist2matrix <- function(x){
   df <- matrix(x[,3], 
                nrow = length(unique(x[,1])), 
@@ -1401,7 +1418,30 @@ edgelist2matrix <- function(x){
 }
 
 
-
+### Generate vector of maximum non-impedance absorption values using impedance scaled absorption matrix
+noimpedance_absorption_maximum <- function(absorption_matrix, 
+                                            impedance_mat, 
+                                            row_max_match = TRUE){
+  a <- absorption_matrix
+  df <- c()
+  x <- a * impedance_mat[rownames(a), colnames(a)]
+  if(isTRUE(row_max_match)){
+    x <- apply(x, 1, which.max)
+    for(i in 1:nrow(a)){
+      df <- cbind(df, a[i, x[i]])
+    }
+  } else {
+    x <- apply(x, 2, which.max)
+    for(i in 1:ncol(a)){
+      df <- cbind(df, a[x[i], i])
+    }
+  }
+  df <- as.data.frame(t(df))
+  rownames(df) <- rownames(a)
+  colnames(df) <- "ab_max"
+  df$id <- deparse(substitute(absorption_matrix))
+  return(df)
+}
 
 
 ############ Call connectedness matrix for any available year and industry scale
@@ -2596,7 +2636,73 @@ inbound2outbound_map <- function(df,
 }
 
 
+############ Map Net Supply and Demand of industry/commodity goods
+net_sd_map <- function(df,
+                       fill,
+                       ...){
 
+g <- ggplot() + 
+  geom_sf_interactive(aes(fill = round((.data[[fill]]), 2), 
+                          tooltip = if("STATE" %in% names(df)){
+                            glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          }else{
+                            glue("{NAME}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          },
+                          data_id = place), 
+                      color = NA,
+                      data = df[df[[fill]] > 0,]) +
+  scale_fill_gradient(low = "#feb24c", high = "#f03b20") + 
+  labs(fill = "Net Supply") +
+  new_scale_fill() +
+  geom_sf_interactive(aes(fill = round(abs(.data[[fill]]), 2), 
+                          tooltip = if("STATE" %in% names(df)){
+                            glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round(abs({.data[[fill]]}), 2)}")
+                          }else{
+                            glue("{NAME}\nFIPS: {place}\nValue: {round(abs({.data[[fill]]}), 2)}")
+                          },
+                          data_id = place), 
+                      color = NA,
+                      data = df[df[[fill]] < 0,]) +
+  scale_fill_gradient(low = "#56B1F7", high = "#132B43") + 
+  labs(fill = "Net Demand") +
+  new_scale_fill() +
+  geom_sf_interactive(aes(fill = round(abs(.data[[fill]]), 2),
+                          tooltip = if("STATE" %in% names(df)){
+                            glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          }else{
+                            glue("{NAME}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          },
+                          data_id = place),
+                      color = NA,
+                      data = df[df[[fill]] == 0,]) +
+  scale_fill_gradient(low = "grey80", high = "grey80", guide = "none") + 
+  coord_sf() +
+  theme_void() +
+  theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+        legend.key.size = unit(.2, "cm"),
+        legend.title = element_text(size = rel(0.5)), 
+        legend.text = element_text(size = rel(0.5)),
+        legend.position = c(0.9, 0.2),
+        plot.caption = element_text(hjust = 0.9, size = rel(0.5))) +
+  labs(caption = glue(fill, ": ", beacode2description(code = fill) ))
+
+girafe(ggobj = g, 
+       options = list(
+         opts_hover(
+           css = girafe_css(
+             css = "stroke:gray;r:8pt;",
+             text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+         opts_zoom(max = 5),
+         opts_sizing = opts_sizing(rescale = TRUE),
+         opts_tooltip(css = "font-family:sans-serif;
+                                           background-color:gray;
+                                           color:white;
+                                           padding:10px;
+                                           border-radius:5px;",
+                      use_cursor_pos = FALSE,
+                      offx = 0, offy = 330),
+         opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
+}
 
 
 
