@@ -1,0 +1,115 @@
+---
+title: "ag_atlas"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+editor: visual
+---
+
+```{r packages and libraries, include = FALSE}
+library(rprojroot)
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+# source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
+options(scipen=999)
+```
+
+::: panel-tabset
+# Ag Net Demand and Supply
+
+```{r}
+library(glue)
+
+year = 2012
+ilevel = "det"
+industryflow = FALSE
+
+
+if(isTRUE(industryflow)){
+  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
+} else {
+  fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel)
+}
+  #lower bound of trade activity potential 
+df <- fs - fd
+df <- df[grep("^11", rownames(df), value = TRUE),] %>% t() %>% as.data.frame()
+df$place <- rownames(df)
+geog <- call_geog(year) %>% .[!grepl('^(02|15|72)', .$place), ] 
+df <- join_space_with_connectedness(df, geog) 
+
+
+  
+```
+
+
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[2])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[3])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[4])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[5])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[6])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[7])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[8])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[9])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[10])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[11])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[12])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[13])
+```
+:::
