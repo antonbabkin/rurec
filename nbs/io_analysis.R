@@ -20,12 +20,7 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-3, maxiter = 1000, verbose =
   sum_tol <- 0.001
   sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
   if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
-
   # mask away all-zero rows and columns
-  # rpos <- (rs1 > 0) & (rowSums(x0) > 0)
-  # cpos <- (cs1 > 0) & (colSums(x0) > 0)
-  # rpos <- (rs1 > 0) & (rowSums(x0[,cs1 > 0]) != 0)
-  # cpos <- (cs1 > 0) & (colSums(x0[rs1 > 0,]) != 0)
   rpos <- (rs1 > 0) & sapply(rowSums(x0[,cs1 > 0, drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
   cpos <- (cs1 > 0) & sapply(colSums(x0[rs1 > 0, ,drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
   x <- x0[rpos, cpos, drop=F]
@@ -39,23 +34,12 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-3, maxiter = 1000, verbose =
     x1 <- matrix(rs / rowSums(x), nr, nc) * x
     # scale cols
     x1 <- matrix(cs / colSums(x1), nr, nc, byrow = TRUE) * x1
-    #rmse <- sqrt(mean((x1 - x)^2))
-    #rmse <- max(abs(rowSums(x1) - rs) + abs(colSums(x1) - cs))
     rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
-    # tbr <- sum(x1) / sum(cs)
-    # eid <- sqrt(mean(((rowSums(x1) / rs) - 1)^2))
-    # iid <- sqrt(mean(((colSums(x1) / cs) - 1)^2))
-    # sts <- mean(diag(x1) / rowSums(x1))
-    # mad <- mean(abs(colSums(x1) - cs))
-    
-    #isTRUE(all.equal(mad, mean(abs(rowSums(x1) - rs))))
-
     if (mad == mean(abs(rowSums(x1) - rs))) {warning("\n\n  No convergence: infeasible\n")
       break}
     mad <- mean(abs(rowSums(x1) - rs))
     x <- x1
     if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, "\n"))
-    #if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, " TBR:", tbr, " EID:", eid, " IID:", iid, " STS:", sts, "\n"))
     if (rmse < tol) break
   }
   if (i == maxiter) warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.\n")
