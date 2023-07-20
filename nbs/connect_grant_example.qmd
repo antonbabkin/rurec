@@ -7,7 +7,6 @@ format:
     code-fold: true
     code-tools: true
     code_download: yes
-editor: visual
 ---
 
 ```{r packages and libraries, include = FALSE}
