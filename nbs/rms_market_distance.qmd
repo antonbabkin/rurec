@@ -1,0 +1,273 @@
+
+
+
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+```
+
+```{r packages and libraries, include = FALSE}
+
+############ Load and attach necessary packages
+library(rprojroot)
+
+############ Load custom functions
+source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+```
+
+
+::: panel-tabset
+
+
+# RAS Trade Flows Sector
+
+The preferred globally balanced industry specific county-to-county potential trade flow permits all places to trade all goods to each other. Given CBP payroll and AgCensus output data we derive county specific factor demand and factor supply using BEA technological requirements coefficients. The RAS balancing procedure imputes a globally balanced county-to-county trade flow potential matrix within a prespecified error and iteration tolerance. The final derived trade flow potential matrix is sensitive to initial starting conditions which are established by a seemingly arbitrary and infinite set of trade impedance distance functions which serve as a proxy for transportation costs. The current method uses a Gaussian impedance distance functional form. For each industry the smallest Gaussian RMS which satisfied the error and iteration tolerance is selected from the infinite set of trade impedance distance functions to derive the trade flow potential matrix. 
+
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25")), by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+Summary of Gauss impedance RMS distances by sector
+```{r}
+# tapply(imped_dist$impedance, imped_dist$group, summary)
+```
+
+```{r}
+# ggplot(imped_dist, aes(x = impedance)) + 
+#   geom_density() +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Density")
+```
+
+```{r}
+# ggplot(imped_dist, aes(impedance, fill = group)) +
+#   geom_density(position = "stack") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Density", fill = "Sector") 
+```
+
+Given a set of globally balanced detail-level industry specific county-to-county potential trade flows, we aggregate the 365 detail-level industries into their respective 14 sector-level industry groups. The distribution and density of each industry varies from a 75 to 375 Gaussian RMS width. The lower the RMS the more cost an industry could endure and still balance its tradeflows. 
+
+```{r}
+# ggplot(imped_dist, aes(impedance, after_stat(count), fill = group)) +
+#   geom_density(position = "stack") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+# ggplot(imped_dist, aes(impedance, stat(count), fill = group)) +
+#   geom_density(position = "fill") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+ggplot(imped_dist, aes(impedance, fill = group)) +
+  geom_bar() +
+  labs(x = "Gauss Impedance RMS Distance", y = "Count", fill = "Sector") 
+```
+
+
+
+```{r}
+ggplot(imped_dist, aes(x = impedance, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = "Gauss Impedance RMS Distance", y = "Sector Cluster")
+```
+
+
+
+```{r}
+# ggplot(imped_dist, aes(x = impedance, y = group, fill = group)) + 
+#   geom_density_ridges(stat = "binline", bins = 13, scale = 0.95, draw_baseline = FALSE) +
+#   theme(legend.position = "none") +
+#   labs(x = "Gauss Impedance RMS Distance", y = "Sector Cluster")
+
+```
+
+
+
+A Gaussian impedance distance functional form with variable RMS has desirable properties as a proxy for transportation costs, namely continuous and nonlinear across space. This allows for all counties to be able to trade among each other while imposing a higher and higher costs for longer and longer trade. However, an RMS width is not directly initiative or interpretable. 
+
+Instead, one might wish to know: What is the maximum distance at which 95% or 90% or 50% of the market still clears? (Given a set of globally balanced detail-level industry specific county-to-county potential trade flows.)
+
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "mcd_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(df, by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+```{r}
+# tapply(imped_dist$mcd_95, imped_dist$group, summary)
+# tapply(imped_dist$mcd_90, imped_dist$group, summary)
+# tapply(imped_dist$mcd_50, imped_dist$group, summary)
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_95, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_95)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_90, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_90)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_50, fill = group)) +
+  geom_bar() +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_50)), 5, 6), "% Clear Market Distance"), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_95, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_95)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_90, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_90)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_50, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x = paste0(">", substr(deparse(substitute(mcd_50)), 5, 6), "% Clear Market Distance"), y = "Sector Cluster")
+```
+
+In addition to being continuous and nonlinear across space another desirable property of the Gaussian impedance distance functional form is that global balancing converges faster and within a "smaller" distance over non-continuous alternatives due to many more non-zero cells in the trade potential matrix that give more degrees of freedom. However, these values may be very very small and well below any economically relevant value or any statically meaningful level giving the measurement and suppression error in the raw data. 
+
+An related but alternative question for deriving interpretable distances is therefore to ask: What is the maximum potential trade distance ignoring all imputed trade flows below \$1, \$10, \$100, \$1000, \$10,000, \$100,000, or \$1,000,000? (Given a set of globally balanced detail-level industry specific county-to-county potential trade flows.)
+
+
+
+```{r}
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "med_detail_2012_industry_gaus_by25"))
+
+imped_dist <- call_industry_concordance() %>% 
+  select("SECTOR", "DETAIL") %>% 
+  setNames(c("group", "sector")) %>% 
+  .[!duplicated(.), ] %>% 
+  inner_join(df, by = "sector")
+
+imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_1, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1)), 5, nchar(deparse(substitute(mcd_1))))), y = "Count", fill = "Sector") 
+```
+
+```{r}
+ggplot(imped_dist, aes(mcd_1000, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000)), 5, nchar(deparse(substitute(mcd_1000))))), y = "Count", fill = "Sector") 
+```
+
+
+```{r}
+ggplot(imped_dist, aes(mcd_1000000, after_stat(count), fill = group)) +
+  geom_density(position = "stack") +
+  labs(x = paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000000)), 5, nchar(deparse(substitute(mcd_1000000))))), y = "Count", fill = "Sector") 
+```
+
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1)), 5, nchar(deparse(substitute(mcd_1))))), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1000, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000)), 5, nchar(deparse(substitute(mcd_1000))))), y = "Sector Cluster")
+```
+
+```{r}
+ggplot(imped_dist, aes(x = mcd_1000000, y = group, fill = group)) + 
+  stat_density_ridges(rel_min_height = 0.005, linetype = 1, scale = 1.5, quantile_lines = TRUE, alpha = 0.85, quantiles = 2) +
+  theme(legend.position = "none") +
+  labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000000)), 5, nchar(deparse(substitute(mcd_1000000))))), y = "Sector Cluster")
+```
+
+```{r}
+
+  cbp_year = "2012"
+  ilevel = "det"
+  
+    fs <- commodity_factor_supply_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel)
+    fd <- commodity_factor_demand_tidy_matrix(cbp_year = cbp_year, 
+                                              ilevel = ilevel)
+    
+  y <- intersect(
+    names(which(!is.na(rowSums(fd)) & 
+                  !rowSums(fd) == 0 )), 
+    names(which(!is.na(rowSums(fs)) & 
+                  !rowSums(fs) == 0 ))
+  )
+      
+  for(i in y){
+    print(abs(sum(fs[i,]) - sum(fd[i,])) / sum(fd[i,]))
+    }
+    
+    
+```
+
+
+

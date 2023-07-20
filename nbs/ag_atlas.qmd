@@ -1,0 +1,335 @@
+---
+title: "ag_atlas"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+editor: visual
+---
+
+```{r packages and libraries, include = FALSE}
+# library(rprojroot)
+# source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
+options(scipen=999)
+```
+
+::: panel-tabset
+
+test the percent improvement in capturing total employment and payrolls across 3 iterations (raw-cbp, state-level Eckert imputation, and national and state-level Eckert imputation)
+```{r}
+year = 2012
+df <- call_cbp(year = year, cbp_scale = "us", imputed = F) %>% .[.$lfo == "-", ]
+x <- call_cbp(year = year, imputed = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
+colnames(x) <- c("NAICS", "raw_ap")
+df <- left_join(df, x, by = "NAICS")
+x <- call_cbp(year = year, national_wages = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
+colnames(x) <- c("NAICS", "onelevel_ap")
+df <- left_join(df, x, by = "NAICS")
+x <- call_cbp(year = year) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
+colnames(x) <- c("NAICS", "twolevel_ap")
+df <- left_join(df, x, by = "NAICS")
+df$raw2nat <- df$raw_ap / df$ap
+df$onelevel2nat <- df$onelevel_ap / df$ap
+df$twolevel2nat <- df$twolevel_ap / df$ap
+```
+
+specific industry coverage
+```{r}
+naics_code = "311224"
+sum(df[df$NAICS == naics_code, ]$raw_ap) / sum(df[df$NAICS == naics_code, ]$ap)
+sum(df[df$NAICS == naics_code, ]$onelevel_ap) / sum(df[df$NAICS == naics_code, ]$ap)
+sum(df[df$NAICS == naics_code, ]$twolevel_ap) / sum(df[df$NAICS == naics_code, ]$ap)
+```
+
+distribution of county-level to national-level annual payroll across across 3 iterations (raw-cbp, state-level Eckert imputation, and national and state-level Eckert imputation) 
+```{r}
+temp <- df %>% pivot_longer(c(raw2nat, onelevel2nat, twolevel2nat), names_to = "key", values_to = "value")
+ggplot(temp, aes(x = value, color = key)) + geom_density()
+# ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = value, color = key)) + geom_point(alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r}
+ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(position=position_dodge(width=0.4), alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r}
+ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sum")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+
+```{r}
+ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sec")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic()
+
+```
+
+```{r}
+
+temp <- df %>% pivot_longer(c(raw_ap, onelevel_ap, twolevel_ap), names_to = "key", values_to = "value")
+ggplot(temp, aes(x=log10(ap), y=log10(value), color = key), position="dodge") +
+  geom_abline() + geom_point(shape=23) + theme_minimal()
+```
+
+```{r}
+
+ggplot(df, aes(x=log10(ap), y=log10(raw_ap)), position="dodge") +
+  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
+  geom_abline() + geom_point(shape=23, color = "#00BA38") + theme_minimal()
+```
+
+```{r}
+ggplot(df, aes(x=log10(ap), y=log10(onelevel_ap)), position="dodge") +
+  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
+  geom_abline() + geom_point(shape=23, color = "#F8766D") + theme_minimal()
+```
+
+```{r}
+ggplot(df, aes(x=log10(ap), y=log10(twolevel_ap)), position="dodge") +
+  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
+  geom_abline() + geom_point(shape=23, color = "#619CFF") + theme_minimal()
+
+```
+
+
+
+
+```{r}
+year = 2012
+# central_place = "30015"
+central_place = "30071"
+idis <- io_yeild_distribution(year = year)
+ bd <- idis[idis$place == central_place, ]  %>% industry_distribution_barcharts(.)
+
+```
+
+industry production
+```{r}
+pobj <- plot_grid(bd$gross_ouput[[central_place]])
+  girafe(ggobj = pobj, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;") ))
+```
+
+```{r}
+pobj <- plot_grid(bd$factor_supply[[central_place]],
+                    bd$factor_demand[[central_place]],
+                    bd$net_demand[[central_place]],
+                    bd$net_supply[[central_place]])
+  girafe(ggobj = pobj, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;") ))
+```
+
+# Where's the beef?
+
+
+# Ag Net Demand and Supply
+commodity flow
+```{r}
+year = 2012
+ilevel = "det"
+industryflow = FALSE
+
+if(isTRUE(industryflow)){
+  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
+} else {
+  fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel)
+}
+  #lower bound of trade activity potential 
+df <- fs - fd
+df <- df[grep("^11", rownames(df), value = TRUE),] %>% t() %>% as.data.frame()
+df$place <- rownames(df)
+geog <- call_geog(year) %>% .[!grepl('^(02|15|72)', .$place), ] 
+df <- join_space_with_connectedness(df, geog) 
+
+```
+
+
+```{r}
+# df[["11"]] <- rowSums(st_drop_geometry(df)[, c(grep("^11", colnames(df)))])
+# net_sd_map(df = df, 
+#            fill = "11")
+```
+
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[2])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[3])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[4])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[5])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[6])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[7])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[8])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[9])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[10])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[11])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[12])
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[13])
+```
+
+
+industry flow
+```{r}
+year = 2012
+ilevel = "det"
+industryflow = TRUE
+
+if(isTRUE(industryflow)){
+  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
+} else {
+  fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel)
+}
+  #lower bound of trade activity potential 
+df <- fs - fd
+df <- df[grep("^11", rownames(df), value = TRUE),] %>% t() %>% as.data.frame()
+df$place <- rownames(df)
+geog <- call_geog(year) %>% .[!grepl('^(02|15|72)', .$place), ] 
+df <- join_space_with_connectedness(df, geog) 
+
+```
+
+```{r}
+net_sd_map(df = df, 
+           fill = "1121A0")
+```
+
+
+```{r}
+
+
+# 3)	For every ag industry, identify the 5 most important input industries .
+# a.	Easily determined from I-O tables. 
+# 4)	Map the share weighted distance for net demanders for each ag industry.
+# 5)	Map the share weighted distance for net suppliers for each input industry.
+
+# 6)	For every ag industry, identify the 5 most important output industries. 
+# 7)	Map the share weighted distance for net suppliers for each ag industry.
+# 8)	Map the share weighted distance for net demands for each output industry.
+
+
+
+  dist_mat <- dist_matc()
+  dm <- d_matrix(year)
+  bm <- b_matrix(year)
+  dm[is.na(dm)] = 0
+  bm[is.na(bm)] = 0
+  #Industry Technology Technological Coeffecients (ixi)
+  dbm <- dm %*% bm
+  diag(dbm) <- 0
+
+  topnin <- c()
+  p <- dim(dbm)[1]
+  n <- 5
+  for (i in grep("^11", colnames(dbm), value = TRUE) ){
+    x <- dbm[, i, drop = F]
+    rn <- rownames(x)[which(x > sort(x, partial = (p-n))[(p-n)]) ]
+    topnin <- c(topnin, rn)
+  }
+
+  topnout <- c()
+  p <- dim(dbm)[2]
+  n <- 5
+  for (i in grep("^11", rownames(dbm), value = TRUE) ){
+    x <- dbm[i, , drop = F]
+    rn <- colnames(x)[which(x > sort(x, partial = (p-n))[(p-n)]) ]
+    topnout <- c(topnout, rn)
+  }
+
+
+  
+  length(unique(topnout))
+    length(unique(topnin))
+
+  View(t(fd["311224",, drop=F]))
+  View(t(fs["311224",, drop=F]))
+  
+  
+  #who are the beef counties?
+  agc <- idis[idis$net_supply != 0 & idis$DETAIL == "1121A0",]$place
+  nag <- idis[idis$net_demand != 0 & idis$DETAIL == "1121A0",]$place
+  
+  dist_mat[, agc, drop=F]
+  
+  ag_d <- apply(dist_mat[nag, agc, drop=F], 1, mean)
+
+ 
+
+```
+
+:::
+
+

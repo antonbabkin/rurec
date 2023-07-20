@@ -1,0 +1,114 @@
+---
+title: "&nbsp;"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  county_fips: "39099"
+---
+
+```{r preamble, include = FALSE}
+
+############ When you click the **Render** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
+############ The params:county_fips:"..." option in YAML header allows the user to select a county for the notebook to analyze  
+
+############ Set chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+############ For nonscientific notation
+options(scipen=999)
+
+############ Load custom functions
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
+
+############ Initialize parameter values
+params
+
+#t <- call_tiger(params$year, geometry = FALSE)
+t <- call_tiger(2012, geometry = FALSE)
+
+county_name <- t$NAME[t$place == params$county_fips]
+state_name <- t$STATE[t$place == params$county_fips]
+
+```
+
+
+::: panel-tabset
+
+### Spatial Impedance Distribution Examples: `r county_name`, `r state_name`
+
+```{r}
+# year = params$year
+year = 2012
+central_place = params$county_fips
+```
+
+```{r}
+impedance_distribution_map(decay_function = "bisquare", 
+                           year = year,
+                           central_place = central_place)
+```
+
+
+
+
+```{r}
+impedance_distribution_map(decay_function = "hyper",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "gaus",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "expo",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "power",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "dprox",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "eprox",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+impedance_distribution_map(decay_function = "bprox",
+                           year = year,
+                           central_place = central_place)
+```
+
+```{r}
+hierarchy_of_neighbors_map(year = year,
+                           central_place = central_place)
+```
+
+Qualitative neighbor of neighbor hierarchy
+
+
+
+:::
+
+
+
