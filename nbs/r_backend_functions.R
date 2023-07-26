@@ -14,6 +14,7 @@ library(reshape2)
 library(parallel)
 library(viridis)
 library(REAT)
+library(arrow)
 
 
 # Display start time
@@ -328,12 +329,12 @@ fips2cbsa <- function(fips,
 }
 
 #error in "rurec.pubdata.ers_rurality" does not work
-# # Call up and clean RUCC data available for years 2013, 2003, 1993, 1983, 1974
-# call_rucc <- function(year){
-#   df <- ers_rurality$get_ruc_df() %>% filter(RUC_YEAR == year2rucc(year))
-#   df$place <- df$FIPS
-#   return(df)
-# }
+# Call up and clean RUCC data available for years 2013, 2003, 1993, 1983, 1974
+call_rucc <- function(year){
+  df <- ers_rurality$get_ruc_df() %>% filter(RUC_YEAR == year2rucc(year))
+  df$place <- df$FIPS
+  return(df)
+}
 
 # Call up and clean TIGER data
 # shapefile formats are available for 2020:2013, 2010, 2000, 1990
@@ -619,34 +620,36 @@ d_matrix <- function(year,
 call_cbp <- function(year,
                      cbp_scale = c("county", "state", "us"),
                      imputed = TRUE, 
-                     national_wages = TRUE, 
+                     national_wages = FALSE, 
                      ...){
   cbp_year <- year2cbp(year)
   cbp_scale <- match.arg(cbp_scale)
   #If TRUE derive county-level annual payroll from county-level EFSY imputed employment and CBP quarterly payroll
   if(imputed){
-    df <- cbp$get_cbp_year(cbp_year)
+    df <- cbp$get_cbp_year_pq(cbp_year) %>% as.character() %>% open_dataset() %>% collect() %>% as.data.frame()
     df$place <- paste0(df$fipstate, df$fipscty)
     # stopgap for getting imputed payrolls when suppression exists even at the state-level
     if (national_wages){
+      #national employment derived from sum of county employment
       nat_ind_emp_sum <- df %>% {aggregate(.$emp, list(.$industry), FUN=sum)}
       colnames(nat_ind_emp_sum) <- c("industry", "nat_emp")
+      #national annual payroll derived from sum of sub-establishment type payroll
       nat_ind_ap_sum <- cbp$get_df(geo = "us", year = cbp_year) %>% .[.$lfo != "-", ] %>% {aggregate(.$ap, list(.$industry), FUN=sum)}
       colnames(nat_ind_ap_sum) <- c("industry", "natsub_ap")
       nat_sums <- inner_join(nat_ind_emp_sum, nat_ind_ap_sum, by = "industry")
       nat_ind_wage <- cbp$get_df(geo = "us", year = cbp_year) %>% .[.$lfo == "-", ] %>% inner_join(., nat_sums, by = "industry")
       nat_ind_wage$nat_wage = nat_ind_wage$qp1 / nat_ind_wage$emp * 4
-      x <- nat_ind_wage$qp1 == 0
       #If national quarterly payroll is zero use national annual payroll
+      x <- nat_ind_wage$qp1 == 0
       nat_ind_wage[x, ]$nat_wage = nat_ind_wage[x, ]$ap / nat_ind_wage[x, ]$emp 
+      #If CBP/EFSY employment is zero use sum of county employment
       x <- nat_ind_wage$emp == 0
-      #If CBP/EFSY employment is zero use national national employment
       nat_ind_wage[x, ]$nat_wage = nat_ind_wage[x, ]$qp1 / nat_ind_wage[x, ]$nat_emp * 4
+      #If CBP/EFSY employment is zero AND national quarterly payroll is zero use national annual payroll and sum of county employment
       x <- nat_ind_wage$emp == 0 & nat_ind_wage$qp1 == 0
-      #If xxx
       nat_ind_wage[x, ]$nat_wage = nat_ind_wage[x, ]$ap / nat_ind_wage[x, ]$nat_emp 
+      #If CBP/EFSY employment is zero AND national quarterly payroll is zero AND national annual payroll is zero use sum of subsector payroll and sum of county employment
       x <- nat_ind_wage$emp == 0 & nat_ind_wage$qp1 == 0  & nat_ind_wage$ap == 0
-      #If xxx
       nat_ind_wage[x, ]$nat_wage = nat_ind_wage[x, ]$natsub_ap / nat_ind_wage[x, ]$nat_emp 
       nat_ind_wage <- nat_ind_wage %>% subset(select = c("industry", "nat_wage"))
       df <- left_join(df, nat_ind_wage, by = "industry")
@@ -669,62 +672,14 @@ call_cbp <- function(year,
   n <- c("lfo", "fipstate", "fipscty", "place", "industry", "emp", "qp1", "ap", "est")
   df <- df[names(df) %in% n] %>% 
     rename(NAICS = industry)
-  df$ap[is.nan(df$ap) | is.infinite(df$ap)] <- 0
+  df$ap[!is.finite(df$ap)] <- 0
   return(df)
 }
 
-# 
-# ##test the percent improvement in capturing total employment and payrolls across 3 iterations (raw-cbp, state-level Eckert imputation, and national and state-level Eckert imputation)
-# {
-# naics_code = "311224"
-# year = 2012
-# national_cbp_ap = call_cbp(year = year, cbp_scale = "us", imputed = F) %>% .[.$lfo == "-", ] %>% {.[.$NAICS == naics_code, ]$ap}
-# raw_cbp_ap = call_cbp(year = year, imputed = F) %>% {.[.$NAICS == naics_code, ]$ap} %>% sum()
-# onelevel_cbp_ap = call_cbp(year = year, national_wages = F) %>% {.[.$NAICS == naics_code, ]$ap} %>% sum()
-# twolevel_cbp_ap = call_cbp(year = year) %>% {.[.$NAICS == naics_code, ]$ap} %>% sum()
-# 
-# raw_cbp_ap/national_cbp_ap
-# onelevel_cbp_ap/national_cbp_ap
-# twolevel_cbp_ap/national_cbp_ap
-# 
-# df <- call_cbp(year = year, cbp_scale = "us", imputed = F) %>% .[.$lfo == "-", ]
-# x <- call_cbp(year = year, imputed = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
-# colnames(x) <- c("NAICS", "raw_ap")
-# df <- left_join(df, x, by = "NAICS")
-# x <- call_cbp(year = year, national_wages = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
-# colnames(x) <- c("NAICS", "onelevel_ap")
-# df <- left_join(df, x, by = "NAICS")
-# x <- call_cbp(year = year) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
-# colnames(x) <- c("NAICS", "twolevel_ap")
-# df <- left_join(df, x, by = "NAICS")
-# df$raw2nat <- df$raw_ap / df$ap 
-# df$onelevel2nat <- df$onelevel_ap / df$ap 
-# df$twolevel2nat <- df$twolevel_ap / df$ap 
-# 
-# temp <- df %>% pivot_longer(c(raw2nat, onelevel2nat, twolevel2nat), names_to = "key", values_to = "value")
-# ggplot(temp, aes(x = value, color = key)) + geom_density()
-# ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(position=position_dodge(width=0.4), alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) 
-# ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sum")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank()) 
-# ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sec")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() 
-# # ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = value, color = key)) + geom_point(alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
-# 
-# temp <- df %>% pivot_longer(c(raw_ap, onelevel_ap, twolevel_ap), names_to = "key", values_to = "value")
-# ggplot(temp, aes(x=log10(ap), y=log10(value), color = key), position="dodge") + 
-#   geom_abline() + geom_point(shape=23) + theme_minimal() 
-# 
-# ggplot(df, aes(x=log10(ap), y=log10(raw_ap)), position="dodge") + 
-#   scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) + 
-#   geom_abline() + geom_point(shape=23, color = "#00BA38") + theme_minimal() 
-# 
-# ggplot(df, aes(x=log10(ap), y=log10(onelevel_ap)), position="dodge") + 
-#   scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) + 
-#   geom_abline() + geom_point(shape=23, color = "#F8766D") + theme_minimal() 
-# 
-# ggplot(df, aes(x=log10(ap), y=log10(twolevel_ap)), position="dodge") + 
-#   scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) + 
-#   geom_abline() + geom_point(shape=23, color = "#619CFF") + theme_minimal() 
-# }
-
+# system.time({df <- call_cbp(2014, national_wages = F)})
+# system.time({df2 <- call_cbp(2014, national_wages = T)})
+# all.equal(df, df2)
+# identical(df, df2)
 
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
 place_industry_economy_long <- function(year, 
@@ -1058,7 +1013,7 @@ io_yeild_distribution <- function(year,
     cbind(. , "color" = viridis(length(unique(.$description)))) %>% 
     inner_join(., call_industry_concordance()[, c("SECTOR", "DETAIL")], by = "SECTOR") %>% 
     .[!duplicated(.), ]
-  df <- io_yeild_list(year)
+  df <- io_yeild_list(year, ...)
   for (i in 1:length(df)){
     df[[i]] <- melt(df[[i]])
     names(df[[i]]) <- c("DETAIL", "place", names(df)[i])
