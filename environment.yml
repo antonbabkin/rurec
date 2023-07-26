@@ -13,7 +13,7 @@ dependencies:
   - openpyxl # new .xlsx format
   - xlrd # old .xls format
   - geopandas
-  - pyarrow # parquet for geopandas
+  - pyarrow=11.0.0 # parquet for geopandas
   - python-graphviz # option visualization of NAICS concordances
   - lxml
   - psutil
