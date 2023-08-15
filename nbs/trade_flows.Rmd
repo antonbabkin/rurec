@@ -68,7 +68,14 @@ $\underset{(n \times 1)}{\mathbf{f}} = [f_{i}]$ - total final demand vector for 
 
 $\underset{(n \times 1)}{\mathbf{x}} = [x_{i}]$ - total gross output vector of sector $i$'s product. Note $\mathbf{x} = \mathbf{Zi} + \mathbf{f} = \left[\sum^{n}_{j=1} z_{ij} + f_{i}\right]$
 
+where $\mathbf{i}$ represent a column vector of 1's 
+
+Postmultiplication of a matrix by $\mathbf{i}$ creates a column vector whose elements are the row sums of the matrix. 
+Premultiplication of a matrix by $\mathbf{i'}$ creates a row vector whose elements are the column sums of the matrix.
+
 $\underset{(n \times n)}{\mathbf{A}} = [a_{ij}]$ - the direct requirements matrix a.k.a. the technical coefficients matrix of the quantity of sector $i$'s product absorbed by sector $j$ per unit of $j$'s total output. Note $\mathbf{A} = \mathbf{Z\hat{x}}^{-1} = [z_{ij} / x_{j}]$
+
+where the "hat" over a vector denotes a diagonal matrix with the elements of the vector along the main diagonal
 
 $\underset{(n \times n)}{\mathbf{L}} = [l_{ij}]$ - the total requirements matrix a.k.a. the Leontief inverse matrix of the quantity of sector $i$'s overall production required to produce a dollar of sector $j$'s gross output. Note $\mathbf{x} = \mathbf{Ax} + \mathbf{f}$ such that $\mathbf{x} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}\mathbf{f}$ and $\mathbf{L} = \left(\mathbf{I} - \mathbf{A}\right)^{-1}$
 
@@ -233,29 +240,42 @@ ECA (Economic Catchment Area) Matching (based on row-wise maximum Absorption wit
 
 # Methods
 
-$\mathbf{x}$ = Gross Industry Output (ixr) = (CBP-regional_industry_payroll/CBP-national_industry_payroll)*BEA-total_industry_output(T018 or T017)
+$\mathbf{U}$ = BEA Use matrix (c-by-i) i.e., intermediate uses of commodities $c$ by industries $i$
 
-$\mathbf{B} = \mathbf{U\hat{x}}^{-1}$ = Commodity/Industry technical coefficients (cxi), where $\mathbf{U}$ is BEA-Use_matrix
+$\mathbf{V'}$ = BEA Supply matrix (c-by-i) i.e., total output of commodities $c$ by industries $i$
 
-$\mathbf{Bx}$ = Commodity Factor Demand (cxr)
+$\mathbf{x}$ = BEA Total Gross Industry Output vector (1-by-i) = national-level output for each industry $i$ (see Use table T018 or Supply table T017)
 
-$\mathbf{D} = \mathbf{V\hat{q}}^{-1}$ = Industry Source of Commodity Outputs (ixc), where $\mathbf{V}$ is the transpose of BEA-Supply_matrix and $\mathbf{q}$ is BEA-total_commodity_output(T007)
+$\mathbf{q}$ = BEA Total Gross Commodity Output vector (c-by-1) = national-level output for each commodity $c$ (see Supply table T007)
 
-$\mathbf{DB}$ = Industry Technology Technological Coeffecients (ixi)
+$payroll$ = CBP County Industry Payroll matrix (i-by-r) = annual payroll for each industry $i$ in each county/region $r$
 
-$\mathbf{C} = \mathbf{V'\hat{x}}^{-1}$ = Commodity Composition of Industry Outputs (cxi), where $\mathbf{V'}$ is the BEA-Supply_matrix
 
-$\mathbf{Cx}$ = Gross Commodity Output (cxr)
+$ps =  (payroll \cdot \mathbf{i})'{\hat{x}}^{-1}$ = payroll's share of (national) gross output vector (1-by-i)
 
-$cfr = \mathbf{Bxi} / \mathbf{Cxi}$  = Commodity Factor Ratio (cx1)
+$\mathbf{\tilde{x}} = {\widehat{ps}}^{-1} \cdot payroll$ = Gross Industry Output by region matrix (i-by-r)
 
-$cfr \cdot \mathbf{Cx}$ = Commodity Factor Supply 
+$\mathbf{B} = \mathbf{U\hat{x}}^{-1}$ = Commodity/Industry Technical Coefficients matrix (c-by-i)
 
-$\mathbf{DBx}$ = Industry Factor Demand (ixr)
+$\mathbf{B\tilde{x}}$ = Commodity Factor Demand matrix (c-by-r)
 
-$ifr = \mathbf{DBxi} / \mathbf{xi}$  = Industry Factor Ratio (ix1)
+$\mathbf{D} = \mathbf{V\hat{q}}^{-1}$ = Industry Source of Commodity Outputs matrix (i-by-c)
 
-$ifr \cdot \mathbf{x}$ = Industry Factor Supply 
+$\mathbf{DB}$ = Industry Technology Technological Coefficients matrix (i-by-i)
+
+$\mathbf{C} = \mathbf{V'\hat{x}}^{-1}$ = Commodity Composition of Industry Outputs matrix (c-by-i)
+
+$\mathbf{C\tilde{x}}$ = Gross Commodity Output by region matrix (c-by-r)
+
+$cfr = (\widehat{\mathbf{B\tilde{x}i}} \cdot \widehat{\mathbf{C\tilde{x}i}})\mathbf{i}$  = Commodity Factor Ratio vector (c-by-1)
+
+$\widehat{cfr}  \cdot \mathbf{C\tilde{x}}$ = Commodity Factor Supply by region matrix (c-by-r)
+
+$\mathbf{DB\tilde{x}}$ = Industry Factor Demand by region matrix (i-by-r)
+
+$ifr = (\widehat{\mathbf{DB\tilde{x}i}} \cdot \widehat{\mathbf{\tilde{x}i}})\mathbf{i}$  = Industry Factor Ratio vector (i-by-1)
+
+$\widehat{ifr} \cdot \mathbf{\tilde{x}}$ = Industry Factor Supply by region matrix (i-by-r)
 
 
 # RAS Trade Flows Sector
