@@ -1,6 +1,4 @@
 
-
-
 ---
 title: "&nbsp;"
 format:
@@ -245,29 +243,7 @@ ggplot(imped_dist, aes(x = mcd_1000000, y = group, fill = group)) +
   labs(x =  paste0("Clear Market Distance >$", substr(deparse(substitute(mcd_1000000)), 5, nchar(deparse(substitute(mcd_1000000))))), y = "Sector Cluster")
 ```
 
-```{r}
 
-  cbp_year = "2012"
-  ilevel = "det"
-  
-    fs <- commodity_factor_supply_tidy_matrix(cbp_year = cbp_year, 
-                                              ilevel = ilevel)
-    fd <- commodity_factor_demand_tidy_matrix(cbp_year = cbp_year, 
-                                              ilevel = ilevel)
-    
-  y <- intersect(
-    names(which(!is.na(rowSums(fd)) & 
-                  !rowSums(fd) == 0 )), 
-    names(which(!is.na(rowSums(fs)) & 
-                  !rowSums(fs) == 0 ))
-  )
-      
-  for(i in y){
-    print(abs(sum(fs[i,]) - sum(fd[i,])) / sum(fd[i,]))
-    }
-    
-    
-```
 
 
 
