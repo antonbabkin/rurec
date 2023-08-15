@@ -5,6 +5,8 @@ library(ggiraph)
 library(glue)
 library(ggnewscale)
 library(cowplot)
+library(RColorBrewer)
+library(scales)
 
 # library(readxl)
 # library(openxlsx)
@@ -15,8 +17,6 @@ library(cowplot)
 # library(arrow)
 # 
 # library(ggplot2)
-# library(RColorBrewer)
-# library(scales)
 # 
 # library(magick)
 # 
@@ -143,6 +143,85 @@ industry_dist_plots <- function(central_place,
                                              padding:10px;
                                              border-radius:5px;") ))
 }
+
+
+#inverse hyperbolic sine transformation for scales package
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+
+extractive_map <- function(df,
+                           fill,
+                           style = c("ihs", "fs", "cs_fs", "cs_us"), 
+                           ...){
+  mn <-  min(df[[fill]])
+  mx <-  max(df[[fill]])
+  style <- match.arg(style)
+  g <- ggplot() + 
+    geom_sf_interactive(aes(fill = round((.data[[fill]]), 2), 
+                            tooltip = if("STATE" %in% names(df)){
+                              glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                            }else{
+                              glue("{NAME}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                            },
+                            data_id = place), 
+                        color = alpha("grey", 0.2),
+                        data = df) + {
+                          #inverse hyperbolic sine scale transformation
+                          if (style == "ihs"){
+                            scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")), trans = "ihs", breaks = c(mn, 0, mx), labels = c("Net Demander", "0", "Net Supplier"), limits = c(mn-1, mx+1))
+                          } } + {
+                            #full spectrum from midpoint transformation
+                            if (style == "fs"){
+                              scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")),  breaks = c(mn+1, mx-1), labels = c("Net Demander", "Net Supplier"), values = rescale(c(mn, 0, mx))) 
+                            } } + {
+                              #constant spread from midpoint transformation with full spectrum shown
+                              if (style == "cs_fs"){
+                                scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")),  breaks = c(-max(abs(mn), mx)+1, max(abs(mn), mx)-1), labels = c("Net Demander", "Net Supplier"), limits = c(-max(abs(mn), mx), max(abs(mn), mx)) )
+                              } } + {
+                                #constant spread from midpoint transformation with only used spectrum shown with value labels
+                                if (style == "cs_us"){
+                                  scale_fill_gradient2(low = "#2166AC", mid = "#F7F7F7", high = "#B2182B", midpoint = 0)
+                                } } +
+    labs(fill = "Extractiveness") +
+    new_scale_fill() +
+    geom_sf_interactive(aes(fill = round(abs(.data[[fill]]), 2),
+                            tooltip = if("STATE" %in% names(df)){
+                              glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                            }else{
+                              glue("{NAME}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                            },
+                            data_id = place),
+                        color = NA,
+                        data = df[df[[fill]] == 0,]) +
+    scale_fill_gradient(low = "grey80", high = "grey80", guide = "none") + 
+    coord_sf(crs = "+proj=longlat") +
+    theme_void() +
+    theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+          legend.key.size = unit(.2, "cm"),
+          legend.title = element_text(size = rel(0.55)), 
+          legend.text = element_text(size = rel(0.5)),
+          legend.position = c(0.85, 0.2),
+          plot.caption = element_text(hjust = 0.9, size = rel(0.5))) +
+    labs(caption = glue(fill, ": ", beacode2description(code = fill) ))
+  girafe(ggobj = g, 
+         options = list(
+           opts_hover(
+             css = girafe_css(
+               css = "stroke:gray;r:8pt;",
+               text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+           opts_zoom(max = 5),
+           opts_sizing = opts_sizing(rescale = TRUE),
+           opts_tooltip(css = "font-family:sans-serif;
+                                             background-color:gray;
+                                             color:white;
+                                             padding:10px;
+                                             border-radius:5px;",
+                        use_cursor_pos = FALSE,
+                        offx = 0, offy = 330),
+           opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
+}
+
+
+
 
 
 
