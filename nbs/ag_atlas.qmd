@@ -7,7 +7,7 @@ format:
     code-fold: true
     code-tools: true
     code_download: yes
-editor: visual
+editor: source
 ---
 
 ```{r packages and libraries, include = FALSE}
@@ -19,97 +19,76 @@ options(scipen=999)
 ```
 
 ::: panel-tabset
+# Where's the beef?
 
-test the percent improvement in capturing total employment and payrolls across 3 iterations (raw-cbp, state-level Eckert imputation, and national and state-level Eckert imputation)
+test the percent improvement in capturing total employment and payrolls across raw cbp vs. Eckert imputation plus
 ```{r}
 year = 2012
 df <- call_cbp(year = year, cbp_scale = "us", imputed = F) %>% .[.$lfo == "-", ]
 x <- call_cbp(year = year, imputed = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
 colnames(x) <- c("NAICS", "raw_ap")
 df <- left_join(df, x, by = "NAICS")
-x <- call_cbp(year = year, national_wages = F) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
-colnames(x) <- c("NAICS", "onelevel_ap")
-df <- left_join(df, x, by = "NAICS")
 x <- call_cbp(year = year) %>% {aggregate(.$ap, list(.$NAICS), FUN=sum)}
-colnames(x) <- c("NAICS", "twolevel_ap")
+colnames(x) <- c("NAICS", "eckert_ap")
 df <- left_join(df, x, by = "NAICS")
 df$raw2nat <- df$raw_ap / df$ap
-df$onelevel2nat <- df$onelevel_ap / df$ap
-df$twolevel2nat <- df$twolevel_ap / df$ap
+df$eckert2nat <- df$eckert_ap / df$ap
 ```
 
-specific industry coverage
+specific industry coverage comparison 
 ```{r}
 naics_code = "311224"
 sum(df[df$NAICS == naics_code, ]$raw_ap) / sum(df[df$NAICS == naics_code, ]$ap)
-sum(df[df$NAICS == naics_code, ]$onelevel_ap) / sum(df[df$NAICS == naics_code, ]$ap)
-sum(df[df$NAICS == naics_code, ]$twolevel_ap) / sum(df[df$NAICS == naics_code, ]$ap)
+sum(df[df$NAICS == naics_code, ]$eckert_ap) / sum(df[df$NAICS == naics_code, ]$ap)
 ```
 
-distribution of county-level to national-level annual payroll across across 3 iterations (raw-cbp, state-level Eckert imputation, and national and state-level Eckert imputation) 
-```{r}
-temp <- df %>% pivot_longer(c(raw2nat, onelevel2nat, twolevel2nat), names_to = "key", values_to = "value")
-ggplot(temp, aes(x = value, color = key)) + geom_density()
-# ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = value, color = key)) + geom_point(alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
-```
 
+over or under imputation relative to national values along NAICS industry type detail level
 ```{r}
+temp <- df %>% pivot_longer(c(raw2nat, eckert2nat), names_to = "key", values_to = "value")
 ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(position=position_dodge(width=0.4), alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
+over or under imputation relative to national values along NAICS industry type summary level
 ```{r}
 ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sum")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
-
-
+over or under imputation relative to national values along NAICS industry type sector level
 ```{r}
 ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sec")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic()
-
+```
+distribution of county-level to national-level annual payroll across raw cbp vs. Eckert imputation plus 
+```{r}
+ggplot(temp, aes(x = value, color = key)) + geom_density()
 ```
 
+over or under imputation relative to national values as a function of annual payroll (log) size 
 ```{r}
-
-temp <- df %>% pivot_longer(c(raw_ap, onelevel_ap, twolevel_ap), names_to = "key", values_to = "value")
-ggplot(temp, aes(x=log10(ap), y=log10(value), color = key), position="dodge") +
-  geom_abline() + geom_point(shape=23) + theme_minimal()
-```
-
-```{r}
-
-ggplot(df, aes(x=log10(ap), y=log10(raw_ap)), position="dodge") +
-  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
-  geom_abline() + geom_point(shape=23, color = "#00BA38") + theme_minimal()
-```
-
-```{r}
-ggplot(df, aes(x=log10(ap), y=log10(onelevel_ap)), position="dodge") +
-  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
-  geom_abline() + geom_point(shape=23, color = "#F8766D") + theme_minimal()
-```
-
-```{r}
-ggplot(df, aes(x=log10(ap), y=log10(twolevel_ap)), position="dodge") +
-  scale_x_continuous(limits = c(0, NA)) + scale_y_continuous(limits = c(0, NA)) +
-  geom_abline() + geom_point(shape=23, color = "#619CFF") + theme_minimal()
-
+temp <- df %>% pivot_longer(c(raw_ap, eckert_ap), names_to = "key", values_to = "value")
+ggplot(temp, aes(x=log10(ap), y=log10(value), color = key), position="dodge") + geom_abline() + geom_point(shape=23) + theme_minimal()
 ```
 
 
 
+# place industry composition
 
-```{r}
+```{r, warning=FALSE}
 year = 2012
 # central_place = "30015"
 central_place = "30071"
 idis <- io_yeild_distribution(year = year)
  bd <- idis[idis$place == central_place, ]  %>% industry_distribution_barcharts(.)
 
+county_name <- fips2name(central_place, long = T)
+
 ```
+
+### `r county_name`
 
 industry production
 ```{r}
 pobj <- plot_grid(bd$gross_ouput[[central_place]])
-  girafe(ggobj = pobj, 
+  girafe(ggobj = pobj,
          options = list(
            opts_hover(
              css = girafe_css(
@@ -122,12 +101,13 @@ pobj <- plot_grid(bd$gross_ouput[[central_place]])
                                              border-radius:5px;") ))
 ```
 
+composition
 ```{r}
 pobj <- plot_grid(bd$factor_supply[[central_place]],
                     bd$factor_demand[[central_place]],
                     bd$net_demand[[central_place]],
                     bd$net_supply[[central_place]])
-  girafe(ggobj = pobj, 
+  girafe(ggobj = pobj,
          options = list(
            opts_hover(
              css = girafe_css(
@@ -140,15 +120,13 @@ pobj <- plot_grid(bd$factor_supply[[central_place]],
                                              border-radius:5px;") ))
 ```
 
-# Where's the beef?
-
-
 # Ag Net Demand and Supply
-commodity flow
+
+commodity flows
 ```{r}
 year = 2012
 ilevel = "det"
-industryflow = FALSE
+industryflow = F
 
 if(isTRUE(industryflow)){
   fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
@@ -166,81 +144,157 @@ df <- join_space_with_connectedness(df, geog)
 
 ```
 
-
 ```{r}
-# df[["11"]] <- rowSums(st_drop_geometry(df)[, c(grep("^11", colnames(df)))])
+##Ag aggregate
+#df[["11"]] <- rowSums(st_drop_geometry(df)[, c(grep("^11", colnames(df)))])
 # net_sd_map(df = df, 
 #            fill = "11")
+
+# #linear scaled spectrum, one-sided value size hue
+# extractive_map(df = df, 
+#            fill = "11", style = "fs")
+# 
+# #inverse hyperbolic sine scaled spectrum, one-sided value size hue
+# extractive_map(df = df, 
+#            fill = "11")
+
 ```
 
-
 ```{r}
-net_sd_map(df = df, 
+#consistent spectrum, true to value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1], style = "cs_fs")
+
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[1])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[2], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[2])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[3], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[3])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[4], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[4])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[5], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[5])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[6], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[6])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[7], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[7])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[8], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[8])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[9], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[9])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[10], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[10])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[11], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[11])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[12], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[12])
 ```
 
 ```{r}
-net_sd_map(df = df, 
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[13], style = "fs")
+
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
            fill = grep("^11", colnames(df), value = TRUE)[13])
 ```
 
-
-industry flow
+industry flows
 ```{r}
 year = 2012
 ilevel = "det"
@@ -263,11 +317,21 @@ df <- join_space_with_connectedness(df, geog)
 ```
 
 ```{r}
-net_sd_map(df = df, 
-           fill = "1121A0")
+
+
 ```
 
+```{r}
+#linear scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[7], style = "fs")
 
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[7])
+```
+
+# Share weighted distances
 ```{r}
 
 
@@ -280,7 +344,11 @@ net_sd_map(df = df,
 # 7)	Map the share weighted distance for net suppliers for each ag industry.
 # 8)	Map the share weighted distance for net demands for each output industry.
 
-
+year = 2012
+ilevel = "det"
+  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
+  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
+idis <- io_yeild_distribution(year = year)
 
   dist_mat <- dist_matc()
   dm <- d_matrix(year)
@@ -292,41 +360,145 @@ net_sd_map(df = df,
   diag(dbm) <- 0
 
   topnin <- c()
-  p <- dim(dbm)[1]
   n <- 5
   for (i in grep("^11", colnames(dbm), value = TRUE) ){
     x <- dbm[, i, drop = F]
-    rn <- rownames(x)[which(x > sort(x, partial = (p-n))[(p-n)]) ]
+    rn <-  names(x[order(x, decreasing = TRUE),])[1:n]
     topnin <- c(topnin, rn)
   }
 
   topnout <- c()
-  p <- dim(dbm)[2]
   n <- 5
   for (i in grep("^11", rownames(dbm), value = TRUE) ){
     x <- dbm[i, , drop = F]
-    rn <- colnames(x)[which(x > sort(x, partial = (p-n))[(p-n)]) ]
-    topnout <- c(topnout, rn)
+    cn <-  names(x[,order(x, decreasing = TRUE)])[1:n]
+    topnout <- c(topnout, cn)
   }
+  
+  # length(unique(topnout))
+  # length(unique(topnin))
+  # 
+  # View(t(fd["311224",, drop=F]))
+  # View(t(fs["311224",, drop=F]))
+  
+  
+  #ag industry (detail-level)
+  ag_sec <- "1121A0"
+  
+  #who are the ag (e.g., beef) surplus counties?
+  agc <- idis[idis$net_supply != 0 & idis$DETAIL == ag_sec,]$place
+  #who are the ag (e.g., beef) deficit counties?
+  nag <- idis[idis$net_demand != 0 & idis$DETAIL == ag_sec,]$place
+  
+  #ag specific overlap of econ and geog counties (excludes  XX999's and AK,HI,PR)
+  agci <- intersect(agc, colnames(dist_mat))
+  #non-ag specific overlap of econ and geog counties (excludes  XX999's and AK,HI,PR)
+  nagi <- intersect(nag, rownames(dist_mat))
+  
+  #county-to-county distances from ag to non-ag
+  a2n <- dist_mat[agci, nagi, drop = F]
+  
+  #average distance out of ag
+  d_out <- apply(a2n, 1, mean)
+  #average distance into non-ag
+  d_in <- apply(a2n, 2, mean)
 
-
-  
-  length(unique(topnout))
-    length(unique(topnin))
-
-  View(t(fd["311224",, drop=F]))
-  View(t(fs["311224",, drop=F]))
-  
-  
-  #who are the beef counties?
-  agc <- idis[idis$net_supply != 0 & idis$DETAIL == "1121A0",]$place
-  nag <- idis[idis$net_demand != 0 & idis$DETAIL == "1121A0",]$place
-  
-  dist_mat[, agc, drop=F]
-  
-  ag_d <- apply(dist_mat[nag, agc, drop=F], 1, mean)
-
+  #check net supply equals net demand (what about the XX999's place share?)
+  sum(idis[idis$DETAIL == ag_sec,]$net_supply) == sum(idis[idis$DETAIL == ag_sec,]$net_demand )
  
+  # ag surplus counties share of total net supply (==total net demand)
+  ag_share <- idis[idis$DETAIL == ag_sec & idis$place %in% agci, ] %>% {.$net_supply/sum(.$net_supply)}
+  # ag deficit counties share of total net demand (==total net supply)
+  nag_share <- idis[idis$DETAIL == ag_sec & idis$place %in% nagi, ] %>% {.$net_demand/sum(.$net_demand)}
+
+  #share weighted distance that ag counties need to supply
+  sw_d_out <- d_out * ag_share
+  #share weighted distance that non-ag counties need to source
+  sw_d_in <- d_in * nag_share
+  
+share_weight_dist <- c(sw_d_out, sw_d_in)
+df <- as.data.frame(share_weight_dist)
+df$mean_dist <- c(d_out, d_in)
+df$place <- rownames(df)
+df$ag_surplus <- ifelse(df$place %in% agc, TRUE, FALSE)
+df$share_weight_dist2 <- df$share_weight_dist
+df[df$ag_surplus == FALSE, ]$share_weight_dist2 <- -(df[df$ag_surplus == FALSE, ]$share_weight_dist2)
+
+df$mean_dist2 <- df$mean_dist
+df[df$ag_surplus == FALSE, ]$mean_dist2 <- -(df[df$ag_surplus == FALSE, ]$mean_dist2)
+
+geog <- call_geog(year) %>% .[!grepl('^(02|15|72)', .$place), ] 
+df <- join_space_with_connectedness(df, geog) 
+
+  
+extractive_map(df = df, 
+           fill = "mean_dist2", style = "fs")
+
+extractive_map(df = df, 
+           fill = "share_weight_dist2", style = "fs")
+
+extractive_map(df = df, 
+           fill = "share_weight_dist2")
+
+test_map <- function(df,
+                       fill,
+                       ...){
+g <- ggplot() + 
+  geom_sf_interactive(aes(fill = round((.data[[fill]]), 2), 
+                          tooltip = if("STATE" %in% names(df)){
+                            glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          }else{
+                            glue("{NAME}\nFIPS: {place}\nValue: {round({.data[[fill]]}, 2)}")
+                          },
+                          data_id = place), 
+                      color = NA,
+                      data = df[which(df[["ag_surplus"]]),]) +
+  scale_fill_gradient(low = "#feb24c", high = "#f03b20") + 
+  labs(fill = "Net Supply") +
+  new_scale_fill() +
+  geom_sf_interactive(aes(fill = round(abs(.data[[fill]]), 2), 
+                          tooltip = if("STATE" %in% names(df)){
+                            glue("{NAME}, {STATE}\nFIPS: {place}\nValue: {round(abs({.data[[fill]]}), 2)}")
+                          }else{
+                            glue("{NAME}\nFIPS: {place}\nValue: {round(abs({.data[[fill]]}), 2)}")
+                          },
+                          data_id = place), 
+                      color = NA,
+                      data = df[which(!df[["ag_surplus"]]),]) +
+  scale_fill_gradient(low = "#56B1F7", high = "#132B43") + 
+  labs(fill = "Net Demand") +
+  coord_sf() +
+  theme_void() +
+  theme(plot.margin = margin(t = 1, r = 1, b = 10, l = 1, unit = "pt"),
+        legend.key.size = unit(.2, "cm"),
+        legend.title = element_text(size = rel(0.5)), 
+        legend.text = element_text(size = rel(0.5)),
+        legend.position = c(0.9, 0.2),
+        plot.caption = element_text(hjust = 0.9, size = rel(0.5))) +
+  labs(caption = glue(fill, ": ", beacode2description(code = fill) ))
+
+girafe(ggobj = g, 
+       options = list(
+         opts_hover(
+           css = girafe_css(
+             css = "stroke:gray;r:8pt;",
+             text = "stroke:none;fill:black;fill-opacity:1;" ) ),
+         opts_zoom(max = 5),
+         opts_sizing = opts_sizing(rescale = TRUE),
+         opts_tooltip(css = "font-family:sans-serif;
+                                           background-color:gray;
+                                           color:white;
+                                           padding:10px;
+                                           border-radius:5px;",
+                      use_cursor_pos = FALSE,
+                      offx = 0, offy = 330),
+         opts_toolbar = opts_toolbar(position = "top", saveaspng = FALSE) ))
+}
+
+
+
+  # ws <- (idis[idis$net_supply != 0 & idis$DETAIL == "1121A0" & idis$place %in% intersect(agc, colnames(dist_mat)) ,]$net_supply/sum(idis[idis$DETAIL == "1121A0" & idis$place %in% intersect(agc, colnames(dist_mat)) ,]$net_supply) * a2n)
+  # wd <- (a2n * idis[idis$net_demand != 0 & idis$DETAIL == "1121A0" & idis$place %in% intersect(nag, rownames(dist_mat)) ,]$net_demand/sum(idis[idis$DETAIL == "1121A0" & idis$place %in% intersect(nag, rownames(dist_mat)) ,]$net_demand))
 
 ```
 
