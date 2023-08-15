@@ -32,11 +32,14 @@ use_condaenv('rurec')
 # Import pubdata Python modules
 bea_io <- import("rurec.pubdata.bea_io")
 cbp <- import("rurec.pubdata.cbp")
-#ers_rurality <- import("rurec.pubdata.ers_rurality")
+ers_rurality <- import("rurec.pubdata.ers_rurality")
 geography <- import("rurec.pubdata.geography")
 naics <- import("rurec.pubdata.naics")
 geography_cbsa <- import("rurec.pubdata.geography_cbsa")
 ag_output <- import("rurec.ag_output")
+
+#turn off S2 spherical geometry
+sf_use_s2(FALSE)
 
 if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {
   dir.create(file.path(find_rstudio_root_file(), "data", "robjs"))
@@ -236,6 +239,21 @@ year2agcensus <- function(year){
   return(as.integer(x))
 }
 
+year2infogroup <- function(year){
+  info_year = c(2017:1997)
+  if(year %in% info_year){
+    x <- year
+  }else if(year > max(info_year)){
+    x <- max(info_year)
+  }else if(year < min(info_year)){
+    x <- min(info_year)
+  }
+  if(!year %in% info_year){
+    warning("InfoGroup years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
 beacode2description <- function(code, 
                                 year = 2012,
                                 ...){
@@ -269,7 +287,15 @@ call_industry_concordance <- function(...){
                   NAICS = "23", 
                   .before = which(df$SECTOR == '23')[1])
   df %<>% filter(NAICS != "23*")
+  df %<>% add_row(SECTOR = "53",
+                  SUMMARY = "531",
+                  U_SUMMARY = "531",
+                  DETAIL = "531",
+                  DESCRIPTION = "Housing",
+                  NAICS = "531",
+                  .before = which(df$SECTOR == '53')[1])
   df %<>% filter(DETAIL != "531HST")
+  df %<>% filter(DETAIL != "531ORE")
   df <- df[order(df$NAICS), ]
   rownames(df) <- 1:nrow(df)
   b <- c("11", "21", "22", "23", "31G", "31G", "31G", "42", "44RT", "44RT", "48TW", "48TW", "51", "FIRE", "FIRE", "PROF", "PROF", "PROF", "6", "6", "7", "7", "81", "G")
@@ -328,7 +354,6 @@ fips2cbsa <- function(fips,
   if(isTRUE(fips %in% cb$place)){cb$CBSA_CODE[fips == cb$place]}else{fips}
 }
 
-#error in "rurec.pubdata.ers_rurality" does not work
 # Call up and clean RUCC data available for years 2013, 2003, 1993, 1983, 1974
 call_rucc <- function(year){
   df <- ers_rurality$get_ruc_df() %>% filter(RUC_YEAR == year2rucc(year))
@@ -349,12 +374,26 @@ call_tiger <- function(year = 2013,
   df %<>% rename(place = CODE)
   df$COUNTY <- paste(df$NAME, "County")
   if(isTRUE(geometry)){
-    df$center <- st_centroid(df$geometry)
+    #df$center <- st_centroid(df$geometry)
+    df$center <- df$geometry %>% st_transform("EPSG:26911") %>% st_centroid() %>% st_transform(st_crs(df)[[1]]) 
     }
   st <- geography$get_state_df(geometry = FALSE) %>% select(c(1:3)) 
   names(st) <- c("STATE_CODE", "STATE_NAME", "STATE")
   df <- left_join(df, st, by = "STATE_CODE")
   df %<>% arrange(place)
+  return(df)
+}
+
+fips2name <- function(fips,
+                      year = 2012,
+                      long = FALSE,
+                      ...){
+  df <- call_tiger(year2tiger(year), geometry = F)
+  if(long){
+    df <- paste0(df$COUNTY[df$place == fips],", ", df$STATE_NAME[df$place == fips])
+  } else {
+    df <- df$NAME[df$place == fips]
+  }
   return(df)
 }
 
@@ -541,15 +580,21 @@ b_matrix <- function(year,
   u <- df[1:(which(rownames(df) == "T005")-1), 1:(which(colnames(df) == "T001")-1)] %>% as.matrix()
   x <- df["T018", 1:(which(colnames(df) == "T001")-1)]
   if(ilevel == "sum"){ 
-    u <- matrix_collapse(u, grep("^336", colnames(u), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
-    x <- vector_collapse(x, grep("^336", colnames(x), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    u <- matrix_collapse(u, grep("^336", colnames(u), value = TRUE), "336") %>% 
+      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+    x <- vector_collapse(x, grep("^336", colnames(x), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
   }
   if(ilevel == "det"){ 
-    u <- matrix_collapse(u, grep("^23", colnames(u), value = TRUE), "23") 
+    u <- matrix_collapse(u, grep("^23", colnames(u), value = TRUE), "23") %>% 
+      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
     com_names <- rownames(u)[!rownames(u) %in% c("4200ID")]
     ind_names <- colnames(u)[!colnames(u) %in% c("4200ID")]
     u <- u[com_names, ind_names] 
-    x <- vector_collapse(x, grep("^23", colnames(x), value = TRUE), "23")
+    x <- vector_collapse(x, grep("^23", colnames(x), value = TRUE), "23") %>%
+      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
     x <- x[ind_names] 
   }
   df <- u %*% diag(1/x)
@@ -566,15 +611,21 @@ c_matrix <- function(year,
   ind_supply <- df[nrow(df), 1:(which(colnames(df) == "T007")-1), drop=F]
   supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
   if(ilevel == "sum"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
-    ind_supply <- vector_collapse(ind_supply, grep("^336", colnames(ind_supply), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% 
+      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+    ind_supply <- vector_collapse(ind_supply, grep("^336", colnames(ind_supply), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
   }
   if(ilevel == "det"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") 
+    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") %>% 
+      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
     com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
     ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
     supply_mat <- supply_mat[com_names, ind_names] 
-    ind_supply <- vector_collapse(ind_supply, grep("^23", colnames(ind_supply), value = TRUE), "23")
+    ind_supply <- vector_collapse(ind_supply, grep("^23", colnames(ind_supply), value = TRUE), "23") %>%
+      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
     ind_supply <- ind_supply[ind_names] 
   }
   df <- supply_mat %*% diag(1/ind_supply)
@@ -595,15 +646,23 @@ d_matrix <- function(year,
   com_supply <- df[1:(nrow(df)-1), "T007", drop=F] %>% as.matrix()
   supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
   if(ilevel == "sum"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541")
-    com_supply <- vector_collapse(t(com_supply), grep("^336", colnames(t(com_supply)), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")  %>% t()
+    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% 
+      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+    com_supply <- vector_collapse(t(com_supply), grep("^336", colnames(t(com_supply)), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531") %>% 
+      t()
   }
   if(ilevel == "det"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") 
+    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") %>% 
+      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
     com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
     ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
     supply_mat <- supply_mat[com_names, ind_names] 
-    com_supply <- t(vector_collapse(t(com_supply), grep("^23", colnames(t(com_supply)), value = TRUE), "23"))
+    com_supply <- vector_collapse(t(com_supply), grep("^23", colnames(t(com_supply)), value = TRUE), "23") %>%
+      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") %>% 
+      t()
     com_supply <- com_supply[com_names, , drop=F] 
   }
   df <- t(supply_mat) %*% diag(as.vector(1/com_supply))
@@ -681,6 +740,7 @@ call_cbp <- function(year,
 # all.equal(df, df2)
 # identical(df, df2)
 
+
 #Agglomerate NAICS and BEA concordance by year and industry specificity (sector, summary, or detail)
 place_industry_economy_long <- function(year, 
                                         cbp_scale = c("county", "state", "us"), 
@@ -691,11 +751,10 @@ place_industry_economy_long <- function(year,
   n <- names(conc)[1]
   cbp_dat <- call_cbp(year = year, imputed = imputed, cbp_scale = cbp_scale, ...)
   if (cbp_scale != "county" & isFALSE(imputed)){
-    cbp_dat <- cbp_dat %>% filter(.[["lfo"]] == "-")
+    cbp_dat <- cbp_dat[cbp_dat$lfo == "-", ]
   }
   x <- left_join(cbp_dat, conc, by = "NAICS") 
-  x <- x %>%
-    filter(.[dim(x)[2]] != "NULL") %>%
+  x <- x %>% .[!is.na(.[dim(.)[2]] ),] %>% 
     group_by(place, .[dim(x)[2]]) %>%
     summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
     as.data.frame()
@@ -740,10 +799,13 @@ payroll_share <- function(year,
   indout <- call_use_table(year, ilevel) %>% 
     .["T018", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE]*1000000
   if(ilevel == "sum"){
-    indout <-  vector_collapse(indout, grep("^336", colnames(indout), value = TRUE), "336") %>% vector_collapse(., grep("^541", colnames(.), value = TRUE), "541")
+    indout <-  vector_collapse(indout, grep("^336", colnames(indout), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531") 
   }
   if(ilevel == "det"){
-    indout <-  vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23")
+    indout <-  vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23") %>%
+      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") 
   }
   conc <- ilevel_concord(ilevel)
   if (county_totals){
@@ -764,6 +826,113 @@ payroll_share <- function(year,
   intind <- intersect(colnames(ap), colnames(indout))
   df <- (ap["ap", intind , drop = FALSE] / indout["T018", intind , drop = FALSE]) 
   rownames(df) <- "psogo"
+  return(df)
+}
+
+
+# Call up InfoGroup county level 6 digit NAICS employment and sales ($1,000 of dollars) available for years 1997:2017
+call_infogroup <- function(year, 
+                           data_dir = file.path("data", "infogroup"),
+                           ...){
+  year <- year2infogroup(year)
+  fp <- file.path(find_rstudio_root_file(), data_dir)
+  df <- fp %>% {file.path(., grep(year, list.files(.), value = TRUE))} %>% readRDS() %>% .[!is.na(.$st) & !is.na(.$cty) & !is.na(.$naics) & !is.na(.$sales), ]
+  df$place <- paste0(df$st, df$cty)
+  return(df)
+}
+
+#Agglomerate NAICS and BEA concordance (sector, summary, or detail) by year for InfoGroup
+infogroup_bea_long <- function(year,
+                               ...){
+  info_dat <- call_infogroup(year, ...)
+  info_dat$NAICS <- NA
+  conc <- ilevel_concord(...)
+  n <- names(conc)[1]
+  for(i in unique(conc$NAICS)){
+    x <- paste0("^", i) %>% 
+      {info_dat[grepl(., info_dat$naics), "naics"]} %>% 
+      unique() %>% 
+      unlist()
+    info_dat[info_dat$naics %in% x, ]$NAICS <- i
+  }
+  df <- left_join(info_dat, conc, by = "NAICS") %>% 
+    {.[!is.na(.[n]),]} %>% 
+    group_by(place, .[n]) %>%
+    summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
+    pivot_wider(id_cols = n, 
+                names_from = "place", 
+                values_from = c("emp", "sales"), 
+                names_sep = ".", 
+                values_fill = 0) %>% 
+    pivot_longer(cols = -n, 
+                 names_to = c(".value", "place"), 
+                 names_pattern = "([^\\.]*)\\.*(\\d+)") %>% 
+    group_by(place) %>% 
+    arrange(factor(.[[n]], levels = unique(conc[[n]])), .by_group = TRUE) %>% 
+    as.data.frame() %>% 
+    .[,1:4]
+  names(df)[1] <- "indcode"
+  return(df)
+}
+
+#Generate industry sales or employment by county from InfoGroup in BEA industry codes ("det", "sum", or "sec") for any available year
+infogroup_by_place <- function(year,
+                               output_metric = c("sales", "emp"),
+                               ...){
+  output_metric <- match.arg(output_metric)
+  df <- infogroup_bea_long(year = year, ...) %>% 
+    .[, c("indcode", "place", output_metric)] %>% 
+    pivot_wider(id_cols = "indcode", names_from = "place", values_from = output_metric) %>% 
+    as.data.frame()
+  rownames(df) <- df$indcode
+  df <- df[, !colnames(df) %in% c("indcode","place"), drop=F] %>% 
+    as.matrix()
+  return(df)
+}
+
+############ Derive national level AgCensus sales share of gross output by year
+infogroup_sales_share <- function(year,
+                                  ilevel = c("det", "sum", "sec"), 
+                                  ...){
+  ilevel <- match.arg(ilevel)
+  indout <- call_use_table(year, ilevel) %>% 
+    .["T018", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE]*1000000
+  if(ilevel == "sum"){
+    indout <-  vector_collapse(indout, grep("^336", colnames(indout), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531") 
+  }
+  if(ilevel == "det"){
+    indout <- vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23") %>%
+      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") 
+  }
+  info_dat <- call_infogroup(year = year, ilevel = ilevel, ...) %>% .[!.$st %in% c("78"),] %>%
+    {aggregate(.$sales, list(.$naics), FUN=sum)} %>% 
+    `colnames<-`(c("naics", "sales")) %>% 
+    as_tibble()
+  info_dat$NAICS <- NA
+  conc <- ilevel_concord(ilevel = ilevel, ...)
+  n <- names(conc)[1]
+  for(i in unique(conc$NAICS)){
+    x <- paste0("^", i) %>% 
+      {info_dat[grepl(., info_dat$naics), "naics"]} %>% 
+      unique() %>% 
+      unlist()
+    info_dat[info_dat$naics %in% x, ]$NAICS <- i
+  }
+  df <- left_join(info_dat, conc, by = "NAICS") %>% 
+    {.[!is.na(.[n]),]} %>% 
+    group_by(.[n]) %>%
+    summarise(across(where(is.numeric), sum), .groups = 'drop') %>%
+    pivot_wider(names_from = n, 
+                values_from = c("sales"), 
+                names_sep = ".", 
+                values_fill = 0) %>% 
+    as.matrix()*1000
+  rownames(df) <- "sales"
+  intind <- intersect(colnames(df), colnames(indout)) %>% intersect(unique(conc[[n]]), .)
+  df <- (df["sales", intind, drop = FALSE] / indout["T018", intind, drop = FALSE]) 
+  rownames(df) <- "ssogo"
   return(df)
 }
 
@@ -829,39 +998,64 @@ agsales_share <- function(year,
 
 ############ Derive the Total Industry Output Matrix (in thousands of dollars)
 total_industry_output <- function (year,
-                                    ilevel = c("det", "sum", "sec"), 
-                                    ...){
+                                   ilevel = c("det", "sum", "sec"), 
+                                   data_source = c("cbp", "infogroup"),
+                                   ...){
   ilevel <- match.arg(ilevel)
-  farm_sales <- call_agoutput(year, ...)
-  fn <- colnames(farm_sales)[-c(1)]
-  as <- agsales_share(year, ...)
-  agout <- farm_sales %>% .[sapply(., is.numeric)] %>% {apply(., 1, function (x) {x / as})} %>% t() %>% as.data.frame()
-  colnames(agout) <- fn
-  agout$place <- farm_sales$place
-  iout <- industry_output_by_place(year = year, ilevel = ilevel, ...)
-  ps <- payroll_share(year = year, ilevel = ilevel, ...) %>% .[, rownames(iout)[rownames(iout) %in% colnames(.)], drop = FALSE] 
-  df <- apply(iout, 2, function (x) {x / ps})
-  df[is.infinite(df)] = 0
-  rownames(df) <- rownames(iout)
-  df <- t(df) %>% as.data.frame()
-  df$place <- rownames(df)
-  df <- left_join(df, agout, by = "place")
-  if (ilevel == "sec") {
-    df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
-    df <- df %>% select(!all_of(c(fn)))
-  } else if (ilevel == "sum") {
-    df[["111CA"]] <- rowSums(df[, c(fn)], na.rm = T)
-    df <- df %>% select(!all_of(c(fn))) %>% select("111CA", everything())
-  } else if (ilevel == "det") {
-    df <- df %>% select(all_of(fn), everything())
+  data_source <- match.arg(data_source)
+  if(data_source == "cbp"){
+    farm_sales <- call_agoutput(year, ...)
+    fn <- colnames(farm_sales)[-c(1)]
+    as <- agsales_share(year, ...)
+    agout <- farm_sales %>% .[sapply(., is.numeric)] %>% {apply(., 1, function (x) {x / as})} %>% t() %>% as.data.frame()
+    colnames(agout) <- fn
+    agout$place <- farm_sales$place
+    iout <- industry_output_by_place(year = year, ilevel = ilevel, ...)
+    ps <- payroll_share(year = year, ilevel = ilevel, ...) %>% .[, rownames(iout)[rownames(iout) %in% colnames(.)], drop = FALSE] 
+    df <- apply(iout, 2, function (x) {x / ps})
+    df[is.infinite(df)] = 0
+    rownames(df) <- rownames(iout)
+    df <- t(df) %>% as.data.frame()
+    df$place <- rownames(df)
+    df <- left_join(df, agout, by = "place")
+    if (ilevel == "sec") {
+      df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
+      df <- df %>% select(!all_of(c(fn)))
+    } else if (ilevel == "sum") {
+      df[["111CA"]] <- rowSums(df[, c(fn)], na.rm = T)
+      df <- df %>% select(!all_of(c(fn))) %>% select("111CA", everything())
+    } else if (ilevel == "det") {
+      df <- df %>% select(all_of(fn), everything())
+    }
+    rownames(df) <- df$place
+    df$place <- NULL
+    df <- t(df)
   }
-  rownames(df) <- df$place
-  df$place <- NULL
-  df <- t(df)
+  if(data_source == "infogroup"){
+    df <- infogroup_by_place(year, ilevel = ilevel, ...) %>% {.[,!colnames(.) %in% grep("^(78)", colnames(.), value = TRUE)]}
+    #To get Infogroup sales adjusted by BEA totals
+    ss <- infogroup_sales_share(year, ilevel = ilevel, ...)
+    df <- apply(df, 2, function (x) {x / ss})
+    rownames(df) <- colnames(ss)
+  }
   df[is.na(df)] = 0
   df[is.infinite(df)] = 0
   return(df)
 }
+
+# # BEA and InfoGroup industry coverage comparison
+# conc <- ilevel_concord()
+# info_dat <- call_infogroup(year) 
+# info_dat$NAICS <- NA
+# for(i in unique(conc$NAICS)){
+#   x <- paste0("^", i) %>% {info_dat[grepl(., info_dat$naics), "naics"]} %>% unique() %>% unlist()
+#   info_dat[info_dat$naics %in% x, ]$NAICS <- i
+# }
+# info_dat <- left_join(info_dat, conc, by = "NAICS")
+# # InfoGroup industries with no BEA coverage
+# info_dat[is.na(info_dat$NAICS), ]$naics %>% unique()
+# # BEA industries with no InfoGroup coverage 
+# setdiff(colnames(bea_ind), unique(info_dat$DETAIL))
 
 # Aggregate industry output of the CBSA members in a cluster
 cbsa_aggregate_industry_output <- function(year,
@@ -1037,12 +1231,12 @@ ras_trade_lists <- function(factor_supply,
                             ...){
   
   pl <- intersect(colnames(factor_supply), colnames(factor_demand))
-  fs <- factor_supply[, pl, drop=F]
-  fd <- factor_demand[, pl, drop=F]
   if(!is.null(impedance_mat)){ 
-    pl <- intersect(intersect(colnames(factor_supply), colnames(factor_demand)), intersect(colnames(g), rownames(g))) 
+    pl <- intersect(intersect(colnames(factor_supply), colnames(factor_demand)), intersect(colnames(impedance_mat), rownames(impedance_mat))) 
     impedance_mat <- impedance_mat[pl, pl]
   }
+  fs <- factor_supply[, pl, drop=F]
+  fd <- factor_demand[, pl, drop=F]
   if(isTRUE(crosshaul)){
     fsx <- fs
     fdx <- fd
@@ -1143,28 +1337,18 @@ call_imputed_tradeflows <- function(year,
 # }
 
 
-
-
-
-# year = 2012
-# ilevel = "sec"
-# factor_supply <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
-# factor_demand <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
-
-# testr <- min_imp_ras(factor_supply = factor_supply[1:2, ], factor_demand = factor_demand[1:2, ], crosshaul = TRUE, min_d = 500, max_d = 2000, step_d = 100, tol = 1e-1, verbose=TRUE)
-
 #develop better cache and directory system
 ### Find minimal distance impedance trade flows 
 min_imp_ras <- function(factor_supply, 
                         factor_demand,
-                        imp_funct = gaus_impedance_mat,
+                        imp_funct = "gaus_impedance_mat",
                         crosshaul = FALSE,
                         dir_location = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester"),
-                        min_d = 50,
-                        max_d = 500,
+                        min_d = 200,
+                        max_d = 2000,
                         step_d = 25,
-                        tol = 1e-3,
-                        verbose = FALSE,
+                        tol = 1e-0,
+                        verbose = TRUE,
                         ...){
   g <- dist_matc(...)
   fs <- intersect(colnames(factor_supply), colnames(g)) %>% factor_supply[, ., drop=F]
@@ -1178,72 +1362,85 @@ min_imp_ras <- function(factor_supply,
     fsx <- pmax(fs - fd, 0)
     fdx <- pmax(fd - fs, 0)
   }
-  # df <- data.frame("sector" = c(), 
-  #                  "impedance" = c())
+  df <- data.frame("sector" = c(),
+                   "impedance" = c())
   y <- intersect(
     names(which(!is.na(rowSums(fdx)) & 
                   !rowSums(fdx) == 0 )), 
     names(which(!is.na(rowSums(fsx)) & 
                   !rowSums(fsx) == 0 )) )
-  unlink(dir_location, recursive = TRUE)
-  dir.create(dir_location)
-  imp_l <- list()
+  # unlink(dir_location, recursive = TRUE)
+  if(!dir.exists(dir_location)){
+    dir.create(dir_location)
+  } 
+  imprd <- file.path(find_rstudio_root_file(), "data", "robjs", paste0(imp_funct, "_range"))
+  if(!dir.exists(imprd)){
+    dir.create(imprd)
+  } 
+  imprf <- list.files(imprd)
   for(d in seq(min_d, max_d, by = step_d)){
-    imp_l[[paste0("d_", d)]] <- do.call(imp_funct, list(miles2meters(d)))
+    if(!d %in% imprf){
+      temp_imp <- do.call(get(imp_funct), list(miles2meters(d)))
+      saveRDS(temp_imp, file = file.path(imprd, d))
+    }
   }
+  y <- setdiff(y, list.files(dir_location))
   for(i in y){
     for(d in seq(min_d, max_d, by = step_d)){
       print(paste("Industry:", i, " Distance:", d))
-      impedance_mat <- imp_l[[paste0("d_", d)]]
+      impedance_mat <- readRDS(file.path(imprd, d))
       xs <- (t(fsx[i, , drop=F]) %*%  fdx[i, , drop=F]) * impedance_mat[pl, pl]
       tf <- ras_trade_flows(x0 = xs,
                             rs1 = fsx[i, , drop=F],
                             cs1 = fdx[i, , drop=F],
                             tol = tol, 
                             verbose = verbose)
+      colnames(tf) = colnames(fdx[i, , drop=F])
+      rownames(tf) = colnames(fsx[i, , drop=F])
       if (max(max(abs(rowSums(tf) - fsx[i, , drop=F])) , max(abs(colSums(tf) - fdx[i, , drop=F]))) < tol) {
-        colnames(tf) = colnames(fdx[i, , drop=F])
-        rownames(tf) = colnames(fsx[i, , drop=F])
         break
       }
     }
     saveRDS(tf, file = file.path(dir_location, i))
-    # df <- rbind(df, data.frame("sector" = i, "impedance" = d))
+    df <- rbind(df, data.frame("sector" = i, "impedance" = d))
+    saveRDS(df, file = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "sec_imp_list"))
   }
-  df <- lapply(file.path(dir_location, y, readRDS))
-  names(df) <- y
-  return(df)
+  dfl <- lapply(file.path(dir_location, y), readRDS)
+  names(dfl) <- y
+  return(dfl)
 }
 
-############ Call matrices of commodity or industry imputed trade flows from RAS procedure (note: impedance is fixed)
+############ Call matrices of commodity or industry imputed trade flows from RAS procedure (note: impedance type is fixed and not specified in file name scheme)
 call_min_imp_ras <- function(year,
+                             data_source = c("cbp", "infogroup"),
                              flow_class = c("industry", "commodity"),
                              ilevel = c("det", "sum", "sec"),
                              cbsa_clust = FALSE,
                              crosshaul = FALSE,
                              dir_location = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester"),
-                             min_d = 50,
-                             max_d = 500,
+                             min_d = 25,
+                             max_d = 2000,
                              step_d = 25,
-                             tol = 1e-3,
+                             tol = 1e-0,
                              ...){
-  nm <- paste0("tally", "_", ilevel,"level", "_", year, "year", "_", flow_class, "class", "_", if(isTRUE(crosshaul)){"xhaul"}else{"nohaul"}, "_", "cbsa", if(isTRUE(cbsa_clust)){"clust"}else{"NA"}, "_", "by", min_d, "_", max_d, "_", step_d)
+  data_source <- match.arg(data_source)
+  ilevel <- match.arg(ilevel)
+  flow_class <- match.arg(flow_class)
+  
+  nm <- paste0("tally", "_", ilevel,"level", "_", year, "year", "_", flow_class, "class", "_", if(isTRUE(crosshaul)){"xhaul"}else{"nohaul"}, "_", "cbsa", if(isTRUE(cbsa_clust)){"clust"}else{"NA"}, "_", "by", min_d, "_", max_d, "_", step_d, "_", tol, "_", data_source)
   if(file.exists(file.path(dir_location, nm))){
     df <- readRDS(file.path(dir_location, nm))
   } else {
     if(!"ras_trade_flows" %in% c(lsf.str())){
       source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
     }
-    ilevel <- match.arg(ilevel)
-    flow_class <- match.arg(flow_class)
-    
     if(flow_class == "industry"){
-      fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
-      fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+      fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, data_source = data_source, ...)
+      fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, data_source = data_source, ...)
     }
     if(flow_class == "commodity"){
-      fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
-      fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, ...)
+      fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, data_source = data_source, ...)
+      fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, data_source = data_source, ...)
     }
     df <- min_imp_ras(factor_supply = fs,
                       factor_demand = fd,
@@ -1253,7 +1450,7 @@ call_min_imp_ras <- function(year,
                       step_d = step_d,
                       tol = tol,
                       ...)
-    #need to add tol and imp_funct to tallyname
+    #need to add to tallyname
     saveRDS(df, file = file.path(dir_location, nm))
   }
   return(df)
