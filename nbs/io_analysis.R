@@ -21,7 +21,7 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-3, maxiter = 1000, verbose =
   sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
   if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
   # mask away all-zero rows and columns
-  rpos <- (rs1 > 0) & sapply(rowSums(x0[,cs1 > 0, drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
+  rpos <- (rs1 > 0) & sapply(rowSums(x0[, cs1 > 0, drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
   cpos <- (cs1 > 0) & sapply(colSums(x0[rs1 > 0, ,drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
   x <- x0[rpos, cpos, drop=F]
   nr <- nrow(x)
@@ -29,14 +29,17 @@ ras_trade_flows <- function (x0, rs1, cs1, tol = 1e-3, maxiter = 1000, verbose =
   rs <- rs1[rpos]
   cs <- cs1[cpos]
   mad <- -1
+  rmse <- -1
   for (i in 1:maxiter) {
     # scale rows
     x1 <- matrix(rs / rowSums(x), nr, nc) * x
     # scale cols
     x1 <- matrix(cs / colSums(x1), nr, nc, byrow = TRUE) * x1
-    rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
     if (mad == mean(abs(rowSums(x1) - rs))) {warning("\n\n  No convergence: infeasible\n")
       break}
+    # if (rmse == max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs))) ) {warning("\n\n  No convergence: infeasible\n")
+    #   break}
+    rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
     mad <- mean(abs(rowSums(x1) - rs))
     x <- x1
     if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, "\n"))
