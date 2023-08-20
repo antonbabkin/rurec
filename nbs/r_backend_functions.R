@@ -1344,7 +1344,7 @@ min_imp_ras <- function(factor_supply,
                         imp_funct = "gaus_impedance_mat",
                         crosshaul = FALSE,
                         dir_location = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester"),
-                        min_d = 200,
+                        min_d = 25,
                         max_d = 2000,
                         step_d = 25,
                         tol = 1e-0,
@@ -1363,7 +1363,12 @@ min_imp_ras <- function(factor_supply,
     fdx <- pmax(fd - fs, 0)
   }
   df <- data.frame("sector" = c(),
-                   "impedance" = c())
+                   "impedance" = c(),
+                   "ras_supply_dim" = c(),
+                   "ras_demand_dim" = c(),
+                   "iterations" = c(),
+                   "rmse" = c(),
+                   "mad" = c())
   y <- intersect(
     names(which(!is.na(rowSums(fdx)) & 
                   !rowSums(fdx) == 0 )), 
@@ -1384,7 +1389,7 @@ min_imp_ras <- function(factor_supply,
       saveRDS(temp_imp, file = file.path(imprd, d))
     }
   }
-  y <- setdiff(y, list.files(dir_location))
+  # y <- setdiff(y, list.files(dir_location))
   for(i in y){
     for(d in seq(min_d, max_d, by = step_d)){
       print(paste("Industry:", i, " Distance:", d))
@@ -1395,20 +1400,29 @@ min_imp_ras <- function(factor_supply,
                             cs1 = fdx[i, , drop=F],
                             tol = tol, 
                             verbose = verbose)
-      colnames(tf) = colnames(fdx[i, , drop=F])
-      rownames(tf) = colnames(fsx[i, , drop=F])
-      if (max(max(abs(rowSums(tf) - fsx[i, , drop=F])) , max(abs(colSums(tf) - fdx[i, , drop=F]))) < tol) {
+      colnames(tf[[1]]) = colnames(fdx[i, , drop=F])
+      rownames(tf[[1]]) = colnames(fsx[i, , drop=F])
+      if (max(max(abs(rowSums(tf[[1]]) - fsx[i, , drop=F])) , max(abs(colSums(tf[[1]]) - fdx[i, , drop=F]))) < tol) {
         break
       }
     }
-    saveRDS(tf, file = file.path(dir_location, i))
-    df <- rbind(df, data.frame("sector" = i, "impedance" = d))
+    saveRDS(tf[[1]], file = file.path(dir_location, i))
+    df <- rbind(df, data.frame("sector" = i, 
+                               "impedance" = d, 
+                               "ras_supply_dim" = tf[["ras_supply_dim"]], 
+                               "ras_demand_dim" = tf[["ras_demand_dim"]], 
+                               "iterations" = tf[["iterations"]], 
+                               "rmse" = tf[["rmse"]], 
+                               "mad" = tf[["mad"]]))
     saveRDS(df, file = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "sec_imp_list"))
   }
   dfl <- lapply(file.path(dir_location, y), readRDS)
   names(dfl) <- y
-  return(dfl)
+  out <- list("impedance_synopsis" = df, 
+              "balanced_matrices" = dfl)
+  return(out) 
 }
+
 
 ############ Call matrices of commodity or industry imputed trade flows from RAS procedure (note: impedance type is fixed and not specified in file name scheme)
 call_min_imp_ras <- function(year,
@@ -1417,9 +1431,7 @@ call_min_imp_ras <- function(year,
                              ilevel = c("det", "sum", "sec"),
                              cbsa_clust = FALSE,
                              crosshaul = FALSE,
-                             dir_location = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester"),
-                             min_d = 25,
-                             max_d = 2000,
+                             dir_location = file.path(find_rstudio_root_file(), "data", "robjs", "trade_base"),
                              step_d = 25,
                              tol = 1e-0,
                              ...){
@@ -1427,7 +1439,7 @@ call_min_imp_ras <- function(year,
   ilevel <- match.arg(ilevel)
   flow_class <- match.arg(flow_class)
   
-  nm <- paste0("tally", "_", ilevel,"level", "_", year, "year", "_", flow_class, "class", "_", if(isTRUE(crosshaul)){"xhaul"}else{"nohaul"}, "_", "cbsa", if(isTRUE(cbsa_clust)){"clust"}else{"NA"}, "_", "by", min_d, "_", max_d, "_", step_d, "_", tol, "_", data_source)
+  nm <- paste0("tally", "_", ilevel,"level", "_", year, "year", "_", flow_class, "class", "_", if(isTRUE(crosshaul)){"xhaul"}else{"nohaul"}, "_", "cbsa", if(isTRUE(cbsa_clust)){"clust"}else{"NA"}, "_", "by", step_d, "_", "tol", tol, "_", data_source)
   if(file.exists(file.path(dir_location, nm))){
     df <- readRDS(file.path(dir_location, nm))
   } else {
@@ -1445,8 +1457,6 @@ call_min_imp_ras <- function(year,
     df <- min_imp_ras(factor_supply = fs,
                       factor_demand = fd,
                       crosshaul = crosshaul,
-                      min_d = min_d,
-                      max_d = max_d,
                       step_d = step_d,
                       tol = tol,
                       ...)
