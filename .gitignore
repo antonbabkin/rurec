@@ -34,3 +34,5 @@ rurec/infogroup
 data/pubdata
 nbs/misc/rurec
 
+condor/*
+

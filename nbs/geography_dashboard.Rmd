@@ -10,6 +10,7 @@ format:
     latex_engine: pdflatex
 params:
   county_fips: "39099"
+  year: 2012
 ---
 
 ```{r preamble, include = FALSE}
@@ -24,13 +25,13 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 options(scipen=999)
 
 ############ Load custom functions
+
 source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
 
 ############ Initialize parameter values
 params
 
-#t <- call_tiger(params$year, geometry = FALSE)
-t <- call_tiger(2012, geometry = FALSE)
+t <- call_tiger(params$year, geometry = FALSE)
 
 county_name <- t$NAME[t$place == params$county_fips]
 state_name <- t$STATE[t$place == params$county_fips]
@@ -43,8 +44,7 @@ state_name <- t$STATE[t$place == params$county_fips]
 ### Spatial Impedance Distribution Examples: `r county_name`, `r state_name`
 
 ```{r}
-# year = params$year
-year = 2012
+year = params$year
 central_place = params$county_fips
 ```
 

@@ -10,9 +10,9 @@ format:
 ---
 
 ```{r packages and libraries, include = FALSE}
-library(tidyr)
+#library(tidyr)
 library(geosphere)
-library(matlib)
+#library(matlib)
 library(rprojroot)
 
 source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
