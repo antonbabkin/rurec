@@ -1,46 +1,72 @@
 
-#package dependencies
-library(rprojroot)
+
 library(magrittr)
 
-# dir.create(file.path(find_rstudio_root_file(), "condor"))
-# year = 2012
-# ilevel = "det"
-# data_source = "infogroup"
-# industry_sector = 1
-#source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
-# industry_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source)[industry_sector, , drop=F] %>% 
-#   saveRDS(file = file.path(find_rstudio_root_file(), "condor", "factor_demand"))
-# industry_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source)[industry_sector, , drop=F] %>% 
-#   saveRDS(file = file.path(find_rstudio_root_file(), "condor", "factor_supply"))
-# dist_matc() %>% saveRDS(file = file.path(find_rstudio_root_file(), "condor", "center2center_distmat"))
-
-#input matricies files
-factor_supply = file.path(find_rstudio_root_file(), "condor", "factor_supply") %>% readRDS()
-factor_demand = file.path(find_rstudio_root_file(), "condor", "factor_demand") %>% readRDS()
-center2center_distmat = file.path(find_rstudio_root_file(), "condor", "center2center_distmat") %>% readRDS()
+TEST_RUN <- FALSE
 
 #parameters
-tol = 1e-0
-min_d = 25
-max_d = 2000
-step_d = 25
-maxiter = 1000
-imp_funct = "gaus_impedance_mat"
-crosshaul = FALSE
-verbose = TRUE
+tol <- 1e-0
+min_d <- 25
+max_d <- 2000
+step_d <- if (TEST_RUN) 250 else 25
+maxiter <- if (TEST_RUN) 10 else 1000
+imp_funct <- "gaus_impedance_mat"
+crosshaul <- FALSE
+verbose <- TRUE
 
-#file paths
-tradeflow_dir = file.path(find_rstudio_root_file(), "condor", "balanced_trade")
-impedance_dir = file.path(find_rstudio_root_file(), "condor", paste0(imp_funct, "_range"))
-diag_location = file.path(find_rstudio_root_file(), "condor", "diagnostic_list")
+generate_inputs <- function() {
+  library(tidyverse)
+  library(glue)
 
-if(!dir.exists(tradeflow_dir)){
-  dir.create(tradeflow_dir)
-} 
-if(!dir.exists(impedance_dir)){
-  dir.create(impedance_dir)
-} 
+  year = 2012
+  ilevel = "det"
+  data_source = "infogroup"
+
+  source(file.path(rprojroot::find_rstudio_root_file(), "nbs/r_visualization_functions.R"))
+  
+  industry_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
+    saveRDS(file = c)
+  industry_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
+    saveRDS(file = rprojroot::find_rstudio_root_file("condor/supply.rds"))
+  
+  dist_matc() %>% 
+    saveRDS(file = rprojroot::find_rstudio_root_file("condor/center2center_distmat.rds"))
+  
+}
+
+output_summary <- function(output_dir) {
+  list.files(output_dir, "diagnostic_*") %>%
+    map(\(x) file.path(output_dir, x)) %>%
+    map(\(x) readRDS(x) %>% tail(1)) %>%
+    bind_rows()
+}
+
+# d <- output_summary(rprojroot::find_rstudio_root_file("condor/output"))
+
+
+args <- commandArgs(trailingOnly = TRUE)
+print(c("Command line arguments:", args))
+if (args[1] == "inputs") {
+  print("preparing inputs...")
+  generate_inputs()
+  quit("no")
+} else if (args[1] == "compute") {
+  print("calculating trade flows...")
+  industry_index <- as.integer(args[2])
+  # proceed through the rest of the script
+} else {
+  print("unkown argument, stopping")
+  quit("no", 1)
+}
+
+
+#input matricies files
+factor_supply <- readRDS("supply.rds")[industry_index, , drop=F]
+factor_demand <- readRDS("demand.rds")[industry_index, , drop=F]
+center2center_distmat <- readRDS("center2center_distmat.rds")
+
+
+
 
 #Balance trade flow matrix using RAS algorithm. Iteratively update prior matrix until rows and columns sum to target vectors.
 ras_trade_flows <- function (x0, rs1, cs1, tol, maxiter, verbose) {
@@ -133,13 +159,14 @@ min_imp_ras <- function(factor_supply,
     fdx <- pmax(fd - fs, 0)
   }
   
-  imprf <- list.files(impedance_dir)
-  for(d in seq(min_d, max_d, by = step_d)){
-    if(!d %in% imprf){
-      temp_imp <- do.call(get(imp_funct), list(miles2meters(d)))
-      saveRDS(temp_imp, file = file.path(impedance_dir, d))
-    }
-  }
+  # pre-calculate impedance matrices, not useful if running single industry in isolated environment
+  # imprf <- list.files(impedance_dir)
+  # for(d in seq(min_d, max_d, by = step_d)){
+  #   if(!d %in% imprf){
+  #     temp_imp <- do.call(get(imp_funct), list(miles2meters(d)))
+  #     saveRDS(temp_imp, file = file.path(impedance_dir, d))
+  #   }
+  # }
   
   df <- data.frame("sector" = c(),
                    "impedance" = c(),
@@ -150,7 +177,8 @@ min_imp_ras <- function(factor_supply,
                    "mad" = c())
     for(d in seq(min_d, max_d, by = step_d)){
       print(paste("Industry:", i, " Distance:", d))
-      impedance_mat <- readRDS(file.path(impedance_dir, d))
+      # impedance_mat <- readRDS(file.path(impedance_dir, d))
+      impedance_mat <- do.call(get(imp_funct), list(miles2meters(d)))
       xs <- (t(fsx) %*%  fdx) * impedance_mat[pl, pl]
       tf <- ras_trade_flows(x0 = xs,
                             rs1 = fsx,
@@ -167,12 +195,12 @@ min_imp_ras <- function(factor_supply,
                                  "iterations" = tf[["iterations"]], 
                                  "rmse" = tf[["rmse"]], 
                                  "mad" = tf[["mad"]]))
-      saveRDS(df, file = diag_location)
+      saveRDS(df, file = paste0("diagnostic_", i))
       if (max(max(abs(rowSums(tf[[1]]) - fsx)) , max(abs(colSums(tf[[1]]) - fdx))) < tol) {
         break
       }
     }
-    saveRDS(tf[[1]], file = file.path(tradeflow_dir, i))
+    saveRDS(tf[[1]], file = paste0("trade_flows_", i))
     out <- list("synopsis" = df, 
                 "matrix" = tf[[1]])
     return(out) 
@@ -184,19 +212,11 @@ test_out <- min_imp_ras(factor_supply = factor_supply,
                         center2center_distmat = center2center_distmat,
                         imp_funct = imp_funct,
                         crosshaul = crosshaul,
-                        tradeflow_dir = tradeflow_dir,
-                        diag_location = diag_location,
-                        impedance_dir = impedance_dir,
                         min_d = min_d,
                         max_d = max_d,
                         step_d = step_d,
                         tol = tol,
                         verbose = verbose)
-
-
-
-
-
 
 
 
