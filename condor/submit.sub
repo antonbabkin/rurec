@@ -17,7 +17,7 @@ when_to_transfer_output = ON_EXIT
 transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/chtc/el8/R413.tar.gz, /home/babkin/build_r/packages.tar.gz, impedance_cost.R, demand.rds, supply.rds, center2center_distmat.rds
 
 request_cpus = 1
-request_memory = 1GB
+request_memory = 3GB
 request_disk = 1GB
 
 # total number of industries = 376

@@ -1,0 +1,55 @@
+---
+title: "APL website dashboard"
+format: html
+---
+
+Prepare data for a web dashboard.
+
+```{r}
+library(tidyverse)
+
+library(reticulate)
+reticulate::use_condaenv("rurec")
+
+pubdata <- new.env()
+pubdata$geography <- reticulate::import("rurec.pubdata.geography")
+pubdata$cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
+pubdata$bea_io <- reticulate::import("rurec.pubdata.bea_io")
+```
+
+
+
+
+```{r}
+
+df <- pubdata$geography$get_state_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  filter(contiguous) %>%
+  select(code, abbr) %>%
+  rename(state_code = code)
+
+d <- pubdata$geography$get_county_df(geometry = FALSE) %>%
+  rename_with(str_to_lower)
+
+df <- left_join(df, d, join_by(state_code)) %>%
+  rename(county_fips = code) %>%
+  mutate(county_name = paste(name, abbr, sep = ", "))
+
+d <- df %>%
+  group_by(state_code) %>%
+  summarize(eca_code = first(county_fips))
+d$eca_level <- runif(nrow(d))
+
+df <- left_join(df, d, join_by(state_code))
+
+for (sector in 1:10) {
+  df[[paste0("demand_", sector)]] <- runif(nrow(df), 0, 1000)
+}
+
+df %>%
+  select(county_fips, county_name, eca_code, eca_level, starts_with("demand_")) %>%
+  write_csv("data/web_dashboard.csv.gz")
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
