@@ -1,0 +1,448 @@
+---
+title: "NIFA-2023 Rural grant examples"
+format: html
+---
+
+This notebook generates examples to motivate and use in preparation of our 2023 NIFA grant applications.
+
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(ggplot2)
+library(ggiraph)
+library(GGally)
+library(patchwork)
+library(glue)
+
+
+
+library(reticulate)
+reticulate::use_condaenv("rurec")
+
+pubdata <- new.env()
+pubdata$geography <- reticulate::import("rurec.pubdata.geography")
+pubdata$cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
+pubdata$bea_nipa <- reticulate::import("rurec.pubdata.bea_nipa")
+pubdata$bea_io <- reticulate::import("rurec.pubdata.bea_io")
+pubdata$pop <- reticulate::import("rurec.pubdata.population")
+pubdata$cbp <- reticulate::import("rurec.pubdata.cbp")
+pubdata$naics <- reticulate::import("rurec.pubdata.naics")
+
+repo_path <- rprojroot::find_rstudio_root_file
+
+source(repo_path("rurec/reticulate_extras.R"))
+source(repo_path("nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
+source(repo_path("nbs/r_backend_functions.R"), local = (circ_fns <- new.env()))
+source(repo_path("nbs/r_visualization_functions.R"), local = (viz_fns <- new.env()))
+source(repo_path("rurec/reseng.R"), local = (reseng <- new.env()))
+
+trade_flow_fns <- new.env()
+trade_flow_fns$commandArgs <- function(...) { c() }
+source(repo_path("condor/impedance_cost.R"), local = trade_flow_fns)
+
+logger::log_threshold(DEBUG)
+ggplot2::theme_set(theme_minimal())
+```
+
+
+# Circulatity indicators and outcomes
+
+## outcomes
+
+```{r}
+
+d <- pubdata$pop$get_df() %>%
+  filter(st != "00", cty != "000", year %in% c(2010, 2015)) %>%
+  mutate(stcty = paste0(st, cty), .keep = "unused") %>%
+  arrange(stcty, year) %>%
+  group_by(stcty) %>%
+  mutate(
+    pop_gr = 200 * (pop - lag(pop)) / (pop + lag(pop)),
+  ) %>%
+  filter(!is.na(pop_gr)) %>%
+  select(stcty, pop_gr)
+
+```
+
+
+## indicators
+
+| Intermediate circularity indicator | Formula                                          |
+|------------------------------------|--------------------------------------------------|
+| Intermediate capacity              | intermediate supply / output                     |
+| Intermediate transmittance         | excess intermediate supply / output              |
+| Intermediate emissivity            | excess intermediate supply / intermediate supply |
+| Intermediate absorption            | 1-transmittance/capacity                         |
+| Intensity                          | intermed demand / output                         |
+| Dependency                         | excess demand / output                           |
+| Autonomy                           | 1- (excess demand / demand)                      |
+| Trade Balance                      | net intermed demand / output                     |
+| Trade Openness                     | (excess demand + excess supply) / output         |
+
+
+
+```{r}
+
+get_output <- reseng$cache(function () {
+  circ_fns$industry_output_matrix(year = 2012, ilevel = "det", data_source = "infogroup")
+}, repo_path("cache/infogroup_output_cty_det.rds"))
+
+moutput <- get_output()
+
+mdemand <- circ_fns$industry_factor_demand_matrix(year = 2012, ilevel = "det", data_source = "infogroup")
+msupply <- circ_fns$industry_factor_supply_matrix(year = 2012, ilevel = "det", data_source = "infogroup")
+mnetdem <- mdemand - msupply
+
+df <- tibble(stcty = colnames(moutput)) %>%
+  mutate(
+    output = colSums(moutput),
+    demand = colSums(mdemand),
+    supply = colSums(msupply),
+    netdem = colSums(mnetdem),
+    excdem = colSums(pmax(mnetdem, 0)),
+    excsup = colSums(pmax(-mnetdem, 0)),
+    capacity = supply / output,
+    transmittance = excsup / output,
+    emissivity = excsup / supply,
+    absorption = 1 - transmittance / capacity,
+    intensity = demand / output,
+    dependency = excdem / output,
+    autonomy = 1 - excdem / demand,
+    balance = netdem / output,
+    openness = (excdem + excsup) / output
+  )
+
+d <- pubdata$pop$get_df() %>%
+  filter(st != "00", cty != "000", year == 2012) %>%
+  mutate(stcty = paste0(st, cty), .keep = "unused") %>%
+  select(stcty, pop)
+df <- left_join(df, d, join_by(stcty))
+
+d <- pubdata$pop$get_df() %>%
+  filter(st != "00", cty != "000", year %in% c(2010, 2015)) %>%
+  mutate(stcty = paste0(st, cty), .keep = "unused") %>%
+  arrange(stcty, year) %>%
+  group_by(stcty) %>%
+  mutate(
+    pop_gr = 200 * (pop - lag(pop)) / (pop + lag(pop)),
+  ) %>%
+  filter(!is.na(pop_gr)) %>%
+  select(stcty, pop_gr)
+df <- left_join(df, d, join_by(stcty))
+    
+
+pm <- ggpairs(
+  df, 
+  columns = c("capacity", "transmittance", "absorption", "intensity", "dependency", "autonomy", "balance", "openness"), 
+  lower = list(
+    continuous = wrap("points", size = 0.3)
+    )
+  )
+
+pm
+
+
+p <- ggpairs(
+  df, 
+  columns = c("pop_gr", "capacity", "transmittance", "absorption", "intensity", "dependency", "autonomy", "balance", "openness"), 
+  lower = list(
+    continuous = wrap("points", size = 0.3)
+    )
+  )
+
+ggplot(df %>% filter(abs(pop_gr) > 3, abs(pop_gr) < 20)) +
+  geom_point(aes(autonomy, openness, color = pop_gr), size = 1) +
+  scale_color_gradient2(midpoint = 0, low = "blue", mid = "gray", high = "red") +
+  labs(title = "Population growth 2010-2015, > 3% or < -3%")
+
+
+```
+
+
+
+# ECA
+
+```{r}
+
+infogroup_trade_flow_totals <- reseng$cache(function () {
+  trade_flows_output_dir <- repo_path(glue("condor/output_16995200"))
+  industries <- trade_flow_fns$output_summary(trade_flows_output_dir)$sector
+  
+  n_counties <- 3220
+  d <- matrix(0, n_counties, n_counties)
+  for (industry in industries) {
+    d <- d + readRDS(repo_path(glue("{trade_flows_output_dir}/trade_flows_{industry}")))
+  }
+  d
+}, repo_path("data/nifa_2023/infogroup_trade_flows_total.rds"))
+
+m_trade_flows <- infogroup_trade_flow_totals()
+m_trade_flows_share <- m_trade_flows %>% (\(x) x / rowSums(x))
+
+eca <- circ_fns$absorption_maximum_match(m_trade_flows_share, 0.05) %>% ungroup()
+eca %>% count(cluster_category)
+eca %>% group_by(eca_membership) %>% summarize(n = n()) %>% arrange(desc(n))
+
+contig_us <- pubdata$geography$get_state_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  filter(contiguous) %>%
+  pull(code)
+
+d <- pubdata$geography$get_county_df() %>%
+  rename_with(str_to_lower) %>%
+  filter(state_code %in% contig_us) %>%
+  rename(place = code) %>%
+  select(place, geometry)
+
+df <- left_join(eca, d, join_by(place))
+
+p <- df %>%
+  filter(cluster_members_count > 1) %>%
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = cluster_members_count)) +
+  scale_fill_steps(n.breaks = 7)
+p
+```
+
+## map
+
+```{r}
+d_eca_t0 <- readRDS(repo_path("data/nifa_2023/infogroup_trade_flows_total.rds")) %>%
+  (\(x) x / rowSums(x)) %>%
+  circ_fns$absorption_maximum_match(0.0) %>%
+  ungroup()
+write_csv(d_eca_t0, repo_path("data/infogroup_eca_t0.csv"))
+
+d_cty_sf <- circ_fns$call_tiger()
+d_contig <- pubdata$geography$get_state_df(geometry = FALSE) %>% filter(CONTIGUOUS)
+
+df <- d_eca_t0 %>%
+  left_join(d_cty_sf, join_by(place)) %>%
+  filter(str_sub(place, 1, 2) %in% d_contig$CODE)
+
+p <- viz_fns$aqual_map(df)
+p1 <- viz_fns$clustmember_map(df)
+
+df %>% filter(eca_membership == "19113") %>% select(place, NAME, max_absorption_alpha) %>% View()
+
+```
+
+
+# CBP toy example
+
+```{r}
+get_cty_io <- reseng$cache(function(variable, year, ilevel, data_source, imputed) {
+  if (variable == "output") {
+    f <- circ_fns$industry_output_matrix
+  } else if (variable == "supply") {
+    f <- circ_fns$industry_factor_supply_matrix
+  } else if (variable == "demand") {
+    f <- circ_fns$industry_factor_demand_matrix
+  }
+  return(f(year = year, ilevel = ilevel, data_source = data_source, imputed = imputed))
+}, repo_path("cache/cty_io/{variable}_{data_source}_{year}_{ilevel}_{imputed}.rds"))
+
+
+ind_codes <- list(
+  oilseed = "1111A0",
+  grain = "1111B0",
+  veg = "111200",
+  floor_mill = "311210",
+  oilseed_proc = "311224",
+  other_chem = "325190",
+  wet_mill = "311221"
+)
+
+# only two counties have soybean proc in CBP
+d <- get_cty_io("output", 2012, "det", "cbp", FALSE)
+d[ind_codes$oilseed_proc, ] %>% as_tibble(rownames = "place") %>% arrange(desc(value)) %>% head()
+
+# now it is 70 counties, because we use EFSY-CBP
+d <- get_cty_io("output", 2012, "det", "cbp", TRUE)
+d[ind_codes$oilseed_proc, ] %>% as_tibble(rownames = "place") %>% count(value > 0)
+
+# interestingly, InfoGroup is somewhere in-between with 44 counties.
+d <- get_cty_io("output", 2012, "det", "infogroup", TRUE)
+d[ind_codes$oilseed_proc, ] %>% as_tibble(rownames = "place") %>% count(value > 0)
+
+# new CBP - different suppression type
+d <- get_cty_io("output", 2018, "det", "cbp", FALSE)
+d[ind_codes$oilseed_proc, ] %>% as_tibble(rownames = "place") %>% count(value > 0)
+
+# every CBP county in 311221 (Wet corn milling) is suppressed, although some have establishments
+d1 <- pubdata$cbp$get_cbp_raw("county", 2012L)
+d1 %>% filter(str_starts(naics, "311221"), est > 0, ap > 0)
+
+# good supply chain example?
+ind_codes <- list(
+  oilseed = "1111A0",
+  grain = "1111B0",
+  veg = "111200",
+  floor_mill = "311210",
+  oilseed_proc = "311224",
+  other_chem = "325190",
+  wet_mill = "311221",
+  plastic = "325211"
+)
+
+d <- get_cty_io("output", 2012, "det", "cbp", FALSE) %>% 
+  as_tibble(rownames = "industry")
+
+
+d %>% filter(industry %in% ind_codes) %>% select(industry, starts_with("55"))
+
+milk_chain <- list(
+  dairy = "112120",
+  cheese = "311513",
+  dry = "311514",
+  fluid = "31151A",
+  froz_food = "311410", # cheese demand
+  full_rest = "722110" # cheese demand
+)
+d %>% filter(industry %in% milk_chain) %>% select(industry, starts_with("55"))
+```
+
+
+```{r}
+df <- get_cty_io("output", 2012, "det", "cbp", FALSE) %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "output")
+d <- get_cty_io("supply", 2012, "det", "cbp", FALSE) %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "supply")
+df <- left_join(df, d, join_by(stcty, industry))
+d <- get_cty_io("demand", 2012, "det", "cbp", FALSE) %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "demand")
+df <- left_join(df, d, join_by(stcty, industry))
+
+# population - to find large counties
+d <- pubdata$pop$get_df() %>%
+  rename_with(str_to_lower) %>%
+  filter(year == 2012) %>%
+  mutate(stcty = paste0(st, cty)) %>%
+  select(stcty, pop)
+df <- left_join(df, d, join_by(stcty))
+
+example_chain <- list(
+  dairy = "112120",
+  cheese = "311513",
+  froz_food = "311410"
+)
+
+# supply is sometimes greater than output because supply and demand have been rescaled for RAS
+# for the example, need to scale back
+sup <- pubdata$bea_io$get_sup(2012L, "det")
+
+
+ras_rescale <- tibble(
+  industry = unlist(example_chain),
+  rescale = sup[unlist(example_chain), "T007"] / sup[unlist(example_chain), "T016"]
+)
+
+example_cty <- c("55025", "55009", "17031")
+# payroll in cheese and frozen food
+d_pay <- arrow::open_dataset(as.character(pubdata$cbp$get_cbp_raw_pq("county", 2012L))) %>%
+  mutate(stcty = paste0(fipstate, fipscty)) %>%
+  filter(naics %in% c("311513", "31141/"), stcty %in% example_cty) %>%
+  rename(payroll = ap) %>%
+  mutate(industry = str_pad(str_remove(naics, "/"), 6, "right", "0"), .keep = "unused") %>%
+  select(stcty, industry, payroll) %>%
+  collect()
+
+
+df_ex <- df %>%
+  filter(industry %in% example_chain, stcty %in% example_cty) %>%
+  left_join(ras_rescale, join_by(industry)) %>%
+  mutate(supply = supply * rescale, demand = demand * rescale) %>%
+  mutate(across(c(output, supply, demand), round)) %>%
+  left_join(d_pay, join_by(stcty, industry)) %>%
+  arrange(stcty, industry) %>%
+  select(industry, stcty, payroll, output, supply, demand)
+
+df_ex %>%
+  mutate(across(c(payroll, output, supply, demand), \(x) round(x / 1000, 1))) %>%
+  pivot_wider(id_cols = industry,
+              names_from = stcty, names_glue = "{stcty}_{.value}",
+              values_from = c(payroll, output, supply, demand)) %>%
+  relocate(starts_with("17031"), starts_with("55009"), starts_with("55025"), .after = industry) %>%
+  View()
+
+```
+
+
+```{r}
+# cheese in Madison
+arrow::open_dataset(as.character(pubdata$cbp$get_cbp_raw_pq("county", 2012L))) %>%
+  filter(naics == example_chain$cheese, fipstate == "55", fipscty == "025") %>%
+  collect()
+```
+
+```{r}
+xo <- circ_fns$commodity_output_matrix(2012, ilevel = "det", data_source = "cbp", imputed = FALSE)
+xs <- circ_fns$commodity_factor_supply_matrix(2012, ilevel = "det", data_source = "cbp", imputed = FALSE)
+xd <- circ_fns$commodity_factor_demand_matrix(2012, ilevel = "det", data_source = "cbp", imputed = FALSE)
+```
+
+
+```{r}
+df <- xo %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "output")
+d <- xs %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "supply")
+df <- left_join(df, d, join_by(stcty, industry))
+d <- xd %>% 
+  as_tibble(rownames = "industry") %>%
+  pivot_longer(!industry, names_to = "stcty", values_to = "demand")
+df <- left_join(df, d, join_by(stcty, industry))
+
+example_chain <- list(
+  dairy = "112120",
+  cheese = "311513",
+  froz_food = "311410"
+)
+
+# supply is sometimes greater than output because supply and demand have been rescaled for RAS
+# for the example, need to scale back
+sup <- pubdata$bea_io$get_sup(2012L, "det")
+ras_rescale <- tibble(
+  industry = unlist(example_chain),
+  rescale = sup[unlist(example_chain), "T007"] / sup[unlist(example_chain), "T016"]
+)
+
+example_cty <- c("55025", "55009", "17031")
+# payroll in cheese and frozen food
+d_pay <- arrow::open_dataset(as.character(pubdata$cbp$get_cbp_raw_pq("county", 2012L))) %>%
+  mutate(stcty = paste0(fipstate, fipscty)) %>%
+  filter(naics %in% c("311513", "31141/"), stcty %in% example_cty) %>%
+  rename(payroll = ap) %>%
+  mutate(industry = str_pad(str_remove(naics, "/"), 6, "right", "0"), .keep = "unused") %>%
+  select(stcty, industry, payroll) %>%
+  collect()
+
+
+df_ex <- df %>%
+  filter(industry %in% example_chain, stcty %in% example_cty) %>%
+  left_join(ras_rescale, join_by(industry)) %>%
+  mutate(supply = supply * rescale, demand = demand * rescale) %>%
+  mutate(across(c(output, supply, demand), round)) %>%
+  left_join(d_pay, join_by(stcty, industry)) %>%
+  arrange(stcty, industry) %>%
+  select(industry, stcty, payroll, output, supply, demand)
+
+df_ex %>%
+  # mutate(across(c(payroll, output, supply, demand), \(x) round(x / 1000, 1))) %>%
+  pivot_wider(id_cols = industry,
+              names_from = stcty, names_glue = "{stcty}_{.value}",
+              values_from = c(output, supply, demand)) %>%
+  relocate(starts_with("17031"), starts_with("55009"), starts_with("55025"), .after = industry) %>%
+  View()
+
+```
+
+
+
