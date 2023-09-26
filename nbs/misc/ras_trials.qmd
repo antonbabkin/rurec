@@ -232,3 +232,77 @@ With half of rows and columns set to zero, 10 iterations take 4 seconds using pr
 This last version will be used.
 
 
+# RAS parameter sensitivity
+
+Compare RAS results under two sets of parameters. Batch 2 is more precise.
+```
+batch     min_d  max_d  step_d  maxiter  tol
+16994913  25     2000   25      1000     1e-0
+16995200  25     2000   5       10000    1e-1
+```
+
+```{r}
+library(tidyverse)
+library(glue)
+
+repo_path <- rprojroot::find_rstudio_root_file
+
+trade_flow_fns <- new.env()
+trade_flow_fns$commandArgs <- function(...) { c() }
+source(repo_path("condor/impedance_cost.R"), local = trade_flow_fns)
+
+ggplot2::theme_set(theme_minimal())
+```
+
+
+```{r}
+batch_ids <- c(16994913, 16995200)
+output_dirs <- repo_path(glue("condor/output_{batch_ids}"))
+
+d1 <- trade_flow_fns$output_summary(output_dirs[1])
+d2 <- trade_flow_fns$output_summary(output_dirs[2])
+
+d <- inner_join(d1, d2, join_by(sector), suffix = c("_1", "_2")) %>%
+  mutate(
+    industry_idx = 1:nrow(d1),
+    impedance_diff = impedance_2 - impedance_1
+  )
+
+tfd <- tibble(sector = character(), trade_flow_diff = numeric())
+for (industry in d$sector) {
+  d1 <- readRDS(repo_path(glue("{output_dirs[1]}/trade_flows_{industry}")))
+  d2 <- readRDS(repo_path(glue("{output_dirs[2]}/trade_flows_{industry}")))
+  tfd <- tfd %>% add_row(sector = industry, trade_flow_diff = sum(abs(d2 - d1)) / sum(d1))
+}
+
+d <- inner_join(d, tfd, join_by(sector))
+
+o <- filter(d, abs(impedance_diff) > 75)
+ggplot(d) +
+  geom_point(aes(industry_idx, impedance_diff), size = 0.5) +
+  annotate("text",
+           x = o$industry_idx,
+           y = o$impedance_diff,
+           label = o$sector,
+           size = 3,
+           vjust = 2
+           ) +
+  labs(title = "Stopping impedance difference (batch_2 - batch_1)")
+
+
+o <- filter(d, trade_flow_diff > 0.5)
+ggplot(d) +
+  geom_point(aes(industry_idx, trade_flow_diff), size = 0.5) +
+  annotate("text",
+           x = o$industry_idx,
+           y = o$trade_flow_diff,
+           label = o$sector,
+           size = 3,
+           vjust = -0.5,
+           ) +
+  labs(title = "Normalized absolute deviation of trade flows (sum(abs(tf2 - tf1)) / sum(tf1))")
+
+d$impedance_diff %>% summary()
+d$trade_flow_diff %>% summary()
+
+```
