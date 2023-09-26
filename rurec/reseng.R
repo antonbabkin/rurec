@@ -33,13 +33,13 @@ cache <- function(f, filename) {
     
     
     if (file.exists(filename)) {
-      rlog::log_debug(paste("read from cache", filename))
+      logger::log_debug(paste("read from cache", filename))
       res <- readRDS(filename)
     } else {
       res <- f(...)
       dir.create(dirname(filename), showWarnings = FALSE, recursive = TRUE)
       saveRDS(res, filename)
-      rlog::log_debug(paste("saved to cache", filename))
+      logger::log_debug(paste("saved to cache", filename))
     }
     return(res)
   }

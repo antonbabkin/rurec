@@ -37,6 +37,7 @@ source(file.path(root_dir, "rurec/reticulate_extras.R"))
 source(file.path(root_dir, "nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
 source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
+source(file.path(root_dir, "nbs/r_backend_functions.R"), local = (conn_backend <- new.env()))
 
 ggplot2::theme_set(theme_minimal())
 Sys.setenv("LOG_LEVEL" = "DEBUG")
@@ -63,6 +64,7 @@ real2nom <- function(real, year) {
 # n1 <- real2nom(r, y)
 # n == n1
 ```
+
 
 
 # Data prep
@@ -182,7 +184,7 @@ CBSA definition, rural = non-metro.
 data_prep$rurality <- function() {
   
   # full list of county FIPS
-  df <- data_prep_county_id() %>%
+  df <- data_prep$county_id() %>%
     select(stcty)
   
   # CBSA counties
@@ -205,8 +207,9 @@ head(data_prep$rurality())
 ## output
 
 ```{r}
+
 data_prep$county_output_by_year <- reseng$cache(function(year, ilevel) {
-  d <- conn_fns$total_output(as.character(year), ilevel)
+  d <- conn_backend$commodity_output_matrix(year, ilevel = ilevel)
   d <- d %>%
     as_tibble(rownames = "ind") %>%
     pivot_longer(!ind, names_to = "stcty", values_to = "output_nom") %>%
@@ -217,13 +220,12 @@ data_prep$county_output_by_year <- reseng$cache(function(year, ilevel) {
 }, file.path(root_dir, "cache/county_output/{ilevel}_{year}.rds"))
 # file.remove(file.path(root_dir, "cache/county_output/det_2020.rds"))
 
-data_prep$county_output <- reseng$cache(function(ilevel) {
-  years <- 2001:2020
+data_prep$county_output <- function(ilevel) {
+  years <- c(2012, 2017)
   d <- lapply(years, data_prep$county_output_by_year, ilevel = ilevel)
   d <- do.call(rbind, d)
   d
-}, file.path(root_dir, "cache/county_output/{ilevel}.rds"))
-# file.remove(file.path(root_dir, "cache/county_output/det.rds"))
+}
 
 head(data_prep$county_output("sec"))
 
@@ -234,36 +236,36 @@ head(data_prep$county_output("sec"))
 County supply and demand for intermediate commodities.
 
 ```{r}
-
-#' County intermediate supply by BEA industry (sector, summary or detail)
-data_prep$intermed_supply_by_ind <- reseng$cache(function(year, ilevel) {
-  d <- conn_fns$commodity_factor_supply_tidy_matrix(as.character(year), ilevel)
+#' County intermediate supply by BEA industry (detail)
+data_prep$intermed_supply_by_ind <- reseng$cache(function(year) {
+  d <- conn_backend$commodity_factor_supply_matrix(year)
   d %>%
     as_tibble(rownames = "ind") %>%
     pivot_longer(!ind, names_to = "stcty", values_to = "intermed_supply_nom") %>%
     mutate(year = year) %>%
     select(year, stcty, ind, intermed_supply_nom) %>%
     mutate(intermed_supply = nom2real(intermed_supply_nom, year))
-}, file.path(root_dir, "cache/intermed_supply/{ilevel}_{year}.rds"))
+}, file.path(root_dir, "cache/intermed_supply/det_{year}.rds"))
 
 
-#' County intermediate demand by BEA industry (sector, summary or detail)
-data_prep$intermed_demand_by_ind <- reseng$cache(function(year, ilevel) {
-  d <- conn_fns$commodity_factor_demand_tidy_matrix(as.character(year), ilevel)
+
+#' County intermediate demand by BEA industry (detail)
+data_prep$intermed_demand_by_ind <- reseng$cache(function(year) {
+  d <- conn_backend$commodity_factor_demand_matrix(year)
   d %>%
     as_tibble(rownames = "ind") %>%
     pivot_longer(!ind, names_to = "stcty", values_to = "intermed_demand_nom") %>%
     mutate(year = year) %>%
     select(year, stcty, ind, intermed_demand_nom) %>%
     mutate(intermed_demand = nom2real(intermed_demand_nom, year))
-}, file.path(root_dir, "cache/intermed_demand/{ilevel}_{year}.rds"))
+}, file.path(root_dir, "cache/intermed_demand/det_{year}.rds"))
 
 #' County intermediate supply and demand, total and agriculture&mining, aggregated from BEA detail industry
-data_prep$intermed_sup_dem <- reseng$cache(function() {
+data_prep$intermed_sup_dem <- function() {
   one_year <- function(year) {
-    d1 <- data_prep$intermed_demand_by_ind(year, "det") %>%
+    d1 <- data_prep$intermed_demand_by_ind(year) %>%
       select(stcty, ind, intermed_demand)
-    d2 <- data_prep$intermed_supply_by_ind(year, "det") %>%
+    d2 <- data_prep$intermed_supply_by_ind(year) %>%
       select(stcty, ind, intermed_supply)
     d <- inner_join(d1, d2, c("stcty", "ind"))
     d <- d %>% 
@@ -292,14 +294,14 @@ data_prep$intermed_sup_dem <- reseng$cache(function() {
       mutate(year = year)
   }
   
-  years <- 2001:2020
+  years <- c(2012, 2017)
   d <- lapply(years, one_year)
   do.call(rbind, d)
-}, file.path(root_dir, "cache/intermed_sup_dem_2001-2020.rds"))
-# file.remove(file.path(root_dir, "cache/intermed_sup_dem_2001-2020.rds"))
+}
 
 
 head(data_prep$intermed_sup_dem())
+
 ```
 
 
@@ -425,7 +427,7 @@ ggplot(d1) + geom_point(aes(conn_2007, conn_2017, color = rural), size = 0.2) + 
 
 ```{r}
 # employment and estabs
-years <- seq(2002, 2017, 5)
+years <- seq(2012, 2017, 5)
 df <- data_prep$county_emp() %>%
   filter(year %in% years)
 
@@ -451,7 +453,8 @@ df <- inner_join(df, d1, c("year", "stcty"))
 
 # intermediates
 d <- data_prep$intermed_sup_dem()
-df <- inner_join(df, d, c("year", "stcty"))
+df <- inner_join(df, d, c("year", "stcty")) %>%
+  mutate(intermed_pct = 100 * intermed_supply / output)
 
 # annualized growth rates
 df <- df %>%
@@ -527,11 +530,135 @@ cor(df, use = "complete.obs")
 
 ## intermediatedness
 
-`total_intermed_supply / total_output`
+`intermed_supply / output`
 
-## excess S&D
+- Sometimes goes over 100%, why?
+- Rurality turns around relationship between intermediatedness and size and agmine share
+  - rural counties with high intermed_pct are bigger and have more ag/mining
+  - the opposite relationship in metro
+- Relationship with growth ambiguous, varies by year and rurality
 
-`total_excess_intermed_supply` and `total_excess_intermed_demand`
+```{r}
+
+dfa_stub %>%
+  ggplot(aes(intermed_pct, output, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + scale_y_log10() +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  ggplot(aes(intermed_pct, emp, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + scale_y_log10() +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  mutate(agmine_pct = 100 * agmine_output / output) %>%
+  ggplot(aes(intermed_pct, agmine_pct, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + ylim(0, 100) +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  mutate(agmine_pct = 100 * agmine_output / output) %>%
+  ggplot(aes(output, agmine_pct, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + ylim(0, 100) + scale_x_log10() +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  filter(year > 2002) %>%
+  ggplot(aes(intermed_pct, output_gr, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + ylim(-20, 20) +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  filter(year > 2002) %>%
+  ggplot(aes(intermed_pct, emp_gr, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 100) + ylim(-20, 20) +
+  facet_wrap(vars(year))
+
+```
+
+
+## intermed S&D
+
+- data issue: agg supply < agg demand
+- smaller counties more likely to demand more than they supply
+  - holds for both full and excess
+  - relationship weaker in rural counties
+  
+
+```{r}
+
+# aggregate supply < demand
+dfa_stub %>%
+  group_by(year) %>%
+  summarize(across(c(intermed_supply, intermed_demand, excess_intermed_supply, excess_intermed_demand), sum)) %>%
+  mutate(intermed_sd_ratio = intermed_supply / intermed_demand,
+         excess_intermed_sd_ratio = excess_intermed_supply / excess_intermed_demand)
+
+dfa_stub %>%
+  ggplot(aes(intermed_supply, intermed_demand, color = rural)) +
+  geom_point(size = 0.1) +
+  facet_wrap(vars(year)) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_x_log10() + scale_y_log10()
+
+dfa_stub %>%
+  mutate(intermed_ds_ratio = intermed_demand / intermed_supply) %>%
+  ggplot(aes(output, intermed_ds_ratio, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  facet_wrap(vars(year)) +
+  ylim(0, 4) +
+  scale_x_log10()
+
+dfa_stub %>%
+  ggplot(aes(excess_intermed_supply, excess_intermed_demand, color = rural)) +
+  geom_point(size = 0.1) +
+  facet_wrap(vars(year)) +
+  geom_abline(intercept = 0, slope = 1) +
+  scale_x_log10() + scale_y_log10()
+
+
+dfa_stub %>%
+  mutate(excess_intermed_ds_ratio = excess_intermed_demand / excess_intermed_supply) %>%
+  ggplot(aes(output, excess_intermed_ds_ratio, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  facet_wrap(vars(year)) +
+  ylim(0, 5) +
+  scale_x_log10()
+
+dfa_stub %>%
+  filter(year > 2002) %>%
+  mutate(excess_intermed_ds_ratio = excess_intermed_demand / excess_intermed_supply) %>%
+  ggplot(aes(excess_intermed_ds_ratio, output_gr, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 5) + ylim(-5, 10) +
+  facet_wrap(vars(year))
+
+dfa_stub %>%
+  filter(year > 2002) %>%
+  mutate(excess_intermed_ds_ratio = excess_intermed_demand / excess_intermed_supply) %>%
+  ggplot(aes(excess_intermed_ds_ratio, emp_gr, color = rural)) +
+  geom_point(size = 0.1) +
+  geom_smooth(method = "lm") +
+  xlim(0, 5) + ylim(-7, 7) +
+  facet_wrap(vars(year))
+
+# inverse hyperbolic 
+```
 
 
 ## conn and size
@@ -736,7 +863,8 @@ ggplot(d, aes(conn, emp_gr)) +
 - Include intermediatedness as explanatory variable.
 - Robust standard errors for panel reg.
 - County fixed effects.
-- Total output as control variable, change to real dollars.
+- Total output as control variable.
+- Add county GDP for size and growth.
 
 
 ```{r}

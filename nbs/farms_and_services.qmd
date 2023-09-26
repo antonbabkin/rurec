@@ -12,8 +12,8 @@ execute:
 params:
   eval_cleanup: true
   eval_tests: true
-  eval_explor: true
-  eval_summ_stats: true
+  eval_explor: false
+  eval_summ_stats: false
   eval_anal_regr: true
   years: [2002, 2007, 2012, 2017]
 ---
@@ -30,9 +30,12 @@ library(glue)
 library(margins)
 library(huxtable)
 library(patchwork)
+library(arrow)
 
 library(reticulate)
 reticulate::use_condaenv("rurec")
+
+root_dir <- rprojroot::find_rstudio_root_file()
 
 ggplot2::theme_set(theme_minimal())
 
@@ -694,6 +697,67 @@ py$t_qcew_county_suppression %>%
   mutate(across(counties:total_annual_wages, ~ ifelse(.x == 0, "", sprintf("%.1f%%", .x))))
 
 ```
+
+
+# Farm wages
+
+Ag census reports on state level total payroll and number of workers.
+Number of workers is also broken down by working more or less than 150 days.
+Using this data, we can estimate total days worked and wage
+
+$d_{FTE} = 260$ business days per year.
+Assume that number of days worked is distributed uniformly between 0 and 260.
+Then workers hired for less than 150 days on average worked $d_{150-} = (0 + 150) / 2 = 75.5$ days.
+And workers hired for more than 150 days on average worked $d_{150+} = (150 + 260) / 2 = 205$ days.
+
+Let $x_{150-}$ be number of workers hired for less than 150 days, and $x_{150+}$ number of workers hired for more than 150 days.
+Total FTE workers can be the estimated as:
+$$x_{FTE} = x_{150-} \frac{d_{150-}}{d_{FTE}} + x_{150+} \frac{d_{150+}}{d_{FTE}} $$
+
+Dividing total payroll by the estimated number of FTE workers, we obtain annual wage estimate.
+
+Number of workers and payroll are also reported broken down by 
+"Reported only workers working 150 days or more",
+"Reported only workers working less than 150 days" and
+"Reported both - workers working 150 days or more and workers working less than 150 days".
+Maybe this could be useful to create a better estimate.
+
+
+```{r}
+#| eval: false
+ds <- open_dataset(file.path(root_dir, "data/pubdata/agcensus"), partitioning = c("year"))
+
+short_desc_list <- c(
+  "LABOR, HIRED, GE 150 DAYS - NUMBER OF WORKERS",
+  "LABOR, HIRED, LT 150 DAYS - NUMBER OF WORKERS",
+  "LABOR, HIRED - NUMBER OF WORKERS",
+  "LABOR, HIRED - EXPENSE, MEASURED IN $")
+
+d <- ds %>%
+  rename_with(str_to_lower) %>%
+  filter(agg_level_desc == "STATE", domain_desc == "TOTAL", short_desc %in% short_desc_list) %>%
+  select(year, state_alpha, short_desc, value) %>%
+  collect() %>%
+  mutate(short_desc = case_when(
+      short_desc == "LABOR, HIRED - EXPENSE, MEASURED IN $" ~ "pay",
+      short_desc == "LABOR, HIRED - NUMBER OF WORKERS" ~ "emp",
+      short_desc == "LABOR, HIRED, LT 150 DAYS - NUMBER OF WORKERS" ~ "emp_lt150",
+      short_desc == "LABOR, HIRED, GE 150 DAYS - NUMBER OF WORKERS" ~ "emp_ge150",
+    )) %>%
+  pivot_wider(id_cols = c("year", "state_alpha"), names_from = short_desc) %>%
+  mutate(emp_fte = emp_lt150 * 75.5 / 260 + emp_ge150 * 205 / 260,
+         wage = pay / emp_fte)
+
+```
+
+Top and bottom 5 states by farm wage.
+
+```{r}
+#| eval: false
+d %>% slice_min(wage, n = 5)
+d %>% slice_max(wage, n = 5)
+```
+
 
 
 # Prepare analysis dataset
