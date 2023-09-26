@@ -890,7 +890,7 @@ infogroup_by_place <- function(year,
   return(df)
 }
 
-############ Derive national level AgCensus sales share of gross output by year
+############ Derive national level sales share of gross output by year
 infogroup_sales_share <- function(year,
                                   ilevel = c("det", "sum", "sec"), 
                                   ...){
@@ -1003,13 +1003,13 @@ total_industry_output <- function (year,
                                    ...){
   ilevel <- match.arg(ilevel)
   data_source <- match.arg(data_source)
+  farm_sales <- call_agoutput(year, ...)
+  fn <- colnames(farm_sales)[-c(1)]
+  as <- agsales_share(year, ...)
+  agout <- farm_sales %>% .[sapply(., is.numeric)] %>% {apply(., 1, function (x) {x / as})} %>% t() %>% as.data.frame()
+  colnames(agout) <- fn
+  agout$place <- farm_sales$place
   if(data_source == "cbp"){
-    farm_sales <- call_agoutput(year, ...)
-    fn <- colnames(farm_sales)[-c(1)]
-    as <- agsales_share(year, ...)
-    agout <- farm_sales %>% .[sapply(., is.numeric)] %>% {apply(., 1, function (x) {x / as})} %>% t() %>% as.data.frame()
-    colnames(agout) <- fn
-    agout$place <- farm_sales$place
     iout <- industry_output_by_place(year = year, ilevel = ilevel, ...)
     ps <- payroll_share(year = year, ilevel = ilevel, ...) %>% .[, rownames(iout)[rownames(iout) %in% colnames(.)], drop = FALSE] 
     df <- apply(iout, 2, function (x) {x / ps})
@@ -1017,19 +1017,6 @@ total_industry_output <- function (year,
     rownames(df) <- rownames(iout)
     df <- t(df) %>% as.data.frame()
     df$place <- rownames(df)
-    df <- left_join(df, agout, by = "place")
-    if (ilevel == "sec") {
-      df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
-      df <- df %>% select(!all_of(c(fn)))
-    } else if (ilevel == "sum") {
-      df[["111CA"]] <- rowSums(df[, c(fn)], na.rm = T)
-      df <- df %>% select(!all_of(c(fn))) %>% select("111CA", everything())
-    } else if (ilevel == "det") {
-      df <- df %>% select(all_of(fn), everything())
-    }
-    rownames(df) <- df$place
-    df$place <- NULL
-    df <- t(df)
   }
   if(data_source == "infogroup"){
     df <- infogroup_by_place(year, ilevel = ilevel, ...) %>% {.[,!colnames(.) %in% grep("^(78)", colnames(.), value = TRUE)]}
@@ -1037,7 +1024,24 @@ total_industry_output <- function (year,
     ss <- infogroup_sales_share(year, ilevel = ilevel, ...)
     df <- apply(df, 2, function (x) {x / ss})
     rownames(df) <- colnames(ss)
+    df <- t(df) %>% as.data.frame()
+    df$place <- rownames(df)
+    df <- df %>% {.[,!colnames(.) %in% c(fn, "111CA")]}
   }
+  df <- left_join(df, agout, by = "place")
+  #note  methodological issues of double counting remain with mixing Agcensus and InfoGroup at sector level for non 113FF ag industries 
+  if (ilevel == "sec") {
+    df[["11"]] <- rowSums(df[, c("11", fn)], na.rm = T)
+    df <- df %>% select(!all_of(c(fn)))
+  } else if (ilevel == "sum") {
+    df[["111CA"]] <- rowSums(df[, c(fn)], na.rm = T)
+    df <- df %>% select(!all_of(c(fn))) %>% select("111CA", everything())
+  } else if (ilevel == "det") {
+    df <- df %>% select(all_of(fn), everything())
+  }
+  rownames(df) <- df$place
+  df$place <- NULL
+  df <- t(df)
   df[is.na(df)] = 0
   df[is.infinite(df)] = 0
   return(df)
