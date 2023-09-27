@@ -1,4 +1,5 @@
 # submit.sub
+# replace <method> with subfolder that contains appropriate supply and demand files
 
 plusone = $(Process) + 1
 IndustryIndex = $INT(plusone,%d)
@@ -14,7 +15,7 @@ arguments = $(IndustryIndex)
 
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/chtc/el8/R413.tar.gz, /home/babkin/build_r/packages.tar.gz, impedance_cost.R, demand.rds, supply.rds, center2center_distmat.rds
+transfer_input_files = http://proxy.chtc.wisc.edu/SQUID/chtc/el8/R413.tar.gz, /home/babkin/build_r/packages.tar.gz, impedance_cost.R, <method>/demand.rds, <method>/supply.rds, center2center_distmat.rds
 
 request_cpus = 1
 request_memory = 3GB

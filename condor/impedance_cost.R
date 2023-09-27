@@ -1,3 +1,7 @@
+# Calculate county-to-county intermediate commodity trade flows.
+# CLI usage:
+# Rscript condor/impedance_cost.R inputs # prepare inputs (demand, supply and distance), must run from project root
+# Rscript impedance_cost.R compute <industry index> # calculate flows for 1 industry, runs from script dir, which must contain all inputs
 
 
 library(magrittr)
@@ -5,11 +9,11 @@ library(magrittr)
 TEST_RUN <- FALSE
 
 #parameters
-tol <- 1e-0
+tol <- 1e-1
 min_d <- 25
 max_d <- 2000
-step_d <- if (TEST_RUN) 250 else 25
-maxiter <- if (TEST_RUN) 10 else 1000
+step_d <- if (TEST_RUN) 250 else 5
+maxiter <- if (TEST_RUN) 10 else 10000
 imp_funct <- "gaus_impedance_mat"
 crosshaul <- FALSE
 verbose <- TRUE
@@ -20,13 +24,13 @@ generate_inputs <- function() {
 
   year = 2012
   ilevel = "det"
-  data_source = "infogroup"
+  data_source = "cbp"
 
-  source(file.path(rprojroot::find_rstudio_root_file(), "nbs/r_visualization_functions.R"))
+  source(file.path(rprojroot::find_rstudio_root_file(), "nbs/r_backend_functions.R"))
   
-  industry_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
+  commodity_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
     saveRDS(file = rprojroot::find_rstudio_root_file("condor/demand.rds"))
-  industry_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
+  commodity_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source) %>%
     saveRDS(file = rprojroot::find_rstudio_root_file("condor/supply.rds"))
   
   dist_matc() %>% 
