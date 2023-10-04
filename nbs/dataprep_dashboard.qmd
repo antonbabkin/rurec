@@ -1,0 +1,153 @@
+---
+title: "Data preparation for dashboard"
+format: html
+---
+
+In this notebook data for the summary dashboard is prepared.
+
+```{r}
+library(logger)
+library(tidyverse)
+library(arrow)
+library(glue)
+
+library(reticulate)
+reticulate::use_condaenv("rurec")
+
+pubdata <- new.env()
+pubdata$geography <- reticulate::import("rurec.pubdata.geography")
+pubdata$cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
+pubdata$bea_nipa <- reticulate::import("rurec.pubdata.bea_nipa")
+pubdata$bea_io <- reticulate::import("rurec.pubdata.bea_io")
+pubdata$pop <- reticulate::import("rurec.pubdata.population")
+pubdata$cbp <- reticulate::import("rurec.pubdata.cbp")
+pubdata$naics <- reticulate::import("rurec.pubdata.naics")
+
+proj_path <- rprojroot::find_rstudio_root_file
+
+source(proj_path("rurec/reticulate_extras.R"))
+source(proj_path("nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
+source(proj_path("nbs/r_backend_functions.R"), local = (circ_fns <- new.env()))
+source(proj_path("nbs/r_visualization_functions.R"), local = (viz_fns <- new.env()))
+source(proj_path("rurec/reseng.R"), local = (reseng <- new.env()))
+
+
+logger::log_threshold(DEBUG)
+
+
+
+PATH = list(
+  data_dir = proj_path("data/dashboard"),
+  county_geography = proj_path("data/dashboard/county_geography.rds"),
+  county_agg_stats = proj_path("data/dashboard/county_agg_stats.rds"),
+  county_ind_outsupdem = proj_path("data/dashboard/county_ind_outsupdem.rds")
+)
+
+if (!dir.exists(PATH$data_dir)) dir.create(PATH$data_dir, recursive = TRUE)
+```
+
+
+# Identifiers and geography
+
+
+```{r}
+df <- pubdata$geography$get_county_df() %>%
+  rename_with(str_to_lower) %>%
+  rename(stcty_fips = code, st_fips = state_code, cty_fips = county_code, cty_name = name)
+
+d <- pubdata$geography$get_state_df(geometry = FALSE) %>%
+  rename_with(str_to_lower) %>%
+  select(!c(aland, awater)) %>%
+  rename(st_fips = code, st_name = name, st_abbr = abbr, usa_contiguous = contiguous, usa_territory = territory) %>%
+  mutate(across(c(bea_region_name, bea_region_code), \(x) unlist(map_if(x, is.null, \(y) NA))))
+
+df <- left_join(df, d, join_by(st_fips))
+
+df <- df %>%
+  arrange(st_fips, cty_fips)
+
+write_rds(df, PATH$county_geography, compress = "gz", version = 3)
+```
+
+
+# Aggregate statistics
+
+Establishments, employment and payroll: CBP with EFSY imputation.
+
+```{r}
+df <- read_rds(PATH$county_geography) %>%
+  as_tibble() %>%
+  select(stcty_fips)
+
+d <- pubdata$pop$get_df() %>%
+  filter(year == 2012) %>%
+  mutate(stcty_fips = str_c(st, cty)) %>%
+  rename(population = pop) %>%
+  select(stcty_fips, population)
+
+df <- left_join(df, d, join_by(stcty_fips))
+
+d <- pubdata$cbp$get_cbp_year_pq(2012L) %>%
+  as.character() %>%
+  open_dataset() %>%
+  filter(ind_digits == 0) %>%
+  mutate(stcty_fips = str_c(fipstate, fipscty)) %>%
+  select(stcty_fips, emp, ap, est) %>%
+  rename(employment = emp, payroll = ap, estab = est) %>%
+  collect()
+
+df <- left_join(df, d, join_by(stcty_fips))
+
+write_rds(df, PATH$county_agg_stats, compress = "gz", version = 3)
+```
+
+# Output, supply and demand
+
+By industry
+
+```{r}
+get_cty_io <- reseng$cache(function(variable, year, ilevel, data_source, imputed) {
+  if (variable == "output") {
+    f <- circ_fns$industry_output_matrix
+  } else if (variable == "supply") {
+    f <- circ_fns$industry_factor_supply_matrix
+  } else if (variable == "demand") {
+    f <- circ_fns$industry_factor_demand_matrix
+  }
+  return(f(year = year, ilevel = ilevel, data_source = data_source, imputed = imputed))
+}, proj_path("cache/cty_io/{variable}_{data_source}_{year}_{ilevel}_{imputed}.rds"))
+
+df <- read_rds(PATH$county_geography) %>%
+  as_tibble() %>%
+  select(stcty_fips)
+
+d <- get_cty_io("output", 2012, "det", "cbp", TRUE) %>%
+  as_tibble(rownames = "bea_ind_code") %>%
+  pivot_longer(!bea_ind_code, names_to = "stcty_fips", values_to = "ind_output")
+
+df <- left_join(df, d, join_by(stcty_fips))
+
+
+d <- get_cty_io("supply", 2012, "det", "cbp", TRUE) %>%
+  as_tibble(rownames = "bea_ind_code") %>%
+  pivot_longer(!bea_ind_code, names_to = "stcty_fips", values_to = "ind_supply")
+
+df <- left_join(df, d, join_by(stcty_fips, bea_ind_code))
+
+d <- get_cty_io("demand", 2012, "det", "cbp", TRUE) %>%
+  as_tibble(rownames = "bea_ind_code") %>%
+  pivot_longer(!bea_ind_code, names_to = "stcty_fips", values_to = "ind_demand")
+
+df <- left_join(df, d, join_by(stcty_fips, bea_ind_code))
+
+d <- tibble(
+  bea_ind_code = colnames(pubdata$bea_io$get_use(2012L, "det", FALSE)),
+  bea_ind_name = colnames(pubdata$bea_io$get_use(2012L, "det", TRUE))
+)
+df <- left_join(df, d, join_by(bea_ind_code))
+
+df <- df %>% relocate(stcty_fips, bea_ind_code, bea_ind_name, ind_output, ind_supply, ind_demand)
+
+write_rds(df, PATH$county_ind_outsupdem, compress = "gz", version = 3)
+```
+

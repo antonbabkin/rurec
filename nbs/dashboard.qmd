@@ -1,0 +1,87 @@
+---
+title: "The Dashboard"
+format:
+  html:
+    code-fold: true
+    df-print: paged
+    embed-resources: true
+params:
+  map_agg_stats_fill_var: "population"
+  map_ex_supdem_ind: "312120"
+---
+
+
+
+::: panel-tabset
+# intro
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(sf)
+
+proj_path <- rprojroot::find_rstudio_root_file
+logger::log_threshold(DEBUG)
+
+PATH = list(
+  data_dir = proj_path("data/dashboard"),
+  county_geography = proj_path("data/dashboard/county_geography.rds"),
+  county_agg_stats = proj_path("data/dashboard/county_agg_stats.rds"),
+  county_ind_outsupdem = proj_path("data/dashboard/county_ind_outsupdem.rds")
+)
+
+```
+
+## params
+
+```{r}
+params
+```
+
+
+
+# agg stats
+
+```{r}
+fill_var <- params$map_agg_stats_fill_var
+
+df <- read_rds(PATH$county_geography) %>%
+  left_join(read_rds(PATH$county_agg_stats), join_by(stcty_fips))
+
+df %>%
+  filter(usa_contiguous) %>%
+  mutate(fill_var = log10(.data[[fill_var]])) %>%
+  ggplot() + 
+  geom_sf(aes(fill = fill_var)) +
+  labs(title = glue("US counties, fill_var = log10({fill_var})"))
+```
+
+
+
+# excess sup/dem
+
+```{r}
+industry <- params$map_ex_supdem_ind
+
+df <- read_rds(PATH$county_geography)
+
+d <- read_rds(PATH$county_ind_outsupdem) %>%
+  filter(bea_ind_code == industry)
+
+df <- left_join(df, d, join_by(stcty_fips)) %>%
+  mutate(net_supply = ind_supply - ind_demand)
+
+ind_name <- df %>% distinct(bea_ind_name) %>% drop_na() %>% pull()
+
+df %>%
+  filter(usa_contiguous) %>%
+  ggplot() + 
+  geom_sf(aes(fill = net_supply)) +
+  labs(title = glue("Net industry supply, {industry} ({ind_name})"))
+
+
+```
+
+:::
