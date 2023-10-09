@@ -1,0 +1,201 @@
+---
+title: "Methodology and Data"
+format: html
+---
+
+This notebook is a comprehensive overview of the project methodology.
+More specific details may be available in other notebooks related to their respective sections.
+Parts of the notebook are illustrated with examples using real or artificial data.
+Each section points to relevant code in a notebook or a script.
+
+# Diagram
+
+A flowchart covering all steps of the methodology, data inputs/outputs and relations between them.
+
+[Google Drive Drawing](https://docs.google.com/drawings/d/1ek6pFUiimufYbH9idiZfNxvfeT7duJ_Xd6lzGHsgMCY/edit) (restricted access).
+
+
+# Data
+
+## CBP
+
+Code: [pubdata/cbp](https://github.com/antonbabkin/pubdata/blob/main/nbs/cbp.md)
+
+[CBP](https://www.census.gov/programs-surveys/cbp.html) (County Business Patterns) CBP is an annual series that provides subnational economic data by industry.
+This series includes the number of establishments, employment during the week of March 12, first quarter payroll, and annual payroll.
+
+- changes in suppression methodology
+
+## CBP-EFSY
+
+Code: [pubdata/cbp](https://github.com/antonbabkin/pubdata/blob/main/nbs/cbp.md), section EFSY.
+
+Imputation of suppressed CBP employment in 1975-2016 by Eckert, Fort, Schott, and Yang.
+[Website](https://fpeckert.me/cbp/)
+
+Fabian Eckert, Teresa C. Fort, Peter K. Schott, and Natalie J. Yang. "Imputing Missing Values in the US Census Bureau's County Business Patterns." NBER Working Paper \#26632, 2021.
+
+## InfoGroup
+
+Establishment level proprietary dataset containing location, industry, employment and sales information for all businesses in the US.
+Also known as [Data Axle](https://www.data-axle.com/our-data/business-data/) and RefUSA.
+
+## BEA I-O tables
+
+Code: [pubdata/bea_io](https://github.com/antonbabkin/pubdata/blob/main/nbs/bea_io.md)
+
+- short overview
+- link to [I-O Fundamentals] notebook
+- 3 levels of BEA industry
+- crosswalk to NAICS
+
+
+## Census of Agriculture
+
+Code: [pubdata/agcensus](https://github.com/antonbabkin/pubdata/blob/main/nbs/agcensus.md)
+
+The [Census of Agriculture](https://www.nass.usda.gov/AgCensus/index.php) is a complete count of U.S. farms and ranches and the people who operate them.
+The Census of Agriculture, taken only once every five years, looks at land use and ownership, operator characteristics, production practices, income and expenditures.
+
+
+## Geographic shapefiles
+
+Code: [pubdata/geography](https://github.com/antonbabkin/pubdata/blob/main/nbs/geography.md)
+
+County cartographic boundary files from Census Bureau [Geography Program](https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html).
+The cartographic boundary files are simplified representations of selected geographic areas from the Census Bureau’s Master Address File/Topologically Integrated Geographic Encoding and Referencing (MAF/TIGER) System.
+
+We currently use a single revision of county shape files (20??).
+Recognizing that county shapes change over time, we have also built capability to use other years.
+
+
+
+# Methodology
+
+## CBP imputation
+
+Code: [pubdata/cbp](https://github.com/antonbabkin/pubdata/blob/main/nbs/cbp.md)
+
+We need county payroll by 6-digit NAICS industry.
+It is often suppressed.
+
+We calculate wage as annual payroll over employment in raw CBP at the most detailed unsuppressed level (county/state/nation, NAICS digits).
+Then multiply wage by EFSY employment to get payroll.
+Always use raw CBP payroll, only replace with imputed when suppressed.
+
+
+## InfoGroup county aggregates
+
+Code: [rurec/infogroup_pq](https://github.com/antonbabkin/rurec/blob/main/nbs/infogroup_pq.qmd)
+
+Establishments, employment and sales are calculated at county-NAICS level by summing individual establishment observations.
+
+
+## NAICS-BEA reconciliation
+
+Code: []()
+
+- economic activity data comes by NAICS, needs re-grouping to match BEA I-O tables
+- a few industries can not be cleanly matched (entire construciton sector and a few smaller ones)
+
+
+## AgCensus to BEA
+
+Code: [rurec/ag_output](https://github.com/antonbabkin/rurec/blob/main/nbs/ag_output.md)
+
+County sales of individual agricultural commodities (e.g. corn, wheat, hogs etc.) are groupped and summed to manually matched corresponding BEA detail-level industries.
+Some county-commodity sales are suppressed in AgCensus, understating national totals, but the difference is minor.
+"Other" categories (111900: "Other crop farming" and 112A00: "Animal production, except cattle and poultry and eggs") are calculated by subtracting the rest from county crop and animal totals.
+This leads to overestimation of Others.
+
+
+## Output from payroll
+
+Code: []()
+
+When CBP is used as the source of information on economic activity, we need to estimate each industry's output.
+This can be done by assuming that payroll share of output is constant across places.
+Payroll share of output at the national level is calculated from TODO.
+
+
+## Industry <-> Commodity
+
+Code: []()
+
+Economic activity data in CBP and InfoGroup is reported by NAICS industry.
+AgCensus sales are in the commodity space.
+
+- why we need to tranlate
+  - join CBP/InfoGroup with AgCensus
+  - TODO
+- how we translate
+  - B/C/D matrix from Supply/Use TODO
+
+
+## Supply from output
+
+Code: []()
+
+TODO
+
+
+## Demand from output
+
+Code: []()
+
+TODO
+
+
+
+## Gravity model
+
+Code: []()
+
+- trade flow from A to B is proportional to supply in A and demand in B, and inversely proportional to distance between A and B
+- distance can be factored in using different functional forms (see Impedance)
+- gravity model estimates are only a starting point and are further rescaled by RAS balancing algorithm
+- no hard proof, but in limited testing we observe that relative ordering of trade flows between different locations is mostly preserved through RAS
+
+
+## Impedance
+
+Code: []()
+
+- distance between counties from shapefiles
+  - center to center
+  - border to border
+  - number of county "hops"
+- impedance: more distant trade is more difficult
+  - binary, Gaussian, truncated Gaussian, Queens, ...
+
+
+## Pre-RAS adjustments
+
+Code: []()
+
+- RAS requires total demand = total supply in each industry/commodity
+- our demand and supply estimates do not satisfy this because data comes from different sources and is processed under a set of assumptions
+- hence we do ??? before feeding it into RAS
+
+
+## RAS
+
+Code: []()
+
+
+- an algorithm of iteratively rescaling a matrix to match target row and column totals
+- why it is called RAS
+- we apply it to gravity model trade flow estimates to match our supply and demand estimates
+
+
+## ECA
+
+Code: []()
+
+TODO
+
+
+
+
+
+
