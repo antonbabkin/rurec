@@ -274,7 +274,7 @@ beacode2description <- function(code,
 }
 
 ###### Call and tidy NAICS to BEA industry concordance table
-call_industry_concordance <- function(...){
+call_industry_concordance <- function(){
   df <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
   for(i in names(df)){
     df[[i]] <- unlist(df[[i]], use.names = FALSE) 
@@ -307,8 +307,7 @@ call_industry_concordance <- function(...){
 }
 
 ###### Get specific industry NAICS to BEA concordance
-ilevel_concord <- function(ilevel = c("det", "sum", "sec"), 
-                           ...){
+ilevel_concord <- function(ilevel = c("det", "sum", "sec")){
   ilevel <- match.arg(ilevel)
   x <- call_industry_concordance()
   if(ilevel == "det"){
@@ -317,6 +316,7 @@ ilevel_concord <- function(ilevel = c("det", "sum", "sec"),
   if(ilevel == "sum"){
     df <- x %>% select(SUMMARY, NAICS) 
     df$NAICS <- substr(df$NAICS, 1,3)
+    # 3-digit NAICS maps to more then one summary for these, we collapse them into one
     df$SUMMARY[df$NAICS == "336"] = "336"
     df$SUMMARY[df$NAICS == "541"] = "541"
     df <- df[!duplicated(df), ]
@@ -747,7 +747,7 @@ place_industry_economy_long <- function(year,
                                         imputed = TRUE,
                                         ...){
   cbp_scale <- match.arg(cbp_scale)
-  conc <- ilevel_concord(...)
+  conc <- ilevel_concord(ilevel = list(...)$ilevel)
   n <- names(conc)[1]
   cbp_dat <- call_cbp(year = year, imputed = imputed, cbp_scale = cbp_scale, ...)
   if (cbp_scale != "county" & isFALSE(imputed)){
@@ -846,7 +846,7 @@ infogroup_bea_long <- function(year,
                                ...){
   info_dat <- call_infogroup(year, ...)
   info_dat$NAICS <- NA
-  conc <- ilevel_concord(...)
+  conc <- ilevel_concord(ilevel = list(...)$ilevel)
   n <- names(conc)[1]
   for(i in unique(conc$NAICS)){
     x <- paste0("^", i) %>% 
@@ -911,7 +911,7 @@ infogroup_sales_share <- function(year,
     `colnames<-`(c("naics", "sales")) %>% 
     as_tibble()
   info_dat$NAICS <- NA
-  conc <- ilevel_concord(ilevel = ilevel, ...)
+  conc <- ilevel_concord(ilevel = ilevel)
   n <- names(conc)[1]
   for(i in unique(conc$NAICS)){
     x <- paste0("^", i) %>% 
