@@ -1,12 +1,23 @@
 ---
 title: "Methodology and Data"
-format: html
+format:
+  html:
+    code-fold: true
 ---
 
 This notebook is a comprehensive overview of the project methodology.
 More specific details may be available in other notebooks related to their respective sections.
 Parts of the notebook are illustrated with examples using real or artificial data.
 Each section points to relevant code in a notebook or a script.
+
+
+```{r}
+#| output: false
+proj_path <- rprojroot::find_rstudio_root_file
+
+source(proj_path("nbs/r_backend_functions.R"), local = (backend_fns <- new.env()))
+```
+
 
 # Diagram
 
@@ -93,10 +104,35 @@ Establishments, employment and sales are calculated at county-NAICS level by sum
 
 ## NAICS-BEA reconciliation
 
-Code: []()
+Code:
+- [pubdata/bea_io](https://github.com/antonbabkin/pubdata/blob/main/nbs/bea_io.md)
+- [rurec/r_backend_functions.R](https://github.com/antonbabkin/rurec/blob/main/nbs/r_backend_functions.R),
+functions call_industry_concordance()
 
 - economic activity data comes by NAICS, needs re-grouping to match BEA I-O tables
 - a few industries can not be cleanly matched (entire construciton sector and a few smaller ones)
+
+BEA industry classification has four nested levels: sector, summary, underlying summary and detail.
+BEA-NAICS crosswalk is usually one-to-many mapping from detail to NAICS, where NAICS can be any level.
+Exceptions are Construction (sector 23) and Housing (HS) and Other Real Estate (ORE).
+
+Construction (sector code 23) does not map to NAICS below sector level.
+We ignore all BEA subindustries and add an artificial industry "23" to every level (sector, summary, u.summary, detail) which maps to NAICS 23.
+
+HS and ORE both map into NAICS 531.
+We group them into a single summary industry called "531".
+
+Sectors in sector-level Use and Supply tables are not always the same as sectors in the BEA-NAICS crosswalk.
+To address this, we map correct sectors into NAICS as follows:
+
+```{r}
+d <- backend_fns$ilevel_concord("sec")
+d %>%
+  filter(SECTOR %in% (d %>% group_by(SECTOR) %>% summarize(n = n()) %>% filter(n > 1) %>% pull(SECTOR)))
+```
+
+When industries are aggregated at summary level, we create a concordance that maps BEA to 3-digit NAICS.
+Many-to-one cases that are created in the process "336" (3361MV, 3364OT) and  "541" (5411, 5412OP, 5415).
 
 
 ## AgCensus to BEA
