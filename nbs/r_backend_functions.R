@@ -20,6 +20,7 @@ library(arrow)
 # Display start time
 log_info("Define functions start")
 
+
 # S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries
 source(file.path(rprojroot::find_rstudio_root_file(), "rurec", "reticulate_extras.R"))
 
@@ -37,6 +38,7 @@ geography <- import("rurec.pubdata.geography")
 naics <- import("rurec.pubdata.naics")
 geography_cbsa <- import("rurec.pubdata.geography_cbsa")
 ag_output <- import("rurec.ag_output")
+
 
 #turn off S2 spherical geometry
 sf_use_s2(FALSE)
@@ -274,7 +276,7 @@ beacode2description <- function(code,
 }
 
 ###### Call and tidy NAICS to BEA industry concordance table
-call_industry_concordance <- function(...){
+call_industry_concordance <- function(){
   df <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
   for(i in names(df)){
     df[[i]] <- unlist(df[[i]], use.names = FALSE) 
@@ -432,7 +434,7 @@ call_geog <- function(year,
   return(df)
 }
 
-############ Generate neighbors of neighbors hierarchal vector for a place ad nauseam
+############ Generate neighbors of neighbors hierarchical vector for a place ad nauseam
 #Watch out for Nantucket, MA; Staten Island,NY; and San Juan, WA
 neighbor_of_neighbor <- function(central_place,
                                  quiet = TRUE,
@@ -556,7 +558,9 @@ call_use_table <- function(year,
                            ilevel = c("det", "sum", "sec"), 
                            ...){
   ilevel <- match.arg(ilevel)
-  df <-year2bea(year, ilevel) %>% bea_io$get_use(., ilevel) %>% as.matrix()
+  df <- year2bea(year, ilevel) %>% 
+    bea_io$get_use(., ilevel) %>% 
+    as.matrix()
   df[is.na(df)] = 0
   return(df)
 }
@@ -566,8 +570,104 @@ call_supply_table <- function(year,
                               ilevel = c("det", "sum", "sec"), 
                               ...){
   ilevel <- match.arg(ilevel)
-  df <- year2bea(year, ilevel) %>% bea_io$get_sup(., ilevel) %>% as.matrix()
+  df <- year2bea(year, ilevel) %>% 
+    bea_io$get_sup(., ilevel) %>% 
+    as.matrix()
   df[is.na(df)] = 0
+  if (ilevel == "sec"){
+    #temp fix needs correction in rurec.pubdata.bea_io module
+    rownames(df) <- c(colnames(df)[1:15], "Used", "Other", "T017")
+  }
+  return(df)
+}
+
+### Aggregate and tidy a commodity-by-industry BEA matrix
+condense_bea_matrix <- function(matrix,
+                                ilevel){
+  if(ilevel == "det"){
+    df <- matrix %>% 
+      matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
+      matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      .[!grepl("4200ID|S00402|S00300", rownames(.)), !grepl("4200ID", colnames(.)), drop=F]
+  }
+  if(ilevel == "sum"){ 
+    df <- matrix %>% 
+      matrix_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
+      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+  }
+  if (ilevel == "sec"){
+    df <- matrix
+  }
+  return(df)
+}
+
+### Aggregate and tidy a BEA row-vector
+condense_bea_vector <- function(vector,
+                                ilevel){
+  if(ilevel == "det"){
+    df <- vector %>% 
+      vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
+      vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      .[,!grepl("4200ID|S00402|S00300", colnames(.)), drop=F]
+  }
+  if(ilevel == "sum"){ 
+    df <- vector %>% 
+      vector_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
+      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+  }
+  if (ilevel == "sec"){
+    df <- vector
+  }
+  return(df)
+}
+
+#needs more adjustments so that all consolidating for CBP is done beforehand (e.g., government)
+### Get Use matrix and tidy structure for use with NAICS adjacent processes
+use_matrix <- function(year,
+                       ilevel = c("det", "sum", "sec"),
+                       ...){
+  ilevel <- match.arg(ilevel)
+  df <- call_use_table(year, ilevel, ...) %>% 
+    .[1:(which(rownames(.) == "T005")-1), 1:(which(colnames(.) == "T001")-1)] %>% 
+    condense_bea_matrix(., ilevel)
+  return(df)
+}
+### Get Supply matrix and tidy structure for use with NAICS adjacent processes
+supply_matrix <- function(year,
+                          ilevel = c("det", "sum", "sec"),
+                          ...){
+  ilevel <- match.arg(ilevel)
+  df <- call_supply_table(year, ilevel, ...) %>% 
+    .[1:(nrow(.)-1), 1:(which(colnames(.) == "T007")-1)] %>% 
+    condense_bea_matrix(., ilevel)
+  return(df)
+}
+
+### Get National BEA Total Industry Output Vector and tidy structure for use with NAICS adjacent processes
+industry_output <- function(year,
+                            ilevel = c("det", "sum", "sec"),
+                            ...){
+  ilevel <- match.arg(ilevel)
+  df <- call_supply_table(year, ilevel, ...) %>% 
+    .[nrow(.), 1:(which(colnames(.) == "T007")-1), drop=F] %>% 
+    condense_bea_vector(., ilevel) %>% 
+    t() %>% 
+    `colnames<-`("T017")
+  return(df)
+}
+### Get National BEA Total Commodity Output Vector and tidy structure for use with NAICS adjacent processes
+commodity_output <- function(year,
+                             ilevel = c("det", "sum", "sec"),
+                             ...){
+  ilevel <- match.arg(ilevel)
+  df <- call_supply_table(year, ilevel, ...) %>% 
+    .[1:(nrow(.)-1), "T007", drop=F] %>% 
+    t() %>% 
+    condense_bea_vector(., ilevel) %>% 
+    t() %>% 
+    `colnames<-`("T007")
   return(df)
 }
 
@@ -576,29 +676,10 @@ b_matrix <- function(year,
                      ilevel = c("det", "sum", "sec"),
                      ...){
   ilevel <- match.arg(ilevel)
-  df <- call_use_table(year, ilevel, ...) %>% as.data.frame()
-  u <- df[1:(which(rownames(df) == "T005")-1), 1:(which(colnames(df) == "T001")-1)] %>% as.matrix()
-  x <- df["T018", 1:(which(colnames(df) == "T001")-1)]
-  if(ilevel == "sum"){ 
-    u <- matrix_collapse(u, grep("^336", colnames(u), value = TRUE), "336") %>% 
-      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
-      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
-    x <- vector_collapse(x, grep("^336", colnames(x), value = TRUE), "336") %>% 
-      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
-      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
-  }
-  if(ilevel == "det"){ 
-    u <- matrix_collapse(u, grep("^23", colnames(u), value = TRUE), "23") %>% 
-      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
-    com_names <- rownames(u)[!rownames(u) %in% c("4200ID")]
-    ind_names <- colnames(u)[!colnames(u) %in% c("4200ID")]
-    u <- u[com_names, ind_names] 
-    x <- vector_collapse(x, grep("^23", colnames(x), value = TRUE), "23") %>%
-      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
-    x <- x[ind_names] 
-  }
-  df <- u %*% diag(1/x)
-  colnames(df) <- colnames(x)
+  u_mat <- use_matrix(year, ilevel, ...)
+  x <- industry_output(year, ilevel, ...)
+  df <- u_mat %*% diag(1/as.vector(x))
+  colnames(df) <- colnames(u_mat)
   return(df)
 }
 
@@ -607,33 +688,10 @@ c_matrix <- function(year,
                      ilevel = c("det", "sum", "sec"),
                      ...){
   ilevel <- match.arg(ilevel)
-  df <- call_supply_table(year, ilevel, ...) %>% as.data.frame()
-  ind_supply <- df[nrow(df), 1:(which(colnames(df) == "T007")-1), drop=F]
-  supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
-  if(ilevel == "sum"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% 
-      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
-      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
-    ind_supply <- vector_collapse(ind_supply, grep("^336", colnames(ind_supply), value = TRUE), "336") %>% 
-      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
-      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
-  }
-  if(ilevel == "det"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") %>% 
-      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
-    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
-    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
-    supply_mat <- supply_mat[com_names, ind_names] 
-    ind_supply <- vector_collapse(ind_supply, grep("^23", colnames(ind_supply), value = TRUE), "23") %>%
-      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
-    ind_supply <- ind_supply[ind_names] 
-  }
-  df <- supply_mat %*% diag(1/ind_supply)
+  supply_mat <- supply_matrix(year, ilevel, ...)
+  x <- industry_output(year, ilevel, ...)
+  df <- supply_mat %*% diag(1/as.vector(x))
   colnames(df) <- colnames(supply_mat)
-  #temp fix needs correction in rurec.pubdata.bea_io module
-  if (ilevel == "sec") {
-    rownames(df) <- c(colnames(supply_mat), "Used", "Other")
-  }
   return(df)
 }
 
@@ -642,36 +700,10 @@ d_matrix <- function(year,
                      ilevel = c("det", "sum", "sec"),
                      ...){
   ilevel <- match.arg(ilevel)
-  df <- call_supply_table(year, ilevel, ...) %>% as.data.frame()
-  com_supply <- df[1:(nrow(df)-1), "T007", drop=F] %>% as.matrix()
-  supply_mat <- as.matrix(df[1:(nrow(df)-1), 1:(which(colnames(df) == "T007")-1)])
-  if(ilevel == "sum"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^336", colnames(supply_mat), value = TRUE), "336") %>% 
-      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
-      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
-    com_supply <- vector_collapse(t(com_supply), grep("^336", colnames(t(com_supply)), value = TRUE), "336") %>% 
-      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>%
-      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531") %>% 
-      t()
-  }
-  if(ilevel == "det"){ 
-    supply_mat <- matrix_collapse(supply_mat, grep("^23", colnames(supply_mat), value = TRUE), "23") %>% 
-      matrix_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531")
-    com_names <- rownames(supply_mat)[!rownames(supply_mat) %in% c("4200ID")]
-    ind_names <- colnames(supply_mat)[!colnames(supply_mat) %in% c("4200ID")]
-    supply_mat <- supply_mat[com_names, ind_names] 
-    com_supply <- vector_collapse(t(com_supply), grep("^23", colnames(t(com_supply)), value = TRUE), "23") %>%
-      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") %>% 
-      t()
-    com_supply <- com_supply[com_names, , drop=F] 
-  }
-  df <- t(supply_mat) %*% diag(as.vector(1/com_supply))
-  #temp fix needs correction in rurec.pubdata.bea_io module
-  if (ilevel == "sec") {
-    colnames(df) <- c(colnames(supply_mat), "Used", "Other")
-  } else {
-    colnames(df) <- rownames(supply_mat)
-  }
+  supply_mat <- supply_matrix(year, ilevel, ...)
+  q <- commodity_output(year, ilevel, ...)
+  df <- t(supply_mat) %*% diag(1/as.vector(q))
+  colnames(df) <- rownames(supply_mat)
   return(df)
 }
 
@@ -775,8 +807,8 @@ place_industry_economy_long <- function(year,
   return(df)
 }
 
-#Generate industry output ("ap", "emp", "qp1", or "est") by county from CBP in terms of BEA industry codes ("det", "sum", or "sec") for any available year
-industry_output_by_place <- function(year, 
+#Generate industry activity ("ap", "emp", "qp1", or "est") by county from CBP in terms of BEA industry codes ("det", "sum", or "sec") for any available year
+industry_activity_by_place <- function(year, 
                                      output_metric = c("ap", "emp", "qp1", "est"), 
                                      ...){
   output_metric <- match.arg(output_metric)
@@ -805,7 +837,7 @@ payroll_share <- function(year,
   }
   if(ilevel == "det"){
     indout <-  vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23") %>%
-      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") 
+      vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") 
   }
   conc <- ilevel_concord(ilevel)
   if (county_totals){
@@ -828,6 +860,13 @@ payroll_share <- function(year,
   rownames(df) <- "psogo"
   return(df)
 }
+
+#add example of what payroll share does (this is not a truth correction but instead a data correction)
+#We only see payroll at county level in CBP and what we want is output by county
+#For each industry, there exist a ratio of annual payroll for a given level of output at the national level
+#In order to scale CBP payroll correctly (given known suppression) we aggregate county level payroll by industry and divide by the BEA's level of total industry output
+#Assuming a constant proportion of wage to output across space, this national level ratio is applied to each observed county-level industry payroll  
+#For example, suppose BEA total output in mining was 10 billion and CBP had 4 counties with mining payroll with 1 billion, 1 billion, 1 billion, and 2 billion in annual payroll respectively, then the payroll share for mining would be (1+1+1+2)/10 = 0.5  
 
 
 # Call up InfoGroup county level 6 digit NAICS employment and sales ($1,000 of dollars) available for years 1997:2017
@@ -904,7 +943,7 @@ infogroup_sales_share <- function(year,
   }
   if(ilevel == "det"){
     indout <- vector_collapse(indout, grep("^23", colnames(indout), value = TRUE), "23") %>%
-      vector_collapse(., grep("^(531HST|531ORE)", colnames(.), value = TRUE), "531") 
+      vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") 
   }
   info_dat <- call_infogroup(year = year, ilevel = ilevel, ...) %>% .[!.$st %in% c("78"),] %>%
     {aggregate(.$sales, list(.$naics), FUN=sum)} %>% 
@@ -1010,7 +1049,7 @@ total_industry_output <- function (year,
   colnames(agout) <- fn
   agout$place <- farm_sales$place
   if(data_source == "cbp"){
-    iout <- industry_output_by_place(year = year, ilevel = ilevel, ...)
+    iout <- industry_activity_by_place(year = year, ilevel = ilevel, ...)
     ps <- payroll_share(year = year, ilevel = ilevel, ...) %>% .[, rownames(iout)[rownames(iout) %in% colnames(.)], drop = FALSE] 
     df <- apply(iout, 2, function (x) {x / ps})
     df[is.infinite(df)] = 0
@@ -1103,15 +1142,16 @@ commodity_output_matrix <- function(year,
   return(df)
 }
 
+#NFG!
 ############ Call Industry Factor Demand
 industry_factor_demand_matrix <- function(year,
                                           ...){
   o <- industry_output_matrix(year, ...)
-  df <- call_supply_table(year, ...)[,"T007", drop=F]
   dm <- d_matrix(year, ...)
   bm <- b_matrix(year, ...)
-  pos_com <- setdiff(colnames(dm), rownames(df)[df == 0])
-  tech_coef <- (dm[, pos_com] %*% bm[pos_com,])
+  tech_coef <- diag(as.vector(colSums(dm %*% bm))) %>% 
+    `colnames<-`(colnames(bm)) %>% 
+    `rownames<-`(colnames(bm)) 
   df <- tech_coef[rownames(o), rownames(o)] %*% o
   return(df)
 }
@@ -1120,11 +1160,12 @@ industry_factor_demand_matrix <- function(year,
 commodity_factor_demand_matrix <- function(year, 
                                            ...){
   o <- industry_output_matrix(year, ...)
-  tech_coef <- b_matrix(year, ...)[, rownames(o)]
-  df <- tech_coef %*% o
+  tech_coef <- b_matrix(year, ...)
+  df <- tech_coef[, rownames(o)] %*% o
   return(df)
 }
 
+#NFG!
 ############ Call the National Factor Ratio of Industry Factor Demand to Gross Industry Output
 industry_region_factor_ratio <- function(year,
                                          ...){
@@ -1134,6 +1175,15 @@ industry_region_factor_ratio <- function(year,
   colnames(df) <- "factor_ratio"
   return(df)
 }
+#note: IFR can be derived from just B matrix and D matrix
+# o <- industry_output_matrix(year, ...)
+# dm <- d_matrix(year, ...)
+# bm <- b_matrix(year, ...)
+# tech_coef <- diag(as.vector(colSums(dm %*% bm))) %>% 
+#   `colnames<-`(colnames(bm)) %>% 
+#   `rownames<-`(colnames(bm)) 
+# df <- tech_coef[,rownames(o)] %>% colSums() %>% as.matrix()
+
 
 ############ Call the National Factor Ratio of Commodity Factor Demand to Gross Commodity Output
 commodity_region_factor_ratio <- function(year,
@@ -1145,6 +1195,7 @@ commodity_region_factor_ratio <- function(year,
   return(df)
 }
 
+#NFG!
 ############ Call Industry Factor Supply
 industry_factor_supply_matrix <- function(year,
                                           ...){

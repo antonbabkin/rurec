@@ -7,6 +7,8 @@ library(ggnewscale)
 library(cowplot)
 library(RColorBrewer)
 library(scales)
+library(ggridges)
+library(igraph)
 
 # library(readxl)
 # library(openxlsx)
@@ -22,9 +24,8 @@ library(scales)
 # 
 # library(tmaptools)
 # 
-# library(igraph)
 # 
-# library(ggridges)
+
 
 
 source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_backend_functions.R"))
@@ -1208,7 +1209,7 @@ sna_value_map <- function(df,
     df <- df %>% eigen_centrality(directed = TRUE, scale = scale) %>% .[[1]]
   }
   if(metric == "alpha_centrality"){
-    df <- df %>% alpha_centrality(loops = TRUE)
+    df <- df %>% alpha_centrality(alpha = 0.5, loops = TRUE)
   }
   if(metric == "closeness"){
     df <- df %>% closeness(mode = mode)
