@@ -20,255 +20,42 @@ library(arrow)
 # Display start time
 log_info("Define functions start")
 
-
-# S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries
-source(file.path(rprojroot::find_rstudio_root_file(), "rurec", "reticulate_extras.R"))
-
-#IO RAS process
-source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
-
-# Load conda environment "rurec"
-use_condaenv('rurec')
-
-# Import pubdata Python modules
-bea_io <- import("rurec.pubdata.bea_io")
-cbp <- import("rurec.pubdata.cbp")
-ers_rurality <- import("rurec.pubdata.ers_rurality")
-geography <- import("rurec.pubdata.geography")
-naics <- import("rurec.pubdata.naics")
-geography_cbsa <- import("rurec.pubdata.geography_cbsa")
-ag_output <- import("rurec.ag_output")
-
-
-#turn off S2 spherical geometry
-sf_use_s2(FALSE)
-
+# Directory to put new data outputs from R functions
 if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {
   dir.create(file.path(find_rstudio_root_file(), "data", "robjs"))
 }
 
-#### Add specified rows and columns of a vector matrix
-vector_collapse <- function(vector, 
-                            collapse_names, 
-                            new_name){
-  vec <- vector
-  cl <- collapse_names
-  nn <- new_name
-  vec <- cbind(rowSums(vec[, which(colnames(vec) %in% cl), drop=F]), vec[, which(!colnames(vec) %in% cl), drop = F] )
-  colnames(vec)[1] <- nn
-  cn <- colnames(vector)[!colnames(vector) %in% cl] %>% append(nn, after = (min(which(colnames(vector) %in% cl)) - 1))
-  vec <- vec[,cn, drop=F] 
-  return(vec)
+#simple independent utility functions in base R for cohesion, conversion, or manipulation
+source(file.path(find_rstudio_root_file(), "nbs", "basic_utilities.R"))
+
+#IO RAS process
+source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+
+#select if using data from disk in warehouse or built from pubdata python modules
+warehouse = F
+if (warehouse){
+  source(file.path(find_rstudio_root_file(), "nbs", "warehouse.R"))
+} else{
+  source(file.path(find_rstudio_root_file(), "rurec", "pubdata.R"))
 }
 
-#### Add specified rows and columns of a matrix
-matrix_collapse <- function(matrix, 
-                            collapse_names, 
-                            new_name){
-  mat <- matrix
-  cl <- collapse_names
-  nn <- new_name
-  mat <- rbind(colSums(mat[which(rownames(mat) %in% cl), ]), mat[which(!rownames(mat) %in% cl), ] )
-  mat <- cbind(rowSums(mat[, which(colnames(mat) %in% cl)]), mat[, which(!colnames(mat) %in% cl) ] )
-  rownames(mat)[1] <- nn
-  colnames(mat)[1] <- nn
-  rn <- rownames(matrix)[!rownames(matrix) %in% cl] %>% append(nn, after = (min(which(rownames(matrix) %in% cl)) - 1))
-  cn <- colnames(matrix)[!colnames(matrix) %in% cl] %>% append(nn, after = (min(which(colnames(matrix) %in% cl)) - 1))
-  mat <- mat[rn, cn] 
-  return(mat)
-}
+#turn off S2 spherical geometry
+sf_use_s2(FALSE)
 
-### Create edgelist from a matrix
-matrix2edgelist <- function(x){
-  df <- do.call(cbind, 
-                lapply(list("row_index" = row(x), 
-                            "col_index" = col(x), 
-                            "value" = x), 
-                       as.vector))
-}
-
-### Create matrix from an edgelist
-edgelist2matrix <- function(x){
-  df <- matrix(x[,3], 
-               nrow = length(unique(x[,1])), 
-               ncol = length(unique(x[,2])), 
-               dimnames = list(unique(x[,1]), 
-                               unique(x[,2])))
-  return(df)
-}
-
-# Convert miles to meters
-miles2meters <- function(miles){
-  df <- as.integer(miles)*1609.344
-  return(df)
-}
-
-# Convert miles to meters
-meters2miles <- function(meters){
-  df <- as.integer(meters)/1609.344
-  return(df)
-}
-
-year2tiger <- function(year){
-  tiger_year = c(2022:2013, 2010, 2000, 1990)
-  if(year %in% tiger_year){
-    x <- year
-  }else if(year > max(tiger_year)){
-    x <- max(tiger_year)
-  }else if(year > 2011){
-    x <- 2013
-  }else if(year > 2005){
-    x <- 2010
-  }else if(year > 1995){
-    x <- 2000
-  }else if(year < 1996){
-    x <- min(tiger_year)
-  }
-  if(!year %in% tiger_year){
-    warning("Shapefile years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
-year2cbsa <- function(year){
-  cbsa_year = c(2020, 2018, 2017, 2015, 2013, 2009:2003)
-  if(year %in% cbsa_year){
-    x <- year
-  }else if(year > 2018){
-    x <- 2020
-  }else if(year == 2016){
-    x <- 2017
-  }else if(year == 2014){
-    x <- 2015
-  }else if(year %in% 2012:2010){
-    x <- 2013
-  }else if(year < 2004){
-    x <- 2003
-  }
-  if(!year %in% cbsa_year){
-    warning("CBSA concordance years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
-year2rucc <- function(year){
-  rucc_year = c(2013, 2003, 1993, 1983, 1974)
-  if(year %in% rucc_year){
-    x <- year
-  }else if(year > max(rucc_year)){
-    x <- max(rucc_year)
-  }else if(year > 2008){
-    x <- 2013
-  }else if(year > 1998){
-    x <- 2003
-  }else if(year > 1988){
-    x <- 1993
-  }else if(year > 1978){
-    x <- 1983
-  }else if(year < 1979){
-    x <- min(rucc_year)
-  }
-  if(!year %in% rucc_year){
-    warning("RUCC years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
-year2cbp <- function(year){
-  cbp_year = c(2021:1986)
-  if(year %in% cbp_year){
-    x <- year
-  }else if(year > max(cbp_year)){
-    x <- max(cbp_year)
-  }else if(year < min(cbp_year)){
-    x <- min(cbp_year)
-  }
-  if(!year %in% cbp_year){
-    warning("CBP years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
-year2bea <- function(year,
-                     ilevel = c("det", "sum", "sec"), 
-                     ...){
-  ilevel <- match.arg(ilevel)
-  if(ilevel != "det"){
-    bea_year = c(2021:1997)
-    if(year %in% bea_year){
-      x <- year
-    }else if(year > max(bea_year)){
-      x <- max(bea_year)
-    }else if(year < min(bea_year)){
-      x <- min(bea_year)
-    }
-    if(!year %in% bea_year){
-      warning("BEA years do not contain [",year,"] using [", x,"]")
-    }
-  }
-  if(ilevel == "det"){
-    bea_year = c(2012, 2007)
-    if(year %in% bea_year){
-      x <- year
-    }else if(year > 2007){
-      x <- 2012
-    }else if(year < 2007){
-      x <- 2007
-    }
-    if(!year %in% bea_year){
-      warning("Detail level BEA years do not contain [",year,"] using [", x,"]")
-    }
-  }
-  return(as.integer(x))
-}
-
-year2agcensus <- function(year){
-  ag_year = c(2017, 2012, 2007, 2002)
-  if(year %in% ag_year){
-    x <- year
-  }else if(year > 2014){
-    x <- 2017
-  }else if(year > 2009){
-    x <- 2012
-  }else if(year > 2004){
-    x <- 2007
-  }else if(year < 2005){
-    x <- 2002
-  }
-  if(!year %in% ag_year){
-    warning("AgCensus years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
-year2infogroup <- function(year){
-  info_year = c(2017:1997)
-  if(year %in% info_year){
-    x <- year
-  }else if(year > max(info_year)){
-    x <- max(info_year)
-  }else if(year < min(info_year)){
-    x <- min(info_year)
-  }
-  if(!year %in% info_year){
-    warning("InfoGroup years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
 
 beacode2description <- function(code, 
                                 year = 2012,
                                 ...){
   #Note: year is necessary but arbitrary selection
   bea_year <- year2bea(year, ...)
-  sec <- data.frame("code" = names(bea_io$get_sup(bea_year, "sec", FALSE)), 
-                    "description" = names(bea_io$get_sup(bea_year, "sec", TRUE))
+  sec <- data.frame("code" = names(get_sup(bea_year, "sec", FALSE)), 
+                    "description" = names(get_sup(bea_year, "sec", TRUE))
   )
-  sum <- data.frame("code" = names(bea_io$get_sup(bea_year, "sum", FALSE)), 
-                    "description" = names(bea_io$get_sup(bea_year, "sum", TRUE))
+  sum <- data.frame("code" = names(get_sup(bea_year, "sum", FALSE)), 
+                    "description" = names(get_sup(bea_year, "sum", TRUE))
   )
-  det <- data.frame("code" = names(bea_io$get_sup(bea_year, "det", FALSE)), 
-                    "description" = names(bea_io$get_sup(bea_year, "det", TRUE))
+  det <- data.frame("code" = names(get_sup(bea_year, "det", FALSE)), 
+                    "description" = names(get_sup(bea_year, "det", TRUE))
   )
   x <- rbind(sec, sum, det)
   df <- x["description"][x["code"] == code]
@@ -277,7 +64,7 @@ beacode2description <- function(code,
 
 ###### Call and tidy NAICS to BEA industry concordance table
 call_industry_concordance <- function(){
-  df <- bea_io$get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
+  df <- get_naics_df() %>% filter(NAICS != "n.a.") %>% filter(NAICS != "NaN") 
   for(i in names(df)){
     df[[i]] <- unlist(df[[i]], use.names = FALSE) 
   }
@@ -333,11 +120,30 @@ ilevel_concord <- function(ilevel = c("det", "sum", "sec")){
   return(df)
 }
 
+### join ag classes with BEA industries
+ag2bea <- function(afbd = file.path(find_rstudio_root_file(),"data","raw","afbd.csv")
+){
+  afbd <- read.csv(afbd)
+  afbd$NAICS <- NA
+  afbd$naics <- afbd[[1]]
+  conc <- ilevel_concord(ilevel = "det")
+  n <- names(conc)[1]
+  for(i in unique(conc$NAICS)){
+    x <- paste0("^", i) %>% 
+      {afbd[grepl(., afbd$naics), "naics"]} %>% 
+      unique() %>% 
+      unlist()
+    if(length(x)<1) {next}
+    afbd[afbd$naics %in% x, ]$NAICS <- i
+  }
+  df <- left_join(afbd, conc, by = "NAICS")
+}
+
 # Call up and clean CBSA concordance codes (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
 call_cbsa_concord <- function(year, 
                               ...){
   cbsa_year <- year2cbsa(year)  
-  df <- geography_cbsa$get_cbsa_delin_df(cbsa_year)
+  df <- get_cbsa_delin_df(cbsa_year)
   df$CBSA_TITLE <- sapply(strsplit(df$CBSA_TITLE, ","), "[", 1)
   df$CBSA_TITLE <- paste(df$CBSA_TITLE, rep("CBSA", length(df$CBSA_TITLE)))
   df$place <- paste0(df$STATE_CODE, df$COUNTY_CODE)
@@ -358,7 +164,7 @@ fips2cbsa <- function(fips,
 
 # Call up and clean RUCC data available for years 2013, 2003, 1993, 1983, 1974
 call_rucc <- function(year){
-  df <- ers_rurality$get_ruc_df() %>% filter(RUC_YEAR == year2rucc(year))
+  df <- get_ruc_df() %>% filter(RUC_YEAR == year2rucc(year))
   df$place <- df$FIPS
   return(df)
 }
@@ -370,7 +176,7 @@ call_tiger <- function(year = 2013,
                        geometry = TRUE,
                        ...){
   scale <- match.arg(scale)
-  df <- geography$get_county_df(year2tiger(year), 
+  df <- get_county_df(year2tiger(year), 
                                 geometry, 
                                 scale)
   df %<>% rename(place = CODE)
@@ -379,13 +185,14 @@ call_tiger <- function(year = 2013,
     #df$center <- st_centroid(df$geometry)
     df$center <- df$geometry %>% st_transform("EPSG:26911") %>% st_centroid() %>% st_transform(st_crs(df)[[1]]) 
     }
-  st <- geography$get_state_df(geometry = FALSE) %>% select(c(1:3)) 
+  st <- get_state_df(geometry = FALSE) %>% select(1:3) 
   names(st) <- c("STATE_CODE", "STATE_NAME", "STATE")
   df <- left_join(df, st, by = "STATE_CODE")
   df %<>% arrange(place)
   return(df)
 }
 
+# Get county name from FIPS code
 fips2name <- function(fips,
                       year = 2012,
                       long = FALSE,
@@ -559,7 +366,7 @@ call_use_table <- function(year,
                            ...){
   ilevel <- match.arg(ilevel)
   df <- year2bea(year, ilevel) %>% 
-    bea_io$get_use(., ilevel) %>% 
+    get_use(., ilevel) %>% 
     as.matrix()
   df[is.na(df)] = 0
   return(df)
@@ -571,7 +378,7 @@ call_supply_table <- function(year,
                               ...){
   ilevel <- match.arg(ilevel)
   df <- year2bea(year, ilevel) %>% 
-    bea_io$get_sup(., ilevel) %>% 
+    get_sup(., ilevel) %>% 
     as.matrix()
   df[is.na(df)] = 0
   if (ilevel == "sec"){
@@ -623,7 +430,7 @@ condense_bea_vector <- function(vector,
   return(df)
 }
 
-#needs more adjustments so that all consolidating for CBP is done beforehand (e.g., government)
+#needs more adjustments so that all consolidating for CBP is done beforehand (e.g., government)?
 ### Get Use matrix and tidy structure for use with NAICS adjacent processes
 use_matrix <- function(year,
                        ilevel = c("det", "sum", "sec"),
@@ -717,7 +524,7 @@ call_cbp <- function(year,
   cbp_scale <- match.arg(cbp_scale)
   #If TRUE derive county-level annual payroll from county-level EFSY imputed employment and CBP quarterly payroll
   if(imputed){
-    df <- cbp$get_cbp_year_pq(cbp_year) %>% as.character() %>% open_dataset() %>% collect() %>% as.data.frame()
+    df <- get_cbp_year_pq(cbp_year) %>% as.character() %>% open_dataset() %>% collect() %>% as.data.frame()
     df$place <- paste0(df$fipstate, df$fipscty)
     # stopgap for getting imputed payrolls when suppression exists even at the state-level
     if (national_wages){
@@ -725,10 +532,10 @@ call_cbp <- function(year,
       nat_ind_emp_sum <- df %>% {aggregate(.$emp, list(.$industry), FUN=sum)}
       colnames(nat_ind_emp_sum) <- c("industry", "nat_emp")
       #national annual payroll derived from sum of sub-establishment type payroll
-      nat_ind_ap_sum <- cbp$get_df(geo = "us", year = cbp_year) %>% .[.$lfo != "-", ] %>% {aggregate(.$ap, list(.$industry), FUN=sum)}
+      nat_ind_ap_sum <- get_df(geo = "us", year = cbp_year) %>% .[.$lfo != "-", ] %>% {aggregate(.$ap, list(.$industry), FUN=sum)}
       colnames(nat_ind_ap_sum) <- c("industry", "natsub_ap")
       nat_sums <- inner_join(nat_ind_emp_sum, nat_ind_ap_sum, by = "industry")
-      nat_ind_wage <- cbp$get_df(geo = "us", year = cbp_year) %>% .[.$lfo == "-", ] %>% inner_join(., nat_sums, by = "industry")
+      nat_ind_wage <- get_df(geo = "us", year = cbp_year) %>% .[.$lfo == "-", ] %>% inner_join(., nat_sums, by = "industry")
       nat_ind_wage$nat_wage = nat_ind_wage$qp1 / nat_ind_wage$emp * 4
       #If national quarterly payroll is zero use national annual payroll
       x <- nat_ind_wage$qp1 == 0
@@ -748,7 +555,7 @@ call_cbp <- function(year,
       df[x, ]$ap <- df[x, ]$emp * df[x, ]$nat_wage
     }
   } else {
-    df <- cbp$get_df(geo = cbp_scale, 
+    df <- get_df(geo = cbp_scale, 
                      year = cbp_year)
     if(cbp_scale == "county"){
       df$place <- paste0(df$fipstate, df$fipscty)
@@ -983,7 +790,7 @@ call_agoutput <- function(year,
                           ...){
   geo_level <- match.arg(geo_level)
   ag_year <- year2agcensus(year)
-  df <- ag_output$get_farm_sales_by_bea_detail(ag_year, geo_level) %>% as.data.frame()
+  df <- get_farm_sales_by_bea_detail(ag_year, geo_level) %>% as.data.frame()
   place <- c(place = rownames(df))
   df <- sapply(df, function(x)x/1000) %>% as.data.frame()
   if(geo_level == "county" | geo_level == "state"){
@@ -1017,7 +824,7 @@ total_ag_industry_output <- function (year,
   return(df)
 }
 # #error between ag census and bea industry output adjusting for tax, subsidy and inventory 
-# total_ag_industry_output(year) / (call_supply_table(year, ilevel)["T017", colnames(farm_sales)]*1000)
+# total_ag_industry_output(year) / (call_supply_table(year, ilevel)["T017", colnames(call_agoutput(year, geo_level = "national"))]*1000)
 
 
 ############ Derive national level AgCensus sales share of gross output by year
@@ -1255,8 +1062,8 @@ io_yeild_list <- function(year,
 io_yeild_distribution <- function(year,
                                   ...){
   bea_year <- year2bea(year)
-  des <- data.frame("code" = names(bea_io$get_sup(bea_year, "sec", FALSE)), 
-                    "description" = names(bea_io$get_sup(bea_year, "sec", TRUE)) ) %>% 
+  des <- data.frame("code" = names(get_sup(bea_year, "sec", FALSE)), 
+                    "description" = names(get_sup(bea_year, "sec", TRUE)) ) %>% 
     .[.$code %in% unique(ilevel_concord("sec")[[1]]), ] %>% 
     `colnames<-`(c("SECTOR", "description")) %>% 
     cbind(. , "color" = viridis(length(unique(.$description)))) %>% 
