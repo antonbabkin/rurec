@@ -6,6 +6,7 @@ format:
     df-print: paged
     embed-resources: true
 params:
+  data_pack_path: "tmp/data_dashboard_v231929.zip"
   map_agg_stats_fill_var: "population"
   map_ex_supdem_ind: "312120"
 ---
@@ -22,15 +23,7 @@ library(tidyverse)
 library(glue)
 library(sf)
 
-proj_path <- rprojroot::find_rstudio_root_file
 logger::log_threshold(DEBUG)
-
-PATH = list(
-  data_dir = proj_path("data/dashboard"),
-  county_geography = proj_path("data/dashboard/county_geography.rds"),
-  county_agg_stats = proj_path("data/dashboard/county_agg_stats.rds"),
-  county_ind_outsupdem = proj_path("data/dashboard/county_ind_outsupdem.rds")
-)
 
 ```
 
@@ -40,6 +33,24 @@ PATH = list(
 params
 ```
 
+## data
+
+```{r}
+source("R/data_warehouse.R", local = (dw <- new.env()))
+
+paths <- names(dw$paths) %>%
+  keep(\(x) str_starts(x, "dashboard_")) %>%
+  rlang::set_names() %>%
+  map(\(x) dw$paths[[x]]) %>%
+  rlang::set_names(str_remove(names(.), "dashboard_"))
+paths
+
+# unzip package all required data objects
+dw$unpack(params$data_pack_path)
+for (p in paths) {
+  stopifnot(file.exists(p))
+}
+```
 
 
 # agg stats
@@ -47,8 +58,8 @@ params
 ```{r}
 fill_var <- params$map_agg_stats_fill_var
 
-df <- read_rds(PATH$county_geography) %>%
-  left_join(read_rds(PATH$county_agg_stats), join_by(stcty_fips))
+df <- read_rds(paths$county_geography) %>%
+  left_join(read_rds(paths$county_agg_stats), join_by(stcty_fips))
 
 df %>%
   filter(usa_contiguous) %>%
@@ -65,9 +76,9 @@ df %>%
 ```{r}
 industry <- params$map_ex_supdem_ind
 
-df <- read_rds(PATH$county_geography)
+df <- read_rds(paths$county_geography)
 
-d <- read_rds(PATH$county_ind_outsupdem) %>%
+d <- read_rds(paths$county_ind_outsupdem) %>%
   filter(bea_ind_code == industry)
 
 df <- left_join(df, d, join_by(stcty_fips)) %>%
