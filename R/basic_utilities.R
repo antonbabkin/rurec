@@ -148,7 +148,7 @@ year2bea <- function(year,
                      ...){
   ilevel <- match.arg(ilevel)
   if(ilevel != "det"){
-    bea_year = c(2021:1997)
+    bea_year = 2022:1997
     if(year %in% bea_year){
       x <- year
     }else if(year > max(bea_year)){
@@ -161,7 +161,7 @@ year2bea <- function(year,
     }
   }
   if(ilevel == "det"){
-    bea_year = c(2012, 2007)
+    bea_year = c(2017, 2012, 2007)
     if(year %in% bea_year){
       x <- year
     }else if(year > 2007){

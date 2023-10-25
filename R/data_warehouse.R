@@ -22,10 +22,11 @@ clear <- function(paths) {
     unlink(p, recursive = TRUE)
   }
 }
-    
 
+# use forward slashes (/) for nested paths even on Windows
+# use {x} for wildcard paths to be later filled with glue()
 paths <- list(
-  pydata_bea_io_dir = "data/pydata/bea_io_raw",
+  pydata_bea_io_dir = "data/pydata/bea_io",
   pydata_bea_io_naics_concord_ = "data/pydata/bea_io/naics_concord/{year}.rds",
   pydata_bea_io_sup_ = "data/pydata/bea_io/sup/{level}/{year}_{labels}.rds",
   pydata_bea_io_use_ = "data/pydata/bea_io/use/{level}/{year}_{labels}.rds",
@@ -37,6 +38,7 @@ paths <- list(
   dashboard_county_agg_stats = "data/dashboard/county_agg_stats.rds",
   dashboard_county_ind_outsupdem = "data/dashboard/county_ind_outsupdem.rds"
 )
+
 
 
 pack <- function(zipfile, files, overwrite = FALSE) {
