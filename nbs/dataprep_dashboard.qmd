@@ -27,33 +27,30 @@ source("rurec/reticulate_extras.R")
 source("nbs/rural_typology_r_functions.R", local = (conn_fns <- new.env()))
 source("nbs/r_backend_functions.R", local = (circ_fns <- new.env()))
 source("nbs/r_visualization_functions.R", local = (viz_fns <- new.env()))
-source("rurec/reseng.R", local = (reseng <- new.env()))
+source("R/reseng.R", local = (reseng <- new.env()))
 
 
 logger::log_threshold(DEBUG)
 
 
-
-
 ```
 
-# Data warehouse
+# Data
 
 ```{r}
-source("R/data_warehouse.R", local = (dw <- new.env()))
-
-paths <- names(dw$paths) %>%
-  keep(\(x) str_starts(x, "dashboard_")) %>%
-  rlang::set_names() %>%
-  map(\(x) dw$paths[[x]]) %>%
-  rlang::set_names(str_remove(names(.), "dashboard_"))
+source("R/data_manager.R", local = (dm <- new.env()))
+paths <- dm$paths[c(
+  "dashboard_county_geography",
+  "dashboard_county_agg_stats",
+  "dashboard_county_ind_outsupdem"
+)]
 paths
 
 # clear all data objects
-# dw$clear(paths)
+# dm$clear(paths)
 
 # package all data objects as zip
-dw$pack("tmp/data_dashboard_v231929.zip", paths)
+# dm$pack("tmp/data_dashboard_v231025.zip", paths, overwrite = TRUE)
 ```
 
 
@@ -77,8 +74,7 @@ df <- left_join(df, d, join_by(st_fips))
 df <- df %>%
   arrange(st_fips, cty_fips)
 
-
-write_rds(df, dw$mkdir(paths$county_geography), compress = "gz", version = 3)
+saveRDS(df, dm$mkdir(paths$dashboard_county_geography))
 ```
 
 
@@ -87,7 +83,7 @@ write_rds(df, dw$mkdir(paths$county_geography), compress = "gz", version = 3)
 Establishments, employment and payroll: CBP with EFSY imputation.
 
 ```{r}
-df <- read_rds(paths$county_geography) %>%
+df <- readRDS(paths$dashboard_county_geography) %>%
   as_tibble() %>%
   select(stcty_fips)
 
@@ -99,10 +95,10 @@ d <- pubdata$pop$get_df() %>%
 
 df <- left_join(df, d, join_by(stcty_fips))
 
-d <- pubdata$cbp$get_cbp_year_pq(2012L) %>%
+d <- pubdata$cbp$get_cbp_path("county", 2012L) %>%
   as.character() %>%
   open_dataset() %>%
-  filter(ind_digits == 0) %>%
+  filter(naics == "------") %>%
   mutate(stcty_fips = str_c(fipstate, fipscty)) %>%
   select(stcty_fips, emp, ap, est) %>%
   rename(employment = emp, payroll = ap, estab = est) %>%
@@ -110,7 +106,7 @@ d <- pubdata$cbp$get_cbp_year_pq(2012L) %>%
 
 df <- left_join(df, d, join_by(stcty_fips))
 
-write_rds(df, dw$mkdir(paths$county_agg_stats), compress = "gz", version = 3)
+saveRDS(df, dm$mkdir(paths$dashboard_county_agg_stats))
 ```
 
 # Output, supply and demand
@@ -129,7 +125,7 @@ get_cty_io <- reseng$cache(function(variable, year, ilevel, data_source, imputed
   return(f(year = year, ilevel = ilevel, data_source = data_source, imputed = imputed))
 }, "cache/cty_io/{variable}_{data_source}_{year}_{ilevel}_{imputed}.rds")
 
-df <- read_rds(paths$county_geography) %>%
+df <- readRDS(paths$dashboard_county_geography) %>%
   as_tibble() %>%
   select(stcty_fips)
 
@@ -152,14 +148,15 @@ d <- get_cty_io("demand", 2012, "det", "cbp", TRUE) %>%
 
 df <- left_join(df, d, join_by(stcty_fips, bea_ind_code))
 
-d <- tibble(
-  bea_ind_code = colnames(pubdata$bea_io$get_use(2012L, "det", FALSE)),
-  bea_ind_name = colnames(pubdata$bea_io$get_use(2012L, "det", TRUE))
-)
+d <- pubdata$bea_io$get_use(2012L, "det", FALSE)$row_names %>%
+  do.call(rbind, .) %>%
+  as.data.frame()
+colnames(d) <- c("bea_ind_code", "bea_ind_name")
+
 df <- left_join(df, d, join_by(bea_ind_code))
 
 df <- df %>% relocate(stcty_fips, bea_ind_code, bea_ind_name, ind_output, ind_supply, ind_demand)
 
-write_rds(df, dw$mkdir(paths$county_ind_outsupdem), compress = "gz", version = 3)
+saveRDS(df, dm$mkdir(paths$dashboard_county_ind_outsupdem))
 ```
 

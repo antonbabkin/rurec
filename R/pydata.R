@@ -14,7 +14,7 @@ library(glue)
 
 
 # data warehouse ----
-source("R/data_warehouse.R", local = (dw <- new.env()))
+source("R/data_manager.R", local = (dw <- new.env()))
 paths <- names(dw$paths) %>%
   keep(\(x) str_starts(x, "pydata_")) %>%
   rlang::set_names() %>%

@@ -26,7 +26,7 @@ if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {
 }
 
 #simple independent utility functions in base R for cohesion, conversion, or manipulation
-source(file.path(find_rstudio_root_file(), "nbs", "basic_utilities.R"))
+source(file.path(find_rstudio_root_file(), "R", "basic_utilities.R"))
 
 #IO RAS process
 source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))

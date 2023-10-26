@@ -6,22 +6,6 @@ library(rprojroot)
 library(logger)
 
 
-mkdir <- function(p) {
-  d <- dirname(p)
-  if (!dir.exists(d)) {
-    logger::log_debug(paste("Creating directory", d))
-    dir.create(d, recursive = TRUE)
-  }
-  return(p)
-}
-
-clear <- function(paths) {
-  for (p in paths) {
-    if (!file.exists(p)) next
-    logger::log_info(paste("Removing", p))
-    unlink(p, recursive = TRUE)
-  }
-}
 
 # use forward slashes (/) for nested paths even on Windows
 # use {x} for wildcard paths to be later filled with glue()
@@ -39,6 +23,24 @@ paths <- list(
   dashboard_county_ind_outsupdem = "data/dashboard/county_ind_outsupdem.rds"
 )
 
+
+mkdir <- function(p) {
+  d <- dirname(p)
+  if (!dir.exists(d)) {
+    logger::log_debug(paste("Creating directory", d))
+    dir.create(d, recursive = TRUE)
+  }
+  return(p)
+}
+
+
+clear <- function(paths) {
+  for (p in paths) {
+    if (!file.exists(p)) next
+    logger::log_info(paste("Removing", p))
+    unlink(p, recursive = TRUE)
+  }
+}
 
 
 pack <- function(zipfile, files, overwrite = FALSE) {

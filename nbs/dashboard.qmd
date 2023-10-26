@@ -6,7 +6,7 @@ format:
     df-print: paged
     embed-resources: true
 params:
-  data_pack_path: "tmp/data_dashboard_v231929.zip"
+  data_pack_path: "tmp/data_dashboard_v231025.zip"
   map_agg_stats_fill_var: "population"
   map_ex_supdem_ind: "312120"
 ---
@@ -36,17 +36,16 @@ params
 ## data
 
 ```{r}
-source("R/data_warehouse.R", local = (dw <- new.env()))
-
-paths <- names(dw$paths) %>%
-  keep(\(x) str_starts(x, "dashboard_")) %>%
-  rlang::set_names() %>%
-  map(\(x) dw$paths[[x]]) %>%
-  rlang::set_names(str_remove(names(.), "dashboard_"))
+source("R/data_manager.R", local = (dm <- new.env()))
+paths <- dm$paths[c(
+  "dashboard_county_geography",
+  "dashboard_county_agg_stats",
+  "dashboard_county_ind_outsupdem"
+)]
 paths
 
 # unzip package all required data objects
-dw$unpack(params$data_pack_path)
+# dw$unpack(params$data_pack_path)
 for (p in paths) {
   stopifnot(file.exists(p))
 }
@@ -58,8 +57,8 @@ for (p in paths) {
 ```{r}
 fill_var <- params$map_agg_stats_fill_var
 
-df <- read_rds(paths$county_geography) %>%
-  left_join(read_rds(paths$county_agg_stats), join_by(stcty_fips))
+df <- read_rds(paths$dashboard_county_geography) %>%
+  left_join(read_rds(paths$dashboard_county_agg_stats), join_by(stcty_fips))
 
 df %>%
   filter(usa_contiguous) %>%
@@ -76,9 +75,9 @@ df %>%
 ```{r}
 industry <- params$map_ex_supdem_ind
 
-df <- read_rds(paths$county_geography)
+df <- read_rds(paths$dashboard_county_geography)
 
-d <- read_rds(paths$county_ind_outsupdem) %>%
+d <- read_rds(paths$dashboard_county_ind_outsupdem) %>%
   filter(bea_ind_code == industry)
 
 df <- left_join(df, d, join_by(stcty_fips)) %>%
