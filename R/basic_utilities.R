@@ -1,6 +1,71 @@
 
 #simple independent utility functions in base R for cohesion, conversion, or manipulation
 
+# file management ----
+mkdir <- function(p) {
+  d <- dirname(p)
+  if (!dir.exists(d)) {
+    logger::log_debug(paste("Creating directory", d))
+    dir.create(d, recursive = TRUE)
+  }
+  return(p)
+}
+
+
+clear_paths <- function(paths) {
+  for (ps in paths) {
+    ps <- ps |>
+      as.character() |>
+      gsub("\\{.*?\\}", "*", x = _) |>
+      Sys.glob()
+    for (p in ps) {
+      if (file.exists(p)) {
+        log_debug("Removing file ", p)
+        unlink(p)
+      }
+    }
+  }
+}
+
+
+zip_pack <- function(zipfile, files, overwrite = FALSE) {
+  stopifnot(getwd() == rprojroot::find_rstudio_root_file())
+  if (file.exists(zipfile)) {
+    if (overwrite) {
+      logger::log_info(paste("Replacing existing Zip file:", zipfile))
+      file.remove(zipfile)
+    }
+    else stop("Zip file already exists: ", zipfile)
+  }
+  # turn all "{...}" into "*" and expand resulting wildcard file names
+  files <- files |>
+    as.character() |>
+    gsub("\\{.*?\\}", "*", x = _) |>
+    Sys.glob()
+  zip(mkdir(zipfile), files)
+}
+
+
+
+zip_unpack <- function(zipfile, overwrite = FALSE) {
+  stopifnot(getwd() == rprojroot::find_rstudio_root_file())
+  stopifnot(file.exists(zipfile))
+  unzip(zipfile, overwrite = overwrite)
+}
+
+#' Un-list columns in pandas dataframes
+#' Sometimes pandas df columns come through reticulate as lists that need unlisting.
+#' This is likely happening with string columns with missing values.
+#' More investigation is desirable, maybe this corrections could be done by customizing reticulate.
+#' For now, simply unlist() all columns that are of list class.
+#' Usage: df <- reticulate_unlist_cols(df)
+reticulate_unlist_cols <- function(df) {
+  df %>% mutate(across(
+    where(is.list), 
+    \(col) unlist(map_if(col, \(el) is.null(el) || is.nan(el), \(y) NA))
+  ))
+}
+
 #### Add specified rows and columns of a vector matrix
 vector_collapse <- function(vector, 
                             collapse_names, 

@@ -1,0 +1,17 @@
+---
+title: "Index for R"
+format: html
+---
+
+# BEA IO tables
+
+```{r}
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+
+bea_io$clear_outputs()
+bea_io$test_pubdata_bea_io()
+bea_io$test_dataprep_bea_io()
+
+```
+
+

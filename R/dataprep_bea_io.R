@@ -1,25 +1,125 @@
 # Data preparation of BEA I-O tables
 
+# R libraries ----
 library(logger)
 log_threshold(DEBUG)
 library(arrow)
 library(tidyverse)
 library(glue)
 
-source("R/basic_utilities.R")
-source("R/pydata.R", local = (pydata <- new.env()))
 
+# R scripts ----
+source("R/basic_utilities.R")
+
+
+# Python modules ----
+pymod <- new.env()
+pymod$initialized <- FALSE
+
+#' Initialize environment with necessary Python modules imported through reticulate
+#' Running multiple times is safe and only imports once.
+pymod$init <- function() {
+  if (pymod$initialized) return()
+  library(reticulate)
+  use_condaenv("rurec")
+  pymod$bea_io <- import("rurec.pubdata.bea_io")
+  pymod$initialized <- TRUE
+}
+
+
+# Data objects ----
+ipath <- list(
+  raw_2022 = "data/pubdata/bea_io/src/AllTablesSUP_2022q2.zip",
+  raw_2023 = "data/pubdata/bea_io/src/AllTablesSUP_2023.zip"
+)
+
+opath <- list(
+  naics_concord_ = "data/bea_io/naics_concord/{year}.rds",
+  sup_ = "data/bea_io/sup/{level}/{year}_{labels}.rds",
+  use_ = "data/bea_io/use/{level}/{year}_{labels}.rds"
+)
+
+clear_outputs <- function() {
+  clear_paths(opath)
+}
+
+
+# Pubdata ----
+pubdata <- new.env()
+
+pubdata$get_naics_concord <- function(year) {
+  year <- as.integer(year)
+  p <- glue(opath$naics_concord_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  pymod$init()
+  x <- pymod$bea_io$get_naics_concord(year) %>%
+    reticulate_unlist_cols()
+  
+  log_debug(paste("save to cache", p))
+  saveRDS(x, mkdir(p))
+  return(x)
+}
+
+pubdata$get_sup <- function(year, level, labels = FALSE) {
+  match.arg(level, c("det", "sum", "sec"))
+  year <- as.integer(year)
+  p <- glue(opath$sup_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  
+  pymod$init()
+  x <- pymod$bea_io$get_sup(year, level, labels)
+  
+  # repair row names of sector supply tables
+  # last row in spreadsheet is missing value in "T017" the code column
+  # when dataframe is converted from pandas, entire row index is ignored because of a missing value
+  if (level == "sec") {
+    x$row_names[[length(x$row_names)]] <- c("T017", "Total industry supply")
+    if (!labels) {
+      rownames(x$table) <- map_chr(x$row_names, \(x) x[1])
+    }
+  }
+  
+  log_debug(paste("save to cache", p))
+  saveRDS(x, mkdir(p))
+  return(x)
+}
+
+
+pubdata$get_use <- function(year, level, labels = FALSE) {
+  match.arg(level, c("det", "sum", "sec"))
+  year <- as.integer(year)
+  p <- glue(opath$use_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  pymod$init()
+  x <- pymod$bea_io$get_use(year, level, labels)
+  log_debug(paste("save to cache", p))
+  saveRDS(x, mkdir(p))
+  return(x)
+}
+
+
+
+# IO tables functions ----
 
 beacode2description <- function(code, 
                                 year = 2012,
                                 ...){
   #Note: year is necessary but arbitrary selection
   bea_year <- year2bea(year, ...)
-  x <- pydata$bea_io$get_sup(bea_year, "sec", FALSE)
+  x <- pubdata$get_sup(bea_year, "sec", FALSE)
   sec <- do.call(rbind, x$col_names)
-  x <- pydata$bea_io$get_sup(bea_year, "sum", FALSE)
+  x <- pubdata$get_sup(bea_year, "sum", FALSE)
   sum <- do.call(rbind, x$col_names)
-  x <- pydata$bea_io$get_sup(bea_year, "det", FALSE)
+  x <- pubdata$get_sup(bea_year, "det", FALSE)
   det <- do.call(rbind, x$col_names)
   x <- rbind(sec, sum, det) %>% as.data.frame()
   colnames(x) <- c("code", "description")
@@ -30,7 +130,7 @@ beacode2description <- function(code,
 
 ###### Call and tidy NAICS to BEA industry concordance table
 call_industry_concordance <- function(year = 2012) {
-  df <- pydata$bea_io$get_naics_concord(year) %>%
+  df <- pubdata$get_naics_concord(year) %>%
     rename_with(str_to_upper) %>%
     filter(NAICS != "n.a.", NAICS != "NaN")
   df <- df %>%
@@ -62,7 +162,6 @@ call_industry_concordance <- function(year = 2012) {
   return(df)
 }
 
-df <- call_industry_concordance(2012)
 
 ###### Get specific industry NAICS to BEA concordance
 ilevel_concord <- function(ilevel = c("det", "sum", "sec"), year = 2012) {
@@ -95,7 +194,7 @@ call_use_table <- function(year,
                            ilevel = c("det", "sum", "sec"), 
                            ...){
   ilevel <- match.arg(ilevel)
-  df <- pydata$bea_io$get_use(year2bea(year, ilevel), ilevel)$table %>% 
+  df <- pubdata$get_use(year2bea(year, ilevel), ilevel)$table %>% 
     as.matrix()
   df[is.na(df)] = 0
   return(df)
@@ -106,7 +205,7 @@ call_supply_table <- function(year,
                               ilevel = c("det", "sum", "sec"), 
                               ...){
   ilevel <- match.arg(ilevel)
-  df <- pydata$bea_io$get_sup(year2bea(year, ilevel), ilevel)$table %>% 
+  df <- pubdata$get_sup(year2bea(year, ilevel), ilevel)$table %>% 
     as.matrix()
   df[is.na(df)] = 0
   return(df)
@@ -239,8 +338,26 @@ d_matrix <- function(year,
   return(df)
 }
 
+# Tests ----
+
+test_pubdata_bea_io <- function() {
+  for (year in c(2012, 2017)) {
+    pubdata$get_naics_concord(year)
+  }
+  for (year in 1997:2022) {
+    log_debug(year)
+    for (level in c("sec", "sum", "det")) {
+      if (level == "det" && !(year %in% c(2007, 2012, 2017))) next
+      for (labels in c(FALSE, TRUE)) {
+        pubdata$get_sup(year, level, labels)
+        pubdata$get_use(year, level, labels)
+      }
+    }
+  }
+}
 
 test_dataprep_bea_io <- function() {
+
   beacode2description("532100")
   beacode2description("T016")
   call_industry_concordance(2012)
