@@ -9,8 +9,10 @@ params:
   data_pack_path: "tmp/data_dashboard_v231025.zip"
   map_agg_stats_fill_var: "population"
   map_ex_supdem_ind: "312120"
+  focus_county: "55025"
+  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
+  map_imped_param: 500 # scale parameter of the impedance function
 ---
-
 
 
 ::: panel-tabset
@@ -22,8 +24,11 @@ library(logger)
 library(tidyverse)
 library(glue)
 library(sf)
+library(units)
 
 logger::log_threshold(DEBUG)
+
+source("R/geography.R", local = (geo <- new.env()))
 
 ```
 
@@ -36,19 +41,17 @@ params
 ## data
 
 ```{r}
-source("R/data_manager.R", local = (dm <- new.env()))
-paths <- dm$paths[c(
-  "dashboard_county_geography",
-  "dashboard_county_agg_stats",
-  "dashboard_county_ind_outsupdem"
-)]
-paths
+ipath <- list(
+  county_geography = "data/dashboard/county_geography.rds",
+  county_agg_stats = "data/dashboard/county_agg_stats.rds",
+  county_ind_outsupdem = "data/dashboard/county_ind_outsupdem.rds",
+  dist_mat = glue(geo$opath$dist_mat_, .envir = list(from = "center", year = 2013, cbsa = FALSE))
+)
+
+ipath
 
 # unzip package all required data objects
 # dw$unpack(params$data_pack_path)
-for (p in paths) {
-  stopifnot(file.exists(p))
-}
 ```
 
 
@@ -57,8 +60,8 @@ for (p in paths) {
 ```{r}
 fill_var <- params$map_agg_stats_fill_var
 
-df <- read_rds(paths$dashboard_county_geography) %>%
-  left_join(read_rds(paths$dashboard_county_agg_stats), join_by(stcty_fips))
+df <- read_rds(ipath$county_geography) %>%
+  left_join(read_rds(ipath$county_agg_stats), join_by(stcty_fips))
 
 df %>%
   filter(usa_contiguous) %>%
@@ -75,9 +78,9 @@ df %>%
 ```{r}
 industry <- params$map_ex_supdem_ind
 
-df <- read_rds(paths$dashboard_county_geography)
+df <- read_rds(ipath$county_geography)
 
-d <- read_rds(paths$dashboard_county_ind_outsupdem) %>%
+d <- read_rds(ipath$county_ind_outsupdem) %>%
   filter(bea_ind_code == industry)
 
 df <- left_join(df, d, join_by(stcty_fips)) %>%
@@ -91,6 +94,51 @@ df %>%
   geom_sf(aes(fill = net_supply)) +
   labs(title = glue("Net industry supply, {industry} ({ind_name})"))
 
+
+```
+
+
+# distance and impedance
+
+```{r}
+fips <- params$focus_county
+name <- geo$fips2name(fips, long = TRUE)
+
+d <- geo$dist_matc()[fips, ] |>
+  as_tibble(rownames = "stcty_fips") |>
+  rename(distance = value) |>
+  mutate(distance = drop_units(set_units(distance, mi)))
+
+df <- read_rds(ipath$county_geography) |>
+  left_join(d, join_by(stcty_fips))
+
+df %>%
+  filter(usa_contiguous) %>%
+  ggplot() + 
+  geom_sf(aes(fill = distance)) +
+  labs(title = glue("Distance from {name} ({fips}), miles"))
+
+```
+
+
+```{r}
+fips <- params$focus_county
+name <- geo$fips2name(fips, long = TRUE)
+imped_fn <- paste0(params$map_imped_shape, "_impedance_mat")
+imped_par <- params$map_imped_param
+
+d <- geo[[imped_fn]](imped_par)[fips, ] |>
+  as_tibble(rownames = "stcty_fips") |>
+  rename(impedance = value)
+
+df <- read_rds(ipath$county_geography) |>
+  left_join(d, join_by(stcty_fips))
+
+df %>%
+  filter(usa_contiguous) %>%
+  ggplot() + 
+  geom_sf(aes(fill = impedance)) +
+  labs(title = glue("Impedance factor ({params$map_imped_shape}, {imped_par}) from {name} ({fips})"))
 
 ```
 

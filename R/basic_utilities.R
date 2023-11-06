@@ -149,26 +149,40 @@ year2tiger <- function(year){
   return(as.integer(x))
 }
 
-year2cbsa <- function(year){
-  cbsa_year = c(2020, 2018, 2017, 2015, 2013, 2009:2003)
-  if(year %in% cbsa_year){
-    x <- year
-  }else if(year > 2018){
-    x <- 2020
-  }else if(year == 2016){
-    x <- 2017
-  }else if(year == 2014){
-    x <- 2015
-  }else if(year %in% 2012:2010){
-    x <- 2013
-  }else if(year < 2004){
-    x <- 2003
+nearest_point <- function(x, grid) {
+  if (x <= min(grid)) return(min(grid))
+  if (x >= max(grid)) return(max(grid))
+  grid <- sort(grid)
+  for (i in 1:(length(grid)-1)) {
+    lo <- grid[i]
+    hi <- grid[i+1]
+    if (x > hi) next
+    if (x - lo < hi - x) return(lo)
+    else return(hi)
   }
+  stop("something is wrong! ", x, grid)
+}
+
+test_nearest_point <- function() {
+  nearest_point(1993, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2003 # below min
+  nearest_point(2050, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # above max
+  nearest_point(2005, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2005 # exact match
+  nearest_point(2021, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2020 # lower bound
+  nearest_point(2022, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # upper bound
+  nearest_point(2016, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2017 # tie
+}
+
+
+year2cbsa <- function(year){
+  cbsa_year = c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003, 1993)
+  x <- nearest_point(year, cbsa_year)
   if(!year %in% cbsa_year){
     warning("CBSA concordance years do not contain [",year,"] using [", x,"]")
   }
   return(as.integer(x))
 }
+
+
 
 year2rucc <- function(year){
   rucc_year = c(2013, 2003, 1993, 1983, 1974)

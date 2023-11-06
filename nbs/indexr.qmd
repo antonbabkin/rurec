@@ -8,10 +8,34 @@ format: html
 ```{r}
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 
+
 bea_io$clear_outputs()
 bea_io$test_pubdata_bea_io()
 bea_io$test_dataprep_bea_io()
 
+
+# data needed for Python-less environments:
+# source("R/basic_utilities.R", local = (util <- new.env()))
+# util$zip_pack("tmp/test.zip", bea_io$opath, TRUE)
+# util$zip_unpack("tmp/test.zip")
+
 ```
 
+# Geography
+
+
+```{r}
+source("R/geography.R", local = (geo <- new.env()))
+
+
+geo$clear_outputs()
+geo$test_pubdata_geo()
+geo$test_dataprep_geo()
+
+
+# data needed for Python-less environments:
+# source("R/basic_utilities.R", local = (util <- new.env()))
+# util$zip_pack("tmp/geography_vYYMMDD.zip", geo$opath, TRUE)
+# util$zip_unpack("tmp/geography_vYYMMDD.zip")
+```
 
