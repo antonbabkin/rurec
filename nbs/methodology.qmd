@@ -2,7 +2,10 @@
 title: "Methodology and Data"
 format:
   html:
+    toc: true
     code-fold: true
+    df-print: paged
+    embed-resources: true
 ---
 
 This notebook is a comprehensive overview of the project methodology.
@@ -10,12 +13,10 @@ More specific details may be available in other notebooks related to their respe
 Parts of the notebook are illustrated with examples using real or artificial data.
 Each section points to relevant code in a notebook or a script.
 
-
 ```{r}
 #| output: false
-proj_path <- rprojroot::find_rstudio_root_file
-
-source(proj_path("nbs/r_backend_functions.R"), local = (backend_fns <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 ```
 
 
@@ -85,14 +86,59 @@ Recognizing that county shapes change over time, we have also built capability t
 
 ## CBP imputation
 
-Code: [pubdata/cbp](https://github.com/antonbabkin/pubdata/blob/main/nbs/cbp.md)
+Code: 
+
+- [pubdata/cbp](https://github.com/antonbabkin/pubdata/blob/main/nbs/cbp.md)
+- [R/dataprep_cbp.R]()
 
 We need county payroll by 6-digit NAICS industry.
-It is often suppressed.
+It is often suppressed along with employment.
 
-We calculate wage as annual payroll over employment in raw CBP at the most detailed unsuppressed level (county/state/nation, NAICS digits).
-Then multiply wage by EFSY employment to get payroll.
-Always use raw CBP payroll, only replace with imputed when suppressed.
+Up to 2016, we can use EFSY imputed employment and derive missing payroll as follows.
+
+First, for every industry we calculate total suppressed employment (`emp_sup`) and annual payroll (`ap_sup`) by subtracting sum of unsuppressed county employment and payroll from national totals.
+We then impute annual payroll in counties with EFSY employment as `ap_efsy(county) = emp_efsy(county) / emp_sup * ap_sup`.
+Intuition of this calculation is that county share of suppressed payroll is proportional to it's share of suppressed employment.
+
+The table below shows percentage of employment and payroll in raw and imputed CBP relative to national totals at different NAICS digit levels from 2012.
+
+
+```{r}
+#| tbl-cap: County sum as percentage of national total
+df <- cbp$call_cbp(year = 2012, cbp_scale = "county", imputed = FALSE) |>
+  select(place, naics, emp, ap) |>
+  rename_with(\(x) paste0(x, "_raw"), c(emp, ap))
+d <- cbp$call_cbp(year = 2012, cbp_scale = "county", imputed = TRUE) |>
+  select(place, naics, emp, ap) |>
+  rename_with(\(x) paste0(x, "_imp"), c(emp, ap))
+df <- left_join(df, d, join_by(place, naics))
+
+dsum <- df |>
+  mutate(naics_dig = str_length(naics)) |>
+  group_by(naics_dig) |>
+  summarize(across(starts_with(c("emp", "ap")), sum))
+
+d <- cbp$call_cbp(year = 2012, cbp_scale = "us", imputed = FALSE) |>
+  filter(lfo == "-") |>
+  select(naics, emp, ap) |>
+  rename_with(\(x) paste0(x, "_nat"), !naics) |>
+  mutate(naics_dig = str_length(naics)) |>
+  group_by(naics_dig) |>
+  summarize(across(c(emp_nat, ap_nat), sum))
+
+left_join(dsum, d, join_by(naics_dig)) |>
+  mutate(
+    emp_raw_pct = emp_raw / emp_nat * 100,
+    emp_imp_pct = emp_imp / emp_nat * 100,
+    ap_raw_pct = ap_raw / ap_nat * 100,
+    ap_imp_pct = ap_imp / ap_nat * 100
+  ) |>
+  select(naics_dig, ends_with("pct")) |>
+  mutate(across(!naics_dig, \(x) round (x, 1)))
+
+
+```
+
 
 
 ## InfoGroup county aggregates
@@ -105,9 +151,9 @@ Establishments, employment and sales are calculated at county-NAICS level by sum
 ## NAICS-BEA reconciliation
 
 Code:
+
 - [pubdata/bea_io](https://github.com/antonbabkin/pubdata/blob/main/nbs/bea_io.md)
-- [rurec/r_backend_functions.R](https://github.com/antonbabkin/rurec/blob/main/nbs/r_backend_functions.R),
-functions call_industry_concordance()
+- [R/dataprep_bea_io.R]()
 
 - economic activity data comes by NAICS, needs re-grouping to match BEA I-O tables
 - a few industries can not be cleanly matched (entire construciton sector and a few smaller ones)
@@ -126,7 +172,8 @@ Sectors in sector-level Use and Supply tables are not always the same as sectors
 To address this, we map correct sectors into NAICS as follows:
 
 ```{r}
-d <- backend_fns$ilevel_concord("sec")
+
+d <- bea_io$ilevel_concord("sec")
 d %>%
   filter(SECTOR %in% (d %>% group_by(SECTOR) %>% summarize(n = n()) %>% filter(n > 1) %>% pull(SECTOR)))
 ```

@@ -1,0 +1,34 @@
+project:
+  title: "Rural Economy"
+  execute-dir: project
+
+# _quarto.yml config was moved to project root to enable "execute-dir: project" setting.
+# Below is the original config that was used to build the GitHub website.
+# It will need to be restored if we want to update the website.
+#   render:
+#     - index.ipynb
+#     - rurality.ipynb
+#     - io_for_dummies.Rmd
+#     - toy_story.Rmd
+#   post-render: touch _site/.nojekyll
+# 
+# website:
+#   title: "Rural Economy"
+#   navbar:
+#     background: primary
+#     left:
+#       - href: index.ipynb
+#         text: Home
+#       - href: rurality.ipynb
+#         text: Rurality
+#       - io_for_dummies.Rmd
+#       - toy_story.Rmd
+# 
+# format:
+#   html:
+#     theme: cosmo
+#     css: styles.css
+#     toc: true
+
+
+

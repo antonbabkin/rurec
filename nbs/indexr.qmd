@@ -39,3 +39,13 @@ geo$test_dataprep_geo()
 # util$zip_unpack("tmp/geography_vYYMMDD.zip")
 ```
 
+
+# CBP
+
+```{r}
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+
+cbp$call_cbp(2012, "county", FALSE)
+
+```
+

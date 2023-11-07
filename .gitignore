@@ -36,3 +36,5 @@ nbs/misc/rurec
 
 condor/*
 
+
+/.quarto/
