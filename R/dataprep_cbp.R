@@ -38,7 +38,7 @@ opath <- list(
 )
 
 clear_outputs <- function() {
-  clear_paths(opath)
+  util$clear_paths(opath)
 }
 
 

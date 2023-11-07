@@ -49,3 +49,22 @@ cbp$call_cbp(2012, "county", FALSE)
 
 ```
 
+
+
+# InfoGroup
+
+
+```{r}
+source("R/dataprep_infogroup.R", local = (ig <- new.env()))
+
+ig$prep_county_agg(seq(2002, 2017, 5))
+
+# soybean processing
+open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
+  filter(naics == "311224") |>
+  arrange(st, cty) |>
+  collect()
+
+```
+
+
