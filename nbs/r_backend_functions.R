@@ -464,19 +464,52 @@ industry_output <- function(year,
     `colnames<-`("T017")
   return(df)
 }
+
 ### Get National BEA Total Commodity Output Vector and tidy structure for use with NAICS adjacent processes
 commodity_output <- function(year,
                              ilevel = c("det", "sum", "sec"),
                              ...){
   ilevel <- match.arg(ilevel)
+  df <- call_supply_table(year, ilevel, ...) %>%
+    .[1:(nrow(.)-1), "T007", drop=F] %>%
+    t() %>%
+    condense_bea_vector(., ilevel) %>%
+    t() %>%
+    `colnames<-`("T007")
+  return(df)
+}
+
+### Get National BEA Total Commodity Product Supply Vector and tidy structure for use with NAICS adjacent processes
+commodity_supply <- function(year,
+                             ilevel = c("det", "sum", "sec"),
+                             ...){
+  ilevel <- match.arg(ilevel)
   df <- call_supply_table(year, ilevel, ...) %>% 
+    .[1:(nrow(.)-1), "T016", drop=F] %>% 
+    t() %>% 
+    condense_bea_vector(., ilevel) %>% 
+    t() %>% 
+    `colnames<-`("T016")
+  return(df)
+}
+
+##todo: use manual rowsum for more consistency a la D and C 
+### Get total commodity output's share of total product supply: Phi
+commodity_share_factor <- function(year,
+                                   ilevel = c("det", "sum", "sec"),
+                                   ...){
+  ilevel <- match.arg(ilevel)
+  tco <- call_supply_table(year, ilevel, ...) %>% 
     .[1:(nrow(.)-1), "T007", drop=F] %>% 
     t() %>% 
     condense_bea_vector(., ilevel) %>% 
     t() %>% 
     `colnames<-`("T007")
+  tps <- commodity_supply(year, ilevel, ...)
+  df <- tco/tps
   return(df)
 }
+
 
 #### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
 b_matrix <- function(year,
@@ -1128,7 +1161,7 @@ ras_trade_lists <- function(factor_supply,
     tf <- ras_trade_flows(x0 = x[[i]],
                           rs1 = fsx[i, , drop=F],
                           cs1 = fdx[i, , drop=F],
-                          ...)
+                          ...)$trade_matrix
     colnames(tf) = colnames(fdx[i, , drop=F])
     rownames(tf) = colnames(fsx[i, , drop=F])
     saveRDS(tf, file = file.path(find_rstudio_root_file(), data_dir, "temp", i))

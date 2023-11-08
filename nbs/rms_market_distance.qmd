@@ -31,7 +31,8 @@ options(scipen=999)
 library(rprojroot)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+#source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
 
 ```
 
@@ -45,13 +46,26 @@ The preferred globally balanced industry specific county-to-county potential tra
 
 
 ```{r}
-df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25"))
+# df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25"))
+# 
+# imped_dist <- call_industry_concordance() %>% 
+#   select("SECTOR", "DETAIL") %>% 
+#   setNames(c("group", "sector")) %>% 
+#   .[!duplicated(.), ] %>% 
+#   inner_join(readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25")), by = "sector")
+# 
+# imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
+```
+
+```{r}
+
+df <- readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "sec_imp_list"))
 
 imped_dist <- call_industry_concordance() %>% 
   select("SECTOR", "DETAIL") %>% 
   setNames(c("group", "sector")) %>% 
   .[!duplicated(.), ] %>% 
-  inner_join(readRDS(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tally_detail_2012_industry_gaus_by25")), by = "sector")
+  inner_join(df, by = "sector")
 
 imped_dist$group <- factor(imped_dist$group, levels = c(unique(imped_dist$group)), ordered = TRUE)
 ```

@@ -299,13 +299,15 @@ industry flows
 year = 2012
 ilevel = "det"
 industryflow = TRUE
+data_source = "infogroup"
+#data_source = "cbp"
 
 if(isTRUE(industryflow)){
-  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel)
-  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel)
+  fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source)
+  fd <- industry_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source)
 } else {
-  fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel)
-  fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel)
+  fs <- commodity_factor_supply_matrix(year = year, ilevel = ilevel, data_source = data_source)
+  fd <- commodity_factor_demand_matrix(year = year, ilevel = ilevel, data_source = data_source)
 }
   #lower bound of trade activity potential 
 df <- fs - fd
@@ -317,7 +319,16 @@ df <- join_space_with_connectedness(df, geog)
 ```
 
 ```{r}
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1])
 
+```
+
+```{r}
+#inverse hyperbolic sine scaled spectrum, one-sided value size hue
+extractive_map(df = df, 
+           fill = grep("^11", colnames(df), value = TRUE)[1])
 
 ```
 

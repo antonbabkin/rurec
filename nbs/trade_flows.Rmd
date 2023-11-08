@@ -32,7 +32,8 @@ options(scipen=999)
 library(rprojroot)
 
 ############ Load custom functions
-source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+#source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
 
 ```
 
@@ -337,6 +338,53 @@ system.time(
 df <- lapply(file.path(find_rstudio_root_file(), "data", "robjs", "temp", y), readRDS)
 names(df) <- y
 
+# f <- file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester") %>% list.files() %>% grep("^11", . , value = T) 
+# fl <- lapply(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester", f), readRDS)
+# df <- Reduce('+', fl)
+# df2 <- df[!grepl('^(02|15|72)', rownames(df)), !grepl('^(02|15|72)', colnames(df))] 
+
+```
+
+```{r}
+
+temp <- lapply(file.path(find_rstudio_root_file(), "data", "robjs", "trade_base", "tester", "1111B0"), readRDS) %>% .[[1]]
+temp <- temp[!grepl('^(02|15|72)', rownames(temp)), 
+             !grepl('^(02|15|72)', colnames(temp))]
+temp %>% sna_value_map(metric = "eigen_centrality")
+
+test <- temp %>% graph_from_adjacency_matrix(weighted = TRUE, mode = "directed") %>% eigen_centrality(., directed = TRUE, scale = F) %>% .[[1]]
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "eigen_centrality")
+```
+
+```{r}
+df %>% sna_value_map(metric = "alpha_centrality")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "closeness")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "harmonic_centrality")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "hub_score")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "authority_score")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "page_rank")
+```
+
+```{r}
+df2 %>% sna_value_map(metric = "strength")
 ```
 
 

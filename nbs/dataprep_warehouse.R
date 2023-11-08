@@ -150,9 +150,8 @@ fn <- "get_cbp_year_pq"
   
   ### select years to store
   year = 2012
-  geo = "county"
   # year = 1986:2021
-  # geo = c("county", "state", "us")
+  geo = c("county", "state", "us")
   
 fn <- "get_df"
   for (g in geo){
