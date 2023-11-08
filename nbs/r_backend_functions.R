@@ -276,25 +276,6 @@ infogroup_sales_share <- function(year,
   return(df)
 }
 
-##Note presence of county-level suppression too. Can we fix/lessen by way of imputation?
-##Note county totals of 111900 and 112A00 are 50% larger than their national level counterparts
-# Call up and clean Ag Output data ($1,000 of dollars)
-call_agoutput <- function(year, 
-                          geo_level = c("county", "state", "national"), 
-                          ...){
-  geo_level <- match.arg(geo_level)
-  ag_year <- year2agcensus(year)
-  df <- get_farm_sales_by_bea_detail(ag_year, geo_level) %>% as.data.frame()
-  place <- c(place = rownames(df))
-  df <- sapply(df, function(x)x/1000) %>% as.data.frame()
-  if(geo_level == "county" | geo_level == "state"){
-    df <- cbind(place, df)
-    rownames(df) <- 1:nrow(df)
-  } else {
-    df <- t(df)
-  }
-  return(df)
-}
 
 ############ Derive adjusted national ag gross industry output (in thousands of dollars)
 total_ag_industry_output <- function (year,

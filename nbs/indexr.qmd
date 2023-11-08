@@ -67,4 +67,22 @@ open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
 
 ```
 
+# Census of Agriculture
+
+Farm sales
+
+
+```{r}
+source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
+
+agcen$test_all()
+
+x <- agcen$call_agoutput(2012, "county")
+
+# data needed for Python-less environments:
+# source("R/basic_utilities.R", local = (util <- new.env()))
+# util$zip_pack("tmp/agcen_vYYMMDD.zip", agcen$opath, TRUE)
+# util$zip_unpack("tmp/agcen_vYYMMDD.zip")# 
+
+```
 
