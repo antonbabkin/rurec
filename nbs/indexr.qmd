@@ -8,16 +8,21 @@ format: html
 ```{r}
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 
-
-bea_io$clear_outputs()
-bea_io$test_pubdata_bea_io()
-bea_io$test_dataprep_bea_io()
-
-
 # data needed for Python-less environments:
-# source("R/basic_utilities.R", local = (util <- new.env()))
-# util$zip_pack("tmp/test.zip", bea_io$opath, TRUE)
-# util$zip_unpack("tmp/test.zip")
+source("R/basic_utilities.R", local = (util <- new.env()))
+util$zip_pack("tmp/bea_io_v231108.zip", bea_io$opath, TRUE)
+util$zip_unpack("tmp/bea_io_v231108.zip")
+
+# bea_io$clear_outputs()
+# bea_io$test_pubdata_bea_io()
+# bea_io$test_dataprep_bea_io()
+
+bea_io$pubdata$get_naics_concord(2017)
+
+bea_io$pubdata$get_use(2017, "det", TRUE)$table
+
+bea_io$b_matrix(2017, "det")
+
 
 ```
 
