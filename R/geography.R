@@ -17,7 +17,7 @@ sf_use_s2(FALSE)
 
 
 # R scripts ----
-source("R/basic_utilities.R")
+source("R/basic_utilities.R", local = (util <- new.env()))
 
 # S3 methods for automatic reticulate conversion of GeoDataFrame and GeoSeries
 source("R/reticulate_extras.R")
@@ -60,7 +60,7 @@ opath <- list(
 )
 
 clear_outputs <- function() {
-  clear_paths(opath)
+  util$clear_paths(opath)
 }
 
 
@@ -78,7 +78,7 @@ pubdata$get_county_df <- function(year, geometry, scale) {
   x <- pymod$geo$get_county_df(year, geometry, scale)
   log_debug(paste("save to cache", p))
   # files suspiciously small, watch out for issues
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -93,7 +93,7 @@ pubdata$get_state_df <- function(geometry,
   pymod$init()
   x <- pymod$geo$get_state_df(geometry, scale)
   log_debug(paste("save to cache", p))
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -106,9 +106,9 @@ pubdata$get_cbsa_delin_df <- function(year) {
   }
   pymod$init()
   x <- pymod$cbsa$get_cbsa_delin_df(year) %>%
-    reticulate_unlist_cols()
+    util$reticulate_unlist_cols()
   log_debug(paste("save to cache", p))
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -123,7 +123,7 @@ call_tiger <- function(year = 2013,
                        scale = c("20m", "500k", "5m"),
                        geometry = TRUE) {
   scale <- match.arg(scale)
-  df <- pubdata$get_county_df(year2tiger(year), 
+  df <- pubdata$get_county_df(util$year2tiger(year), 
                               geometry, 
                               scale) %>%
     rename(place = CODE)
@@ -144,7 +144,7 @@ call_tiger <- function(year = 2013,
 # Call up and clean CBSA concordance codes (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
 call_cbsa_concord <- function(year, 
                               ...){
-  cbsa_year <- year2cbsa(year)  
+  cbsa_year <- util$year2cbsa(year)  
   df <- pubdata$get_cbsa_delin_df(cbsa_year)
   df$CBSA_TITLE <- sapply(strsplit(df$CBSA_TITLE, ","), "[", 1)
   df$CBSA_TITLE <- paste(df$CBSA_TITLE, rep("CBSA", length(df$CBSA_TITLE)))
@@ -173,7 +173,7 @@ fips2name <- function(fips,
                       year = 2013,
                       long = FALSE,
                       ...){
-  df <- call_tiger(year2tiger(year), geometry = F)
+  df <- call_tiger(util$year2tiger(year), geometry = F)
   if (long) {
     df <- paste0(df$COUNTY[df$place == fips],", ", df$STATE_NAME[df$place == fips])
   } else {
@@ -211,7 +211,7 @@ cbsa_spatial_cluster <- function(year = 2013) {
   df$center <- st_centroid(df$geometry)
   
   log_debug(paste("save to cache", cache_path))
-  saveRDS(df, mkdir(cache_path))
+  saveRDS(df, util$mkdir(cache_path))
   return(df)
 }
 
@@ -249,7 +249,7 @@ dist_mat <- function(from = c("center", "border"), year = 2013, cbsa = FALSE) {
   rownames(m) <- colnames(m) <- df$place
   
   log_debug(paste("save to cache", cache_path))
-  saveRDS(m, mkdir(cache_path))  
+  saveRDS(m, util$mkdir(cache_path))  
   return(m)
 }
 
@@ -279,7 +279,7 @@ bprox_mat <- function(queen = TRUE, year = 2013, cbsa = FALSE) {
   rownames(df) <- colnames(df) <- t$place
   
   log_debug(paste("save to cache", cache_path))
-  saveRDS(df, mkdir(cache_path))  
+  saveRDS(df, util$mkdir(cache_path))  
   return(df)
 }
 
@@ -321,7 +321,7 @@ neighbor_of_neighbor <- function(central_place,
     }
   }
   log_debug(paste("save to cache", cache_path))
-  saveRDS(df, mkdir(cache_path))  
+  saveRDS(df, util$mkdir(cache_path))  
   return(df)
 }
 
@@ -398,10 +398,14 @@ bisquare_impedance_mat <- function(decay_zero = 1000, from = c("center", "border
 
 
 # tests ----
-test_pubdata_geo <- function() {
+test_pubdata <- function() {
   
-  # todo: test for other argument values
-  pubdata$get_county_df(2013, TRUE, "20m")
+  for (y in c(2010, 2013:2020)) {
+    for (geom in c(TRUE, FALSE)) {
+      # not testing smaller scales
+      pubdata$get_county_df(y, geom, "20m")
+    }
+  }
   
   for (scale in c("20m", "5m", "500k", "tiger")) {
     for (geometry in c(TRUE, FALSE)) {
@@ -417,9 +421,14 @@ test_pubdata_geo <- function() {
 }
   
 
-test_dataprep_geo <- function() {
-  # todo: test for other argument values
-  call_tiger(2013, "20m", TRUE)
+test_dataprep <- function() {
+  
+  for (y in c(2010, 2013:2020)) {
+    for (geom in c(TRUE, FALSE)) {
+      # not testing smaller scales
+      call_tiger(y, "20m", geom)
+    }
+  }
   
   # does not work for 1993
   for (y in c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) {

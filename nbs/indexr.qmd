@@ -3,24 +3,44 @@ title: "Index for R"
 format: html
 ---
 
+
+# Data packaging
+
+`zip_pack()` and `zip_unpack()` functions from utilities module can be used to package a list of data files and unpack them to same locations in a different environment.
+
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+source("R/dataprep_infogroup.R", local = (ig <- new.env()))
+source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
+
+# pack all outputs from 5 dataprep modules, excluding parquet'd establishment-level inforgroup
+# list(bea_io$opath, geo$opath, cbp$opath, ig$opath["county_"], agcen$opath) |> 
+#   list_c() |> list_c() |> # cat paths from all lists into single vector
+#   util$zip_pack("tmp/bea_cbp_geo_ig_ag_v231109.zip", files = _, overwrite = TRUE)
+# unpack
+# util$zip_unpack("tmp/bea_cbp_geo_ig_ag_v231109.zip", overwrite = TRUE)
+
+```
+
+
+
 # BEA IO tables
 
 ```{r}
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 
-# data needed for Python-less environments:
-source("R/basic_utilities.R", local = (util <- new.env()))
-util$zip_pack("tmp/bea_io_v231108.zip", bea_io$opath, TRUE)
-util$zip_unpack("tmp/bea_io_v231108.zip")
 
+# test module functions
 # bea_io$clear_outputs()
-# bea_io$test_pubdata_bea_io()
-# bea_io$test_dataprep_bea_io()
+# bea_io$test_pubdata()
+# bea_io$test_dataprep()
 
 bea_io$pubdata$get_naics_concord(2017)
-
 bea_io$pubdata$get_use(2017, "det", TRUE)$table
-
 bea_io$b_matrix(2017, "det")
 
 
@@ -33,15 +53,13 @@ bea_io$b_matrix(2017, "det")
 source("R/geography.R", local = (geo <- new.env()))
 
 
-geo$clear_outputs()
-geo$test_pubdata_geo()
-geo$test_dataprep_geo()
+# test module functions
+# geo$clear_outputs()
+# geo$test_pubdata()
+# geo$test_dataprep()
 
+geo$call_cbsa_concord(2013)
 
-# data needed for Python-less environments:
-# source("R/basic_utilities.R", local = (util <- new.env()))
-# util$zip_pack("tmp/geography_vYYMMDD.zip", geo$opath, TRUE)
-# util$zip_unpack("tmp/geography_vYYMMDD.zip")
 ```
 
 
@@ -50,7 +68,11 @@ geo$test_dataprep_geo()
 ```{r}
 source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 
-cbp$call_cbp(2012, "county", FALSE)
+# testing
+# cbp$clear_outputs()
+# cbp$test_naics_years()
+
+x <- cbp$call_cbp(2012, "county", FALSE)
 
 ```
 
@@ -70,6 +92,8 @@ open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
   arrange(st, cty) |>
   collect()
 
+ig$prep_county_agg(1997:2017)
+
 ```
 
 # Census of Agriculture
@@ -80,14 +104,14 @@ Farm sales
 ```{r}
 source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 
-agcen$test_all()
+# testing
+# agcen$test_all()
 
 x <- agcen$call_agoutput(2012, "county")
 
-# data needed for Python-less environments:
-# source("R/basic_utilities.R", local = (util <- new.env()))
-# util$zip_pack("tmp/agcen_vYYMMDD.zip", agcen$opath, TRUE)
-# util$zip_unpack("tmp/agcen_vYYMMDD.zip")# 
 
 ```
+
+
+
 

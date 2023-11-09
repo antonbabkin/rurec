@@ -121,22 +121,30 @@ call_cbp <- function(year,
       select(fipstate, fipscty, naics, est, emp, ap, qp1) %>%
       collect()
     df$place <- paste0(df$fipstate, df$fipscty)
-    
+
     # merge EFSY county employment
     p <- glue(ipath$efsy_)
     d <- open_dataset(p) %>%
       mutate(efsy_emp = (lb + ub) / 2) %>%
       select(fipstate, fipscty, naics, efsy_emp) %>%
       collect()
+    if (year == 1999) {
+      # 6 pairs of duplicate rows exist in this year
+      d <- distinct(d)
+    }      
     df <- left_join(df, d, join_by(fipstate, fipscty, naics))
-    
+
     # calculate and merge total suppressed emp and pay
     p <- glue(ipath$cbp_, .envir = list(geo = "us", year = year))
-    dsup <- open_dataset(p) |>
-      filter(lfo == "-") |>
+    dsup <- open_dataset(p)
+    if ("lfo" %in% names(dsup)) {
+      dsup <- filter(dsup, lfo == "-")
+    }
+    dsup <- dsup |>
       select(naics, emp, ap) |>
       rename(emp_nat = emp, ap_nat = ap) |>
       collect()
+
     d <- df |>
       group_by(naics) |>
       summarize(emp_unsup = sum(emp), ap_unsup = sum(ap))
@@ -149,7 +157,7 @@ call_cbp <- function(year,
         | ((ap_nat > 0) & (ap_nat < ap_unsup)))
     if (nrow(d_sus) > 0) {
       log_warn("Imputed emp/ap greater than national!!!")
-      cat(d_sus)
+      print(d_sus)
     }
 
     df <- left_join(df, dsup, join_by(naics))
@@ -174,3 +182,15 @@ call_cbp <- function(year,
 }
 
 
+# Tests ----
+
+test_naics_years <- function() {
+  for (y in 1998:2021) {
+    if (y < 2017) 
+      call_cbp(y, "county", TRUE)
+    for (scale in c("county", "state", "us"))
+      call_cbp(y, scale, FALSE)
+  }
+}
+  
+  

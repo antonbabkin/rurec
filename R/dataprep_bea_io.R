@@ -9,7 +9,7 @@ library(glue)
 
 
 # R scripts ----
-source("R/basic_utilities.R")
+source("R/basic_utilities.R", local = (util <- new.env()))
 
 
 # Python modules ----
@@ -40,7 +40,7 @@ opath <- list(
 )
 
 clear_outputs <- function() {
-  clear_paths(opath)
+  util$clear_paths(opath)
 }
 
 
@@ -56,10 +56,10 @@ pubdata$get_naics_concord <- function(year) {
   }
   pymod$init()
   x <- pymod$bea_io$get_naics_concord(year) %>%
-    reticulate_unlist_cols()
+    util$reticulate_unlist_cols()
   
   log_debug(paste("save to cache", p))
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -86,7 +86,7 @@ pubdata$get_sup <- function(year, level, labels = FALSE) {
   }
   
   log_debug(paste("save to cache", p))
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -102,7 +102,7 @@ pubdata$get_use <- function(year, level, labels = FALSE) {
   pymod$init()
   x <- pymod$bea_io$get_use(year, level, labels)
   log_debug(paste("save to cache", p))
-  saveRDS(x, mkdir(p))
+  saveRDS(x, util$mkdir(p))
   return(x)
 }
 
@@ -114,7 +114,7 @@ beacode2description <- function(code,
                                 year = 2012,
                                 ...){
   #Note: year is necessary but arbitrary selection
-  bea_year <- year2bea(year, ...)
+  bea_year <- util$year2bea(year, ...)
   x <- pubdata$get_sup(bea_year, "sec", FALSE)
   sec <- do.call(rbind, x$col_names)
   x <- pubdata$get_sup(bea_year, "sum", FALSE)
@@ -194,7 +194,7 @@ call_use_table <- function(year,
                            ilevel = c("det", "sum", "sec"), 
                            ...){
   ilevel <- match.arg(ilevel)
-  df <- pubdata$get_use(year2bea(year, ilevel), ilevel)$table %>% 
+  df <- pubdata$get_use(util$year2bea(year, ilevel), ilevel)$table %>% 
     as.matrix()
   df[is.na(df)] = 0
   return(df)
@@ -205,7 +205,7 @@ call_supply_table <- function(year,
                               ilevel = c("det", "sum", "sec"), 
                               ...){
   ilevel <- match.arg(ilevel)
-  df <- pubdata$get_sup(year2bea(year, ilevel), ilevel)$table %>% 
+  df <- pubdata$get_sup(util$year2bea(year, ilevel), ilevel)$table %>% 
     as.matrix()
   df[is.na(df)] = 0
   return(df)
@@ -217,15 +217,15 @@ condense_bea_matrix <- function(matrix,
                                 ilevel){
   if(ilevel == "det"){
     df <- matrix %>% 
-      matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-      matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      util$matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
+      util$matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
       .[!grepl("4200ID|S00402|S00300", rownames(.)), !grepl("4200ID", colnames(.)), drop=F]
   }
   if(ilevel == "sum"){ 
     df <- matrix %>% 
-      matrix_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
-      matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
-      matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+      util$matrix_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
+      util$matrix_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      util$matrix_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
   }
   if (ilevel == "sec"){
     df <- matrix
@@ -238,15 +238,15 @@ condense_bea_vector <- function(vector,
                                 ilevel){
   if(ilevel == "det"){
     df <- vector %>% 
-      vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-      vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      util$vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
+      util$vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
       .[,!grepl("4200ID|S00402|S00300", colnames(.)), drop=F]
   }
   if(ilevel == "sum"){ 
     df <- vector %>% 
-      vector_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
-      vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
-      vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
+      util$vector_collapse(., grep("^336", colnames(.), value = TRUE), "336") %>% 
+      util$vector_collapse(., grep("^541", colnames(.), value = TRUE), "541") %>% 
+      util$vector_collapse(., grep("^(HS|ORE)", colnames(.), value = TRUE), "531")
   }
   if (ilevel == "sec"){
     df <- vector
@@ -340,7 +340,7 @@ d_matrix <- function(year,
 
 # Tests ----
 
-test_pubdata_bea_io <- function() {
+test_pubdata <- function() {
   for (year in c(2012, 2017)) {
     pubdata$get_naics_concord(year)
   }
@@ -356,7 +356,7 @@ test_pubdata_bea_io <- function() {
   }
 }
 
-test_dataprep_bea_io <- function() {
+test_dataprep <- function() {
 
   beacode2description("532100")
   beacode2description("T016")
