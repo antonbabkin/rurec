@@ -1,6 +1,71 @@
 
 #simple independent utility functions in base R for cohesion, conversion, or manipulation
 
+# file management ----
+mkdir <- function(p) {
+  d <- dirname(p)
+  if (!dir.exists(d)) {
+    logger::log_debug(paste("Creating directory", d))
+    dir.create(d, recursive = TRUE)
+  }
+  return(p)
+}
+
+
+clear_paths <- function(paths) {
+  for (ps in paths) {
+    ps <- ps |>
+      as.character() |>
+      gsub("\\{.*?\\}", "*", x = _) |>
+      Sys.glob()
+    for (p in ps) {
+      if (file.exists(p)) {
+        log_debug("Removing file ", p)
+        unlink(p)
+      }
+    }
+  }
+}
+
+
+zip_pack <- function(zipfile, files, overwrite = FALSE) {
+  stopifnot(getwd() == rprojroot::find_rstudio_root_file())
+  if (file.exists(zipfile)) {
+    if (overwrite) {
+      logger::log_info(paste("Replacing existing Zip file:", zipfile))
+      file.remove(zipfile)
+    }
+    else stop("Zip file already exists: ", zipfile)
+  }
+  # turn all "{...}" into "*" and expand resulting wildcard file names
+  files <- files |>
+    as.character() |>
+    gsub("\\{.*?\\}", "*", x = _) |>
+    Sys.glob()
+  zip(mkdir(zipfile), files)
+}
+
+
+
+zip_unpack <- function(zipfile, overwrite = FALSE) {
+  stopifnot(getwd() == rprojroot::find_rstudio_root_file())
+  stopifnot(file.exists(zipfile))
+  unzip(zipfile, overwrite = overwrite)
+}
+
+#' Un-list columns in pandas dataframes
+#' Sometimes pandas df columns come through reticulate as lists that need unlisting.
+#' This is likely happening with string columns with missing values.
+#' More investigation is desirable, maybe this corrections could be done by customizing reticulate.
+#' For now, simply unlist() all columns that are of list class.
+#' Usage: df <- reticulate_unlist_cols(df)
+reticulate_unlist_cols <- function(df) {
+  df %>% mutate(across(
+    where(is.list), 
+    \(col) unlist(map_if(col, \(el) is.null(el) || is.nan(el), \(y) NA))
+  ))
+}
+
 #### Add specified rows and columns of a vector matrix
 vector_collapse <- function(vector, 
                             collapse_names, 
@@ -84,26 +149,40 @@ year2tiger <- function(year){
   return(as.integer(x))
 }
 
-year2cbsa <- function(year){
-  cbsa_year = c(2020, 2018, 2017, 2015, 2013, 2009:2003)
-  if(year %in% cbsa_year){
-    x <- year
-  }else if(year > 2018){
-    x <- 2020
-  }else if(year == 2016){
-    x <- 2017
-  }else if(year == 2014){
-    x <- 2015
-  }else if(year %in% 2012:2010){
-    x <- 2013
-  }else if(year < 2004){
-    x <- 2003
+nearest_point <- function(x, grid) {
+  if (x <= min(grid)) return(min(grid))
+  if (x >= max(grid)) return(max(grid))
+  grid <- sort(grid)
+  for (i in 1:(length(grid)-1)) {
+    lo <- grid[i]
+    hi <- grid[i+1]
+    if (x > hi) next
+    if (x - lo < hi - x) return(lo)
+    else return(hi)
   }
+  stop("something is wrong! ", x, grid)
+}
+
+test_nearest_point <- function() {
+  nearest_point(1993, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2003 # below min
+  nearest_point(2050, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # above max
+  nearest_point(2005, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2005 # exact match
+  nearest_point(2021, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2020 # lower bound
+  nearest_point(2022, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # upper bound
+  nearest_point(2016, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2017 # tie
+}
+
+
+year2cbsa <- function(year){
+  cbsa_year = c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003, 1993)
+  x <- nearest_point(year, cbsa_year)
   if(!year %in% cbsa_year){
     warning("CBSA concordance years do not contain [",year,"] using [", x,"]")
   }
   return(as.integer(x))
 }
+
+
 
 year2rucc <- function(year){
   rucc_year = c(2013, 2003, 1993, 1983, 1974)
@@ -148,7 +227,7 @@ year2bea <- function(year,
                      ...){
   ilevel <- match.arg(ilevel)
   if(ilevel != "det"){
-    bea_year = c(2021:1997)
+    bea_year = 2022:1997
     if(year %in% bea_year){
       x <- year
     }else if(year > max(bea_year)){
@@ -161,7 +240,7 @@ year2bea <- function(year,
     }
   }
   if(ilevel == "det"){
-    bea_year = c(2012, 2007)
+    bea_year = c(2017, 2012, 2007)
     if(year %in% bea_year){
       x <- year
     }else if(year > 2007){

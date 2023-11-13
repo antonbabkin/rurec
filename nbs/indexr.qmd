@@ -1,0 +1,117 @@
+---
+title: "Index for R"
+format: html
+---
+
+
+# Data packaging
+
+`zip_pack()` and `zip_unpack()` functions from utilities module can be used to package a list of data files and unpack them to same locations in a different environment.
+
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+source("R/dataprep_infogroup.R", local = (ig <- new.env()))
+source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
+
+# pack all outputs from 5 dataprep modules, excluding parquet'd establishment-level inforgroup
+# list(bea_io$opath, geo$opath, cbp$opath, ig$opath["county_"], agcen$opath) |> 
+#   list_c() |> list_c() |> # cat paths from all lists into single vector
+#   util$zip_pack("tmp/bea_cbp_geo_ig_ag_v231109.zip", files = _, overwrite = TRUE)
+# unpack
+# util$zip_unpack("tmp/bea_cbp_geo_ig_ag_v231109.zip", overwrite = TRUE)
+
+```
+
+
+
+# BEA IO tables
+
+```{r}
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+
+
+# test module functions
+# bea_io$clear_outputs()
+# bea_io$test_pubdata()
+# bea_io$test_dataprep()
+
+bea_io$pubdata$get_naics_concord(2017)
+bea_io$pubdata$get_use(2017, "det", TRUE)$table
+bea_io$b_matrix(2017, "det")
+
+
+```
+
+# Geography
+
+
+```{r}
+source("R/geography.R", local = (geo <- new.env()))
+
+
+# test module functions
+# geo$clear_outputs()
+# geo$test_pubdata()
+# geo$test_dataprep()
+
+geo$call_cbsa_concord(2013)
+
+```
+
+
+# CBP
+
+```{r}
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+
+# testing
+# cbp$clear_outputs()
+# cbp$test_naics_years()
+
+x <- cbp$call_cbp(2012, "county", FALSE)
+
+```
+
+
+
+# InfoGroup
+
+
+```{r}
+source("R/dataprep_infogroup.R", local = (ig <- new.env()))
+
+ig$prep_county_agg(seq(2002, 2017, 5))
+
+# soybean processing
+open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
+  filter(naics == "311224") |>
+  arrange(st, cty) |>
+  collect()
+
+ig$prep_county_agg(1997:2017)
+
+```
+
+# Census of Agriculture
+
+Farm sales
+
+
+```{r}
+source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
+
+# testing
+# agcen$test_all()
+
+x <- agcen$call_agoutput(2012, "county")
+
+
+```
+
+
+
+

@@ -1,0 +1,69 @@
+---
+title: "InfoGroup benchmarking"
+format: html
+---
+
+Compare InfoGroup with public datasets.
+
+```{r}
+library(tidyverse)
+library(arrow)
+library(glue)
+library(logger)
+log_threshold(DEBUG)
+
+ggplot2::theme_set(theme_minimal())
+
+library(reticulate)
+reticulate::use_condaenv("rurec")
+bds <- reticulate::import("rurec.pubdata.bds")
+
+source("R/dataprep_infogroup.R", local = (ig <- new.env()))
+
+
+```
+
+
+# BDS national est, emp, entry and exit
+
+```{r}
+ds <- open_dataset(ig$opath$enh_pq_dir, partitioning = "year")
+
+d <- ds %>%
+  group_by(year) %>%
+  summarize(est = n(), entry = sum(entry), exit = sum(exit), emp = sum(emp), sales = sum(sales)) %>%
+  collect() %>%
+  arrange(year) %>%
+  mutate(entry_rate = 200 * entry / (est + lag(est)), exit_rate = 200 * lag(exit) / (est + lag(est))) %>%
+  mutate(data = "infogroup")
+
+d1 <- bds$get_df("") %>%
+  rename(est = estabs, entry_rate = estabs_entry_rate, exit_rate = estabs_exit_rate) %>%
+  select(year, est, emp, entry_rate, exit_rate) %>%
+  filter(year %in% 1997:2017) %>%
+  mutate(data = "bds")
+
+d2 <- bind_rows(d, d1)
+
+ggplot(d2, aes(year, est / 1e6, color = data)) +
+  geom_line() +
+  ylim(0, 20) + labs(title = "Number of establishments, mln", y = "est")
+
+ggplot(d2, aes(year, emp / 1e6, color = data)) +
+  geom_line() +
+  ylim(0, 200) + labs(title = "Employment, mln", y = "emp")
+
+
+d3 <- d2 %>%
+  pivot_longer(cols = c(entry_rate, exit_rate)) %>%
+  select(year, data, name, value)
+
+ggplot(d3, aes(year, value, color = data, linetype = name)) +
+  geom_line() +
+  ylim(0, 30) + labs(title = "Entry and exit rates, %", y = "rate")
+
+```
+
+
+
+
