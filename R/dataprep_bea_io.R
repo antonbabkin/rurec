@@ -338,6 +338,134 @@ d_matrix <- function(year,
   return(df)
 }
 
+# Toys ----
+toy <- new.env()
+
+#' Create a toy use table from given data or randomly generated
+#' @param core commodity-by-industry core matrix of the use table
+#' @param va payroll + taxes + surplus vector of the use table
+#' @param final consumption + export + gov expenses vector of the use table
+#'
+#' @example toy$use_table(matrix(1:9, 3, 3), 0:2, 1:3)
+toy$use_table <- function(core, va = NA, final = NA) {
+  nc <- nrow(core)
+  ni <- ncol(core)
+  
+  if (all(is.na(core))) {
+    core <- matrix(runif(nc * ni), nc, ni)
+    core[runif(nc * ni) < 0.5] <- 0
+  }
+  if (all(is.na(va))) {
+    va <- runif(ni)
+  }
+  if (all(is.na(final))) {
+    final <- runif(nc)
+  }
+  
+  c_names <- if (is.null(rownames(core))) paste0("c_", 1:nc) else rownames(core)
+  i_names <- if (is.null(colnames(core))) paste0("i_", 1:ni) else colnames(core)
+  
+  
+  t <- matrix(NA, nc + 3, ni + 3,
+              dimnames = list(
+                commodity = c(paste0("c_", 1:nc), "i_tot_use", "val_add", "i_tot_out"),
+                industry = c(paste0("i_", 1:ni), "c_int_use", "final_cons", "c_tot_use")
+              ))
+  t[1:nc, 1:ni] <- core
+  t[1:nc, "c_int_use"] <- rowSums(core)
+  t[1:nc, "final_cons"] <- final
+  t[1:nc, "c_tot_use"] <- t[1:nc, "c_int_use"] + final
+  t["i_tot_use", ] <- colSums(t[1:nc, ])
+  t["val_add", 1:ni] <- va
+  t["i_tot_out", 1:ni] <- t["i_tot_use", 1:ni] + va
+  t[c("val_add", "i_tot_out"), "c_int_use"] <- rowSums(t[c("val_add", "i_tot_out"), 1:ni])
+  return(t) 
+}
+
+
+#' Create a toy supply table from given data or randomly generated
+#' @param core commodity-by-industry core matrix of the supply table
+#' @param wedge imports + margins + taxes vector of the supply table
+#'
+#' @example toy$sup_table(matrix(1:9, 3, 3), 0:2)
+toy$sup_table <- function(core, wedge = NA) {
+  nc <- nrow(core)
+  ni <- ncol(core)
+  
+  if (all(is.na(core))) {
+    core[1:nc, 1:ni] <- runif(nc * ni)
+    core[runif(nc * ni) < 0.5] <- 0
+  }
+  if (all(is.na(wedge))) {
+    wedge[1:nc] <- runif(nc)
+  }
+
+  c_names <- if (is.null(rownames(core))) paste0("c_", 1:nc) else rownames(core)
+  i_names <- if (is.null(colnames(core))) paste0("i_", 1:ni) else colnames(core)
+  t <- matrix(NA, nc + 1, ni + 3,
+              dimnames = list(
+                commodity = c(c_names, "i_tot_out"),
+                industry = c(i_names, "c_tot_out", "wedge", "c_tot_sup")
+              ))
+  t[1:nc, 1:ni] <- core
+  t[1:nc, "c_tot_out"] <- rowSums(core)
+  t[1:nc, "wedge"] <- wedge
+  t[1:nc, "c_tot_sup"] <- t[1:nc, "c_tot_out"] + wedge
+  t["i_tot_out", ] <- colSums(t[1:nc, ])
+  return(t) 
+}
+
+
+#### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
+b_matrix <- function(year,
+                     ilevel = c("det", "sum", "sec"),
+                     ...){
+  ilevel <- match.arg(ilevel)
+  u_mat <- use_matrix(year, ilevel, ...)
+  x <- industry_output(year, ilevel, ...)
+  df <- u_mat %*% diag(1/as.vector(x))
+  colnames(df) <- colnames(u_mat)
+  return(df)
+}
+
+#' Commodities-by-Industries parallel to ordinary technical coefficients matrix
+toy$b_matrix <- function(use_table) {
+  nc <- nrow(use_table) - 3
+  ni <- ncol(use_table) - 3
+  ind_out <- use_table["i_tot_out", 1:ni]
+  m <- use_table[1:nc, 1:ni] %*% diag(1 / ind_out)
+  colnames(m) <- colnames(use_table)[1:ni]
+  return(m)
+}
+
+#' Commodity Composition of Industry Outputs
+toy$c_matrix <- function(sup_table) {
+  nc <- nrow(sup_table) - 1
+  ni <- ncol(sup_table) - 3
+  ind_out <- sup_table["i_tot_out", 1:ni]
+  m <- sup_table[1:nc, 1:ni] %*% diag(1 / ind_out)
+  m <- matrix(m, nc, ni, dimnames = list(
+    commodity = rownames(sup_table)[1:nc],
+    industry = colnames(sup_table)[1:ni]))
+  return(m)
+}
+
+#' Industry Source of Commodity Outputs
+toy$d_matrix <- function(sup_table) {
+  nc <- nrow(sup_table) - 1
+  ni <- ncol(sup_table) - 3
+  com_out <- sup_table[1:nc, "c_tot_out"]
+  m <- t(sup_table[1:nc, 1:ni]) %*% diag(1 / com_out)
+  m <- matrix(m, nc, ni, dimnames = list(
+    industry = colnames(sup_table)[1:ni],
+    commodity = rownames(sup_table)[1:nc]))
+  return(m)
+}
+
+
+
+
+
 # Tests ----
 
 test_pubdata <- function() {

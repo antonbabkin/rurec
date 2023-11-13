@@ -335,10 +335,6 @@ prox_impedance_mat <- function(radius = 1000, from = c("center", "border"), year
   m <- (x < set_units(radius, mi))
   mode(m) <- "integer"
   rownames(m) <- colnames(m) <- rownames(x)
-  # why was it like this?
-  # df[df < meter_limit & df > 0] <- 1
-  # df[df > meter_limit] <- 0
-  # diag(df) <- 1
   return(m)
 }
 

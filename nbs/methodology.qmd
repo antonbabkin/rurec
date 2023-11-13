@@ -61,6 +61,21 @@ Code: [pubdata/bea_io](https://github.com/antonbabkin/pubdata/blob/main/nbs/bea_
 - 3 levels of BEA industry
 - crosswalk to NAICS
 
+```{r}
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+is <- c("milk", "cheese", "pizza")
+x <- matrix(1:9, 3, 3)
+sup_tab <- bea_io$toy$sup_table(x)
+colnames(sup_tab)[1:3] <- rownames(sup_tab)[1:3] <- is
+c_mat <- bea_io$toy$c_matrix(sup_tab)
+d_mat <- bea_io$toy$d_matrix(sup_tab)
+
+sup_tab
+c_mat
+d_mat
+```
+
+
 
 ## Census of Agriculture
 
@@ -192,14 +207,119 @@ Some county-commodity sales are suppressed in AgCensus, understating national to
 This leads to overestimation of Others.
 
 
-## Output from payroll
+## Place output
 
-Code: []()
+Code: [R/place_output.R]()
+
+
+
+### payroll -> output
 
 When CBP is used as the source of information on economic activity, we need to estimate each industry's output.
 This can be done by assuming that payroll share of output is constant across places.
-Payroll share of output at the national level is calculated from TODO.
+Payroll share of output at the national level is calculated from the Use table.
 
+
+```{r}
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+is <- c("i_1", "i_2")
+cs <- c("c_1", "c_2")
+ps <- c("a", "b", "c")
+use_tab <- bea_io$toy$use_table(matrix(c(9, 1, 2, 38), 2, 2), c(10, 20), c(15, 15))
+rownames(use_tab)[4] <- "emp_comp"
+sup_tab <- bea_io$toy$sup_table(matrix(c(16, 4, 10, 50), 2, 2), 0)
+stopifnot(all(use_tab["i_tot_out", is] == sup_tab["i_tot_out", is]))
+stopifnot(all(use_tab[cs, "c_tot_use"] == sup_tab[cs, "c_tot_sup"]))
+c_mat <- bea_io$toy$c_matrix(sup_tab)
+
+cbp_pay <- matrix(1:6, 2, 3, dimnames = list(industry = is, place = ps))
+emp_comp_share <- use_tab["emp_comp", is] / use_tab["i_tot_out", is]
+cbp_out <- diag(1 / emp_comp_share) %*% cbp_pay
+# rescale output to match national total
+county_share <- sweep(cbp_out, 1, rowSums(cbp_out), "/")
+i_output <- sweep(county_share, 1, use_tab["i_tot_out", is], "*")
+rownames(i_output) <- is
+c_output <- c_mat %*% i_output 
+
+use_tab
+sup_tab
+c_mat
+cbp_pay
+emp_comp_share
+cbp_out
+county_share
+i_output
+c_output
+```
+
+
+### combine farm and nonfarm
+
+Economy partitioned into farm and non-farm sectors along industry dimension.
+
+```{r}
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+n <- c("farm", "nonfarm")
+x <- matrix(c(9, 1, 2, 38), 2, 2, dimnames = list(n, n))
+s <- bea_io$toy$sup_table(x, 0)
+m <- bea_io$toy$c_matrix(s)
+s
+m
+```
+
+*Farm output*
+Assumption: Ag Census covers producers in agricultural NAICS codes.
+And we extract ag commodity sales from Ag Census.
+Start with farm sales of BEA agricultural commodities at detail level by place, call it $y^{c,f}_{r}$.
+Translate it to output by industry as $y^{i,f}_r = D y^{c,f}_{r}$. <- DOUBLE-CHECK THIS!
+
+
+```{r}
+# 2 places "a" and "b"
+agcen_output <- c(a = 2, b = 5)
+# every county's farm industry output is proportional to county's share in national ag commodity output
+farm_i_tot_out <- s["i_tot_out", "farm"] * agcen_output / sum(agcen_output)
+farm_c_out <- outer(m[, "farm"], farm_i_tot_out, "*")
+
+farm_i_tot_out
+farm_c_out
+```
+
+
+*Non-farm output*
+Start with non-farm sales by NAICS from InfoGroup.
+Convert to output by BEA industry, using BEA-NAICS concordance, call it $y^{i,nf}_{r}$.
+Translate it to output by commodity as $y^{c,nf}_{r} = C y^{i,nf}_{r}$. <- DOUBLE-CHECK THIS!
+
+```{r}
+business_i_tot_out <- c(a = 40, b = 10)
+# rescale to national total from BEA
+nonfarm_i_tot_out <- business_i_tot_out / sum(business_i_tot_out) * s["i_tot_out", "nonfarm"]
+# break industry output by commodity
+nonfarm_c_out <- outer(m[, "nonfarm"], nonfarm_i_tot_out, "*")
+
+business_i_tot_out
+nonfarm_i_tot_out
+nonfarm_c_out
+```
+
+
+
+*Total output*
+$y^c_r = y^{c,f}_{r} + y^{c,nf}_{r}$
+
+$y^i_r = y^{i,f}_{r} + y^{i,nf}_{r}$
+
+```{r}
+c_output <- farm_c_out + nonfarm_c_out
+i_output <- data.frame(farm = farm_i_tot_out, nonfarm = nonfarm_i_tot_out) |> t()
+
+rowSums(c_output) == s[c("farm", "nonfarm"), "c_tot_out"]
+rowSums(i_output) == s["i_tot_out", c("farm", "nonfarm")]
+
+c_output
+i_output
+```
 
 ## Industry <-> Commodity
 
