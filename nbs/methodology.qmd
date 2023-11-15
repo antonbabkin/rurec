@@ -238,7 +238,7 @@ cbp_out <- diag(1 / emp_comp_share) %*% cbp_pay
 # rescale output to match national total
 county_share <- sweep(cbp_out, 1, rowSums(cbp_out), "/")
 i_output <- sweep(county_share, 1, use_tab["i_tot_out", is], "*")
-rownames(i_output) <- is
+dimnames(i_output) <- list(industry = is, place = ps)
 c_output <- c_mat %*% i_output 
 
 use_tab

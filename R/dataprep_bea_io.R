@@ -452,18 +452,6 @@ toy$sup_table <- function(core, wedge = NA) {
 }
 
 
-#### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
-b_matrix <- function(year,
-                     ilevel = c("det", "sum", "sec"),
-                     ...){
-  ilevel <- match.arg(ilevel)
-  u_mat <- use_matrix(year, ilevel, ...)
-  x <- industry_output(year, ilevel, ...)
-  df <- u_mat %*% diag(1/as.vector(x))
-  colnames(df) <- colnames(u_mat)
-  return(df)
-}
-
 #' Commodities-by-Industries parallel to ordinary technical coefficients matrix
 toy$b_matrix <- function(use_table) {
   nc <- nrow(use_table) - 3
