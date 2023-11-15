@@ -204,103 +204,6 @@ rbind(capacity,
 
 ################################################################################
 
-supply_mat <- call_supply_table(year = year, ilevel = ilevel) %>% 
-  .[1:(nrow(.)-1), 1:(which(colnames(.) == "T007")-1)]
-use_mat <- call_use_table(year = year, ilevel = ilevel) %>% 
-  .[1:(which(rownames(.) == "T005")-1), 1:(which(colnames(.) == "T001")-1)]
-
-#supply matrix
-smat <- supply_mat %>% condense_bea_matrix(., ilevel)
-# smat <- supply_mat %>% matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-#   matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
-#   .[!grepl("4200ID|S00402|S00300", rownames(.)),!grepl("4200ID", colnames(.)), drop=F] 
-#use matrix
-umat <- use_mat %>% condense_bea_matrix(., ilevel)
-# umat <- use_mat %>% matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-#   matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
-#   .[!grepl("4200ID|S00402|S00300", rownames(.)),!grepl("4200ID", colnames(.)), drop=F] 
-
-# tot_ind_out <- call_use_table(2012) %>% 
-#   .["T018", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE] %>% 
-#   vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-#   vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
-#   .[,!grepl("4200ID", colnames(.)), drop=F] 
-
-
-
-#intermediate industry usage
-int_ind_use <- call_use_table(year = year, ilevel = ilevel) %>%
-  .["T005", !colnames(.) %in% grep("^(F|T)[0-9]", colnames(.), value = TRUE), drop = FALSE] %>%
-  vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>%
-  vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>%
-  .[,!grepl("4200ID", colnames(.)), drop=F]
-
-#intermediate commodity usage
-int_com_use <- call_use_table(year = year, ilevel = ilevel) %>%
-  .[1:(which(rownames(.) == "T005")-1), "T001", drop = FALSE] %>%  t() %>% 
-  vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>%
-  vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>%
-  .[,!grepl("4200ID|S00402|S00300", colnames(.)), drop=F]
-
-#total industry supply
-tot_ind_sup <- call_supply_table(year = year, ilevel = ilevel) %>% 
-  .[nrow(.), 1:(which(colnames(.) == "T007")-1), drop=F] %>% 
-  vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-  vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
-  .[,!grepl("4200ID", colnames(.)), drop=F] 
-
-#total commodity supply
-tot_com_sup <- call_supply_table(year = year, ilevel = ilevel) %>% 
-  .[1:(nrow(.)-1), "T007", drop=F] %>% t() %>% 
-  vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-  vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
-  .[,!grepl("4200ID|S00402|S00300", colnames(.)), drop=F] 
-
-#B matrix
-bmat <- umat %*% diag(1/as.vector(tot_ind_sup)) %>% 
-  `colnames<-`(colnames(umat)) 
-#C matrix
-cmat <- smat %*% diag(1/as.vector(tot_ind_sup)) %>% 
-  `colnames<-`(colnames(smat))
-#D matrix
-dmat <- t(smat) %*% diag(1/as.vector(tot_com_sup)) %>% 
-  `colnames<-`(rownames(smat)) 
-
-#direct national industry factor ratio ~= (i'DB)
-nat_ind_facrat <- int_ind_use/tot_ind_sup
-#derived industry factor ratio (hat(i'DB)x)/x = D'B'i
-der_ind_facrat <- as.matrix(rowSums(t(bmat) %*% t(dmat)))
-View(cbind(t(nat_ind_facrat), der_ind_facrat, t(nat_ind_facrat)/der_ind_facrat))
-
-#direct national commodity factor ratio
-nat_com_facrat <- int_com_use/tot_com_sup
-#derived commodity factor ratio ~= (i'DB)
-der_com_facrat <- (bmat %*% t(tot_ind_sup)) / (cmat %*% t(tot_ind_sup))
-View(cbind(t(nat_com_facrat), der_com_facrat, t(nat_com_facrat)/der_com_facrat))
-
-#Dq=x
-View(cbind(dmat %*% t(tot_com_sup), t(tot_ind_sup), dmat %*% t(tot_com_sup)/t(tot_ind_sup)))
-#Cx=q
-View(cbind(cmat %*% t(tot_ind_sup), t(tot_com_sup), cmat %*% t(tot_ind_sup)/t(tot_com_sup)))
-
-#Bx=Ui
-View(cbind(bmat %*% t(tot_ind_sup), t(int_com_use), bmat %*% t(tot_ind_sup)/t(int_com_use)))
-#BDq=Ui
-View(cbind(bmat %*% dmat %*% t(tot_com_sup), t(int_com_use), bmat %*% dmat %*% t(tot_com_sup)/t(int_com_use)))
-
-#NFG  DBx != i'U
-#View(cbind(dmat %*% bmat %*% t(tot_ind_sup), t(int_ind_use), dmat %*% bmat %*% t(tot_ind_sup)/t(int_ind_use)))
-
-#i'(DBhat(x))=i'U
-View(cbind(colSums(dmat %*% bmat %*% diag(as.vector(t(tot_ind_sup)))), t(int_ind_use), colSums(dmat %*% bmat %*% diag(as.vector(t(tot_ind_sup))))/t(int_ind_use)))
-#x*(i'DB)=i'U
-View(cbind(t(tot_ind_sup) * as.matrix(colSums(dmat %*% bmat)), t(int_ind_use), t(tot_ind_sup) * as.matrix(colSums(dmat %*% bmat))/t(int_ind_use)))
-#hat(i'DB)x=i'U
-View(cbind(diag(as.vector(der_ind_facrat)) %*% t(tot_ind_sup), t(int_ind_use), diag(as.vector(der_ind_facrat)) %*% t(tot_ind_sup)/t(int_ind_use)))
-# %>% `colnames<-`(colnames(bmat)) %>% `rownames<-`(colnames(bmat)) 
-
-
-
 
 # What we want from IO process?:
 # Gross Industry Output by Region - Scale CBP industry payroll by payrollshare coefficient (GIO = x_r = CBP_ir/ps_i) where (ps = Sum_r(CBP_i)/BEA_i) 
@@ -310,9 +213,6 @@ View(cbind(diag(as.vector(der_ind_facrat)) %*% t(tot_ind_sup), t(int_ind_use), d
 # Intermediate Commodity Demand by Region - Transform GIO to ICD with the B_matrix (i.e., technical coefficients) (ICD = Bx_r) (note: sum(ICD)_r = Ui)
 # Intermediate Commodity Supply by Region - Scale GCO by the derived commodity factor ratio to ensure Supply==Demand (ICS = hat(cfr)q_r) where (cfr = hat(Bx)(Cx)^-1)
 
-
-
-
 #can we build commodity factor ratio another way?
 #(bmat %*% t(tot_ind_sup)) / (cmat %*% t(tot_ind_sup))
 
@@ -320,14 +220,10 @@ View(cbind(diag(as.vector(der_ind_facrat)) %*% t(tot_ind_sup), t(int_ind_use), d
 # 1) scale GIO by national BEA ratio (intermediate industry use/total industry supply) 
 # 2) scale GIO by derived ratio sum(Intermediate Industry Demand by Region)_r/sum(Gross Industry Output by Region)_r
 
-
-
-
-
-
-bmat <- b_matrix(2012)
-cmat <- c_matrix(2012)
-dmat <- d_matrix(2012)
+# 
+# bmat <- b_matrix(2012)
+# cmat <- c_matrix(2012)
+# dmat <- d_matrix(2012)
 
 
 
