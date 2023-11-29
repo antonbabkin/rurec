@@ -183,24 +183,9 @@ year2cbsa <- function(year){
 }
 
 
-
 year2rucc <- function(year){
   rucc_year = c(2013, 2003, 1993, 1983, 1974)
-  if(year %in% rucc_year){
-    x <- year
-  }else if(year > max(rucc_year)){
-    x <- max(rucc_year)
-  }else if(year > 2008){
-    x <- 2013
-  }else if(year > 1998){
-    x <- 2003
-  }else if(year > 1988){
-    x <- 1993
-  }else if(year > 1978){
-    x <- 1983
-  }else if(year < 1979){
-    x <- min(rucc_year)
-  }
+  x <- nearest_point(year, rucc_year)
   if(!year %in% rucc_year){
     warning("RUCC years do not contain [",year,"] using [", x,"]")
   }
@@ -209,13 +194,7 @@ year2rucc <- function(year){
 
 year2cbp <- function(year){
   cbp_year = c(2021:1986)
-  if(year %in% cbp_year){
-    x <- year
-  }else if(year > max(cbp_year)){
-    x <- max(cbp_year)
-  }else if(year < min(cbp_year)){
-    x <- min(cbp_year)
-  }
+  x <- nearest_point(year, cbp_year)
   if(!year %in% cbp_year){
     warning("CBP years do not contain [",year,"] using [", x,"]")
   }
@@ -223,31 +202,18 @@ year2cbp <- function(year){
 }
 
 year2bea <- function(year,
-                     ilevel = c("det", "sum", "sec"), 
-                     ...){
+                     ilevel = c("det", "sum", "sec")){
   ilevel <- match.arg(ilevel)
   if(ilevel != "det"){
     bea_year = 2022:1997
-    if(year %in% bea_year){
-      x <- year
-    }else if(year > max(bea_year)){
-      x <- max(bea_year)
-    }else if(year < min(bea_year)){
-      x <- min(bea_year)
-    }
+    x <- nearest_point(year, bea_year)
     if(!year %in% bea_year){
       warning("BEA years do not contain [",year,"] using [", x,"]")
     }
   }
   if(ilevel == "det"){
     bea_year = c(2017, 2012, 2007)
-    if(year %in% bea_year){
-      x <- year
-    }else if(year > 2007){
-      x <- 2012
-    }else if(year < 2007){
-      x <- 2007
-    }
+    x <- nearest_point(year, bea_year)
     if(!year %in% bea_year){
       warning("Detail level BEA years do not contain [",year,"] using [", x,"]")
     }
@@ -257,17 +223,7 @@ year2bea <- function(year,
 
 year2agcensus <- function(year){
   ag_year = c(2017, 2012, 2007, 2002)
-  if(year %in% ag_year){
-    x <- year
-  }else if(year > 2014){
-    x <- 2017
-  }else if(year > 2009){
-    x <- 2012
-  }else if(year > 2004){
-    x <- 2007
-  }else if(year < 2005){
-    x <- 2002
-  }
+  x <- nearest_point(year, ag_year)
   if(!year %in% ag_year){
     warning("AgCensus years do not contain [",year,"] using [", x,"]")
   }
@@ -276,13 +232,7 @@ year2agcensus <- function(year){
 
 year2infogroup <- function(year){
   info_year = c(2017:1997)
-  if(year %in% info_year){
-    x <- year
-  }else if(year > max(info_year)){
-    x <- max(info_year)
-  }else if(year < min(info_year)){
-    x <- min(info_year)
-  }
+  x <- nearest_point(year, info_year)
   if(!year %in% info_year){
     warning("InfoGroup years do not contain [",year,"] using [", x,"]")
   }
