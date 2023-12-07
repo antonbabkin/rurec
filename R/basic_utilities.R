@@ -128,27 +128,6 @@ meters2miles <- function(meters){
   return(df)
 }
 
-year2tiger <- function(year){
-  tiger_year = c(2022:2013, 2010, 2000, 1990)
-  if(year %in% tiger_year){
-    x <- year
-  }else if(year > max(tiger_year)){
-    x <- max(tiger_year)
-  }else if(year > 2011){
-    x <- 2013
-  }else if(year > 2005){
-    x <- 2010
-  }else if(year > 1995){
-    x <- 2000
-  }else if(year < 1996){
-    x <- min(tiger_year)
-  }
-  if(!year %in% tiger_year){
-    warning("Shapefile years do not contain [",year,"] using [", x,"]")
-  }
-  return(as.integer(x))
-}
-
 nearest_point <- function(x, grid) {
   if (x <= min(grid)) return(min(grid))
   if (x >= max(grid)) return(max(grid))
@@ -163,15 +142,23 @@ nearest_point <- function(x, grid) {
   stop("something is wrong! ", x, grid)
 }
 
-test_nearest_point <- function() {
-  nearest_point(1993, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2003 # below min
-  nearest_point(2050, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # above max
-  nearest_point(2005, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2005 # exact match
-  nearest_point(2021, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2020 # lower bound
-  nearest_point(2022, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # upper bound
-  nearest_point(2016, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2017 # tie
-}
+# test_nearest_point <- function() {
+#   nearest_point(1993, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2003 # below min
+#   nearest_point(2050, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # above max
+#   nearest_point(2005, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2005 # exact match
+#   nearest_point(2021, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2020 # lower bound
+#   nearest_point(2022, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2023 # upper bound
+#   nearest_point(2016, c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003)) == 2017 # tie
+# }
 
+year2tiger <- function(year){
+  tiger_year = c(2022:2013, 2010, 2000, 1990)
+  x <- nearest_point(year, tiger_year)
+  if(!year %in% tiger_year){
+    warning("Shapefile years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
 
 year2cbsa <- function(year){
   cbsa_year = c(2023, 2020, 2018, 2017, 2015, 2013, 2009:2003, 1993)
@@ -238,3 +225,18 @@ year2infogroup <- function(year){
   }
   return(as.integer(x))
 }
+
+year2bea_concord <- function(year){
+  concord_year = c(2017,2012)
+  x <- nearest_point(year, concord_year)
+  if(!year %in% concord_year){
+    warning("Concordance years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
+
+
+
+
+
