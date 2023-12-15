@@ -113,5 +113,15 @@ x <- agcen$call_agoutput(2012, "county")
 ```
 
 
+# Place output
+
+```{r}
+source("R/place_output.R", local = (place_output <- new.env()))
+
+# testing
+# place_output$test_all()
+
+x <- place_output$call_output(2012, "commodity", "det", "infogroup")
+```
 
 

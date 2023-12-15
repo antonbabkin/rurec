@@ -424,6 +424,7 @@ test_all <- function() {
     for (s in c("industry", "commodity")) {
       for (i in c("det", "sum", "sec")) {
         for (b in c("cbp_imp", "cbp_raw", "infogroup")) {
+          if (b == "infogroup" && y > 2017) next
           call_output(y, s, i, b)
         }
       }
