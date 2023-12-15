@@ -177,32 +177,58 @@ call_output <- function(year,
   #   {aggregate(.$output, list(.$indcode), FUN=sum)} %>%
   #   {all.equal(.[,2]/1000, indout[.[,1], "T017"])}
   
+  
+
   #Ag census farm sales at BEA detail level by place
   fs <- agcen$call_agoutput(year = year, geo_level = "county")
   
-  #BEA-IO C matrix detail-level
-  cmat <- bea_io$c_matrix(year = year, ilevel = "det", condense = TRUE)
+    #BEA-IO C matrix detail-level
+    cmat <- bea_io$c_matrix(year = year, ilevel = "det", condense = TRUE)
+    
+    #BEA-IO D matrix detail-level
+    dmat <- bea_io$d_matrix(year = year, ilevel = "det", condense = TRUE)
+    
+    #Ag census to BEA gross industry output scalar 
+    as <- fs %>% 
+      select(-place) %>% 
+      colSums() %>% 
+      as.data.frame() %>%
+      `colnames<-`(c("scalar")) %>% 
+      {(.)/1000} %>% 
+      {(.)/comout[rownames(.), "T007"]} %>% 
+      {(.)*diag(cmat[rownames(.), rownames(.)])} %>% 
+      {diag(dmat[rownames(.), rownames(.)])/(.)} %>% 
+      mutate(indcode = rownames(.))
+    
+    # #test: check scalar precision at aggregate level
+    # fs %>%
+    #   select(-place) %>%
+    #   colSums() %>%
+    #   {all.equal(as.numeric((.)*as$scalar/1000), indout[as$indcode, "T017"])}
+    
   
-  #BEA-IO D matrix detail-level
-  dmat <- bea_io$d_matrix(year = year, ilevel = "det", condense = TRUE)
-  
-  #Ag census to BEA gross industry output scalar 
-  as <- fs %>% 
-    select(-place) %>% 
-    colSums() %>% 
-    as.data.frame() %>%
-    `colnames<-`(c("scalar")) %>% 
-    {(.)/1000} %>% 
-    {(.)/comout[rownames(.), "T007"]} %>% 
-    {(.)*diag(cmat[rownames(.), rownames(.)])} %>% 
-    {diag(dmat[rownames(.), rownames(.)])/(.)} %>% 
-    mutate(indcode = rownames(.))
-  
-  # #test: check scalar precision at aggregate level 
-  # fs %>%
-  #   select(-place) %>%
-  #   colSums() %>%
-  #   {all.equal(as.numeric((.)*as$scalar/1000), indout[as$indcode, "T017"])}
+    # #"Alternate" Ag census to BEA gross industry output scalar 
+    # as_alt <- fs %>%
+    #   select(-place) %>%
+    #   colSums() %>%
+    #   as.data.frame() %>%
+    #   {(.)/1000} %>%
+    #   `colnames<-`(c("sales")) %>%
+    #   mutate(indcode = rownames(.)) %>%
+    #   inner_join(., indout, by = "indcode") %>%
+    #   mutate(scalar = T017/ sales) %>%
+    #   select(scalar, indcode)
+    
+    # #test: check scalar precision at aggregate level
+    # fs %>%
+    #   select(-place) %>%
+    #   colSums() %>%
+    #   {all.equal(as.numeric((.)*as_alt$scalar/1000), indout[as_alt$indcode, "T017"])}
+
+    # #test: check difference between direct and indirect scalar method
+    # all.equal(as$scalar, as_alt$scalar)
+    
+
   
   #nationally adjusted BEA detail level farm industry gross output by place (millions of dollars) 
   ag <- fs %>% 
@@ -267,11 +293,11 @@ call_output <- function(year,
       select(-indcode) %>% 
       as.matrix() 
     
-    #BEA supply matrix 
-    s_mat <- bea_io$supply_matrix(year = year, ilevel = ilevel, condense = TRUE)
-    
     #national industry aggregate of derived gross industry output by place
     x <- rowSums(df)/1000
+    
+    #BEA supply matrix 
+    s_mat <- bea_io$supply_matrix(year = year, ilevel = ilevel, condense = TRUE)
     
     #alternate scaled "C" matrix using derived values 
     cmat_alt <- (s_mat[, names(x)[x!=0], drop=FALSE] %*% diag(1/as.vector(x[names(x)[x!=0]]))) %>%
@@ -316,6 +342,81 @@ call_output <- function(year,
 
 
 
+
+  
+
+#regional intermediate industry use or supply
+call_intermediate <- function(year,
+                              schedule = c("demand", "supply")
+                              class_system = c("industry", "commodity"), 
+                              ilevel = c("det", "sum", "sec"),
+                              bus_data = c("cbp_imp", "cbp_raw", "infogroup") ){
+  
+  schedule <- match.arg(schedule)
+  class_system <- match.arg(class_system)
+  ilevel <- match.arg(ilevel)
+  bus_data <- match.arg(bus_data)
+  
+  df <- call_output(year = year, 
+                    class_system = "industry", 
+                    ilevel = ilevel, 
+                    bus_data = bus_data) %>% 
+    long2matrix(.)
+  
+  bmat <- bea_io$b_matrix(year = year, 
+                          ilevel = ilevel, 
+                          condense = TRUE) 
+  cmat <- bea_io$c_matrix(year = year, 
+                          ilevel = ilevel, 
+                          condense = TRUE) 
+  dmat <- bea_io$d_matrix(year = year, 
+                          ilevel = ilevel, 
+                          condense = TRUE) 
+  
+  lnames <- intersect(rownames(dmat), colnames(bmat)) %>% 
+    intersect(., colnames(cmat)) %>% 
+    intersect(., rownames(df))
+  
+  if (schedule == "demand" & class_system == "industry"){
+    df <- diag(as.vector(colSums(dmat[lnames, ]%*%bmat[, lnames])))%*%df[lnames, ] %>% 
+      `rownames<-`(colnames(bmat)) 
+  }
+  
+  if (schedule == "demand" & class_system == "commodity"){
+    df <- ((bmat[, lnames]%*%dmat[lnames, ])%*%cmat[, lnames])%*%df[lnames, ] %>% 
+      `rownames<-`(rownames(bmat)) 
+  }
+  
+  if (schedule == "supply" & class_system == "industry"){
+    df <- (dmat[lnames, ]%*%bmat[, lnames])%*%df[lnames, ] %>% 
+      `rownames<-`(colnames(bmat)) 
+  }
+  
+  if (schedule == "supply" & class_system == "commodity"){
+    dfx <- diag(as.vector(bmat[, lnames]%*%rowSums(df[lnames, ])))%*%t(dmat[lnames, ])%*%diag(1/as.vector(rowSums(df[lnames, ])))%*%df[lnames, ] %>% 
+      `rownames<-`(rownames(bmat)) 
+  }
+  
+  
+  return(df)  
+}
+
+
+
+long2matrix <- function(df, values_from = "output", id_cols = "indcode", names_from = "place"){
+  df <- df %>% 
+    pivot_wider(id_cols = id_cols, names_from = names_from, values_from = values_from) %>% 
+    as.data.frame() 
+  rownames(df) <- df[[id_cols]]
+  df <- df %>% 
+    select(-id_cols) %>% 
+    as.matrix() 
+  return(df)
+}
+
+  
+
+
 # Tests ----
 
 test_all <- function() {
@@ -357,7 +458,7 @@ test_all <- function() {
   # 5) alternately derive single combined scale factor at the national level: (diag(beacom)^-1)*(agcen*i)=share, D*(diag(agcen*i)*diag(share)^-1)=NWQ, (diag(beaind)^-1)*diag_e(NWQ)=comb_ratio
   ## (diag(beaind)^-1)*diag_e(D*(diag(agcen*i)*diag((diag(beacom)^-1)*(agcen*i))))=comb_ratio
   ## simplify if assuming NWQ of D and in particular C is strictly square and diagonal (as it is for 2007, 2012 and 2017)
-  #agc*((D/C)/share)=farm_industry_output
+  #agcensus*((D/C)/share)=farm_industry_output
   
   
 ###watch for PR, 999's in CBP (state), and 99990 in infogroup (industry)
