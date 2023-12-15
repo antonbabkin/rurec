@@ -62,7 +62,7 @@ Code: [pubdata/bea_io](https://github.com/antonbabkin/pubdata/blob/main/nbs/bea_
 - crosswalk to NAICS
 
 ```{r}
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+
 is <- c("milk", "cheese", "pizza")
 x <- matrix(1:9, 3, 3)
 sup_tab <- bea_io$toy$sup_table(x)
@@ -197,130 +197,6 @@ When industries are aggregated at summary level, we create a concordance that ma
 Many-to-one cases that are created in the process "336" (3361MV, 3364OT) and  "541" (5411, 5412OP, 5415).
 
 
-## AgCensus to BEA
-
-Code: [rurec/ag_output](https://github.com/antonbabkin/rurec/blob/main/nbs/ag_output.md)
-
-County sales of individual agricultural commodities (e.g. corn, wheat, hogs etc.) are groupped and summed to manually matched corresponding BEA detail-level industries.
-Some county-commodity sales are suppressed in AgCensus, understating national totals, but the difference is minor.
-"Other" categories (111900: "Other crop farming" and 112A00: "Animal production, except cattle and poultry and eggs") are calculated by subtracting the rest from county crop and animal totals.
-This leads to overestimation of Others.
-
-
-## Place output
-
-Code: [R/place_output.R]()
-
-
-
-### payroll -> output
-
-When CBP is used as the source of information on economic activity, we need to estimate each industry's output.
-This can be done by assuming that payroll share of output is constant across places.
-Payroll share of output at the national level is calculated from the Use table.
-
-
-```{r}
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
-is <- c("i_1", "i_2")
-cs <- c("c_1", "c_2")
-ps <- c("a", "b", "c")
-use_tab <- bea_io$toy$use_table(matrix(c(9, 1, 2, 38), 2, 2), c(10, 20), c(15, 15))
-rownames(use_tab)[4] <- "emp_comp"
-sup_tab <- bea_io$toy$sup_table(matrix(c(16, 4, 10, 50), 2, 2), 0)
-stopifnot(all(use_tab["i_tot_out", is] == sup_tab["i_tot_out", is]))
-stopifnot(all(use_tab[cs, "c_tot_use"] == sup_tab[cs, "c_tot_sup"]))
-c_mat <- bea_io$toy$c_matrix(sup_tab)
-
-cbp_pay <- matrix(1:6, 2, 3, dimnames = list(industry = is, place = ps))
-emp_comp_share <- use_tab["emp_comp", is] / use_tab["i_tot_out", is]
-cbp_out <- diag(1 / emp_comp_share) %*% cbp_pay
-# rescale output to match national total
-county_share <- sweep(cbp_out, 1, rowSums(cbp_out), "/")
-i_output <- sweep(county_share, 1, use_tab["i_tot_out", is], "*")
-dimnames(i_output) <- list(industry = is, place = ps)
-c_output <- c_mat %*% i_output 
-
-use_tab
-sup_tab
-c_mat
-cbp_pay
-emp_comp_share
-cbp_out
-county_share
-i_output
-c_output
-```
-
-
-### combine farm and nonfarm
-
-Economy partitioned into farm and non-farm sectors along industry dimension.
-
-```{r}
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
-n <- c("farm", "nonfarm")
-x <- matrix(c(9, 1, 2, 38), 2, 2, dimnames = list(n, n))
-s <- bea_io$toy$sup_table(x, 0)
-m <- bea_io$toy$c_matrix(s)
-s
-m
-```
-
-*Farm output*
-Assumption: Ag Census covers producers in agricultural NAICS codes.
-And we extract ag commodity sales from Ag Census.
-Start with farm sales of BEA agricultural commodities at detail level by place, call it $y^{c,f}_{r}$.
-Translate it to output by industry as $y^{i,f}_r = D y^{c,f}_{r}$. <- DOUBLE-CHECK THIS!
-
-
-```{r}
-# 2 places "a" and "b"
-agcen_output <- c(a = 2, b = 5)
-# every county's farm industry output is proportional to county's share in national ag commodity output
-farm_i_tot_out <- s["i_tot_out", "farm"] * agcen_output / sum(agcen_output)
-farm_c_out <- outer(m[, "farm"], farm_i_tot_out, "*")
-
-farm_i_tot_out
-farm_c_out
-```
-
-
-*Non-farm output*
-Start with non-farm sales by NAICS from InfoGroup.
-Convert to output by BEA industry, using BEA-NAICS concordance, call it $y^{i,nf}_{r}$.
-Translate it to output by commodity as $y^{c,nf}_{r} = C y^{i,nf}_{r}$. <- DOUBLE-CHECK THIS!
-
-```{r}
-business_i_tot_out <- c(a = 40, b = 10)
-# rescale to national total from BEA
-nonfarm_i_tot_out <- business_i_tot_out / sum(business_i_tot_out) * s["i_tot_out", "nonfarm"]
-# break industry output by commodity
-nonfarm_c_out <- outer(m[, "nonfarm"], nonfarm_i_tot_out, "*")
-
-business_i_tot_out
-nonfarm_i_tot_out
-nonfarm_c_out
-```
-
-
-
-*Total output*
-$y^c_r = y^{c,f}_{r} + y^{c,nf}_{r}$
-
-$y^i_r = y^{i,f}_{r} + y^{i,nf}_{r}$
-
-```{r}
-c_output <- farm_c_out + nonfarm_c_out
-i_output <- data.frame(farm = farm_i_tot_out, nonfarm = nonfarm_i_tot_out) |> t()
-
-rowSums(c_output) == s[c("farm", "nonfarm"), "c_tot_out"]
-rowSums(i_output) == s["i_tot_out", c("farm", "nonfarm")]
-
-c_output
-i_output
-```
-
 ## Industry <-> Commodity
 
 Code: []()
@@ -333,20 +209,148 @@ AgCensus sales are in the commodity space.
   - TODO
 - how we translate
   - B/C/D matrix from Supply/Use TODO
+  
+What happens when industry and commodity lists are not exactly the same (secondary aluminum smelting, scrap).
 
 
-## Supply from output
 
-Code: []()
+## Place output
 
-TODO
+Code: [R/place_output.R]()
+
+Dollar value of economic output by industry in a place (county) is calculated separately for agricultural and non-agricultural sectors.
+We assume that economic activity in the agricultural sector, defined here as NAICS codes 111 and 112, is fully covered by the Census of Agriculture.
+Activity in the rest of the economy is taken from a business dataset, such as CBP or InfoGroup.
+In the case of InfoGroup, establishments with agricultural NAICS codes are dropped to avoid double-counting over the Census of Agriculture.
+
+Toy example.
+
+```{r}
+industry_names <- c("ag_1", "ag_2", "nonag_1", "nonag_2")
+industry_count_ag <- 2
+industry_count_nonag <- 2
+place_names <- c("a", "b")
+
+sup_tab <- matrix(c(9, 0, 1, 1, 
+                    0, 7, 2, 1, 
+                    1, 0, 18, 3,
+                    0, 1, 1, 23), length(industry_names), length(industry_names), dimnames = list(industry_names, industry_names)) %>%
+  bea_io$toy$sup_table(0)
+c_mat <- bea_io$toy$c_matrix(sup_tab)
+d_mat <- bea_io$toy$d_matrix(sup_tab)
+
+sup_tab
+c_mat
+d_mat
+```
+
+### agricultural sector
+
+
+Although some statistics in the publicly available Census of Agriculture dataset are reported by county at 6-digit NAICS level, measures of dollar output are not among them.
+Thus, we take county farm sales of individual agricultural commodities (e.g. corn, wheat, hogs etc.) and combine them to obtain estimates of agricultural output by industry.
+In this transformation, we go directly to BEA detail-level industry classification.
+
+Some county-commodity sales are suppressed in AgCensus, understating national totals, but the difference is minor.
+"Other" categories (111900: "Other crop farming" and 112A00: "Animal production, except cattle and poultry and eggs") are calculated by subtracting the rest from county crop and animal totals.
+This leads to overestimation of Others.
+
+For illustration, see County Table 2. Market Value of Agricultural Products Sold Including Direct Sales in the Census of Agriculture.
+Details and code are in the [`ag_output`](https://github.com/antonbabkin/rurec/blob/main/nbs/ag_output.md) notebook.
+
+++++ Reprodude national bar chart from ag_output notebook here, include both BEA commodity and industry totals ++++
+```{r}
+
+
+```
+
+
+Although we assume that the Census of Agriculture covers the entirety of the agricultural sector (NAICS 111 and 112), farm sales do not include non-agricultural commodity outputs observed in the agricultural columns of the Supply table.
+In addition, AgCensus national sales are close, but do not exactly match national numbers in the Supply table.
+To account for both discrepancies, we rescale numbers obtained from AgCensus so that national totals match Total industry supply (row "T017") of the agricultural sector in the Supply table.
+
+
+
+```{r}
+industry_ag_names <- industry_names[1:industry_count_ag]
+agcen_sales <- matrix(c(4, 4, 1, 4), industry_count_ag, length(place_names), 
+                      dimnames = list(industry_ag_names, place_names))
+
+# every county's farm industry output is proportional to county's share in national ag commodity output
+nat_output <- sup_tab["i_tot_out", industry_ag_names]
+place_share <- sweep(agcen_sales, 1, rowSums(agcen_sales), "/")
+ag_i_tot_out <- sweep(place_share, 1, nat_output, "*")
+
+
+nat_output
+agcen_sales
+place_share
+ag_i_tot_out
+```
+
+### non-agricultural sector
+
+- business data from CBP or InfoGroup
+- county share trick: can use either payroll or sales, don't need to explicitly turn payroll into output
+
+```{r}
+nonag_industry_names <- industry_names[-(1:industry_count_ag)]
+nonag_bus_value <- matrix(c(10, 10, 
+                            20, 10), 
+                          industry_count_nonag, length(place_names),
+                          byrow = TRUE,
+                          dimnames = list(nonag_industry_names, place_names))
+
+nonag_nat_output <- sup_tab["i_tot_out", nonag_industry_names]
+
+# every county's nonag industry output is proportional to county's share in national nonag "value" (payroll or sales)
+place_share <- sweep(nonag_bus_value, 1, rowSums(nonag_bus_value), "/")
+nonag_i_tot_out <- sweep(place_share, 1, nonag_nat_output, "*")
+
+
+nonag_nat_output
+nonag_bus_value
+place_share
+nonag_i_tot_out
+```
+
+
+### combine ag and nonag, translate to commodity space
+
+
+```{r}
+i_tot_out <- rbind(ag_i_tot_out, nonag_i_tot_out)
+c_tot_out <- c_mat %*% i_tot_out
+
+i_tot_out
+c_tot_out
+# county total output is the same whether measured in industry or commodity space
+all.equal(colSums(i_tot_out), colSums(c_tot_out))
+# industry total output matches national total from Supply table
+all.equal(rowSums(i_tot_out), sup_tab["i_tot_out", industry_names])
+# commodity total output matches national total from Supply table
+all.equal(rowSums(c_tot_out), sup_tab[industry_names, "c_tot_out"])
+```
+
 
 
 ## Demand from output
 
 Code: []()
 
-TODO
+County demand by commodity = B-matrix * County output by industry ?
+
+County demand by industry = D-matrix * County demand by commodity ?
+
+
+
+## Supply from output
+
+Code: []()
+
+County supply by commodity = County output by commodity * (Total Intermediate from Use table / Total Commodity Output from Supply table) ?
+
+County supply by industry = D-matrix * County supply by commodity ?
 
 
 
