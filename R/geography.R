@@ -142,8 +142,7 @@ call_tiger <- function(year = 2013,
 
 
 # Call up and clean CBSA concordance codes (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
-call_cbsa_concord <- function(year, 
-                              ...){
+call_cbsa_concord <- function(year){
   cbsa_year <- util$year2cbsa(year)  
   df <- pubdata$get_cbsa_delin_df(cbsa_year)
   df$CBSA_TITLE <- sapply(strsplit(df$CBSA_TITLE, ","), "[", 1)
@@ -155,8 +154,7 @@ call_cbsa_concord <- function(year,
 
 #Convert a fips code into a cbsa code 
 fips2cbsa <- function(fips,
-                      year, 
-                      ...){
+                      year){
   cb <- call_cbsa_concord(year)
   counties <- pubdata$get_county_df(year, FALSE, "20m")
   if (isFALSE(fips %in% counties$CODE)) {
@@ -166,13 +164,10 @@ fips2cbsa <- function(fips,
   else return(fips)
 }
 
-
-
 # Get county name from FIPS code
 fips2name <- function(fips,
                       year = 2013,
-                      long = FALSE,
-                      ...){
+                      long = FALSE){
   df <- call_tiger(util$year2tiger(year), geometry = F)
   if (long) {
     df <- paste0(df$COUNTY[df$place == fips],", ", df$STATE_NAME[df$place == fips])

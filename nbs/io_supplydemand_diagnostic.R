@@ -6,6 +6,8 @@ source(file.path(
   "nbs",
   "r_backend_functions.R"
 ))
+
+source("R/dataprep_bea_io.R")
 year = 2012
 ilevel = "sec"
 #matrix of intermediate uses of commodities by industries: U 
@@ -149,9 +151,10 @@ all.equal(as.numeric(q), as.numeric(rowSums(qr)))
 IIUr <- diag(as.vector(colSums(D%*%B)))%*%xr %>% `rownames<-`(colnames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
 all.equal(as.numeric(IIU), as.numeric(rowSums(IIUr)))
 #regional intermediate commodity use: ICUr=B*xr
-# ICUr <- B%*%xr
-ICUr <- B%*%D%*%C%*%xr %>% `rownames<-`(rownames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
+ICUr <- B%*%xr
+#ICUr <- B%*%D%*%C%*%xr %>% `rownames<-`(rownames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
 all.equal(as.numeric(ICU), as.numeric(rowSums(ICUr)))
+
 #regional intermediate industry supply: IISr=DB*xr
 IISr <- D%*%B%*%xr  %>% `rownames<-`(colnames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
 all.equal(as.numeric(IIS), as.numeric(rowSums(IISr)))
@@ -163,6 +166,8 @@ all.equal(as.numeric(ICS), as.numeric(rowSums(ICSr)))
 ##industries use commodities to make commodities!
 
 ##QUESTION: B%*%D%*%C%*%x==B%*%x but B%*%D%*%C%*%xr!=B%*%xr and B%*%D%*%C!=B
+
+### !!!!!Thus rescaling total output or whatever else from industry to commodity or from commodity to industry using C or D matrix is not tractible at the sub-national scale i.e., xr != D%*%C%*%xr whereas x==D%*%C%*%x 
 
 cbind(rowSums(diag(as.vector(lambda/phi))%*%C%*%xr), rowSums(B%*%xr))
 cbind(rowSums(diag(as.vector(lambda/phi))%*%C%*%xr), rowSums(diag(as.vector(B%*%x))%*%t(D)%*%diag(1/as.vector(x))%*%xr))
@@ -176,10 +181,19 @@ cbind(rowSums(diag(as.vector(lambda/phi))%*%C%*%xr), rowSums(diag(as.vector(B%*%
 #The value of net exchangeables in out-flow and in-flow terms are:
 net_demand <- pmax(ICUr - ICSr, 0)
 net_supply <- pmax(ICSr - ICUr, 0)
+net_demand
+net_supply
+all.equal(rowSums(net_demand), rowSums(net_supply))
+all.equal(colSums(net_demand), colSums(net_supply))
+all.equal(sum(net_demand), sum(net_supply))
 
-rowSums(net_demand)==rowSums(net_supply)
-colSums(net_demand)==colSums(net_supply)
-sum(net_demand)==sum(net_supply)
+net_demand <- pmax(IIUr - IISr, 0)
+net_supply <- pmax(IISr - IIUr, 0)
+all.equal(rowSums(net_demand), rowSums(net_supply))
+all.equal(colSums(net_demand), colSums(net_supply))
+all.equal(sum(net_demand), sum(net_supply))
+net_demand
+net_supply
 
 trade_flows <- ras_trade_lists(factor_supply = ICSr, factor_demand = ICUr, crosshaul = F)
 

@@ -1,6 +1,5 @@
 Package: rurec
 Title: Rural economy
-
 Imports:
   markdown,
   reticulate,
