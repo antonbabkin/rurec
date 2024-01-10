@@ -45,6 +45,8 @@ e <- q-ICU
   all.equal(as.numeric(rowSums(smat)), as.numeric(ICU+(phi-lambda)*q))
   #Ui=lambda*q
   all.equal(as.numeric(rowSums(umat)), as.numeric(lambda*q))
+#wedge
+  w <- q-rowSums(smat)
   
 #OPEN QUESTION: Do we need to adjust phi and lambda and theta based on non-bea output values?
   
@@ -159,13 +161,20 @@ all.equal(as.numeric(ICU), as.numeric(rowSums(ICUr)))
 IISr <- D%*%B%*%xr  %>% `rownames<-`(colnames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
 all.equal(as.numeric(IIS), as.numeric(rowSums(IISr)))
 #regional intermediate commodity supply: ICSr
-ICSr <- diag(as.vector(B%*%x))%*%t(D)%*%diag(1/as.vector(x))%*%xr  %>% `rownames<-`(rownames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
+ICSr <- diag(as.vector(B%*%x))%*%t(D)%*%diag(1/as.vector(x))%*%xr %>% `rownames<-`(rownames(B)) %>% `colnames<-`(LETTERS[1:ncol(xr)])
 all.equal(as.numeric(ICS), as.numeric(rowSums(ICSr)))
 
 ##intermediate industry supply by industry != intermediate industry use by industry 
 ##industries use commodities to make commodities!
 
 ##QUESTION: B%*%D%*%C%*%x==B%*%x but B%*%D%*%C%*%xr!=B%*%xr and B%*%D%*%C!=B
+
+
+
+all.equal(rowSums(diag(as.vector(commodity_use_shares(year, ilevel))) %*% (C %*% xr)), 
+          rowSums(diag(as.vector(production_shares(year, ilevel))) %*% (B %*% xr)) )
+
+
 
 ### !!!!!Thus rescaling total output or whatever else from industry to commodity or from commodity to industry using C or D matrix is not tractible at the sub-national scale i.e., xr != D%*%C%*%xr whereas x==D%*%C%*%x 
 

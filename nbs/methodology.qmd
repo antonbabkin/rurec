@@ -423,7 +423,8 @@ Formula: `(I * y_c / (y_c + w_c)) * (B * Y_i)`
 
 Interpretation:
 `(B * Y_i)` is a `(n_c, r)` matrix of total county commodity demand for intermediates (in purchaser prices, including margins, taxes and imports).
-`y_c / (y_c + w_c)` is a `(n_c)` vector of domestic production shares of total national commodity supply.
+`y_c / (y_c + w_c)` is a `(n_c)` vector of domestic production shares of total national commodity supply. 
+(national commodity output / national commodity supply)
 Pre-multiplying total commodity demand by the domestic share vector, we obtain county commodity demand for domestic intermediates.
 
 
@@ -472,7 +473,8 @@ Formula:
 
 Interpretation:
 `(C * Y_i)` is a `(n_c, r)` matrix of county total commodity production (in purchaser prices, including output used for exports and other final uses).
-`x_c / (x_c + f_c)` is a `(n_c)` vector of domestic intermediate use shares of total national commodity use.
+`x_c / (x_c + f_c)` is a `(n_c)` vector of domestic intermediate use shares of total national commodity supply. 
+(national commodity intermediate use / national commodity supply)
 Pre-multiplying total commodity production by the domestic use share vector, we obtain county commodity supply of domestic intermediates.
 
 
@@ -500,6 +502,7 @@ County demand by industry = D-matrix * County demand by commodity ?
 National analog of demand and supply:
 demand = `y_c / (y_c + w_c) * (B * y_i)` = `y_c / (y_c + w_c) * x_c`
 supply = `x_c / (x_c + f_c) * (C * y_i)` = `x_c / (x_c + f_c) * y_c`
+Note: (y_c + w_c) == (x_c + f_c) == national commodity supply
 
 demand = `y_c / (y_c + w_c) * x_c`
   = `y_c * x_c / (y_c + w_c)`

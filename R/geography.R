@@ -364,8 +364,6 @@ gaus_impedance_mat <- function(rms_width = 1000, from = c("center", "border"), y
   return(x)
 }
 
-
-
 # Produce hyperbolic secant distance decay impedance matrix
 hyper_impedance_mat <- function(decay_constant = 1000000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
   from <- match.arg(from)

@@ -364,6 +364,55 @@ d_matrix <- function(year,
   return(df)
 }
 
+
+# domestic production shares of total national commodity supply
+production_shares <- function(year,
+                              ilevel = c("det", "sum", "sec"),
+                              condense = TRUE){
+  x <- industry_output(year, ilevel, condense)
+  cmat <- c_matrix(year, ilevel, condense)
+  c <- commodity_supply(year, ilevel, condense)
+  #df <- ((cmat %*% x))/((cmat %*% x) + (c-(cmat %*% x)))
+  df <- (cmat %*% x)/(c)
+  colnames(df) <- "production_share"
+  return(df)
+}
+
+# domestic intermediate commodity use shares of total national commodity supply
+commodity_use_shares <- function(year,
+                                 ilevel = c("det", "sum", "sec"),
+                                 condense = TRUE){
+  x <- industry_output(year, ilevel, condense)
+  bmat <- b_matrix(year, ilevel, condense)
+  c <- commodity_supply(year, ilevel, condense)
+  #df <- (bmat %*% x)/((bmat %*% x) + (c - (bmat %*% x)))
+  df <- (bmat %*% x)/(c)
+  colnames(df) <- "com_use_share"
+  return(df)
+}
+
+# domestic intermediate industry use shares of total national industry use
+industry_use_shares <- function(year,
+                                ilevel = c("det", "sum", "sec"),
+                                condense = TRUE){
+  x <- industry_output(year, ilevel, condense)
+  bmat <- b_matrix(year, ilevel, condense)
+  df <- (diag(as.vector(colSums(bmat))) %*% x)/(x)
+  rownames(df) <- rownames(x) 
+  colnames(df) <- "ind_use_share"
+  return(df)
+}
+
+#artificial output by place diagnostic matrix for n randomly divided arbitrary "places"
+out_by_place_diag <- function(output_vector,
+                              place_count = 5){
+  ov <- output_vector
+  df <- ov %>% {(diag(as.vector(.)) %*% t(replicate(length(.), diff(c(0, sort(runif(place_count-1)), 1)))) ) } %>% 
+  `rownames<-`(rownames(ov)) 
+  return(df)
+}
+
+
 # Toys ----
 toy <- new.env()
 
