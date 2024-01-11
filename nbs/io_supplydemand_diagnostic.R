@@ -15,7 +15,7 @@ umat <- use_matrix(year, ilevel)
 #matrix of total output of commodities by industries: V' 
 smat <- supply_matrix(year, ilevel)
 #vector of total commodity supply: q=Ui+e note: q!=V'i 
-q <- commodity_supply(year, ilevel)
+q <- natinal_commodity_supply(year, ilevel)
 #vector of Total Gross Industry Output: x=U'i+v note: x=Vi 
 x <- as.matrix(colSums(smat))
 #scaling factor of total commodity output's share of total product supply: phi = (V'i)/q such that V'i=q*phi  

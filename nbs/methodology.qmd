@@ -513,6 +513,7 @@ demand = `y_c / (y_c + w_c) * x_c`
 Does it hold at county level?
 Yes, it does because `rowSums(B * Y_i) == B * y_i` and `rowSums(C * Y_i) == C * y_i`
 
+NOTE: `old_demand=(B*Y_i)=(C*Y_i)*(x_c/(x_c +f_c))/(y_c/(y_c +w_c))=B*y_i*t(D)/y_i*Y_i=old_supply`
 
 
 

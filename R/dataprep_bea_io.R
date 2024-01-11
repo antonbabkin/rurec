@@ -308,7 +308,7 @@ commodity_output <- function(year,
 
 ### Get National BEA Total Commodity Product Supply Vector and tidy structure for use with NAICS adjacent processes
 # TODO has not been tested
-commodity_supply <- function(year,
+natinal_commodity_supply <- function(year,
                              ilevel = c("det", "sum", "sec"),
                              condense = TRUE){
   df <- call_supply_table(year, ilevel) %>% 
@@ -327,7 +327,14 @@ commodity_supply <- function(year,
 commodity_share_factor <- function(year,
                                    ilevel = c("det", "sum", "sec"),
                                    condense = TRUE){
-  df <- commodity_output(year, ilevel, condense)/commodity_supply(year, ilevel, condense)
+  df <- commodity_output(year, ilevel, condense)/natinal_commodity_supply(year, ilevel, condense)
+  return(df)
+}
+
+# formula to recover commodity supply from commodity output and Phi
+commodity_supply <- function(commodity_output_vector,
+                             phi){
+  df <- commodity_output_vector / phi 
   return(df)
 }
 
@@ -364,42 +371,70 @@ d_matrix <- function(year,
   return(df)
 }
 
-
 # domestic production shares of total national commodity supply
-production_shares <- function(year,
-                              ilevel = c("det", "sum", "sec"),
-                              condense = TRUE){
-  x <- industry_output(year, ilevel, condense)
-  cmat <- c_matrix(year, ilevel, condense)
-  c <- commodity_supply(year, ilevel, condense)
-  #df <- ((cmat %*% x))/((cmat %*% x) + (c-(cmat %*% x)))
-  df <- (cmat %*% x)/(c)
+production_shares <- function(commodity_output_vector,
+                              commodity_supply_vector){
+  df <- commodity_output_vector / commodity_supply_vector 
   colnames(df) <- "production_share"
+  rownames(df) <- rownames(commodity_supply_vector) 
   return(df)
 }
 
 # domestic intermediate commodity use shares of total national commodity supply
-commodity_use_shares <- function(year,
+commodity_use_shares <- function(intermediate_commodity_use_vector,
+                                 commodity_supply_vector){
+  df <- intermediate_commodity_use_vector / commodity_supply_vector 
+  colnames(df) <- "com_use_share"
+  rownames(df) <- rownames(commodity_supply_vector) 
+  return(df)
+}
+
+# domestic intermediate commodity use shares of total national commodity supply
+industry_use_shares <- function(intermediate_industry_use_vector,
+                                industry_output_vector){
+  df <- intermediate_industry_use_vector / industry_output_vector 
+  colnames(df) <- "ind_use_share"
+  rownames(df) <- rownames(industry_output_vector) 
+  return(df)
+}
+
+# call national domestic production shares of total national commodity supply
+national_production_shares <- function(year,
+                              ilevel = c("det", "sum", "sec"),
+                              condense = TRUE){
+  x <- industry_output(year, ilevel, condense)
+  cmat <- c_matrix(year, ilevel, condense)
+  cs <- natinal_commodity_supply(year, ilevel, condense)
+  co <- (cmat %*% x)
+  #cs <- ((cmat %*% x) + (cs-(cmat %*% x)))
+  df <- production_shares(commodity_output_vector = co,
+                          commodity_supply_vector = cs)
+  return(df)
+}
+
+# call national domestic intermediate commodity use shares of total national commodity supply
+national_commodity_use_shares <- function(year,
                                  ilevel = c("det", "sum", "sec"),
                                  condense = TRUE){
   x <- industry_output(year, ilevel, condense)
   bmat <- b_matrix(year, ilevel, condense)
-  c <- commodity_supply(year, ilevel, condense)
-  #df <- (bmat %*% x)/((bmat %*% x) + (c - (bmat %*% x)))
-  df <- (bmat %*% x)/(c)
-  colnames(df) <- "com_use_share"
+  cs <- natinal_commodity_supply(year, ilevel, condense)
+  icu <- (bmat %*% x)
+  #cs <- ((bmat %*% x) + (cs - (bmat %*% x)))
+  df <- commodity_use_shares(intermediate_commodity_use_vector = icu,
+                             commodity_supply_vector = cs)
   return(df)
 }
 
-# domestic intermediate industry use shares of total national industry use
-industry_use_shares <- function(year,
+# call national domestic intermediate industry use shares of total national industry use
+national_industry_use_shares <- function(year,
                                 ilevel = c("det", "sum", "sec"),
                                 condense = TRUE){
   x <- industry_output(year, ilevel, condense)
   bmat <- b_matrix(year, ilevel, condense)
-  df <- (diag(as.vector(colSums(bmat))) %*% x)/(x)
-  rownames(df) <- rownames(x) 
-  colnames(df) <- "ind_use_share"
+  iiu <- (diag(as.vector(colSums(bmat))) %*% x)
+  df <- industry_use_shares(intermediate_industry_use_vector = iiu,
+                            industry_output_vector = x)
   return(df)
 }
 
