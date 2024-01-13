@@ -41,7 +41,7 @@ source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 
 bea_io$pubdata$get_naics_concord(2017)
 bea_io$pubdata$get_use(2017, "det", TRUE)$table
-bea_io$b_matrix(2017, "det")
+bea_io$call_b_matrix(2017, "det")
 
 
 ```

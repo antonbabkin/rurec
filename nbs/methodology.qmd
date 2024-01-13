@@ -266,7 +266,7 @@ Difference between national and county shows effect of data suppression.
 ```{r}
 year <- 2012
 # BEA ag commodities in ag sector and ag industry total output
-x <- bea_io$call_supply_table(year, "det")
+x <- bea_io$call_bea_supply_table(year, "det")
 d <- data.frame(
   industry = colnames(x)[1:10],
   BEA_commodity = diag(x)[1:10],

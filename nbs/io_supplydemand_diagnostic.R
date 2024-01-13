@@ -1,25 +1,25 @@
 
 
 options(scipen = 999)
-source(file.path(
-  rprojroot::find_rstudio_root_file(),
-  "nbs",
-  "r_backend_functions.R"
-))
+# source(file.path(
+#   rprojroot::find_rstudio_root_file(),
+#   "nbs",
+#   "r_backend_functions.R"
+# ))
 
 source("R/dataprep_bea_io.R")
 year = 2012
 ilevel = "sec"
 #matrix of intermediate uses of commodities by industries: U 
-umat <- use_matrix(year, ilevel)
+umat <- call_use_matrix(year, ilevel)
 #matrix of total output of commodities by industries: V' 
-smat <- supply_matrix(year, ilevel)
+smat <- call_supply_matrix(year, ilevel)
 #vector of total commodity supply: q=Ui+e note: q!=V'i 
-q <- natinal_commodity_supply(year, ilevel)
+q <- call_commodity_supply(year, ilevel)
 #vector of Total Gross Industry Output: x=U'i+v note: x=Vi 
 x <- as.matrix(colSums(smat))
 #scaling factor of total commodity output's share of total product supply: phi = (V'i)/q such that V'i=q*phi  
-###phi <- commodity_share_factor(year, ilevel)
+###phi <- call_commodity_share_factor(year, ilevel)
 phi <- rowSums(smat)/q
 #vector of Intermediate Industry Use (IIU)=U'i
 IIU <- as.matrix(colSums(umat))
@@ -243,10 +243,7 @@ rbind(capacity,
 # 1) scale GIO by national BEA ratio (intermediate industry use/total industry supply) 
 # 2) scale GIO by derived ratio sum(Intermediate Industry Demand by Region)_r/sum(Gross Industry Output by Region)_r
 
-# 
-# bmat <- b_matrix(2012)
-# cmat <- c_matrix(2012)
-# dmat <- d_matrix(2012)
+
 
 
 

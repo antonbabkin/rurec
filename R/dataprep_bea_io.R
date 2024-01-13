@@ -36,7 +36,10 @@ ipath <- list(
 opath <- list(
   naics_concord_ = "data/bea_io/naics_concord/{year}.rds",
   sup_ = "data/bea_io/sup/{level}/{year}_{labels}.rds",
-  use_ = "data/bea_io/use/{level}/{year}_{labels}.rds"
+  use_ = "data/bea_io/use/{level}/{year}_{labels}.rds",
+  ixi_ = "data/bea_io/ixi/{level}/{year}_{labels}.rds",
+  ixc_ = "data/bea_io/ixc/{level}/{year}_{labels}.rds",
+  cxc_ = "data/bea_io/cxc/{level}/{year}_{labels}.rds"
 )
 
 clear_outputs <- function() {
@@ -106,9 +109,52 @@ pubdata$get_use <- function(year, level, labels = FALSE) {
   return(x)
 }
 
+pubdata$get_ixi <- function(year, level, labels = FALSE) {
+  match.arg(level, c("det", "sum", "sec"))
+  year <- as.integer(year)
+  p <- glue(opath$ixi_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  pymod$init()
+  x <- pymod$bea_io$get_ixi(year, level, labels)
+  log_debug(paste("save to cache", p))
+  saveRDS(x, util$mkdir(p))
+  return(x)
+}
 
+pubdata$get_ixc <- function(year, level, labels = FALSE) {
+  match.arg(level, c("det", "sum", "sec"))
+  year <- as.integer(year)
+  p <- glue(opath$ixc_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  pymod$init()
+  x <- pymod$bea_io$get_ixc(year, level, labels)
+  log_debug(paste("save to cache", p))
+  saveRDS(x, util$mkdir(p))
+  return(x)
+}
 
-# IO tables functions ----
+pubdata$get_cxc <- function(year, level, labels = FALSE) {
+  match.arg(level, c("det", "sum", "sec"))
+  year <- as.integer(year)
+  p <- glue(opath$cxc_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
+  }
+  pymod$init()
+  x <- pymod$bea_io$get_cxc(year, level, labels)
+  log_debug(paste("save to cache", p))
+  saveRDS(x, util$mkdir(p))
+  return(x)
+}
+
+# IO code/concordance ----
 
 #TODO: check if unnecessaryredundant with new table/label dataframe scheme
 beacode2description <- function(code, 
@@ -127,7 +173,6 @@ beacode2description <- function(code,
   df <- x["description"][x["code"] == code]
   return(df)
 }
-
 
 ###### Call and tidy NAICS to BEA industry concordance table
 call_industry_concordance <- function(year = 2012) {
@@ -163,7 +208,6 @@ call_industry_concordance <- function(year = 2012) {
   return(df)
 }
 
-
 ###### Get specific industry NAICS to BEA concordance
 ilevel_concord <- function(ilevel = c("det", "sum", "sec"), 
                            year = 2012) {
@@ -187,29 +231,6 @@ ilevel_concord <- function(ilevel = c("det", "sum", "sec"),
     df <- df[!duplicated(df), ]
     rownames(df) <- 1:nrow(df)
   }
-  return(df)
-}
-
-
-############ Call and clean pubdata BEA IO Use table
-call_use_table <- function(year,
-                           ilevel = c("det", "sum", "sec")){
-  ilevel <- match.arg(ilevel)
-  df <- util$year2bea(year, ilevel) %>% 
-    {pubdata$get_use(., ilevel)$table} %>% 
-    as.matrix()
-  df[is.na(df)] = 0
-  return(df)
-}
-
-############ Call and clean pubdata BEA IO Supply table
-call_supply_table <- function(year,
-                              ilevel = c("det", "sum", "sec")){
-  ilevel <- match.arg(ilevel)
-  df <- util$year2bea(year, ilevel) %>% 
-    {pubdata$get_sup(., ilevel)$table} %>% 
-    as.matrix()
-  df[is.na(df)] = 0
   return(df)
 }
 
@@ -258,118 +279,105 @@ condense_bea_vector <- function(vector,
   return(df)
 }
 
-#needs more adjustments so that all consolidating for CBP is done beforehand (e.g., government)?
-### Get Use matrix and tidy structure for use with NAICS adjacent processes
-use_matrix <- function(year,
-                       ilevel = c("det", "sum", "sec"),
-                       condense = TRUE){
-  df <- call_use_table(year, ilevel) %>% 
-    .[1:(which(rownames(.) == "T005")-1), 1:(which(colnames(.) == "T001")-1)] 
-  if(condense){
-    df <- condense_bea_matrix(df, ilevel)
-  }
-  return(df)
-}
 
-### Get Supply matrix and tidy structure for use with NAICS adjacent processes
-supply_matrix <- function(year,
-                          ilevel = c("det", "sum", "sec"),
-                          condense = TRUE){
-  df <- call_supply_table(year, ilevel) %>% 
-    .[1:(nrow(.)-1), 1:(which(colnames(.) == "T007")-1)]   
-  if(condense){
-      df <- condense_bea_matrix(df, ilevel)
-    }
-  return(df)
-}
+# IO functions core----
 
-### Get National BEA Total Industry Output Vector and tidy structure for use with NAICS adjacent processes
-industry_output <- function(year,
-                            ilevel = c("det", "sum", "sec"),
-                            condense = TRUE){
-  df <- supply_matrix(year, ilevel, condense) %>% 
+industry_output <- function(io_supply_matrix){
+  df <- io_supply_matrix %>% 
     colSums() %>% 
     as.matrix() %>% 
     `colnames<-`("T017")
   return(df)
 }
 
-### Get National BEA Total Commodity Output Vector and tidy structure for use with NAICS adjacent processes
-commodity_output <- function(year,
-                             ilevel = c("det", "sum", "sec"),
-                             condense = TRUE){
-  df <- supply_matrix(year, ilevel, condense) %>% 
+commodity_output <- function(io_supply_matrix){
+  df <- io_supply_matrix %>% 
     rowSums() %>% 
     as.matrix() %>% 
     `colnames<-`("T007")
   return(df)
 }
 
+b_matrix <- function(io_use_matrix, 
+                     io_supply_matrix){
+  x <- industry_output(io_supply_matrix)
+  inames <- rownames(x)[x > 0]
+  df <- io_use_matrix %*% diag(1/as.vector(x))
+  colnames(df) <- colnames(io_supply_matrix)
+  df <- df[, inames, drop=F]
+  return(df)
+}
 
-### Get National BEA Total Commodity Product Supply Vector and tidy structure for use with NAICS adjacent processes
-# TODO has not been tested
-natinal_commodity_supply <- function(year,
-                             ilevel = c("det", "sum", "sec"),
-                             condense = TRUE){
-  df <- call_supply_table(year, ilevel) %>% 
-    .[1:(nrow(.)-1), "T016", drop=F]
-  if(condense){
-    df <- df %>% 
-      t() %>% 
-      condense_bea_vector(., ilevel) %>% 
-      t() 
+c_matrix <- function(io_supply_matrix){
+  x <- industry_output(io_supply_matrix)
+  inames <- rownames(x)[x > 0]
+  df <- io_supply_matrix %*% diag(1/as.vector(x))
+  colnames(df) <- colnames(io_supply_matrix)
+  df <- df[, inames, drop=F]
+  return(df)
+}
+
+d_matrix <- function(io_supply_matrix){
+  x <- commodity_output(io_supply_matrix)
+  cnames <- rownames(x)[x > 0]
+  df <- t(io_supply_matrix) %*% diag(1/as.vector(x))
+  colnames(df) <- rownames(io_supply_matrix)
+  df <- df[, cnames, drop=F]
+  return(df)
+}
+
+# technical coefficients
+direct_requirements <- function(io_use_matrix,
+                                io_supply_matrix,
+                                technology = c("industry", "commodity"),
+                                dimensions = c("industry", "commodity")){
+  technology <- match.arg(technology)
+  dimensions <- match.arg(dimensions)
+  if(technology == "industry" & dimensions == "commodity"){
+    bmat <- b_matrix(io_use_matrix, io_supply_matrix)
+    dmat <- d_matrix(io_supply_matrix)
+    inames <- intersect(colnames(bmat), rownames(dmat))
+    cnames <- intersect(rownames(bmat), colnames(dmat))
+    df <- bmat[cnames, inames] %*% dmat[inames, cnames]
+  }
+  if(technology == "industry" & dimensions == "industry"){
+    bmat <- b_matrix(io_use_matrix, io_supply_matrix)
+    dmat <- d_matrix(io_supply_matrix)
+    inames <- intersect(colnames(bmat), rownames(dmat))
+    cnames <- intersect(rownames(bmat), colnames(dmat))
+    df <- dmat[inames, cnames] %*% bmat[cnames, inames]
+  }
+  if(technology == "commodity" & dimensions == "commodity"){
+    bmat <- b_matrix(io_use_matrix, io_supply_matrix)
+    cmat <- c_matrix(io_supply_matrix)
+    inames <- intersect(colnames(bmat), colnames(cmat))
+    cnames <- intersect(rownames(bmat), rownames(cmat))
+    df <- bmat[cnames, inames] %*% solve(cmat[cnames, inames])
+  }
+  if(technology == "commodity" & dimensions == "industry"){
+    bmat <- b_matrix(io_use_matrix, io_supply_matrix)
+    cmat <- c_matrix(io_supply_matrix)
+    inames <- intersect(colnames(bmat), colnames(cmat))
+    cnames <- intersect(rownames(bmat), rownames(cmat))
+    df <- solve(cmat[cnames, inames]) %*% bmat[cnames, inames]
   }
   return(df)
 }
 
-### Get total commodity output's share of total product supply: Phi
-# TODO has not been tested
-commodity_share_factor <- function(year,
-                                   ilevel = c("det", "sum", "sec"),
-                                   condense = TRUE){
-  df <- commodity_output(year, ilevel, condense)/natinal_commodity_supply(year, ilevel, condense)
+# Leontief inverse
+total_requirements <- function(io_use_matrix,
+                               io_supply_matrix,
+                               technology = c("industry", "commodity"),
+                               dimensions = c("industry", "commodity")){
+  technology <- match.arg(technology)
+  dimensions <- match.arg(dimensions)
+  dr <- direct_requirements(io_use_matrix, io_supply_matrix, technology, dimensions)
+  df <- solve(diag(ncol(dr)) - dr)
   return(df)
 }
 
-# formula to recover commodity supply from commodity output and Phi
-commodity_supply <- function(commodity_output_vector,
-                             phi){
-  df <- commodity_output_vector / phi 
-  return(df)
-}
+# IO functions extension----
 
-#### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
-b_matrix <- function(year,
-                     ilevel = c("det", "sum", "sec"),
-                     condense = TRUE){
-  u_mat <- use_matrix(year, ilevel, condense)
-  x <- industry_output(year, ilevel, condense)
-  df <- u_mat %*% diag(1/as.vector(x))
-  colnames(df) <- colnames(u_mat)
-  return(df)
-}
-
-####Commodity Composition of Industry Outputs
-c_matrix <- function(year,
-                     ilevel = c("det", "sum", "sec"),
-                     condense = TRUE){
-  s_mat <- supply_matrix(year, ilevel, condense)
-  x <- industry_output(year, ilevel, condense)
-  df <- s_mat %*% diag(1/as.vector(x))
-  colnames(df) <- colnames(s_mat)
-  return(df)
-}
-
-#### Industry Source of Commodity Outputs
-d_matrix <- function(year,
-                     ilevel = c("det", "sum", "sec"),
-                     condense = TRUE){
-  s_mat <- supply_matrix(year, ilevel, condense)
-  x <- commodity_output(year, ilevel, condense)
-  df <- t(s_mat) %*% diag(1/as.vector(x))
-  colnames(df) <- rownames(s_mat)
-  return(df)
-}
 
 # domestic production shares of total national commodity supply
 production_shares <- function(commodity_output_vector,
@@ -398,13 +406,181 @@ industry_use_shares <- function(intermediate_industry_use_vector,
   return(df)
 }
 
+# formula to recover commodity supply from commodity output and Phi
+commodity_supply <- function(commodity_output_vector,
+                             phi){
+  df <- commodity_output_vector / phi 
+  return(df)
+}
+
+# toy artificial output by place diagnostic matrix for n randomly divided arbitrary "places"
+out_by_place_diag <- function(output_vector,
+                              place_count = 5){
+  ov <- output_vector
+  df <- ov %>% {(diag(as.vector(.)) %*% t(replicate(length(.), diff(c(0, sort(runif(place_count-1)), 1)))) ) } %>% 
+    `rownames<-`(rownames(ov)) 
+  return(df)
+}
+
+
+# IO tables ----
+
+############ Call and clean pubdata BEA IO Use table
+call_bea_use_table <- function(year,
+                               ilevel = c("det", "sum", "sec")){
+  ilevel <- match.arg(ilevel)
+  df <- util$year2bea(year, ilevel) %>% 
+    {pubdata$get_use(., ilevel)$table} %>% 
+    as.matrix()
+  df[is.na(df)] = 0
+  return(df)
+}
+
+############ Call and clean pubdata BEA IO Supply table
+call_bea_supply_table <- function(year,
+                                  ilevel = c("det", "sum", "sec")){
+  ilevel <- match.arg(ilevel)
+  df <- util$year2bea(year, ilevel) %>% 
+    {pubdata$get_sup(., ilevel)$table} %>% 
+    as.matrix()
+  df[is.na(df)] = 0
+  return(df)
+}
+
+############ Call and clean pubdata BEA IO Supply table
+call_bea_direct_req <- function(year,
+                                ilevel = c("det", "sum", "sec"),
+                                dim_class = c("ixi", "ixc", "cxc")){
+  ilevel <- match.arg(ilevel)
+  dim_class <- match.arg(dim_class)
+  y <- util$year2bea(year, ilevel) 
+  if(dim_class == "ixi"){df <- pubdata$get_ixi(y, ilevel)$table} 
+  if(dim_class == "ixc"){df <- pubdata$get_ixc(y, ilevel)$table} 
+  if(dim_class == "cxc"){df <- pubdata$get_cxc(y, ilevel)$table} 
+  df <- df %>% 
+    as.matrix() %>% 
+    {.[-nrow(.),]}
+  df[is.na(df)] = 0
+  return(df)
+}
+
+### Get Use matrix and tidy structure for use with NAICS adjacent processes
+call_use_matrix <- function(year,
+                             ilevel = c("det", "sum", "sec"),
+                             condense = TRUE){
+  df <- call_bea_use_table(year, ilevel) %>% 
+    .[1:(which(rownames(.) == "T005")-1), 1:(which(colnames(.) == "T001")-1)] 
+  if(condense){
+    df <- condense_bea_matrix(df, ilevel)
+  }
+  return(df)
+}
+
+### Get Supply matrix and tidy structure for use with NAICS adjacent processes
+call_supply_matrix <- function(year,
+                                ilevel = c("det", "sum", "sec"),
+                                condense = TRUE){
+  df <- call_bea_supply_table(year, ilevel) %>% 
+    .[1:(nrow(.)-1), 1:(which(colnames(.) == "T007")-1)]   
+  if(condense){
+      df <- condense_bea_matrix(df, ilevel)
+    }
+  return(df)
+}
+
+### Get National BEA Total Industry Output Vector and tidy structure for use with NAICS adjacent processes
+call_industry_output <- function(year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  condense = TRUE){
+  df <- call_supply_matrix(year, ilevel, condense) %>% 
+    industry_output()
+  return(df)
+}
+
+### Get National BEA Total Commodity Output Vector and tidy structure for use with NAICS adjacent processes
+call_commodity_output <- function(year,
+                                   ilevel = c("det", "sum", "sec"),
+                                   condense = TRUE){
+  df <- call_supply_matrix(year, ilevel, condense) %>% 
+    commodity_output()
+  return(df)
+}
+
+### Get National BEA Total Commodity Product Supply Vector and tidy structure for use with NAICS adjacent processes
+# TODO has not been tested
+call_commodity_supply <- function(year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  condense = TRUE){
+  df <- call_bea_supply_table(year, ilevel) %>% 
+    .[1:(nrow(.)-1), "T016", drop=F]
+  if(condense){
+    df <- df %>% 
+      t() %>% 
+      condense_bea_vector(., ilevel) %>% 
+      t() 
+  }
+  return(df)
+}
+
+#### Commodities-by-Industries parallel to ordinary technical coefficients matrix 
+call_b_matrix <- function(year,
+                           ilevel = c("det", "sum", "sec"),
+                           condense = TRUE){
+  u_mat <- call_use_matrix(year, ilevel, condense)
+  s_mat <- call_supply_matrix(year, ilevel, condense)
+  df <- b_matrix(u_mat, s_mat)
+  return(df)
+}
+
+####Commodity Composition of Industry Outputs
+call_c_matrix <- function(year,
+                           ilevel = c("det", "sum", "sec"),
+                           condense = TRUE){
+  df <- call_supply_matrix(year, ilevel, condense) %>% 
+    c_matrix()
+  return(df)
+}
+
+#### Industry Source of Commodity Outputs
+call_d_matrix <- function(year,
+                           ilevel = c("det", "sum", "sec"),
+                           condense = TRUE){
+  df <- call_supply_matrix(year, ilevel, condense) %>% 
+    d_matrix()
+  return(df)
+}
+
+call_direct_requirements <- function(year,
+                                     ilevel = c("det", "sum", "sec"),
+                                     condense = TRUE,
+                                     technology = c("industry", "commodity"),
+                                     dimensions = c("industry", "commodity")){
+  u_mat <- call_use_matrix(year, ilevel, condense)
+  s_mat <- call_supply_matrix(year, ilevel, condense)
+  df <- direct_requirements(u_mat, s_mat, technology, dimensions)
+  return(df)
+}
+
+
+
+# IO tables extension----
+
+### Get total commodity output's share of total product supply: Phi
+# TODO has not been tested
+call_commodity_share_factor <- function(year,
+                                   ilevel = c("det", "sum", "sec"),
+                                   condense = TRUE){
+  df <- call_commodity_output(year, ilevel, condense)/call_commodity_supply(year, ilevel, condense)
+  return(df)
+}
+
 # call national domestic production shares of total national commodity supply
-national_production_shares <- function(year,
+call_production_shares <- function(year,
                               ilevel = c("det", "sum", "sec"),
                               condense = TRUE){
-  x <- industry_output(year, ilevel, condense)
-  cmat <- c_matrix(year, ilevel, condense)
-  cs <- natinal_commodity_supply(year, ilevel, condense)
+  x <- call_industry_output(year, ilevel, condense)
+  cmat <- call_c_matrix(year, ilevel, condense)
+  cs <- call_commodity_supply(year, ilevel, condense)
   co <- (cmat %*% x)
   #cs <- ((cmat %*% x) + (cs-(cmat %*% x)))
   df <- production_shares(commodity_output_vector = co,
@@ -413,12 +589,12 @@ national_production_shares <- function(year,
 }
 
 # call national domestic intermediate commodity use shares of total national commodity supply
-national_commodity_use_shares <- function(year,
+call_commodity_use_shares <- function(year,
                                  ilevel = c("det", "sum", "sec"),
                                  condense = TRUE){
-  x <- industry_output(year, ilevel, condense)
-  bmat <- b_matrix(year, ilevel, condense)
-  cs <- natinal_commodity_supply(year, ilevel, condense)
+  x <- call_industry_output(year, ilevel, condense)
+  bmat <- call_b_matrix(year, ilevel, condense)
+  cs <- call_commodity_supply(year, ilevel, condense)
   icu <- (bmat %*% x)
   #cs <- ((bmat %*% x) + (cs - (bmat %*% x)))
   df <- commodity_use_shares(intermediate_commodity_use_vector = icu,
@@ -427,25 +603,18 @@ national_commodity_use_shares <- function(year,
 }
 
 # call national domestic intermediate industry use shares of total national industry use
-national_industry_use_shares <- function(year,
+call_industry_use_shares <- function(year,
                                 ilevel = c("det", "sum", "sec"),
                                 condense = TRUE){
-  x <- industry_output(year, ilevel, condense)
-  bmat <- b_matrix(year, ilevel, condense)
+  x <- call_industry_output(year, ilevel, condense)
+  bmat <- call_b_matrix(year, ilevel, condense)
   iiu <- (diag(as.vector(colSums(bmat))) %*% x)
   df <- industry_use_shares(intermediate_industry_use_vector = iiu,
                             industry_output_vector = x)
   return(df)
 }
 
-#artificial output by place diagnostic matrix for n randomly divided arbitrary "places"
-out_by_place_diag <- function(output_vector,
-                              place_count = 5){
-  ov <- output_vector
-  df <- ov %>% {(diag(as.vector(.)) %*% t(replicate(length(.), diff(c(0, sort(runif(place_count-1)), 1)))) ) } %>% 
-  `rownames<-`(rownames(ov)) 
-  return(df)
-}
+
 
 
 # Toys ----
@@ -575,6 +744,9 @@ test_pubdata <- function() {
       for (labels in c(FALSE, TRUE)) {
         pubdata$get_sup(year, level, labels)
         pubdata$get_use(year, level, labels)
+        pubdata$get_ixi(year, level, labels)
+        pubdata$get_ixc(year, level, labels)
+        pubdata$get_cxc(year, level, labels)
       }
     }
   }
@@ -595,15 +767,15 @@ test_dataprep <- function() {
   for (year in 1997:2022) {
     for (ilevel in c("det", "sum", "sec")) {
       if (ilevel == "det" && !(year %in% c(2007, 2012, 2017))) next
-      call_use_table(year, ilevel)
-      call_supply_table(year, ilevel)
-      use_matrix(year, ilevel)
-      supply_matrix(year, ilevel)
-      industry_output(year, ilevel)
-      commodity_output(year, ilevel)
-      b_matrix(year, ilevel)
-      c_matrix(year, ilevel)
-      d_matrix(year, ilevel)
+      call_bea_use_table(year, ilevel)
+      call_bea_supply_table(year, ilevel)
+      call_use_matrix(year, ilevel)
+      call_supply_matrix(year, ilevel)
+      call_industry_output(year, ilevel)
+      call_commodity_output(year, ilevel)
+      call_b_matrix(year, ilevel)
+      call_c_matrix(year, ilevel)
+      call_d_matrix(year, ilevel)
     }
   }
 }
