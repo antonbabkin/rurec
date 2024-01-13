@@ -447,8 +447,8 @@ call_bea_supply_table <- function(year,
   return(df)
 }
 
-############ Call and clean pubdata BEA IO Supply table
-call_bea_direct_req <- function(year,
+############ Call and clean BEA IO total requirements
+call_bea_total_req <- function(year,
                                 ilevel = c("det", "sum", "sec"),
                                 dim_class = c("ixi", "ixc", "cxc")){
   ilevel <- match.arg(ilevel)
@@ -558,6 +558,17 @@ call_direct_requirements <- function(year,
   u_mat <- call_use_matrix(year, ilevel, condense)
   s_mat <- call_supply_matrix(year, ilevel, condense)
   df <- direct_requirements(u_mat, s_mat, technology, dimensions)
+  return(df)
+}
+
+call_total_requirements <- function(year,
+                                     ilevel = c("det", "sum", "sec"),
+                                     condense = TRUE,
+                                     technology = c("industry", "commodity"),
+                                     dimensions = c("industry", "commodity")){
+  u_mat <- call_use_matrix(year, ilevel, condense)
+  s_mat <- call_supply_matrix(year, ilevel, condense)
+  df <- total_requirements(u_mat, s_mat, technology, dimensions)
   return(df)
 }
 
