@@ -29,7 +29,7 @@ ipath <- list(
 
 opath <- list(
   output_ = "data/place_activity/output_{year}_{class_system}_{ilevel}_{bus_data}.pq",
-  iofactor_ = "data/place_activity/iofactor_{year}_{class_system}_{ilevel}_{bus_data}_{cbsa}.pq"
+  iofactor_ = "data/place_activity/iofactor_{year}_{class_system}_{ilevel}_{bus_data}_{cbsa}_{paradigm}.pq"
 )
 
 clear_outputs <- function() {
@@ -427,6 +427,11 @@ intermediate_activity_domestic <- function(industry_output_matrix,
   cnames <- co %>%
     rowSums() %>%
     {names(.)[.!=0]}
+  
+  #sub-subset of commodity names where phi is defined
+  cnames <- phi %>%
+    {rownames(.)[is.finite(.)]} %>% 
+    {intersect(. , cnames)}
 
   #aggregate gross commodity supply
   cs <- co %>%
@@ -558,9 +563,9 @@ call_intermediate <- function(year,
                                     condense = TRUE)
   #total commodity output's share of total product supply
   phi <- bea_io$call_commodity_share_factor(year = year, 
-                                       ilevel = ilevel, 
-                                       condense = TRUE)
-  
+                                             ilevel = ilevel, 
+                                             condense = TRUE)
+
   df <- intermediate_activity(industry_output_matrix = iout,
                               io_b_matrix = bmat,
                               io_supply_matrix = smat,
@@ -574,7 +579,6 @@ call_intermediate <- function(year,
   return(df)  
 }
 
-#TODO: reformulate to just get all outputs
 # Call list factor supply and demand 
 call_factor_list <- function(year,
                              class_system = c("industry", "commodity"),
@@ -600,6 +604,7 @@ call_factor_list <- function(year,
                     ilevel = ilevel, 
                     bus_data = bus_data,
                     verbose = verbose) 
+  
   fs <- call_intermediate(year = year,
                           schedule = "supply",
                           paradigm = paradigm,

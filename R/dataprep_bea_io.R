@@ -512,7 +512,7 @@ call_commodity_supply <- function(year,
                                   ilevel = c("det", "sum", "sec"),
                                   condense = TRUE){
   df <- call_bea_supply_table(year, ilevel) %>% 
-    .[1:(nrow(.)-1), "T016", drop=F]
+    {.[1:(nrow(.)-1), "T016", drop=F]}
   if(condense){
     df <- df %>% 
       t() %>% 
