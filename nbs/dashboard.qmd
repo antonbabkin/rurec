@@ -45,7 +45,7 @@ ipath <- list(
   county_geography = "data/dashboard/county_geography.rds",
   county_agg_stats = "data/dashboard/county_agg_stats.rds",
   county_ind_outsupdem = "data/dashboard/county_ind_outsupdem.rds",
-  dist_mat = glue(geo$opath$dist_mat_, .envir = list(from = "center", year = 2013, cbsa = FALSE))
+  call_dist_mat = glue(geo$opath$dist_mat_, .envir = list(from = "center", year = 2013, cbsa = FALSE))
 )
 
 ipath
@@ -104,7 +104,7 @@ df %>%
 fips <- params$focus_county
 name <- geo$fips2name(fips, long = TRUE)
 
-d <- geo$dist_matc()[fips, ] |>
+d <- geo$call_dist_matc()[fips, ] |>
   as_tibble(rownames = "stcty_fips") |>
   rename(distance = value) |>
   mutate(distance = drop_units(set_units(distance, mi)))
@@ -139,6 +139,20 @@ df %>%
   ggplot() + 
   geom_sf(aes(fill = impedance)) +
   labs(title = glue("Impedance factor ({params$map_imped_shape}, {imped_par}) from {name} ({fips})"))
+
+```
+
+```{r}
+source("R/connectedness.R", local = (connect <- new.env()))
+df <- call_hierarchical_connectedness(year = 2012, 
+                                      paradigm = "domestic", 
+                                      class_system = "commodity", 
+                                      impedance = T, 
+                                      functional_form = "distance", 
+                                      scalar_constant = 300)
+
+df[["Hierarchical_Connectedness_table"]][["level_6"]] %>% 
+  ggplot() + geom_sf(aes(fill = STATE))
 
 ```
 

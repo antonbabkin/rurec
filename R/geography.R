@@ -114,8 +114,39 @@ pubdata$get_cbsa_delin_df <- function(year) {
 
 # R functions ----
 
+## shapes functions----
 
-## shapes ----
+# Spatial union each CBSA member in a cluster
+cbsa_spatial_cluster <- function(spatial_dataframe,
+                                 cbsa_concordance,
+                                 verbose = FALSE){
+  sdf <- spatial_dataframe
+  cbsa_conc <- cbsa_concordance
+  j <- cbsa_conc %>% 
+    {.[.$place %in% intersect(.$place, sdf$place), ]} %>% 
+    {data.frame(CBSA_CODE = c(.$CBSA_CODE, setdiff(sdf$place, .$place)), 
+                place = c(.$place, setdiff(sdf$place, .$place)),
+                CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) }%>% 
+    {.[order(.$CBSA_CODE), ]} %>% 
+    `rownames<-`(1:nrow(.))  %>% 
+    {inner_join(., sdf, by = "place", copy = TRUE)} 
+  df <- j %>% 
+    select(CBSA_CODE, CBSA_TITLE) %>% 
+    distinct(CBSA_CODE, .keep_all = TRUE) %>% 
+    rename(place = CBSA_CODE)
+  df$geometry <- df$geometry %>% st_transform("EPSG:26911")
+  x <- unique(cbsa_conc$CBSA_CODE) 
+  for (i in x){
+    if(verbose){print(paste("start cluster: ", i, which(i == x), "of", length(x), Sys.time()))}
+    df[df$place == i, ]$geometry <- j[j$CBSA_CODE == i, ] %>% st_transform("EPSG:26911") %>% st_union()
+    if(verbose){print(paste("end cluster: ", i, which(i == x), "of", length(x), Sys.time()))}
+  }
+  df$geometry <- df$geometry %>% st_transform(st_crs(sdf)[[1]]) 
+  df$center <- df$geometry %>% st_transform("EPSG:26911") %>% st_centroid() %>% st_transform(st_crs(sdf)[[1]]) 
+  return(df)
+}
+
+## shapes files----
 
 # Call up and clean TIGER data
 # shapefile formats are available for 2020:2013, 2010, 2000, 1990
@@ -152,11 +183,55 @@ call_cbsa_concord <- function(year){
   return(df)
 }
 
-#Convert a fips code into a cbsa code 
+# Call geography and aggregate spatial features of each CBSA member in a cluster
+# (low priority todo) can be rewritten to use pymod$cbsa$get_cbsa_shape_df()
+call_cbsa_spatial_cluster <- function(year = 2013,
+                                      scale = c("20m", "5m", "500k"),
+                                      verbose = FALSE) {
+  scale <- match.arg(scale)
+  
+  cache_path <- glue(opath$cbsa_shapes_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(readRDS(cache_path))
+  }
+  sdf <- call_tiger(year = year, 
+                    scale = scale)
+  cbsa_conc <- call_cbsa_concord(year = year)
+  df <- cbsa_spatial_cluster(spatial_dataframe = sdf, 
+                             cbsa_concordance = cbsa_conc, 
+                             verbose = verbose)
+  
+  log_debug(paste("save to cache", cache_path))
+  saveRDS(df, util$mkdir(cache_path))
+  return(df)
+}
+
+### Call geographic features
+call_geog <- function(year = 2013,
+                      scale = c("20m", "5m", "500k"),
+                      cbsa = FALSE,
+                      verbose = FALSE){
+  scale <- match.arg(scale)
+  if (cbsa){
+    df <- call_cbsa_spatial_cluster(year = year, 
+                                    scale = scale, 
+                                    verbose = verbose)
+  } else {
+    df <- call_tiger(year = year, 
+                     scale = scale)
+  }
+  return(df)
+}
+
+## place codes/concordance ----
+
+# Convert a fips code into a cbsa code 
 fips2cbsa <- function(fips,
-                      year){
+                      year = 2013){
   cb <- call_cbsa_concord(year)
-  counties <- pubdata$get_county_df(year, FALSE, "20m")
+  counties <- util$year2tiger(year) %>% 
+    {pubdata$get_county_df(., FALSE, "20m")}
   if (isFALSE(fips %in% counties$CODE)) {
     warning("FIPS entry [",fips,"] not found in ANSI FIPS records\n See: https://www2.census.gov/geo/docs/reference/codes/national_county.txt")
   }
@@ -168,7 +243,7 @@ fips2cbsa <- function(fips,
 fips2name <- function(fips,
                       year = 2013,
                       long = FALSE){
-  df <- call_tiger(util$year2tiger(year), geometry = F)
+  df <- call_tiger(year = year, scale = "20m", geometry = F)
   if (long) {
     df <- paste0(df$COUNTY[df$place == fips],", ", df$STATE_NAME[df$place == fips])
   } else {
@@ -178,100 +253,81 @@ fips2name <- function(fips,
 }
 
 
-# Call geography and aggregate spatial features of each CBSA member in a cluster
-# (low priority todo) can be rewritten to use pymod$cbsa$get_cbsa_shape_df()
-cbsa_spatial_cluster <- function(year = 2013) {
-  cache_path <- glue(opath$cbsa_shapes_)
-  if (file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(readRDS(cache_path))
-  }
-  
-  t <- call_tiger(year)
-  c <- call_cbsa_concord(year)
-  c <- c[c$place %in% intersect(c$place, t$place),]
-  c <- data.frame(CBSA_CODE = c(c$CBSA_CODE, setdiff(t$place, c$place)), 
-                  place = c(c$place, setdiff(t$place, c$place)),
-                  CBSA_TITLE = c(c$CBSA_TITLE, t$COUNTY[t$place %in% setdiff(t$place, c$place)]))
-  c <- c[order(c$CBSA_CODE), ]
-  rownames(c) <- 1:nrow(c)
-  j <- inner_join(t, c, by = "place", copy = TRUE)
-  x <- j$CBSA_CODE %>% unique() %>% .[order(.)]
-  df <- j %>% distinct(CBSA_CODE, .keep_all = TRUE) %>% select(CBSA_CODE, CBSA_TITLE)
-  for (i in x){
-    #print(paste(list_names, "start cluster: ", i, which(i == x), "of", length(x), Sys.time()))
-    df$geometry[df$CBSA_CODE == i] <- j %>% filter(j$CBSA_CODE == i) %>% st_union()
-    #print(paste(list_names, "  end cluster: ", i, which(i == x), "of", length(x), Sys.time()))
-  }
-  df$center <- st_centroid(df$geometry)
-  
-  log_debug(paste("save to cache", cache_path))
-  saveRDS(df, util$mkdir(cache_path))
+## distance functions----
+
+# generate a distance matrix
+dist_mat <- function(spatial_dataframe, 
+                     from = c("center", "border")) {
+  from <- match.arg(from)
+
+  df <- spatial_dataframe
+  if (from == "center") x <- df$center
+  else if (from == "border") x <- df$geometry
+  m <- st_distance(x)
+  rownames(m) <- colnames(m) <- df$place
+
+  return(m)
+}
+
+# generate a shared border proximity matrix
+bprox_mat <- function(spatial_dataframe, 
+                      queen = TRUE) {
+  sd <- spatial_dataframe 
+  df <- sd$geometry %>% 
+    poly2nb(queen = queen) %>%
+    nb2mat(style = "B", zero.policy = TRUE)
+  diag(df) <- 1
+  rownames(df) <- colnames(df) <- sd$place
   return(df)
 }
 
-### Call geographic features
-call_geog <- function(year = 2013,
-                      cbsa_clust = FALSE,
-                      scale = c("20m", "5m", "500k"),
-                      ...){
-  scale <- match.arg(scale)
-  if (cbsa_clust) {
-    df <- cbsa_spatial_cluster(year = year, scale = scale)
-  } else {
-    df <- call_tiger(year = year, scale = scale)
-  }
-  return(df)
-}
-
-
-## distance ----
+## distance matrices----
 
 #' Produce Distance Matrix
 #' "border" takes 6+ hours to calculate.
-dist_mat <- function(from = c("center", "border"), year = 2013, cbsa = FALSE) {
+call_dist_mat <- function(year = 2013, 
+                          from = c("center", "border"),
+                          cbsa = FALSE) {
   from <- match.arg(from)
+  
   cache_path <- glue(opath$dist_mat_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
     return(readRDS(cache_path))
   }
-  
-  df <- call_geog(year, cbsa)
-  if (from == "center") x <- df$center
-  else if (from == "border") x <- df$geometry
-  m <- st_distance(x)
-  rownames(m) <- colnames(m) <- df$place
-  
+  df <- call_geog(year = year, cbsa = cbsa) %>% 
+    {dist_mat(spatial_dataframe = ., from = from)}
+
   log_debug(paste("save to cache", cache_path))
-  saveRDS(m, util$mkdir(cache_path))  
-  return(m)
+  saveRDS(df, util$mkdir(cache_path))  
+  return(df)
 }
 
-dist_matc <- function(year = 2013, cbsa = FALSE) {
-  return(dist_mat("center", year, cbsa))
-}
-
-dist_matb <- function(year = 2013, cbsa = FALSE) {
-  return(dist_mat("border", year, cbsa))
-}
-
+# # TODO: depreciate
+# call_dist_matc <- function(year = 2013, 
+#                            cbsa = FALSE) {
+#   return(call_dist_mat(year = year, from = "center", cbsa = cbsa))
+# }
+# 
+# # TODO: depreciate
+# call_dist_matb <- function(year = 2013, 
+#                            cbsa = FALSE) {
+#   return(call_dist_mat(year = year, from = "border", cbsa = cbsa))
+# }
 
 
 # Produce Shared Border Matrix
-bprox_mat <- function(queen = TRUE, year = 2013, cbsa = FALSE) {
+call_bprox_mat <- function(year = 2013, 
+                           cbsa = FALSE, 
+                           queen = TRUE) {
   cache_path <- glue(opath$bprox_mat_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
     return(readRDS(cache_path))
   }
   
-  t <- call_geog(year, cbsa)
-  df <- t$geometry %>% 
-    poly2nb(queen = queen) %>%
-    nb2mat(style = "B", zero.policy = TRUE)
-  diag(df) <- 1
-  rownames(df) <- colnames(df) <- t$place
+  df <- call_geog(year = year, cbsa = cbsa) %>% 
+    {bprox_mat(spatial_dataframe = ., queen = queen)}
   
   log_debug(paste("save to cache", cache_path))
   saveRDS(df, util$mkdir(cache_path))  
@@ -279,13 +335,14 @@ bprox_mat <- function(queen = TRUE, year = 2013, cbsa = FALSE) {
 }
 
 
+#TODO: fix with functional form and update more efficient/flexible algorithm 
 ############ Generate neighbors of neighbors hierarchical vector for a place ad nauseam
 #Watch out for Nantucket, MA; Staten Island,NY; and San Juan, WA
 # this is slow and can probably be improved by using existing shortest path algorithm
-neighbor_of_neighbor <- function(central_place,
+call_neighbor_of_neighbor <- function(central_place,
                                  quiet = TRUE,
                                  ...){
-  cache_path <- glue(opath$neighbor_rings_)
+  cache_path <- glue(opath$dist_neighbors_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
     return(readRDS(cache_path))
@@ -320,69 +377,227 @@ neighbor_of_neighbor <- function(central_place,
   return(df)
 }
 
-## impedance ----
+## impedance functions----
 
-#' Binary proximity matrix (1 = within radius)
-#' @param radius distance in miles
-prox_impedance_mat <- function(radius = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa)
+# generate a binary proximity distance matrix
+prox_impedance_mat <- function(distance_matrix, 
+                               radius = 1000){
+  x <- distance_matrix
   m <- (x < set_units(radius, mi))
   mode(m) <- "integer"
   rownames(m) <- colnames(m) <- rownames(x)
   return(m)
 }
 
-
-# Produce inverse power distance decay impedance matrix
-power_impedance_mat <- function(decay_power = 2, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa) |>
+# generate a inverse power decay impedance matrix
+power_impedance_mat <- function(distance_matrix,
+                                decay_power = 2) {
+  x <- distance_matrix |>
     drop_units()
   x <- 1 / (x^decay_power)
   x[is.infinite(x)] <- 1
   return(x)
 }
 
-# Produce exponential distance decay impedance matrix
-expo_impedance_mat <- function(decay_constant = 10000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa) |>
+# generate an exponential decay impedance matrix
+expo_impedance_mat <- function(distance_matrix,
+                               decay_constant = 10000) {
+  x <- distance_matrix |>
     drop_units()
   x <- exp(- x / decay_constant)
   return(x)
 }
 
-#' Produce Gaussian distance decay impedance matrix
-#' @param rms_width distance in miles
-gaus_impedance_mat <- function(rms_width = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa) |>
+# generate a Gaussian decay impedance matrix
+gaus_impedance_mat <- function(distance_matrix,
+                               rms_width = 1000) {
+  x <- distance_matrix |>
     drop_units()
-  rms_width <- set_units(rms_width, mi) |> set_units(m) |> drop_units()
+  rms_width <- set_units(rms_width, mi) |> 
+    set_units(m) |> 
+    drop_units()
   x <- exp(-.5 * (x / rms_width)^2)
   return(x)
 }
 
-# Produce hyperbolic secant distance decay impedance matrix
-hyper_impedance_mat <- function(decay_constant = 1000000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa) |>
+# generate a hyperbolic secant decay impedance matrix
+hyper_impedance_mat <- function(distance_matrix,
+                                decay_constant = 200) {
+  x <- distance_matrix |>
+    drop_units()
+  decay_constant <- set_units(decay_constant, mi) |> 
+    set_units(m) |>
     drop_units()
   x <- ((2/(exp(-(x/decay_constant)) + exp(x/decay_constant))))
   return(x)
 }
 
-#' Produce bi-square distance decay
-#' @param decay_zero distance in miles
-bisquare_impedance_mat <- function(decay_zero = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
-  from <- match.arg(from)
-  x <- dist_mat(from, year, cbsa) |>
+# generate a bi-square decay impedance matrix
+bisquare_impedance_mat <- function(distance_matrix,
+                                   decay_zero = 1000) {
+  x <- distance_matrix |>
     drop_units()
-  decay_zero <- set_units(decay_zero, mi) |> set_units(m) |> drop_units()
+  decay_zero <- set_units(decay_zero, mi) |> 
+    set_units(m) |> 
+    drop_units()
   m <- (1-(x/decay_zero)^2)^2
   m[x > decay_zero] <- 0
   return(m)
+}
+
+# TODO: implement neighbors decay option
+# Note: power decay with constant of 1 is functionally the inverse distance decay
+# generate family of impedance matrices from single function 
+impedance_mat <- function(spatial_dataframe,
+                          from = c("center", "border"),
+                          functional_form = c("bisquare",
+                                              "secant",
+                                              "gaussian",
+                                              "exponential",
+                                              "power",
+                                              "distance",
+                                              "queen",
+                                              "rook",
+                                              "neighbor"),
+                          scalar_constant,
+                          meta = FALSE){
+  from <- match.arg(from)
+  functional_form <- match.arg(functional_form)
+  if(functional_form == "bisquare"){
+    if(is.null(scalar_constant)){scalar_constant = 1000}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- bisquare_impedance_mat(distance_matrix = dm, decay_zero = scalar_constant)
+    caption <- paste0("Bi-square Decay: ", scalar_constant," mile limit")
+  }
+  if(functional_form == "secant"){
+    if(is.null(scalar_constant)){scalar_constant = 200}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- hyper_impedance_mat(distance_matrix = dm, decay_constant = scalar_constant)
+    caption <- paste0("Hyperbolic Secant Decay: ", scalar_constant," mile scewness scalar")
+  }
+  if(functional_form == "gaussian"){
+    if(is.null(scalar_constant)){scalar_constant = 1000}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- gaus_impedance_mat(distance_matrix = dm, rms_width = scalar_constant)
+    caption <- paste0("Gaussian Decay: ", scalar_constant," mile RMS scalar")
+  }
+  if(functional_form == "exponential"){
+    if(is.null(scalar_constant)){scalar_constant = 10000}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- expo_impedance_mat(distance_matrix = dm, decay_constant = scalar_constant)
+    caption <- paste0("Exponential Decay: ", scalar_constant," mile disintegration scalar")
+  }
+  if(functional_form == "power"){
+    if(is.null(scalar_constant)){scalar_constant = 2}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- power_impedance_mat(distance_matrix = dm, decay_power = scalar_constant)
+    caption <- paste0("Inverse Power Decay: decay power of ", scalar_constant)
+  }
+  if(functional_form == "distance"){
+    if(is.null(scalar_constant)){scalar_constant = 500}
+    dm <- dist_mat(spatial_dataframe = spatial_dataframe, from = from)
+    df <- prox_impedance_mat(distance_matrix = dm, radius = scalar_constant)
+    caption <- paste0("Proximity Radius: ", scalar_constant," mile limit")
+  }
+  if(functional_form == "queen"){
+    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = TRUE)
+    caption <- paste0("Queen Adjacent Borders")
+  }
+  if(functional_form == "rook"){
+    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = FALSE)
+    caption <- paste0("Rook Adjacent Borders")
+  }
+  if(functional_form == "neighbor"){
+    stop("dummy error")
+    if(missing(scalar_constant)){scalar_constant = 2}
+    df <- neighbor_of_neighbor()
+    caption <- paste0("Neighbor Adjacency Hierarchy:", scalar_constant, "degrees of seperation")
+  }
+  
+  if(meta){
+    return(list("imatrix" = df, "caption" = caption, "scalar" = scalar_constant))
+  } else {
+    return(df)
+  }
+  
+}
+
+## impedance matrices----
+
+#' Binary proximity matrix (1 = within radius)
+#' @param radius distance in miles
+call_prox_impedance_mat <- function(radius = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {prox_impedance_mat(distance_matrix = ., radius = radius)}
+  return(df)
+}
+
+# Produce inverse power distance decay impedance matrix
+call_power_impedance_mat <- function(decay_power = 2, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {power_impedance_mat(distance_matrix = ., decay_power = decay_power)}
+  return(df)
+}
+
+# Produce exponential distance decay impedance matrix
+call_expo_impedance_mat <- function(decay_constant = 10000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {expo_impedance_mat(distance_matrix = ., decay_constant = decay_constant)}
+  return(df)
+}
+
+#' Produce Gaussian distance decay impedance matrix
+#' @param rms_width distance in miles
+call_gaus_impedance_mat <- function(rms_width = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {gaus_impedance_mat(distance_matrix = ., rms_width = rms_width)}
+  return(df)
+}
+
+#' Produce hyperbolic secant distance decay impedance matrix
+#' @param decay_constant distance in miles
+call_hyper_impedance_mat <- function(decay_constant = 200, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {hyper_impedance_mat(distance_matrix = ., decay_constant = decay_constant)}
+  return(df)
+}
+
+#' Produce bi-square distance decay
+#' @param decay_zero distance in miles
+call_bisquare_impedance_mat <- function(decay_zero = 1000, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  from <- match.arg(from)
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {bisquare_impedance_mat(distance_matrix = ., decay_zero = decay_zero)}
+  return(df)
+}
+
+# call family of impedance matrices from single function 
+call_impedance_mat <- function(year = 2013,
+                               cbsa = FALSE,
+                               from = c("center", "border"),
+                               functional_form = c("bisquare",
+                                                   "secant",
+                                                   "gaussian",
+                                                   "exponential",
+                                                   "power",
+                                                   "distance",
+                                                   "queen",
+                                                   "rook",
+                                                   "neighbor"),
+                               scalar_constant = NULL,
+                               meta = FALSE){
+  df <- call_geog(year = year, cbsa = cbsa)
+  df <-  impedance_mat(spatial_dataframe = df, 
+                       from = from, 
+                       functional_form = functional_form,
+                       scalar_constant = scalar_constant, 
+                       meta = meta)
+  return(df)
 }
 
 
@@ -429,18 +644,18 @@ test_dataprep <- function() {
   fips2name("55025") == "Dane"
   fips2name("55025", long = TRUE) == "Dane County, Wisconsin"
   
-  # cbsa_spatial_cluster(2013) #slow
+  # call_cbsa_spatial_cluster(2013) #slow
 
-  dist_matc()
-  # dist_matb() #slow, many hours
+  # call_dist_matc()
+  # # call_dist_matb() #slow, many hours
+  # 
+  # call_bprox_mat()
+  # # neighbor_of_neighbor("55025", quiet = FALSE) #slow
   
-  bprox_mat()
-  # neighbor_of_neighbor("55025", quiet = FALSE) #slow
-  
-  x <- prox_impedance_mat()
-  x <- power_impedance_mat()
-  x <- expo_impedance_mat()
-  x <- gaus_impedance_mat()
-  x <- hyper_impedance_mat()
-  x <- bisquare_impedance_mat()
+  x <- call_prox_impedance_mat()
+  x <- call_power_impedance_mat()
+  x <- call_expo_impedance_mat()
+  x <- call_gaus_impedance_mat()
+  x <- call_hyper_impedance_mat()
+  x <- call_bisquare_impedance_mat()
 }

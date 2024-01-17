@@ -66,6 +66,24 @@ reticulate_unlist_cols <- function(df) {
   ))
 }
 
+# matrix manipulation ----
+
+# intermediate function to get matrix output format from long format data used with parquet storage
+long2matrix <- function(df, 
+                        values_from = names(df)[3], 
+                        names_from = names(df)[2], 
+                        id_cols = names(df)[1]){
+  df <- df %>% 
+    pivot_wider(id_cols = id_cols, 
+                names_from = names_from, 
+                values_from = values_from) %>% 
+    as.data.frame() 
+  rownames(df) <- df[[id_cols]]
+  df <- df[-1] %>% 
+    as.matrix() 
+  return(df)
+}
+
 #### Add specified rows and columns of a vector matrix
 vector_collapse <- function(vector, 
                             collapse_names, 
@@ -116,6 +134,8 @@ edgelist2matrix <- function(x){
   return(df)
 }
 
+# spatial concordance ----
+
 # Convert miles to meters
 miles2meters <- function(miles){
   df <- as.integer(miles)*1609.344
@@ -127,6 +147,8 @@ meters2miles <- function(meters){
   df <- as.integer(meters)/1609.344
   return(df)
 }
+
+# temporal concordance ----
 
 nearest_point <- function(x, grid) {
   if (x <= min(grid)) return(min(grid))
@@ -235,21 +257,7 @@ year2bea_concord <- function(year){
   return(as.integer(x))
 }
 
-# intermediate function to get matrix output format from long format data used with parquet storage
-long2matrix <- function(df, 
-                        values_from = names(df)[3], 
-                        names_from = names(df)[2], 
-                        id_cols = names(df)[1]){
-  df <- df %>% 
-    pivot_wider(id_cols = id_cols, 
-                names_from = names_from, 
-                values_from = values_from) %>% 
-    as.data.frame() 
-  rownames(df) <- df[[id_cols]]
-  df <- df[-1] %>% 
-    as.matrix() 
-  return(df)
-}
+
 
 
 

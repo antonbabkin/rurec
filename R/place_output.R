@@ -66,7 +66,7 @@ industry2commodity <- function(industry_output_matrix,
     `colnames<-`(names(x)[x!=0]) 
   
   #commodity-by-place gross output matrix (1,000's of dollars)
-  df <- cmat_alt%*%df[names(x)[x!=0], ]
+  df <- cmat_alt%*%df[names(x)[x!=0], ,drop = F]
   
   return(df)
 }
@@ -386,19 +386,19 @@ intermediate_activity_factor <- function(industry_output_matrix,
     `colnames<-`(rownames(smat))
 
   if (schedule == "demand" & class_system == "industry"){
-    df <- diag(as.vector(colSums(dmat_alt[inames, cnames]%*%bmat[cnames, inames])))%*%df[inames, ] %>%
+    df <- diag(as.vector(colSums(dmat_alt[inames, cnames, drop = F]%*%bmat[cnames, inames, drop = F])))%*%df[inames, , drop = F] %>%
       `rownames<-`(inames)
   }
   if (schedule == "supply" & class_system == "industry"){
-    df <- (dmat_alt[inames, cnames]%*%bmat[cnames, inames])%*%df[inames, ] %>%
+    df <- (dmat_alt[inames, cnames, drop = F]%*%bmat[cnames, inames, drop = F])%*%df[inames, , drop = F] %>%
       `rownames<-`(inames)
   }
   if (schedule == "demand" & class_system == "commodity"){
-    df <- bmat[cnames, inames]%*%df[inames, ] %>%
+    df <- bmat[cnames, inames, drop = F]%*%df[inames, , drop = F] %>%
       `rownames<-`(cnames)
   }
   if (schedule == "supply" & class_system == "commodity"){
-    df <- diag(as.vector(bmat[cnames, inames]%*%rowSums(df[inames, ])))%*%t(dmat_alt[inames, cnames])%*%diag(1/as.vector(rowSums(df[inames, ])))%*%df[inames, ] %>%
+    df <- diag(as.vector(bmat[cnames, inames, drop = F]%*%rowSums(df[inames, , drop = F])))%*%t(dmat_alt[inames, cnames, drop = F])%*%diag(1/as.vector(rowSums(df[inames, , drop = F])))%*%df[inames, , drop = F] %>%
       `rownames<-`(cnames)
   }
 
@@ -451,17 +451,17 @@ intermediate_activity_domestic <- function(industry_output_matrix,
       {bea_io$production_shares(commodity_output_vector = ., commodity_supply_vector = cs)}
 
     #county demand for domestically produced intermediate commodities in producer prices
-    df <- diag(as.vector(ps[cnames, ])) %*% (bmat %*% df)[cnames, ] %>%
+    df <- diag(as.vector(ps[cnames, , drop = F])) %*% (bmat %*% df)[cnames, , drop = F] %>%
       `rownames<-`(cnames)
   }
   if (schedule == "supply" & class_system == "commodity"){
     #censored commodity use shares
-    cus <- (bmat %*% df) %>%
+    cus <- (bmat %*% df)[, , drop = F] %>%
       rowSums() %>%
       {bea_io$commodity_use_shares(intermediate_commodity_use_vector = ., commodity_supply_vector = cs)}
 
     #county supply of domestically produced intermediate commodities in producer prices
-    df <- diag(as.vector(cus[cnames, ])) %*% co[cnames, ]  %>%
+    df <- diag(as.vector(cus[cnames, , drop = F])) %*% co[cnames, , drop = F]  %>%
       `rownames<-`(cnames)
   }
 
@@ -502,7 +502,6 @@ intermediate_activity <- function(industry_output_matrix,
   schedule <- match.arg(schedule)
   paradigm <- match.arg(paradigm)
   class_system <- match.arg(class_system)
-  
   if(paradigm == "factor"){
     df <- intermediate_activity_factor(industry_output_matrix = industry_output_matrix,
                                        io_b_matrix = io_b_matrix,
