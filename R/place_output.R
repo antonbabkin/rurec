@@ -349,6 +349,23 @@ call_output <- function(year,
 }
 
 
+# Call intertemporal gross output by county table
+call_temporal_output <- function(set_of_years, 
+                                 names_prefix = "y.",
+                                 class_system = c("industry", "commodity"), 
+                                 ilevel = c("det", "sum", "sec"),
+                                 bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                 verbose = FALSE){
+  df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
+                                 call_output, 
+                                 class_system = class_system, 
+                                 ilevel = ilevel, 
+                                 bus_data = bus_data,
+                                 verbose = verbose) %>%
+    bind_rows(.id = "id") %>%
+    pivot_wider(names_from = id, values_from = output, names_prefix = names_prefix)
+}
+
 # Intermediate functions----
 
 #return "factor" paradigm intermediate industry/commodity demand/supply matrix 
@@ -591,7 +608,7 @@ call_factor_list <- function(year,
   paradigm <- match.arg(paradigm)
   ilevel <- match.arg(ilevel)
   bus_data <- match.arg(bus_data)
-  
+
   cache_path <- glue(opath$iofactor_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
@@ -636,7 +653,24 @@ call_factor_list <- function(year,
   
 }
 
-
+# Call intertemporal list factor supply and demand 
+call_temporal_factor_list <- function(set_of_years,
+                                      class_system = c("industry", "commodity"),
+                                      paradigm = c("factor", "domestic", "capital"),
+                                      ilevel = c("det", "sum", "sec"),
+                                      bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                      cbsa = FALSE,
+                                      verbose = FALSE){
+  df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
+                                 call_factor_list, 
+                                 paradigm = paradigm,
+                                 class_system = class_system, 
+                                 ilevel = ilevel,
+                                 bus_data = bus_data,
+                                 verbose = verbose) %>%
+    bind_rows(.id = "id_year")
+  return(df) 
+}
 
 # Tests ----
 

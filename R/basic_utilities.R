@@ -68,7 +68,7 @@ reticulate_unlist_cols <- function(df) {
 
 # matrix manipulation ----
 
-# intermediate function to get matrix output format from long format data used with parquet storage
+# get matrix output format from long format data used with parquet storage
 long2matrix <- function(df, 
                         values_from = names(df)[3], 
                         names_from = names(df)[2], 
@@ -257,6 +257,28 @@ year2bea_concord <- function(year){
   return(as.integer(x))
 }
 
+# temporal recursion ----
+
+# return a list of results from a function with a year argument, optional function arguments are permitted
+temp_fun_recur_list <- function(set_of_years = 2000:2020, 
+                                function_name, 
+                                ...){
+  df <- vector("list", length(set_of_years))
+  names(df) <- set_of_years
+  x <- list(set_of_years = set_of_years)
+  opargs <- list(...)
+  for(i in 1:length(opargs)){
+    assign(paste(names(opargs[i])), opargs[[i]][1])
+  }
+  for (y in 1:length(set_of_years)){
+        year <- x$set_of_years[[y]]
+        df[[y]] <- do.call(deparse(substitute(function_name)), c(list(year=year, ...)) )
+  }
+  return(df)
+}
+
+
+# Tests ----
 
 
 
