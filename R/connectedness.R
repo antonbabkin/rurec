@@ -182,7 +182,7 @@ call_nominal_absorption_table <- function(year,
   paradigm <- match.arg(paradigm)
   ilevel <- match.arg(ilevel)
   bus_data <- match.arg(bus_data)
-  
+
   cache_path <- glue(opath$abmatrix_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
@@ -261,7 +261,7 @@ call_absorption_table <- function(year,
                                   cbsa = FALSE,
                                   normalized = TRUE, 
                                   verbose = FALSE){
-  
+
   if(normalized){
     df <- call_normalized_absorption_table(year = year, 
                                            class_system = class_system,
@@ -280,6 +280,29 @@ call_absorption_table <- function(year,
                                         verbose = verbose)
     return(df)
   }
+}
+
+# Call intertemporal absorption table
+call_temporal_absorption_table <- function(set_of_years, 
+                                           names_prefix = "y.",
+                                           class_system = c("industry", "commodity"), 
+                                           paradigm = c("factor", "domestic", "capital"),
+                                           ilevel = c("det", "sum", "sec"),
+                                           bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                           cbsa = FALSE,
+                                           normalized = TRUE, 
+                                           verbose = FALSE){
+  df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
+                                 call_absorption_table, 
+                                 class_system = class_system, 
+                                 paradigm = paradigm, 
+                                 ilevel = ilevel, 
+                                 bus_data = bus_data, 
+                                 cbsa = cbsa, 
+                                 verbose = verbose) %>%
+    bind_rows(.id = "id") %>%
+    pivot_wider(names_from = id, names_prefix = names_prefix)
+  return(df)
 }
 
 
@@ -597,7 +620,7 @@ call_eca_table <- function(year,
   
   # log_debug(paste("save to cache", cache_path))
   # write_parquet(df, util$mkdir(cache_path))
-  # 
+  
   return(df)
 }
 
@@ -642,6 +665,73 @@ call_eca_table_spatial <- function(year,
 
   return(df)
 }
+
+
+# Call intertemporal ECA table
+call_temporal_eca_table <- function(set_of_years, 
+                                    normalized = TRUE, 
+                                    impedance = FALSE,
+                                    functional_form = c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor"),
+                                    scalar_constant = NULL,
+                                    from = c("center", "border"),
+                                    central_place = NULL,
+                                    flow_direction = c("out", "in"),
+                                    function_class = c("max", "gini", "sum", "mean", "sd"),
+                                    threshold = .05,
+                                    alpha_vector = "max_alpha",
+                                    class_system = c("industry", "commodity"), 
+                                    paradigm = c("factor", "domestic", "capital"),
+                                    ilevel = c("det", "sum", "sec"),
+                                    bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                    cbsa = FALSE, 
+                                    trim = "^(02|15|60|66|69|72|78)|(999)$",
+                                    verbose = FALSE,
+                                    spatial = TRUE){
+  if(spatial){
+  df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
+                                 call_eca_table_spatial, 
+                                 normalized = normalized, 
+                                 impedance = impedance,
+                                 functional_form = functional_form,
+                                 scalar_constant = scalar_constant,
+                                 from = from,
+                                 central_place = central_place,
+                                 flow_direction = flow_direction,
+                                 function_class = function_class,
+                                 threshold = threshold,
+                                 alpha_vector = alpha_vector,
+                                 class_system = class_system, 
+                                 paradigm = paradigm,
+                                 ilevel = ilevel,
+                                 bus_data = bus_data,
+                                 cbsa = cbsa, 
+                                 trim = trim,
+                                 verbose = verbose)
+  } else {
+    df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
+                                   call_eca_table, 
+                                   normalized = normalized, 
+                                   impedance = impedance,
+                                   functional_form = functional_form,
+                                   scalar_constant = scalar_constant,
+                                   from = from,
+                                   central_place = central_place,
+                                   flow_direction = flow_direction,
+                                   function_class = function_class,
+                                   threshold = threshold,
+                                   alpha_vector = alpha_vector,
+                                   class_system = class_system, 
+                                   paradigm = paradigm,
+                                   ilevel = ilevel,
+                                   bus_data = bus_data,
+                                   cbsa = cbsa, 
+                                   trim = trim,
+                                   verbose = verbose)
+  }
+    df <- df %>% bind_rows(.id = "id_year")
+  return(df)
+}
+
 
 # Call list of hierarchical ECA tables
 call_hierarchical_connectedness <- function(year,
@@ -735,25 +825,11 @@ call_hierarchical_connectedness <- function(year,
 }
 
 
-
-# eca_hierarchical_connectedness <- function(){}
-
 # update n vector and place_centric_connect inputs
 ############ Change in connectedness over time for a county 
 #place_connect_delta <-
 
 
-# ############ Absorption matching outcomes over time
-# absorption_match_overtime <- function(years = 2000:2020,
-#                                       ...){
-#   dis <- vector("list", length(years))
-#   names(dis) <- years
-#   for (y in years){
-#     dis[[y]] <- connectedness(year = y, ...)
-#   }
-#   df <- bind_rows(dis, .id = "id")
-#   return(df)
-# }
 
 # Tests ----
 
