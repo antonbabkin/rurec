@@ -35,6 +35,7 @@ ipath <- list(
 
 opath <- list(
   naics_concord_ = "data/bea_io/naics_concord/{year}.rds",
+  names_concord_ = "data/bea_io/names_concord/{year}.rds",
   sup_ = "data/bea_io/sup/{level}/{year}_{labels}.rds",
   use_ = "data/bea_io/use/{level}/{year}_{labels}.rds",
   ixi_ = "data/bea_io/ixi/{level}/{year}_{labels}.rds",
@@ -154,63 +155,68 @@ pubdata$get_cxc <- function(year, level, labels = FALSE) {
   return(x)
 }
 
-# IO code/concordance ----
+# IO industry codes and concordances ----
 
-#TODO: check if unnecessaryredundant with new table/label dataframe scheme
-beacode2description <- function(code, 
-                                year = 2012,
-                                ...){
-  #Note: year is necessary but arbitrary selection
-  bea_year <- util$year2bea(year, ...)
-  x <- pubdata$get_sup(bea_year, "sec", FALSE)
-  sec <- do.call(rbind, x$col_names)
-  x <- pubdata$get_sup(bea_year, "sum", FALSE)
-  sum <- do.call(rbind, x$col_names)
-  x <- pubdata$get_sup(bea_year, "det", FALSE)
-  det <- do.call(rbind, x$col_names)
-  x <- rbind(sec, sum, det) %>% as.data.frame()
-  colnames(x) <- c("code", "description")
-  df <- x["description"][x["code"] == code]
-  return(df)
-}
-
-###### Call and tidy NAICS to BEA industry concordance table
-call_industry_concordance <- function(year = 2012) {
-  df <- pubdata$get_naics_concord(year) %>%
-    rename_with(str_to_upper) %>%
-    filter(NAICS != "n.a.", NAICS != "NaN")
-  df <- df %>%
-    add_row(SECTOR = "23", 
-            SUMMARY = "23", 
-            U_SUMMARY = "23", 
-            DETAIL = "23", 
-            DESCRIPTION = "Construction", 
-            NAICS = "23", 
-            .before = which(df$SECTOR == '23')[1]) %>%
-    filter(NAICS != "23*")
-  df <- df %>%
-    add_row(SECTOR = "53",
-            SUMMARY = "531",
-            U_SUMMARY = "531",
-            DETAIL = "531",
-            DESCRIPTION = "Housing",
-            NAICS = "531",
-            .before = which(df$SECTOR == '53')[1]) %>%
-    filter(DETAIL != "531HST", DETAIL != "531ORE") %>%
-    arrange(NAICS)
-  
-  rownames(df) <- 1:nrow(df)
-  b <- c("11", "21", "22", "23", "31G", "31G", "31G", "42", "44RT", "44RT", "48TW", "48TW", "51", "FIRE", "FIRE", "PROF", "PROF", "PROF", "6", "6", "7", "7", "81", "G")
-  n <- c("11", "21", "22", "23", "31", "32", "33", "42", "44", "45", "48", "49", "51", "52", "53", "54", "55", "56", "61", "62", "71", "72", "81", "92")
-  for(i in 1:length(n)){
-    df$SECTOR[substr(df$NAICS, 1,2) %in% n[i]] <- b[i]
+# return totality of BEA "Industry Title" and "Industry Code" descriptions
+call_bea_description_concordance <- function(year = 2012){
+  year = util$year2bea_concord(year)
+  p <- glue(opath$names_concord_)
+  if (file.exists(p)) {
+    log_debug(paste("read from cache", p))
+    return(readRDS(p))
   }
+  df <- data.frame()
+  for (i in c("det", "sum", "sec")){
+    x <- util$year2bea(year = year, ilevel = i) %>% 
+      {pubdata$get_sup(year = ., level = i, labels = F)} %>% 
+      {bind_rows(as.data.frame(t(sapply(.$row_names, c))), 
+                 as.data.frame(t(sapply(.$col_names, c))) )} 
+    df <- rbind(df, x)
+  }
+  df <- df %>% {.[!duplicated(.), ]} %>% 
+    `colnames<-`(c("code", "description"))
+  log_debug(paste("save to cache", p))
+  saveRDS(df, util$mkdir(p))
   return(df)
 }
+
+# return the BEA "Industry Title" description for a given BEA "Industry Code"
+beacode2description <- function(code,
+                                year = 2012){
+  df <- call_bea_description_concordance(year = year) %>% 
+    {.[2][.[1] == as.character(code)]}
+  return(df)
+}
+
+# Call and tidy NAICS to BEA industry concordance table
+call_industry_concordance <- function(year = 2012) {
+  df <- util$year2bea_concord(year = year) %>% 
+    pubdata$get_naics_concord(year = .)
+  df[df[, "sector"] %in% c("33DG", "31ND"),"sector"] <- "31G" 
+  df[df[, "sector"] %in% c("52", "53"),"sector"] <- "FIRE" 
+  df[df[, "sector"] %in% c("54", "55", "56"),"sector"] <- "PROF" 
+  df[df[, "sector"] %in% c("61", "62"),"sector"] <- "6" 
+  df[df[, "sector"] %in% c("71", "72"),"sector"] <- "7" 
+  df[df[, "summary"] %in% c("HS", "ORE"),"naics"] <- NA 
+  df[is.na(df[,"summary"]),"summary"] <- df[is.na(df[,"summary"]),"sector"]
+  df[is.na(df[,"detail"]),"detail"] <- df[is.na(df[,"detail"]),"summary"]
+  df[df[, "description"] == "Housing", c("u_summary","naics")] <- "531"
+  df[df[, "description"] == "Construction", c("u_summary","naics")] <- "23" 
+  df <- df %>%
+    {.[!is.na(.[,"naics"]), ]} %>%
+    {.[.[,"naics"] != "n.a.", ]} %>% 
+    {.[.[,"naics"] != "23*", ]} %>%
+    {.[!duplicated(.), ]} %>% 
+    {.[order(.$naics),]} %>% 
+    `rownames<-`(1:nrow(.)) %>% 
+    rename_with(str_to_upper)
+  return(df)
+}
+
 
 ###### Get specific industry NAICS to BEA concordance
-ilevel_concord <- function(ilevel = c("det", "sum", "sec"), 
-                           year = 2012) {
+call_ilevel_concord <- function(ilevel = c("det", "sum", "sec"), 
+                                year = 2012) {
   ilevel <- match.arg(ilevel)
   x <- call_industry_concordance(year)
   if(ilevel == "det"){
@@ -234,7 +240,45 @@ ilevel_concord <- function(ilevel = c("det", "sum", "sec"),
   return(df)
 }
 
+# return concordance between BEA industry levels 
+call_intra_level_concordance <- function(year = 2012,
+                                         cluster_level = c("sec", "sum", "det")){
+  cluster_level <- match.arg(cluster_level)
+  df <- util$year2bea_concord(year = year) %>% 
+    pubdata$get_naics_concord(year = .) %>% 
+    {subset(., select = -c(naics))}
+  df[df[, "sector"] %in% c("33DG", "31ND"),"sector"] <- "31G" 
+  df[df[, "sector"] %in% c("52", "53"),"sector"] <- "FIRE" 
+  df[df[, "sector"] %in% c("54", "55", "56"),"sector"] <- "PROF" 
+  df[df[, "sector"] %in% c("61", "62"),"sector"] <- "6" 
+  df[df[, "sector"] %in% c("71", "72"),"sector"] <- "7" 
+  df[df[, "summary"] %in% c("HS", "ORE"),"summary"] <- "531" 
+  df$indcode <- df$detail
+  df[is.na(df[,"detail"]),"indcode"] <- df[is.na(df[,"detail"]),"summary"]
+  df[is.na(df[,"summary"]),"indcode"] <- df[is.na(df[,"summary"]),"sector"]
+  df[df[, "description"] == "Housing", c("u_summary", "detail")] <- "531"
+  df[df[, "description"] == "Construction", c("u_summary", "detail")] <- "23"
+  df <- df %>%
+    {.[, c(switch(cluster_level, sec={"sector"}, sum={"summary"}, det={"detail"}), "indcode")]} %>%
+    {.[!duplicated(.), ]} %>%
+    na.omit()
+  return(df)
+}
 
+# check logical consistency of clustering for agiven ilevel
+cluster_logic <- function(ilevel, 
+                          cluster_level){
+  if (cluster_level == "sum"){
+    stopifnot("`cluster_level` more specific than `ilevel`"= ilevel == "det" | ilevel == "sum")
+  }
+  if (cluster_level == "det"){
+    stopifnot("`cluster_level` more specific than `ilevel`"= ilevel == "det" )
+  }
+}
+
+# BEA matrix manipulation ----
+
+#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach
 ### Aggregate and tidy a commodity-by-industry BEA matrix
 condense_bea_matrix <- function(matrix,
                                 ilevel= c("det", "sum", "sec")){
@@ -257,6 +301,7 @@ condense_bea_matrix <- function(matrix,
   return(df)
 }
 
+#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach
 ### Aggregate and tidy a BEA row-vector
 condense_bea_vector <- function(vector,
                                 ilevel= c("det", "sum", "sec")){
@@ -771,7 +816,7 @@ test_dataprep <- function() {
   call_industry_concordance(2017)
   for (year in c(2012, 2017)) {
     for (ilevel in c("det", "sum", "sec")) {
-      ilevel_concord(ilevel, year)
+      call_ilevel_concord(ilevel, year)
     }
   }
   
