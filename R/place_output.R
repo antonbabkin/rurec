@@ -44,8 +44,8 @@ cbsa_aggregate_output <- function(df,
   df <- geog$call_cbsa_concord(year) %>% 
     {left_join(df, ., by = "place")} %>% 
     mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), place, CBSA_CODE)) %>% 
-    {aggregate(.$output, list(.$indcode, .$CBSA_CODE), FUN=sum)} %>% 
-    `colnames<-`(c("indcode", "place", "output"))
+    {aggregate(.[[3]], list(.$indcode, .$CBSA_CODE), FUN=sum)} %>% 
+    `colnames<-`(names(df))
   return(df)  
 }
 
@@ -592,7 +592,7 @@ call_intermediate <- function(year,
                               schedule = schedule,
                               class_system = class_system) %>% 
     as.data.frame.table() %>% 
-    `colnames<-`(c("indcode", "place", "output"))
+    `colnames<-`(c("indcode", "place", schedule))
   
   return(df)  
 }
