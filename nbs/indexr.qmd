@@ -17,12 +17,13 @@ source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 source("R/dataprep_infogroup.R", local = (ig <- new.env()))
 source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 
-# pack all outputs from 5 dataprep modules, excluding parquet'd establishment-level inforgroup
-# list(bea_io$opath, geo$opath, cbp$opath, ig$opath["county_"], agcen$opath) |> 
+# pack all outputs from 5 dataprep modules, excluding parquet'd establishment-level infogroup
+# list(bea_io$opath, geo$opath, cbp$opath, ig$opath["county_"], agcen$opath, dataprep$opath["population"]) |> 
 #   list_c() |> list_c() |> # cat paths from all lists into single vector
-#   util$zip_pack("tmp/bea_cbp_geo_ig_ag_v231109.zip", files = _, overwrite = TRUE)
+#   util$zip_pack("tmp/bea_cbp_geo_ig_ag_pop_v240123.zip", files = _, overwrite = TRUE)
 # unpack
 # util$zip_unpack("tmp/bea_cbp_geo_ig_ag_v231109.zip", overwrite = TRUE)
+
 
 ```
 
@@ -39,9 +40,10 @@ source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 # bea_io$test_pubdata()
 # bea_io$test_dataprep()
 
+# example usage
 bea_io$pubdata$get_naics_concord(2017)
 bea_io$pubdata$get_use(2017, "det", TRUE)$table
-bea_io$call_b_matrix(2017, "det")
+bea_io$call_b_matrix(2017, "det")[1:5, 1:5]
 
 
 ```
@@ -58,6 +60,7 @@ source("R/geography.R", local = (geo <- new.env()))
 # geo$test_pubdata()
 # geo$test_dataprep()
 
+# example usage
 geo$call_cbsa_concord(2013)
 
 ```
@@ -72,7 +75,8 @@ source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 # cbp$clear_outputs()
 # cbp$test_naics_years()
 
-x <- cbp$call_cbp(2012, "county", FALSE)
+# example usage
+cbp$call_cbp(2012, "county", FALSE)
 
 ```
 
@@ -84,15 +88,17 @@ x <- cbp$call_cbp(2012, "county", FALSE)
 ```{r}
 source("R/dataprep_infogroup.R", local = (ig <- new.env()))
 
-ig$prep_county_agg(seq(2002, 2017, 5))
+# build enhanced parquet dataset
+ig$prep_enh()
 
-# soybean processing
+# build county aggregates
+ig$prep_county_agg(1997:2017)
+
+# example: county soybean processing
 open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
   filter(naics == "311224") |>
   arrange(st, cty) |>
   collect()
-
-ig$prep_county_agg(1997:2017)
 
 ```
 
@@ -107,7 +113,8 @@ source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 # testing
 # agcen$test_all()
 
-x <- agcen$call_agoutput(2012, "county")
+# county output of BEA detail agricultural industries
+agcen$call_agoutput(2012, "county")
 
 
 ```
@@ -121,7 +128,37 @@ source("R/place_output.R", local = (place_output <- new.env()))
 # testing
 # place_output$test_all()
 
-x <- place_output$call_output(2012, "commodity", "det", "infogroup")
+# county output
+place_output$call_output(year = 2012, class_system = "commodity", ilevel = "det", bus_data = "infogroup")
+
+# county demand
+place_output$call_intermediate(
+  year = 2012, 
+  schedule = "demand", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup")
+
+# county supply
+place_output$call_intermediate(
+  year = 2012, 
+  schedule = "supply", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup")
+
+```
+
+
+# Population
+
+```{r}
+source("R/dataprep.R", local = (dataprep <- new.env()))
+
+dataprep$call_population()
+
 ```
 
 

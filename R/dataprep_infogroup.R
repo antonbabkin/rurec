@@ -186,7 +186,7 @@ prep_county_agg <- function(years) {
     d <- ds %>% 
       filter(year == !!year) %>%
       group_by(st, cty, naics) %>%
-      summarize(sales = sum(sales), emp = sum(emp), .groups = "drop") %>%
+      summarize(est = n(), emp = sum(emp), sales = sum(sales), .groups = "drop") %>%
       collect()
     p <- glue(opath$county_)
     write_parquet(d, util$mkdir(p))
