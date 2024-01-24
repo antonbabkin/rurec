@@ -92,7 +92,7 @@ call_output <- function(year,
   }
   
   #NAICS to BEA industry concordance
-  conc <- bea_io$ilevel_concord(ilevel = ilevel, year = util$year2bea_concord(year))
+  conc <- bea_io$call_ilevel_concord(ilevel = ilevel, year = year)
   
   #BEA national gross industry output
   indout <- bea_io$call_industry_output(year = year, ilevel = ilevel, condense = TRUE) %>% 
@@ -364,7 +364,9 @@ call_temporal_output <- function(set_of_years,
                                  verbose = verbose) %>%
     bind_rows(.id = "id") %>%
     pivot_wider(names_from = id, values_from = output, names_prefix = names_prefix)
+  return(df)
 }
+
 
 # Intermediate functions----
 

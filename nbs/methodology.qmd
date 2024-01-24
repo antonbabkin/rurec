@@ -190,7 +190,7 @@ To address this, we map correct sectors into NAICS as follows:
 
 ```{r}
 
-d <- bea_io$ilevel_concord("sec")
+d <- bea_io$call_ilevel_concord("sec")
 d %>%
   filter(SECTOR %in% (d %>% group_by(SECTOR) %>% summarize(n = n()) %>% filter(n > 1) %>% pull(SECTOR)))
 ```

@@ -46,16 +46,16 @@ sum(df[df$NAICS == naics_code, ]$eckert_ap) / sum(df[df$NAICS == naics_code, ]$a
 over or under imputation relative to national values along NAICS industry type detail level
 ```{r}
 temp <- df %>% pivot_longer(c(raw2nat, eckert2nat), names_to = "key", values_to = "value")
-ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(position=position_dodge(width=0.4), alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+ggplot(temp[temp$NAICS %in% call_ilevel_concord(ilevel = "det")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(position=position_dodge(width=0.4), alpha = 1/2) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
 over or under imputation relative to national values along NAICS industry type summary level
 ```{r}
-ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sum")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+ggplot(temp[temp$NAICS %in% call_ilevel_concord(ilevel = "sum")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic() + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 over or under imputation relative to national values along NAICS industry type sector level
 ```{r}
-ggplot(temp[temp$NAICS %in% ilevel_concord(ilevel = "sec")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic()
+ggplot(temp[temp$NAICS %in% call_ilevel_concord(ilevel = "sec")$NAICS, ], aes(x = NAICS, y = (value), color = key)) + geom_hline(yintercept=1) + geom_point(aes(shape=key, color=key), position=position_dodge(width=0.4)) + theme_classic()
 ```
 distribution of county-level to national-level annual payroll across raw cbp vs. Eckert imputation plus 
 ```{r}

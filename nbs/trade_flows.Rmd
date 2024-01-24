@@ -395,7 +395,7 @@ cbp_year = "2012"
 ilevel = "sec"
 industryflow = TRUE
 impedance_mat = NULL
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = NULL
 crosshaul = TRUE
@@ -576,7 +576,7 @@ cbp_year = "2012"
 ilevel = "sec"
 industryflow = TRUE
 impedance_mat = NULL
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = NULL
 crosshaul = F
@@ -632,7 +632,7 @@ ilevel = "sec"
 industryflow = T
 impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = "gaus200"
 crosshaul = T
@@ -743,7 +743,7 @@ ilevel = "sec"
 industryflow = T
 impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = "gaus200"
 crosshaul = F
@@ -802,7 +802,7 @@ cbp_year = "2012"
 ilevel = "det"
 industryflow = T
 impedance_mat = NULL
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = NULL
 crosshaul = TRUE
@@ -862,7 +862,7 @@ cbp_year = "2012"
 ilevel = "det"
 industryflow = T
 impedance_mat = NULL
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = NULL
 crosshaul = F
@@ -917,7 +917,7 @@ ilevel = "det"
 industryflow = T
 impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = "gaus200"
 crosshaul = T
@@ -975,7 +975,7 @@ ilevel = "det"
 industryflow = T
 impedance_mat = gaus_impedance_mat(tiger_year = year2tiger(cbp_year), 
                                     rms_width = miles2meters(200))
-#unique(ilevel_concord(ilevel)[1])
+#unique(call_ilevel_concord(ilevel)[1])
 subsectors = NULL
 impedance_call = "gaus200"
 crosshaul = F
@@ -1047,7 +1047,7 @@ inner_join(call_geog(geog_year),
 #                                 ilevel = "det",
 #                                 industryflow = T,
 #                                 impedance_mat = NULL,
-#                                 subsectors = unique(ilevel_concord("det")[1])[1:13,],
+#                                 subsectors = unique(call_ilevel_concord("det")[1])[1:13,],
 #                                 verbose = TRUE)
 # 
 # inbound2outbound_map(temp)
