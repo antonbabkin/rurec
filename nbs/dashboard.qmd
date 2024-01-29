@@ -13,7 +13,7 @@ params:
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
   map_ex_supdem_show: true
   map_ex_supdem_year: 2012
-  map_ex_supdem_ind: "1111A0" #"312120"
+  map_ex_supdem_ind: "713900" #"1111A0"
   focus_county: "55025"
   map_imped_show: true
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
@@ -62,7 +62,7 @@ ipath <- list(
   geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}"),
   population = dataprep$opath$population,
   infogroup_ = infogroup$opath$county_,
-  io_output_ = glue(place_output$opath$output_, year = "{year}", class_system = "commodity", ilevel = "det", bus_data = "{bus_data}"),
+  io_output_ = glue(place_output$opath$output_, year = "{year}", class_system = "{class_system}", ilevel = "det", bus_data = "{bus_data}"),
   bea_io_use_det_ = glue(bea_io$opath$use_, level = "det", year = "{year}", labels = FALSE),
   bea_io_sup_det_ = glue(bea_io$opath$sup_, level = "det", year = "{year}", labels = FALSE),
   call_dist_mat_ = glue(geo$opath$dist_mat_, year = "{year}", from = "center", cbsa = FALSE)
@@ -175,7 +175,6 @@ if (params$map_ex_supdem_show) {
     bus_data = "infogroup"
   ) |>
     filter(indcode == industry) |>
-    rename(demand = output) |>
     select(place, demand)
 
   df <- left_join(df, d, "place")
@@ -190,7 +189,6 @@ if (params$map_ex_supdem_show) {
     bus_data = "infogroup"
   ) |>
     filter(indcode == industry) |>
-    rename(supply = output) |>
     select(place, supply)
   
   df <- left_join(df, d, "place") |>
