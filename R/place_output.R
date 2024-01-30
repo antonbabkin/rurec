@@ -191,7 +191,7 @@ call_output <- function(year,
     .[!(duplicated(.) & .$value==0), ] %>% 
     complete(indcode, place, fill = list(value = 0)) %>% 
     na.omit() %>%
-    {aggregate(.$value, list(.$indcode, .$place), FUN=sum)} %>% #TODO: highest single point of computation time consider possible alternatives
+    {aggregate(.$value, list(.$indcode, .$place), FUN=sum)} %>% # TODO: highest single point of computation time consider possible alternatives
     `colnames<-`(c("indcode", "place", "value")) %>% 
     {.[!grepl("^(11)[1-2]", .$indcode), ]} %>% 
     arrange(place)
@@ -673,6 +673,71 @@ call_temporal_factor_list <- function(set_of_years,
     bind_rows(.id = "id_year")
   return(df) 
 }
+
+# trade flow potential ----
+
+
+# tidy a long factor list into a place indexed table of economic activity (trade flow potential) for a set/sets of sectors
+extraction_table <- function(intra_level_concordance,
+                             io_factor_list,
+                             cluster_level = c("sec", "sum", "det"),
+                             cbsa = FALSE,
+                             cluster_subset = NULL) {
+  cluster_level <- match.arg(cluster_level)
+  ilc <- intra_level_concordance
+  iol <- io_factor_list
+  df <- left_join(iol, ilc, by = "indcode")
+  if (!is.null(cluster_subset)){
+    df <- df[grepl(cluster_subset, df[[short2long(cluster_level)]]), ]
+  }
+  df <- df %>%
+    {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+    `colnames<-`(c("place", names(.)[-1])) 
+  return(df)
+}
+
+# generate a table of trade flow potential with spatial components
+call_extraction_table <- function(year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  class_system = c("industry", "commodity"),
+                                  paradigm = c("factor", "domestic", "capital"),
+                                  bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                  verbose = FALSE,
+                                  cluster_level = c("sec", "sum", "det"),
+                                  cbsa = FALSE,
+                                  cluster_subset = NULL,
+                                  trim = "^(60|66|69|78)|(999)$", 
+                                  spatial = TRUE){
+  ilevel <- match.arg(ilevel)
+  cluster_level <- match.arg(cluster_level)
+  bea_io$cluster_logic(ilevel, cluster_level)
+  ilc <- bea_io$call_intra_level_concordance(year = year, 
+                                             cluster_level = cluster_level)
+  iol <- call_factor_list(year = year,
+                          class_system = class_system,
+                          paradigm = paradigm,
+                          ilevel = ilevel,
+                          bus_data = bus_data,
+                          cbsa = cbsa,
+                          verbose = verbose)
+  df <- extraction_table(intra_level_concordance = ilc,
+                         io_factor_list = iol,
+                         cluster_level = cluster_level,
+                         cbsa = cbsa,
+                         cluster_subset = cluster_subset) %>% 
+    mutate(extract = intermediate_demand - intermediate_supply) 
+  if (spatial){
+    geot <- geog$call_geog(year = year, cbsa = cbsa)
+    df <- inner_join(geot, df, by = "place", copy = TRUE)
+  }
+  if (!is.null(trim)){
+    df <- df[!grepl(trim, df$place), ]
+  }
+  return(df)
+}
+
+
+
 
 # Tests ----
 
