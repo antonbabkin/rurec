@@ -36,6 +36,14 @@ clear_outputs <- function() {
   util$clear_paths(opath)
 }
 
+
+# utility functions----
+
+# get long format industry name
+short2long <- function(short_name){
+  switch(short_name, sec = {"sector"}, sum = {"summary"}, det = {"detail"})
+}
+
 # Output functions----
 
 # Aggregate "output" of the CBSA members if in a cluster
@@ -675,7 +683,6 @@ call_temporal_factor_list <- function(set_of_years,
 }
 
 # trade flow potential ----
-
 
 # tidy a long factor list into a place indexed table of economic activity (trade flow potential) for a set/sets of sectors
 extraction_table <- function(intra_level_concordance,

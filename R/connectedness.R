@@ -852,13 +852,10 @@ call_hierarchical_connectedness <- function(year,
 }
 
 
-# update n vector and place_centric_connect inputs
-############ Change in connectedness over time for a county 
-#place_connect_delta <-
-
-
-
 # Tests ----
+
+
+
 
 
 
