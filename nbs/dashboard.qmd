@@ -291,10 +291,10 @@ df <- connect$call_hierarchical_connectedness(year = 2012,
                                       class_system = "commodity", 
                                       impedance = T, 
                                       functional_form = "distance", 
-                                      scalar_constant = 300)
+                                      scalar_constant = 300, threshold = .25)
 
 df[["Hierarchical_Connectedness_table"]][["level_6"]] %>% 
-  ggplot() + geom_sf(aes(fill = STATE))
+  ggplot() + geom_sf(aes(fill = eca_membership))
 }
 ```
 

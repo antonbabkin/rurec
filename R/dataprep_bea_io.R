@@ -242,7 +242,8 @@ call_ilevel_concord <- function(ilevel = c("det", "sum", "sec"),
 
 # return concordance between BEA industry levels 
 call_intra_level_concordance <- function(year = 2012,
-                                         cluster_level = c("sec", "sum", "det")){
+                                         cluster_level = c("sec", "sum", "det"),
+                                         compact = TRUE){
   cluster_level <- match.arg(cluster_level)
   df <- util$year2bea_concord(year = year) %>% 
     pubdata$get_naics_concord(year = .) %>% 
@@ -258,10 +259,12 @@ call_intra_level_concordance <- function(year = 2012,
   df[is.na(df[,"summary"]),"indcode"] <- df[is.na(df[,"summary"]),"sector"]
   df[df[, "description"] == "Housing", c("u_summary", "detail")] <- "531"
   df[df[, "description"] == "Construction", c("u_summary", "detail")] <- "23"
-  df <- df %>%
-    {.[, c(switch(cluster_level, sec={"sector"}, sum={"summary"}, det={"detail"}), "indcode")]} %>%
-    {.[!duplicated(.), ]} %>%
-    na.omit()
+  if (compact){
+    df <- df %>%
+      {.[, c(switch(cluster_level, sec={"sector"}, sum={"summary"}, det={"detail"}), "indcode")]} %>%
+      {.[!duplicated(.), ]} %>%
+      na.omit()
+  }
   return(df)
 }
 
@@ -274,6 +277,7 @@ cluster_logic <- function(ilevel,
   if (cluster_level == "det"){
     stopifnot("`cluster_level` more specific than `ilevel`"= ilevel == "det" )
   }
+  return(NULL)
 }
 
 # BEA matrix manipulation ----

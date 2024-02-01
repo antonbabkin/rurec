@@ -170,6 +170,7 @@ noimpedance_absorption_maximum <- function(absorption_matrix,
 
 # Absorption tables----
 
+# TODO: add cluster sub class aggregation akin to place_output$extraction_table
 # Call nominal absorption table
 call_nominal_absorption_table <- function(year,
                                           class_system = c("industry", "commodity"), 
@@ -290,7 +291,8 @@ call_temporal_absorption_table <- function(set_of_years,
                                            ilevel = c("det", "sum", "sec"),
                                            bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
                                            cbsa = FALSE,
-                                           normalized = TRUE, 
+                                           normalized = TRUE,
+                                           wide = FALSE,
                                            verbose = FALSE){
   df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
                                  call_absorption_table, 
@@ -300,8 +302,10 @@ call_temporal_absorption_table <- function(set_of_years,
                                  bus_data = bus_data, 
                                  cbsa = cbsa, 
                                  verbose = verbose) %>%
-    bind_rows(.id = "id") %>%
-    pivot_wider(names_from = id, names_prefix = names_prefix)
+    bind_rows(.id = "id")
+    if (wide){
+      df <- df %>% pivot_wider(names_from = id, names_prefix = names_prefix)
+      }
   return(df)
 }
 
@@ -369,14 +373,14 @@ eca_table_central <- function(central_place,
     central_place <- geog$fips2cbsa(fips = central_place, 
                                     year = year)
   }
-  df <- cbind(export_absorption = c(t(abmat[central_place, , drop = FALSE])),
-              import_absorption = c(abmat[, central_place, drop = FALSE]),
+  df <- cbind(export_absorption = c(t(abmat[central_place, , drop = FALSE])) %>% as.numeric(),
+              import_absorption = c(abmat[, central_place, drop = FALSE]) %>% as.numeric(),
               place = rownames(abmat)) %>% 
     as.data.frame()
+  df$export_absorption <- as.numeric(df$export_absorption)
+  df$import_absorption <- as.numeric(df$import_absorption)
   return(df)
 }
-
-
 
 # Aggregate economic industry output of each ECA member in a cluster, keep all non source places as ECA core unit label
 eca_aggregate_industry_output <- function(industry_output_matrix, 
@@ -409,8 +413,32 @@ eca_spatial_cluster <- function(spatial_eca_table,
 }
 
 
-# Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
+# discretize ECA members across entire place space
+eca_discretize_space <- function(eca_table, 
+                                 eca_connect_table,
+                                 eca_cluster_table,
+                                 geog_table){
+  et <- eca_table 
+  ec <- eca_connect_table %>% 
+    {subset(., select = c(names(et)))}
+  es <- eca_cluster_table
+  delta <- ec[ec$place %in% setdiff(ec$place, es$place),] %>% 
+    subset(select = c(place, eca_membership)) %>% 
+    st_drop_geometry()
+  geot <- geog_table %>% 
+    {subset(., select = c(place, geometry))}
+  df <- setdiff(et[["place"]], ec[["place"]]) %>% 
+    {et[et[["place"]] %in% ., ]} %>% 
+    {rbind(., ec)} %>% 
+    st_drop_geometry() %>% 
+    {inner_join(geot, ., by = "place", copy = TRUE)}
+  for (i in unique(df[df$eca_membership %in% delta$place, ]$eca_membership)){
+    df[df$eca_membership == i, ]$eca_membership <- delta[delta$place == i, ]$eca_membership
+  }
+  return(df)
+}
 
+# Single function of nested functions to derive a hierarchies of connectedness tables and resulting output matrices from a base single output matrix and single direct requirements matrix
 hierarchical_connectedness <- function(industry_output_matrix,
                                        io_supply_matrix,
                                        io_b_matrix,
@@ -436,38 +464,34 @@ hierarchical_connectedness <- function(industry_output_matrix,
   phi <- phi_vector
   geot <- geog_table
   ecatab <- eca_table
-
   hct <- list()
   hsct <- list()
   hom <- list()
-  
-  pnames <- intersect(geot$place, colnames(iout))
-  
-  if(class_system == "commodity"){
-    hom$level_0 <- place_output$industry2commodity(iout, smat)[, pnames, drop = F]
-  } else {
-    hom$level_0  <- iout[, pnames, drop = F]
-  }
-  
+  hdt <- list()
   df <- inner_join(geot, ecatab, by = "place", copy = TRUE)
-  hct$level_1 <- df
+  hct$level_0 <- df
+  iout <- intersect(geot$place, colnames(iout)) %>% 
+    {iout[, ., drop = F]}
+  hom$level_0 <- iout
+  hdt$level_0 <- df %>% 
+    subset(., select = -c(center, nominal_values, cluster_members_count, max_count))
   n = 1
-  if (verbose){cat(paste("Start level: ", n, "\n"))}
-  
-  sdf <- eca_spatial_cluster(spatial_eca_table = df, 
-                                      verbose = verbose)
-  hsct$level_1 <- sdf
-  iout <- eca_aggregate_industry_output(industry_output_matrix = iout,
-                                        eca_table = df) %>% as.matrix()
-  hom$level_1 <- iout
-  n = n + 1
-
   i = FALSE
   while(i==FALSE){
     if (verbose){cat(paste("Start level: ", n, "\n"))}
-    
-    clust_geo <- hsct[[paste0("level_", n-1)]] %>% {.[, intersect(names(geot), names(.))]}
-    
+    sdf <- eca_spatial_cluster(spatial_eca_table = df,
+                               verbose = verbose)
+    hsct[[paste0("level_", n)]] <- sdf
+    iout <- eca_aggregate_industry_output(industry_output_matrix = iout,
+                                          eca_table = df) %>% as.matrix()
+    hom[[paste0("level_", n)]] <- iout
+    dse <- eca_discretize_space(eca_table = hdt[[paste0("level_", n-1)]], 
+                                eca_connect_table = hct[[paste0("level_", n-1)]],
+                                eca_cluster_table = hsct[[paste0("level_", n)]],
+                                geog_table = geot)
+    hdt[[paste0("level_", n)]] <- dse
+    clust_geo <- hsct[[paste0("level_", n)]] %>% 
+      {.[, intersect(names(geot), names(.))]}
     nis <- place_output$intermediate_activity(industry_output_matrix = iout,
                                               io_b_matrix = bmat,
                                               io_supply_matrix = smat,
@@ -475,7 +499,6 @@ hierarchical_connectedness <- function(industry_output_matrix,
                                               schedule = "supply",
                                               paradigm = paradigm,
                                               class_system = class_system)
-    
     nid <- place_output$intermediate_activity(industry_output_matrix = iout,
                                               io_b_matrix = bmat,
                                               io_supply_matrix = smat,
@@ -483,7 +506,6 @@ hierarchical_connectedness <- function(industry_output_matrix,
                                               schedule = "demand",
                                               paradigm = paradigm,
                                               class_system = class_system)
-    
     df <- stacked_absorption_share(net_supply_matrix = nis, 
                                    net_demand_matrix = nid, 
                                    verbose = verbose)
@@ -491,7 +513,6 @@ hierarchical_connectedness <- function(industry_output_matrix,
       df <- normalized_absorption_share(absorption_share_matrix = df, 
                                         net_supply_matrix = nis)
     }
-
     if(impedance){
       impedance_matrix <- geog$impedance_mat(spatial_dataframe = sdf,
                                               from = from,
@@ -501,7 +522,6 @@ hierarchical_connectedness <- function(industry_output_matrix,
     } else {
       impedance_matrix <- NULL
     }
-    
     df <- eca_table(absorption_matrix = df,
                     impedance_matrix = impedance_matrix,
                     flow_direction = flow_direction,
@@ -512,25 +532,36 @@ hierarchical_connectedness <- function(industry_output_matrix,
                     verbose = verbose)
     df <- inner_join(clust_geo, df, by = "place", copy = TRUE)
     hct[[paste0("level_", n)]] <- df
-    
     i <- length(unique(df$eca_membership)) == length(unique(hct[[paste0("level_", n-1)]]$eca_membership))
     if (i){next}
-    sdf <- eca_spatial_cluster(spatial_eca_table = df,
-                               verbose = verbose)
-    hsct[[paste0("level_", n)]] <- sdf
-
-    iout <- eca_aggregate_industry_output(industry_output_matrix = iout,
-                                          eca_table = df) %>% as.matrix()
-    hom[[paste0("level_", n)]] <- iout
     n = n + 1
+  }
+  if(class_system == "commodity"){
+    for (i in 1:length(hom)){
+      hom[[i]] <- intersect(geot$place, colnames(hom[[i]])) %>%
+        {place_output$industry2commodity(hom[[i]], smat)[, ., drop = F]}
+    }
   }
   df <- list("Hierarchical_Connectedness_table" = hct,
              "Hierarchical_Spatial_Cluster_table" = hsct,
-             "Hierarchical_Output_mat" = hom)
+             "Hierarchical_Output_mat" = hom,
+             "Hierarchical_Discrete_table" = hdt)
   return(df)
 }
 
-
+# find the difference of absorption for a place over time 
+temporal_delta_central <- function(table_base, 
+                                   table_change){
+  df <- table_base
+  int <- intersect(table_base$place, table_change$place)
+  sect1 <- table_base$place %in% int
+  sect2 <- table_change$place %in% int
+  df$delta_export <- NA
+  df$delta_import <- NA
+  df[sect1, ]$delta_export <- table_base[sect1, ]$export_absorption - table_change[sect2, ]$export_absorption
+  df[sect1, ]$delta_import <- table_base[sect1, ]$import_absorption - table_change[sect2, ]$import_absorption
+  return(df)
+}
 
 # ECA tables----
 
@@ -686,6 +717,7 @@ call_temporal_eca_table <- function(set_of_years,
                                     cbsa = FALSE, 
                                     trim = "^(02|15|60|66|69|72|78)|(999)$",
                                     verbose = FALSE,
+                                    bind = TRUE,
                                     spatial = TRUE){
   if(spatial){
   df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
@@ -728,10 +760,9 @@ call_temporal_eca_table <- function(set_of_years,
                                    trim = trim,
                                    verbose = verbose)
   }
-    df <- df %>% bind_rows(.id = "id_year")
+    if(bind){df <- df %>% bind_rows(.id = "id_year")}
   return(df)
 }
-
 
 # Call list of hierarchical ECA tables
 call_hierarchical_connectedness <- function(year,
@@ -758,8 +789,6 @@ call_hierarchical_connectedness <- function(year,
   class_system <- match.arg(class_system)
   ilevel <- match.arg(ilevel)
   bus_data <- match.arg(bus_data)
-
-  
   iout <- place_output$call_output(year = year, 
                                    class_system = "industry", 
                                    ilevel = ilevel, 
@@ -777,8 +806,6 @@ call_hierarchical_connectedness <- function(year,
   geot <- geog$call_geog(year = year, 
                          cbsa = cbsa,
                          verbose = verbose)
-  
-  
   ecat <- call_eca_table(year = year,
                          normalized = normalized, 
                          impedance = impedance,
@@ -825,13 +852,10 @@ call_hierarchical_connectedness <- function(year,
 }
 
 
-# update n vector and place_centric_connect inputs
-############ Change in connectedness over time for a county 
-#place_connect_delta <-
-
-
-
 # Tests ----
+
+
+
 
 
 

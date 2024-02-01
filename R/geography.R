@@ -600,6 +600,43 @@ call_impedance_mat <- function(year = 2013,
   return(df)
 }
 
+# call tidy table of place specific impedance
+call_impedance_distribution_table <- function(central_place,
+                                              year = 2013,
+                                              cbsa = FALSE,
+                                              from = c("center", "border"),
+                                              functional_form = c("bisquare",
+                                                                  "secant",
+                                                                  "gaussian",
+                                                                  "exponential",
+                                                                  "power",
+                                                                  "distance",
+                                                                  "queen",
+                                                                  "rook",
+                                                                  "neighbor"),
+                                              scalar_constant = NULL){
+  if(cbsa){
+    central_place <- fips2cbsa(fips = central_place, 
+                                    year = year)
+  }
+  geot <- call_geog(year = year,
+                        cbsa = cbsa)
+  imat <- call_impedance_mat(year = year,
+                                  cbsa = cbsa,
+                                  from = from,
+                                  functional_form = functional_form,
+                                  scalar_constant = scalar_constant,
+                                  meta = TRUE) 
+  meta <-  imat[[2]]
+  imat <- imat[[1]] %>% 
+    as.data.frame.table() %>% 
+    `colnames<-`(c("place", "central_place", "impedance"))
+  df <- imat %>% 
+    {.[.$central_place == central_place, , drop = FALSE]} %>% 
+    {inner_join(geot, ., by = "place")}
+  return(list(df, meta))
+}
+
 
 # tests ----
 test_pubdata <- function() {
