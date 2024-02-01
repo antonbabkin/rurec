@@ -162,3 +162,16 @@ dataprep$call_population()
 ```
 
 
+# Trade flows
+
+```{r}
+source("R/trade_flows.R", local = (tf <- new.env()))
+
+
+```
+
+```{r}
+tmap_mode("view")
+pgi
+```
+
