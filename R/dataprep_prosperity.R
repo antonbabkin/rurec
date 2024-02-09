@@ -18,13 +18,15 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 # inputs
 ipath <- list(
   population_county_2022 = "https://www2.census.gov/programs-surveys/popest/tables/2020-2022/counties/totals/co-est2022-pop.xlsx",
-  unemployment_rate = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.xlsx?v=8720.6"
+  unemployment_rate = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.xlsx?v=8720.6", 
+  netmigration_rate = "https://netmigration.wisc.edu/documents/NME_1020_data_beta.zip"
 )
 
 # outputs
 opath <- list(
   population_county_2022_raw = "data/population/raw/co-est2022-pop.xlsx",
-  unemployment_rate_raw = "data/prosperity/raw/unemployment.xlsx"
+  unemployment_rate_raw = "data/prosperity/raw/unemployment.xlsx", 
+  netmigration_rate_raw = "data/prosperity/raw/NME_1020_data_beta.zip"
 )
 
 
@@ -82,5 +84,24 @@ call_unemployment_rate_df <- function() {
 }
 
 
+call_netmigration_df <- function() {
+  raw_path <- opath$netmigration_rate_raw
+  
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+  } else {
+    # create parent directories
+    raw_path <- util$mkdir(raw_path)
+    download_status <- download.file(url = ipath$netmigration_rate, destfile = raw_path, mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("raw data dowloaded to {raw_path}")
+  }
+  
+  
+  df <- read_csv(raw_path)
+  
 
+  return(df)
+}
 

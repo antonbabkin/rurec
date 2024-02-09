@@ -207,6 +207,15 @@ prosperity$call_unemployment_rate_df()
 ```
 
 
+## net migration rate 
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_netmigration_df()
+
+
+```
 
 
 
