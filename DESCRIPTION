@@ -23,5 +23,6 @@ Imports:
   magick,
   tmaptools,
   zoo,
-  leaflet
+  leaflet,
+  tmap
 

@@ -128,54 +128,125 @@ gravity <- function(sup, dem, imped_mat) {
 }
 
 
-#' Balance trade flow matrix using RAS algorithm
-#' Iteratively update prior matrix until rows and columns sum to target vectors.
+#' Iteratively scale prior matrix to match target row and column sums using RAS algorithm
 #'
-#' @param x0 Prior trade flows matrix.
+#' @param x0 Prior matrix.
 #' @param rs1 Vector of target row sums.
 #' @param cs1 Vector of target column sums.
 #' @param tol Numerical tolerance number, iterate until RMSE between steps falls below `tol`.
 #' @param maxiter Maximum number of iterations.
-#' @param verbose Print iteration progress.
-#' @return Balanced trade flow matrix.
+#' @return List with result and iteration diagnostics.
 #' 
 #' @examples
-#' ras_trade_flows(matrix(1, 3, 3), c(0,2,3), c(3,0,2))
-ras_trade_flows <- function (x0, rs1, cs1, tol, maxiter, verbose) {
-  # test if targets sum to same total, within 0.1% tolerance
+#' ras_rescale(matrix(1, 3, 3), c(0,2,3), c(3,0,2))
+ras_rescale <- function(x0, rs1, cs1, tol = 0, maxiter = 10) {
+  
+  # stalling condition tolerance
+  maxad_stall_tol <- 0.01
+
+  # verify if targets sum to same total within relative tolerance
   sum_tol <- 0.001
   sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
   if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
+  
   # mask away all-zero rows and columns
-  rpos <- (rs1 > 0) & sapply(rowSums(x0[, cs1 > 0, drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
-  cpos <- (cs1 > 0) & sapply(colSums(x0[rs1 > 0, ,drop=F]), function(x){!isTRUE(all.equal(x, 0))} )
+  # they will be added back after RAS
+  rpos <- (rs1 > 0) & (rowSums(x0) > 0)
+  cpos <- (cs1 > 0) & (colSums(x0) > 0)
   x <- x0[rpos, cpos, drop=F]
   nr <- nrow(x)
   nc <- ncol(x)
   rs <- rs1[rpos]
   cs <- cs1[cpos]
-  mad <- -1
-  rmse <- -1
-
-  for (i in 1:maxiter) {
-    # scale rows
-    x1 <- matrix(rs / rowSums(x), nr, nc) * x
-    # scale cols
-    x1 <- matrix(cs / colSums(x1), nr, nc, byrow = TRUE) * x1
-    if (mad == mean(abs(rowSums(x1) - rs))) {warning("\n\n  No convergence: infeasible\n")
-      break}
-    rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
-    mad <- mean(abs(rowSums(x1) - rs))
-    x <- x1
-    if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, "\n"))
-    if (rmse <= tol) break
+  
+  
+  # initialize convergence metrics
+  rmsd <- Inf # root mean squared deviation
+  mad <- Inf # mean absolute deviation
+  maxad <- Inf # maximum absolute deviation
+  converged <- FALSE
+  
+  # print matrix and required scaling factors
+  print_scale_factors <- function(x1, rows) {
+    y <- matrix(0, nrow(x0), ncol(x0), dimnames = list(rownames(x0), colnames(x0)))
+    y[rpos, cpos] <- x1
+    if (rows) {
+      rs <- rowSums(y)
+      y <- cbind(y, rs, rs1, rs1 / rs)
+      colnames(y)[-(1:ncol(x0))] <- c("sum", "target", "adj")
+    } else {
+      cs <- colSums(y)
+      y <- rbind(y, cs, cs1, cs1 / cs)
+      rownames(y)[-(1:nrow(x0))] <- c("sum", "target", "adj")
+    }
+    y <- round(y, 3)
+    print(glue("scale {what}", what = if (rows) "rows" else "cols"))
+    print(y)
   }
-  if (i == maxiter) warning("\n\n  No convergence. Maximum Number of iterations reached. Consider increasing the number of iterations.\n")
-  if (verbose) cat(paste("Number of iterations:", i, "RMSE:", rmse, "\n"))
-  # return zero rows and cols back
-  xz <- matrix(0, nrow(x0), ncol(x0))
-  xz[rpos, cpos] <- x
-  out <- list("trade_matrix" = xz, "ras_supply_dim" =  dim(x)[1], "ras_demand_dim" =  dim(x)[2], "iterations" = i, "rmse" = rmse, "mad" = mad)
+  
+  for (iter in 1:maxiter) {
+    # scale rows
+    # print_scale_factors(x, TRUE)
+    radj <- rs / rowSums(x)
+    x1 <- matrix(radj, nrow(x), ncol(x)) * x
+    # scale cols
+    # print_scale_factors(x1, FALSE)
+    cadj <- cs / colSums(x1)
+    x1 <- matrix(cadj, nrow(x), ncol(x), byrow = TRUE) * x1
+
+    # convergence metrics
+    # calculated from rows, since column sums match target exactly after scaling
+    rs_dev <- rowSums(x1) - rs
+    rmsd <- sqrt(mean(rs_dev^2))
+    mad <- mean(abs(rs_dev))
+    maxad1 <- max(abs(rs_dev))
+
+    # new matrix for next iteration    
+    x <- x1
+    
+    # check stalling condition
+    maxad_rel_ch <- abs(maxad1 - maxad) / maxad1
+    if (maxad_rel_ch < maxad_stall_tol) {
+      log_warn("Convergence stalled at relative MaxAD difference {maxad_rel_ch}")
+      break
+    }
+    maxad <- maxad1
+
+    converged <- (maxad <= tol)
+    
+    log_debug("RAS iteration: {iter}, RMSD: {rmsd}, MAD: {mad}, MaxAD: {maxad}, converged: {converged}")
+    if (converged) break
+  }
+  if (iter == maxiter) log_warn("Maximum number of iterations reached")
+
+  # add back rows and cols of zeroes
+  x_full <- matrix(0, nrow(x0), ncol(x0))
+  x_full[rpos, cpos] <- x
+  rownames(x_full) <- rownames(x0)
+  colnames(x_full) <- colnames(x0)
+  
+  # last used row adjustment factors and unmatched zeroes
+  radj_full <- rep(1, nrow(x0))
+  radj_full[rpos] <- radj
+  radj_full[(rs1 > 0) & (rowSums(x0) == 0)] <- Inf
+  names(radj_full) <- rownames(x0)
+  
+  # last used column adjustment factors and unmatched zeroes
+  cadj_full <- rep(1, ncol(x0))
+  cadj_full[cpos] <- cadj
+  cadj_full[(cs1 > 0) & (colSums(x0) == 0)] <- Inf
+  names(cadj_full) <- colnames(x0)
+  
+  out <- list(matrix = x_full,
+              nrow_pos = nrow(x), 
+              ncol_pos = ncol(x),
+              iterations = iter, 
+              rmsd = rmsd,
+              mad = mad, 
+              maxad = maxad,
+              converged = converged,
+              radj = radj_full,
+              cadj = cadj_full)
   return(out)
 }
 

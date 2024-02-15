@@ -9,12 +9,288 @@ library(tidyverse)
 library(sf)
 library(units)
 library(tmap)
+library(patchwork)
 tmap_mode("plot")
+library(lpSolve)
 
+source("R/place_output.R", local = (place_output <- new.env()))
 source("R/trade_flows.R", local = (tf <- new.env()))
 source("R/geography.R", local = (geog <- new.env()))
+```
 
 
+```{r}
+#' Viz matrix as a heat map using ggplot
+plot_heatmap <- function(x, zero_na = TRUE, discrete = FALSE) {
+  if (is.null(rownames(x))) rownames(x) <- 1:nrow(x)
+  if (is.null(colnames(x))) colnames(x) <- 1:ncol(x)
+  x |>
+    as_tibble(rownames = "from") |>
+    pivot_longer(!from, names_to = "to") |>
+    mutate(
+      from = ordered(from, levels = rev(rownames(x))),
+      to = ordered(to, levels = colnames(x)),
+      value = if (zero_na) na_if(value, 0) else value,
+      value = if (discrete) ordered(value) else value
+      ) |>
+    ggplot() +
+    scale_x_discrete(position = "top") +
+    geom_tile(aes(to, from, fill = value)) +
+    coord_fixed()
+}
+
+x <- matrix(runif(25) * 4, 5, 5)
+plot_heatmap(x)
+plot_heatmap(floor(x))
+plot_heatmap(floor(x), discrete = TRUE)
+
+```
+
+# Problem size
+
+How many counties have positive excess supply or demand in every industry?
+
+
+```{r}
+
+# county demand
+df <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "demand", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup")
+
+# county supply
+d <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "supply", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup")
+
+df <- inner_join(df, d, join_by(indcode, place))
+
+df_supdem_counts <- df |>
+  group_by(indcode) |>
+  summarize(
+    sup_pos = sum(supply > 0),
+    dem_pos = sum(demand > 0),
+    exsup_pos = sum(supply > demand),
+    exdem_pos = sum(demand > supply)
+  ) |>
+  mutate(ex_size = exsup_pos * exdem_pos)
+```
+
+
+# Optimal solution
+
+We want trade flow estimates to satisfy two conditions.
+1. Total exports are equal to excess supply, total imports are equal to excess demand for each county.
+2. Total transportation cost is minimized.
+
+This is a classic transportation problem, and efficient solution algorithms exist.
+We use linear programming solver from `lpSolve` package.
+
+We assume that transportation cost is proportional to linear distance between county centroids.
+
+## toy example
+
+```{r}
+sup <- c(2, 0, 0, 1, 0)
+dem <- c(0, 1, 1, 0, 1)
+loc <- c(1, 2, 3, 4, 5)
+dmat <- dist(loc) |> as.matrix()
+
+sol <- lp.transport(
+  cost.mat = dmat,
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  integers = NULL
+)
+
+sol$solution
+sol$objval
+```
+## algo scaling
+
+Using random supply and demand vectors to assess algorithm run times.
+
+1000x1000 matrix of random numbers is solved in 1 minute.
+2000x2000 solved in 15 minutes.
+
+```{r}
+n <- 2000
+sup <- (runif(n) * 1000)
+dem <- runif(n) |> (\(x) x / sum(x) * sum(sup))()
+dmat <- dist(1:n) |> as.matrix()
+
+system.time({
+sol <- lp.transport(
+  cost.mat = dmat,
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  integers = NULL
+)
+})
+
+plot_heat(sol$solution)
+```
+
+## real data
+
+LP solution demonstration for one industry.
+
+```{r}
+# county demand
+df <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "demand", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup") %>%
+  filter(indcode == "1111A0") %>%
+  select(place, demand)
+
+# county supply
+d <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "supply", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup") %>%
+  filter(indcode == "1111A0") %>%
+  select(place, supply)
+
+df <- inner_join(df, d, "place") %>%
+  mutate(exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+
+sup <- df %>%
+  filter(exsup > 0) %>%
+  select(place, exsup)
+
+dem <- df %>%
+  filter(exdem > 0) %>%
+  select(place, exdem)
+
+dmat <- geog$call_dist_mat()
+dmat <- dmat[sup$place, dem$place] %>%
+  set_units(mi) %>%
+  drop_units()
+
+system.time({
+sol <- lp.transport(
+  cost.mat = dmat,
+  row.signs = rep("=", nrow(sup)),
+  row.rhs = sup$exsup,
+  col.signs = rep("=", nrow(dem)),
+  col.rhs = dem$exdem,
+  integers = NULL
+)
+})
+
+
+```
+
+
+```{r}
+trade_flows <- sol$solution
+rownames(trade_flows) <- sup$place
+colnames(trade_flows) <- dem$place
+
+# imports to Woodbury Co, IA
+d <- trade_flows[, "19193"] %>%
+  na_if(0) %>%
+  as_tibble(rownames = "place")
+
+df <- geog$call_geog() %>%
+  rename_with(str_to_lower) %>%
+  left_join(d, "place")
+d <- geog$pubdata$get_state_df(FALSE) |>
+  rename_with(str_to_lower) |>
+  select(code, contiguous, bea_region_name) |>
+  rename(state_code = code)
+df <- left_join(df, d, "state_code")
+
+tm_shape(filter(df, bea_region_name == "Plains")) + tm_fill("value") +
+  tm_shape(filter(df, place == "19193")) + tm_fill("blue") +
+  tm_shape(filter(geog$pubdata$get_state_df(TRUE), BEA_REGION_NAME == "Plains")) + tm_borders() +
+  tm_layout(main.title = "Oilseed imports to Woodbury County, IA", main.title.size = 1)
+
+```
+
+
+# RAS + Gravity
+
+An alternative algorithm, used in the literature, uses RAS procedure to achieve balancing flows with demand and supply.
+Because RAS results depends on the initial condition, starting from estimates obtained using some form of gravity equation allows to introduce the desirable property of minimized transportation cost.
+However the resulting transportation cost will not be at the absolute minimum like in the optimization problem.
+There are also multiple algorithm parameters researcher needs to pick that will effect the outcome, such as impedance form in the gravity equation, convergence tolerance and stalling condition.
+
+We explore application of RAS algorithm in this section.
+
+## RAS
+
+### random inputs
+
+```{r}
+n <- 10
+x0 <- matrix(runif(n*n) * 1000, n, n)
+rs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
+cs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
+
+# start with matrix of ones
+tf$ras_rescale(matrix(1, n, n), rs1, cs1, tol = 1e-4)$matrix %>%
+  cbind(rowSums(x = .)) %>%
+  rbind(colSums(x = .)) %>%
+  round()
+
+# start with random matrix
+tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 20)$matrix %>%
+  cbind(rowSums(x = .)) %>%
+  rbind(colSums(x = .)) %>%
+  round()
+
+```
+
+### change initial matrix
+
+Increasing single element in the initial matrix increases corresponding element in the final matrix.
+
+```{r}
+n <- 10
+x0 <- matrix(runif(n*n) * 1000, n, n)
+rs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
+cs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
+
+m <- 10
+xnn0 <- seq(min(x0), max(x0), length.out = m)
+xnn1 <- rep(NA, m)
+for (i in 1:m) {
+  x0m <- x0
+  x0m[n, n] <- xnn0[i]
+  sol <- tf$ras_rescale(x0m, rs1, cs1, tol = 1e-1, maxiter = 100)
+  stopifnot(sol$converged)
+  xnn1[i] <- sol$matrix[n, n]
+}
+
+plot(xnn0, xnn1)
+
+```
+
+## Gravity
+
+Estimates from gravity equation for different impedance forms.
+
+```{r}
 x <- tf$test_map_gravity("1111A0", "prox", 300, "55025") |>
   mutate(imports_from = na_if(imports_from, 0), exports_to = na_if(exports_to, 0))
 ppi <- tm_shape(x) + tm_fill("imports_from")
@@ -30,145 +306,212 @@ pge <- tm_shape(x) + tm_fill("exports_to")
 tmap_arrange(ppi, ppe, pgi, pge)
 ```
 
-# RAS function
+
+### proximity impedanace
+
+Convergence rate and result depend on choice of proximity radius.
+No convergence if radius is too small.
 
 ```{r}
-ras_trade_flows <- function(x0, rs1, cs1, tol = 0, maxiter = 10, verbose = TRUE) {
-  
-  mad_break_rel_dif <- 0.001
-  
-  # test if targets sum to same total, within 0.1% tolerance
-  sum_tol <- 0.001
-  sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
-  if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
+n <- 10
+rs1 <- (runif(n) * 1000) |> sort()
+cs1 <- runif(n) |> (\(x) x / sum(x) * sum(rs1))() |> sort()
+d <- dist(1:n) |> as.matrix() |> set_units(mi)
 
-  # mask away all-zero rows and columns
-  rpos <- (rs1 > 0) & (rowSums(x0) > 0)
-  cpos <- (cs1 > 0) & (colSums(x0) > 0)
-  x <- x0[rpos, cpos, drop=F]
-  nr <- nrow(x)
-  nc <- ncol(x)
-  rs <- rs1[rpos]
-  cs <- cs1[cpos]
-  mad <- Inf
-  rmse <- -1
+sols <- data.frame()
+for (imp_par in 2:10) {
+  imp <- geog$prox_impedance_mat(d, imp_par)
+  x0 <- tf$gravity(rs1, cs1, imp)
+  diag(x0) <- 0
+  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
   
-  print_progress <- function(x1, rows) {
-    y <- matrix(0, nrow(x0), ncol(x0), dimnames = list(rownames(x0), colnames(x0)))
-    y[rpos, cpos] <- x1
-    if (rows) {
-      rs <- rowSums(y)
-      y <- cbind(y, rs, rs1, rs1 / rs)
-      colnames(y)[-(1:ncol(x0))] <- c("sum", "target", "adj")
-    } else {
-      cs <- colSums(y)
-      y <- rbind(y, cs, cs1, cs1 / cs)
-      rownames(y)[-(1:nrow(x0))] <- c("sum", "target", "adj")
-    }
-    y <- round(y, 3)
-    print(glue("scale {what}", what = if (rows) "rows" else "cols"))
-    print(y)
+  sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
+  
+  if(sol$converged) {
+    p1 <- plot_heatmap(imp) + labs(title = glue("Proximity impedance {imp_par}"))
+    p2 <- plot_heatmap(sol$matrix) + labs(title = glue("Trade flows, iterations = {sol$iterations}"))
+    print(p1 | p2)
   }
+}
+sols
+```
 
-  for (i in 1:maxiter) {
-    log_debug("iteration ", i)
-    # scale rows
-    if (verbose) print_progress(x, TRUE)
-    radj <- rs / rowSums(x)
-    x1 <- matrix(radj, nr, nc) * x
-    # scale cols
-    if (verbose) print_progress(x1, FALSE)
-    cadj <- cs / colSums(x1)
-    x1 <- matrix(cadj, nr, nc, byrow = TRUE) * x1
-    mad1 <- mean(abs(rowSums(x1) - rs))
-    mad_rel_dif <- abs(mad - mad1) / mad1
-    if (mad_rel_dif < mad_break_rel_dif) {
-      log_warn("Convergence stalled at relative MAD difference {mad_rel_dif}")
-      break
-    }
-    rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
-    mad <- mad1
-    x <- x1
-    if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, "\n"))
-    converged <- (rmse <= tol)
-    if (converged) break
+### Gaussian impedance
+
+Convergence takes longer with stronger distance penalty.
+
+```{r}
+n <- 10
+rs1 <- (runif(n) * 1000) |> sort()
+cs1 <- runif(n) |> (\(x) x / sum(x) * sum(rs1))() |> sort()
+d <- dist(1:n) |> as.matrix() |> set_units(mi)
+
+sols <- data.frame()
+for (imp_par in 1:7) {
+  imp <- geog$gaus_impedance_mat(d, imp_par)
+  x0 <- tf$gravity(rs1, cs1, imp)
+  diag(x0) <- 0
+  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
+  
+  sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
+  
+  if(sol$converged) {
+    p1 <- plot_heatmap(imp) + labs(title = glue("Gauss impedance {imp_par}"))
+    p2 <- plot_heatmap(sol$matrix) + labs(title = glue("Trade flows, iterations = {sol$iterations}"))
+    print(p1 | p2)
   }
-  if (i == maxiter) log_debug("Maximum Number of iterations reached")
-  if (verbose) cat(paste("Number of iterations:", i, "RMSE:", rmse, " MAD:", mad, "\n"))
-  # return zero rows and cols back
-  xz <- matrix(0, nrow(x0), ncol(x0))
-  xz[rpos, cpos] <- x
-  rownames(xz) <- rownames(x0)
-  colnames(xz) <- colnames(x0)
+}
+sols
+```
+
+### truncanted Gaussian
+
+Allows to impose hard bounds of proximity and distance penalty of Gaussian.
+
+```{r}
+n <- 10
+rs1 <- (runif(n) * 1000) |> sort()
+cs1 <- runif(n) |> (\(x) x / sum(x) * sum(rs1))() |> sort()
+d <- dist(1:n) |> as.matrix() |> set_units(mi)
+
+sols <- data.frame()
+for (imp_par in 2:10) {
+  imp <- geog$gaus_impedance_mat(d, imp_par) * geog$prox_impedance_mat(d, imp_par)
+  x0 <- tf$gravity(rs1, cs1, imp)
+  diag(x0) <- 0
+  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
   
-  radj_full <- rep(1, nrow(x0))
-  radj_full[rpos] <- radj
-  radj_full[(rs1 > 0) & (rowSums(x0) == 0)] <- Inf
-  names(radj_full) <- rownames(x0)
+  sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
   
-  cadj_full <- rep(1, ncol(x0))
-  cadj_full[cpos] <- cadj
-  cadj_full[(cs1 > 0) & (colSums(x0) == 0)] <- Inf
-  names(cadj_full) <- colnames(x0)
-  
-  out <- list("trade_matrix" = xz, "ras_supply_dim" =  dim(x)[1], "ras_demand_dim" =  dim(x)[2], "iterations" = i, "rmse" = rmse, "mad" = mad, converged = converged, radj = radj_full, cadj = cadj_full)
-  return(out)
+  if(sol$converged) {
+    p1 <- plot_heatmap(imp) + labs(title = glue("Truncated Gauss par {imp_par}"))
+    p2 <- plot_heatmap(sol$matrix) + labs(title = glue("Trade flows, iterations = {sol$iterations}"))
+    print(p1 | p2)
+  }
+}
+sols
+```
+
+
+## problem of universal distance
+
+Universal impedance parameter for each trading pair (proximity radius or Gaussian truncation) results in sub-optimal allocations.
+Gaussian impedance approximates optimal allocation, but is slow to converge.
+
+Truncated Gaussian.
+
+```{r}
+
+sup <- c(4,0,0,3,0)
+dem <- c(0,2,2,0,3)
+d <- dist(1:5) |> as.matrix() |> set_units(mi)
+plot_heat(drop_units(d)) + labs(title = "Distance")
+
+sols <- list()
+sol_sum <- data.frame()
+for (imp_par in 1:5) {
+  imp <- geog$gaus_impedance_mat(d, imp_par) * geog$prox_impedance_mat(d, imp_par)
+  p1 <- plot_heatmap(imp) + labs(title = glue("Truncated Gauss par {imp_par}"))
+  x0 <- tf$gravity(sup, dem, imp)
+  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  sols[[length(sols) + 1]] <- sol
+  sol_sum <- rbind(sol_sum, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
+  if (sol$converged) {
+    p2 <- plot_heatmap(sol$matrix) + labs(title = glue("Trade flows, iterations = {sol$iterations}"))
+    print(p1 | p2)
+  } else {
+    print(p1)
+  }
+}
+sol_sum
+
+```
+
+
+Gaussian for one remote location.
+
+
+```{r}
+
+sup <- c(1, 0, 2, 0, 0)
+dem <- c(0, 1, 0, 1, 1)
+loc <- c(1, 2, 3, 4, 20)
+dmat <- dist(loc) |> as.matrix() |> set_units(mi)
+
+sols <- list()
+sol_sum <- data.frame()
+for (imp_par in 1:20) {
+  imp <- geog$gaus_impedance_mat(dmat, imp_par)
+  x0 <- tf$gravity(sup, dem, imp)
+  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  sols[[length(sols) + 1]] <- sol
+  sol_row <- append(list(imp_par = imp_par, avg_dist = sum(drop_units(dmat) * sol$matrix) / sum(sol$matrix)), sol[c("converged", "iterations", "rmsd", "mad", "maxad")])
+  sol_sum <- rbind(sol_sum, sol_row)
 }
 
+# optimal solution
+sol_lp <- lp.transport(
+  cost.mat = drop_units(dmat),
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  integers = NULL
+)
+
+# optimal solution in first row
+sol_sum <- add_row(sol_sum, imp_par = -1, avg_dist = sum(drop_units(dmat) * sol_lp$solution) / sum(sol_lp$solution), .before = 1)
+sol_sum
+
 
 ```
 
-# mock data
+
+## RAS vs optimal
+
+LP solver with random data vs RAS.
 
 ```{r}
-n <- 4
-df <- data.frame(
-  place = letters[1:n],
-  demand = c(5, 5, 0, 0),
-  supply = c(0, 0, 7, 3),
-  lon = 1:n,
-  lat = 0
-  ) |>
-  mutate(net_supply = supply - demand) |>
-  rowwise() |>
-  mutate(center = list(st_point(c(lon, 0)))) |>
-  st_as_sf(crs = 4326)
+n <- 10
+sup <- (runif(n) * 1000) |> sort()
+dem <- runif(n) |> (\(x) x / sum(x) * sum(sup))() |> sort()
+dmat <- dist(1:n) |> as.matrix()
 
-df
+sols <- list()
+sol_sum <- data.frame()
+for (imp_par in 1:20) {
+  imp <- geog$gaus_impedance_mat(set_units(dmat, mi), imp_par)
 
-st_distance(df) |> set_units(mi)
+  x0 <- tf$gravity(sup, dem, imp)
+  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  sols[[length(sols) + 1]] <- sol
+  sol_row <- append(list(imp_par = imp_par, avg_dist = sum(dmat * sol$matrix) / sum(sol$matrix)), sol[c("converged", "iterations", "rmsd", "mad", "maxad")])
+  sol_sum <- rbind(sol_sum, sol_row)
+}
 
-tm_shape(df) + tm_grid() + tm_bubbles() + tm_text("place") +
-  tm_shape(df) + tm_text("net_supply", ymod = -1)
-```
+# optimal solution
+sol_lp <- lp.transport(
+  cost.mat = dmat,
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  integers = NULL
+)
 
-
-
-
-# solve
-
-```{r}
-
-imp <- st_distance(df) |>
-  geog$prox_impedance_mat(100)
-colnames(imp) <- rownames(imp) <- df$place
-imp
-x0 <- tf$gravity(df$supply, df$demand, imp)
-colnames(x0) <- rownames(x0) <- df$place
-x0
-y <- ras_trade_flows(x0, df$supply, df$demand, 0.01)
-y$trade_matrix
-
-y$cadj
-y$radj
+sol_sum <- add_row(sol_sum, imp_par = -1, avg_dist = sum(dmat * sol_lp$solution) / sum(sol_lp$solution), .before = 1)
+sol_sum
 
 ```
 
-# asymmetric proximity with varying distance
+# Asymmetric proximity with varying distance
+
+This extension of the RAS+Gravity algorithm introduces different distance parameters for each county and trade side (exports and imports).
+It relaxes the issue of universal distance applied to all counties.
+
+*Warning* Code in this section has not been updated to use newer RAS function and will not work without modification.
 
 ```{r}
-
-
 prox_mat_var_dist <- function(dist_mat, dist_from, dist_to) {
   dist_mat <- dist_mat |> set_units(mi) |> drop_units()
   dist_from <- dist_from |> set_units(mi) |> drop_units()
@@ -198,93 +541,9 @@ prox_mat_var_dist(d, c(1,0,0,0,0), c(0,1,0,0,0))
 prox_mat_var_dist(d, c(0,0,0,0,4), c(4,0,0,0,0))
 
 ```
-# step by step solve
-
-## 1
-
-With 100 mile radius, can only trade with immediate neighbors.
-`a` and `d` have no partners to trade with.
-
-```{r}
-dist_from <- rep(100, nrow(df)) |> set_units(mi)
-dist_from
-dist_to <- rep(100, nrow(df)) |> set_units(mi)
-dist_to
-imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
-colnames(imp) <- rownames(imp) <- df$place
-imp
-
-x0 <- tf$gravity(df$supply, df$demand, imp)
-colnames(x0) <- rownames(x0) <- df$place
-x0
-
-y <- ras_trade_flows(x0, df$supply, df$demand, 0.01)
-y$converged
-y$trade_matrix
-print("last supply adjustment:")
-y$radj
-print("last demand adjustment:")
-y$cadj
-```
-
-## 2
-
-`c -> a` now becomes available
-
-```{r}
-# increment radius for places with >1 adjustment factor
-dist_from[y$radj > 1] <- dist_from[y$radj > 1] + set_units(100, mi)
-dist_to[y$cadj > 1] <- dist_to[y$cadj > 1] + set_units(100, mi)
-dist_from
-dist_to
-imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
-colnames(imp) <- rownames(imp) <- df$place
-imp
-
-x0 <- tf$gravity(df$supply, df$demand, imp)
-colnames(x0) <- rownames(x0) <- df$place
-x0
-
-y <- ras_trade_flows(x0, df$supply, df$demand, 0.01, verbose = TRUE)
-y$converged
-y$trade_matrix
-print("last supply adjustment:")
-y$radj
-print("last demand adjustment:")
-y$cadj
-```
 
 
-## 3
-
-`d -> a` and `d -> b` become available, everything clears.
-
-```{r}
-# increment radius for places with >1 adjustment factor
-dist_from[y$radj > 1] <- dist_from[y$radj > 1] + set_units(100, mi)
-dist_to[y$cadj > 1] <- dist_to[y$cadj > 1] + set_units(100, mi)
-dist_from
-dist_to
-imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
-colnames(imp) <- rownames(imp) <- df$place
-imp
-
-x0 <- tf$gravity(df$supply, df$demand, imp)
-colnames(x0) <- rownames(x0) <- df$place
-x0
-
-y <- ras_trade_flows(x0, df$supply, df$demand, 0.01, verbose = TRUE)
-y$converged
-y$trade_matrix
-print("last supply adjustment:")
-y$radj
-print("last demand adjustment:")
-y$cadj
-```
-
-
-
-# iterative RAS function
+## iterative RAS function
 
 ```{r}
 iter_ras_trade_flows <- function(rs1, cs1, dist_mat, dist_from, dist_to, dist_step, var_dist = TRUE, tol = 0, maxiter = 10, verbose = TRUE) {
@@ -343,14 +602,8 @@ iter_ras_trade_flows <- function(rs1, cs1, dist_mat, dist_from, dist_to, dist_st
 }
 ```
 
-## apply to mock data
 
-```{r}
-y <- iter_ras_trade_flows(st_distance(df), df$supply, df$demand, 0.01, verbose = FALSE)
-y
-```
-
-# mock more
+## toy example
 
 ```{r}
 n <- 5
@@ -405,11 +658,10 @@ sol$last_ras$trade_matrix |>
   coord_fixed()
 ```
 
-# Wisconsin data
+## Wisconsin data
 
 
 ```{r}
-source("R/place_output.R", local = (place_output <- new.env()))
 
 df <- geog$call_geog() |>
   rename_with(str_to_lower) |>
@@ -495,7 +747,4 @@ solvar$last_ras$trade_matrix |>
 ```
 
 
-```{r}
-dist[1:5, 1:5]
-```
 
