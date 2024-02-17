@@ -174,17 +174,6 @@ source("R/trade_flows.R", local = (tf <- new.env()))
 
 # Prosperity
 
-## population (example)
-
-```{r}
-source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
-
-# annual estimates without base
-prosperity$call_population_2022_df() |>
-  filter(month(date) == 7)
-
-```
-
 
 ## premature death
 
@@ -217,6 +206,45 @@ prosperity$call_netmigration_df()
 
 ```
 
+
+
+## population growth
+
+```{r}
+# calculate ad hoc
+
+```
+
+
+## education
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_education_df()
+
+```
+
+
+## labor force participation rate
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_lfpr_df()
+
+```
+
+
+## saipe
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_saipe_df()
+
+
+```
 
 
 
