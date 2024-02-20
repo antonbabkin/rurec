@@ -19,6 +19,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 ipath <- list(
   unemployment_rate = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.xlsx?v=8720.6", 
   netmigration_rate = "https://netmigration.wisc.edu/documents/NME_1020_data_beta.zip", 
+  CHRR_data_2012 = "https://www.countyhealthrankings.org/sites/default/files/analytic_data2012.csv",
   saipe_2022 = "https://www2.census.gov/programs-surveys/saipe/datasets/2022/2022-state-and-county/est22all.xls",
   saipe_2021 = "https://www2.census.gov/programs-surveys/saipe/datasets/2021/2021-state-and-county/est21all.xls",
   saipe_2020 = "https://www2.census.gov/programs-surveys/saipe/datasets/2020/2020-state-and-county/est20all.xls",
@@ -46,6 +47,7 @@ opath <- list(
   netmigration_rate_raw = "data/prosperity/raw/NME_1020_data_beta.zip",
   education_raw = "data/prosperity/raw/education.csv",
   lfpr_raw = "data/prosperity/raw/lfpr.csv",
+  CHRR_data_2012_raw = "data/prosperity/raw/analytic_data2012.csv",
   saipe_2022_raw = "data/prosperity/raw/saipe22.xls",
   saipe_2021_raw = "data/prosperity/raw/saipe21.xls",
   saipe_2020_raw = "data/prosperity/raw/saipe20.xls",
@@ -152,6 +154,25 @@ call_education_df <- function() {
                                  ifelse(year == 2017, "2013-2017",
                                         ifelse(year == 2022, "2018-2022", NA))))) %>%
     select(-year, -X)
+  return(df)
+}
+
+#US County Health Rankings and Roadmaps Data 2012 (Includes premature death)
+
+call_CHRR_df <- function() {
+  raw_path <- opath$CHRR_data_2012_raw
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+  } else {
+    # create parent directories
+    raw_path <- util$mkdir(raw_path)
+    download_status <- download.file(url = ipath$CHRR_data_2012, destfile = raw_path, mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("raw data dowloaded to {raw_path}")
+  }
+  df <- read_csv(raw_path, skip = 1)
+  
   return(df)
 }
 

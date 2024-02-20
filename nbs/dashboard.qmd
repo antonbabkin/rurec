@@ -8,10 +8,10 @@ format:
 params:
   data_pack_path: "data/dashboard_data_v240124.zip"
   geography_year: 2013
-  map_agg_stats_show: false
+  map_agg_stats_show: true
   map_agg_stats_year: 2012
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
-  map_agg_prosp_fill_var: "poverty" # unemployment_rate, bachelors, lfpr, poverty
+  map_agg_prosp_fill_var: "premature.death" # unemployment_rate, bachelors, lfpr, poverty, net.migration, premature.death
   map_ex_supdem_show: true
   map_ex_supdem_year: 2012
   map_ex_range_year: "2008-2012"
@@ -327,6 +327,22 @@ if (params$map_agg_stats_show) {
     select(place, lfpr)
   df <- left_join(df, d, by = "place")
 
+  # premature death (years of potential life lost per 100,000)
+  d <- prosperity$call_CHRR_df() |>
+    filter(year == params$map_agg_stats_year, countycode != "000") |>
+    mutate(place = str_c(statecode, countycode)) |>
+    rename(premature.death = v001_rawvalue) |>
+    select(place, premature.death)
+  df <- left_join(df, d, by = "place")
+
+  # net migration rate
+  d <- prosperity$call_netmigration_df() |>
+    mutate(county.fips = substr(fips_str2020,3,5)) |>
+    filter(county.fips != "000") |>
+    mutate(place = fips_str2020) |>
+    rename(net.migration = r1tttt) |>
+    select(place, net.migration)
+  df <- left_join(df, d, by = "place")
 
   # poverty rate
   d <- prosperity$call_saipe_df() |>
@@ -339,7 +355,7 @@ if (params$map_agg_stats_show) {
   fill_var <- params$map_agg_prosp_fill_var
   d <- df |>
     filter(contiguous)
-  if (fill_var == "poverty") {
+  if (fill_var == "poverty" | fill_var == "premature.death") {
     pal=colorNumeric("magma", (d[[fill_var]]), reverse = TRUE)
   }
   else{pal=colorNumeric("magma", (d[[fill_var]]), reverse = FALSE)}
@@ -351,6 +367,8 @@ if (params$map_agg_stats_show) {
         "% Bachelor's or Higher: {bachelors}",
         "Labor Force Participation Rate: {lfpr}",
         "Poverty Rate: {poverty}",
+        "Premature Death (Years of Potential Life Lost per 100k): {premature.death}",
+        "Net Migration Rate: {net.migration}",
         .sep = "<br>",
         .envir = d) |> lapply(HTML)
   
