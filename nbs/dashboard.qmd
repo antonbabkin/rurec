@@ -11,9 +11,11 @@ params:
   map_agg_stats_show: false
   map_agg_stats_year: 2012
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
-  map_ex_supdem_show: false
+  map_agg_prosp_fill_var: "poverty" # unemployment_rate, bachelors, lfpr, poverty
+  map_ex_supdem_show: true
   map_ex_supdem_year: 2012
-  map_ex_supdem_ind: "1111A0" #"312120"
+  map_ex_range_year: "2008-2012"
+  map_ex_supdem_ind: "713900" #"1111A0"
   focus_county: "55025"
   map_imped_show: false
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
@@ -56,6 +58,7 @@ source("R/dataprep_infogroup.R", local = (infogroup <- new.env()))
 source("R/place_output.R", local = (place_output <- new.env()))
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 source("R/connectedness.R", local = (connect <- new.env()))
+source("R/connectedness.R", local = (connect <- new.env()))
 
 source("R/visualization.R", local = (visual <- new.env()))
 source("R/circularity.R", local = (circ <- new.env()))
@@ -77,7 +80,7 @@ ipath <- list(
   geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}"),
   population = dataprep$opath$population,
   infogroup_ = infogroup$opath$county_,
-  io_output_ = glue(place_output$opath$output_, year = "{year}", class_system = "commodity", ilevel = "det", bus_data = "{bus_data}"),
+  io_output_ = glue(place_output$opath$output_, year = "{year}", class_system = "{class_system}", ilevel = "det", bus_data = "{bus_data}"),
   bea_io_use_det_ = glue(bea_io$opath$use_, level = "det", year = "{year}", labels = FALSE),
   bea_io_sup_det_ = glue(bea_io$opath$sup_, level = "det", year = "{year}", labels = FALSE),
   call_dist_mat_ = glue(geo$opath$dist_mat_, year = "{year}", from = "center", cbsa = FALSE)
@@ -188,7 +191,6 @@ if (params$map_ex_supdem_show) {
     bus_data = "infogroup"
   ) |>
     filter(indcode == industry) |>
-    rename(demand = output) |>
     select(place, demand)
 
   df <- left_join(df, d, "place")
@@ -203,7 +205,6 @@ if (params$map_ex_supdem_show) {
     bus_data = "infogroup"
   ) |>
     filter(indcode == industry) |>
-    rename(supply = output) |>
     select(place, supply)
   
   df <- left_join(df, d, "place") |>
@@ -295,6 +296,78 @@ if (params$map_imped_show) {
 }
 ```
 
+# prosperity
+
+```{r}
+if (params$map_agg_stats_show) {
+  # county shapes
+  df <- call_geo()
+
+  # unemployment rate
+  d <- prosperity$call_unemployment_rate_df() |>
+    filter(year == params$map_agg_stats_year, cty != "000") |>
+    mutate(place = str_c(st, cty)) |>
+    rename(unemployment_rate = unemp_rt) |>
+    select(place, unemployment_rate)
+  df <- left_join(df, d, by = "place")
+
+  # % bachelor's or higher
+  d <- prosperity$call_education_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(bachelors = estimate) |>
+    select(place, bachelors)
+  df <- left_join(df, d, by = "place")
+
+  # labor force participation rate
+  d <- prosperity$call_lfpr_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(lfpr = estimate) |>
+    select(place, lfpr)
+  df <- left_join(df, d, by = "place")
+
+
+  # poverty rate
+  d <- prosperity$call_saipe_df() |>
+    filter(year == params$map_agg_stats_year, county.fips != "000") |>
+    mutate(place = str_c(state.fips, county.fips)) |>
+    rename(poverty = pov) |>
+    select(place, poverty)
+  df <- left_join(df, d, by = "place")
+  
+  fill_var <- params$map_agg_prosp_fill_var
+  d <- df |>
+    filter(contiguous)
+  if (fill_var == "poverty") {
+    pal=colorNumeric("magma", (d[[fill_var]]), reverse = TRUE)
+  }
+  else{pal=colorNumeric("magma", (d[[fill_var]]), reverse = FALSE)}
+  val <- (d[[fill_var]])
+  col <- pal(val)
+  lab <- glue(
+        "{county}",
+        "Unemployment Rate: {unemployment_rate}",
+        "% Bachelor's or Higher: {bachelors}",
+        "Labor Force Participation Rate: {lfpr}",
+        "Poverty Rate: {poverty}",
+        .sep = "<br>",
+        .envir = d) |> lapply(HTML)
+  
+  leaflet() |>
+    addTiles() |>
+    addPolygons(
+      data = d,
+      stroke = FALSE,
+      fillColor = col,
+      fillOpacity = 0.6,
+      label = lab,
+      popup = lab
+    ) |>
+    addLegend(pal = pal, values = val, title = glue("{fill_var}"))
+}
+```
+
 
 # geography
 
@@ -320,6 +393,7 @@ if (params$basic_geog_feature) {
 
 }
 ```
+
 
 
 ```{r}
@@ -397,8 +471,6 @@ if (params$central_impedance_table) {
   str(df)
 }
 ```
-
-
 
 
 # connectedness
@@ -965,8 +1037,6 @@ if (params$eca_place_map) {
 }
 
 ```
-
-
 
 
 :::
