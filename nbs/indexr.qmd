@@ -162,3 +162,90 @@ dataprep$call_population()
 ```
 
 
+# Trade flows
+
+```{r}
+source("R/trade_flows.R", local = (tf <- new.env()))
+
+
+```
+
+
+
+# Prosperity
+
+
+## premature death
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_premature_death_df()
+
+```
+
+
+
+## unemployment rate
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_unemployment_rate_df()
+
+```
+
+
+## net migration rate 
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_netmigration_df()
+
+
+```
+
+
+
+## population growth
+
+```{r}
+# calculate ad hoc
+
+```
+
+
+## education
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_education_df()
+
+```
+
+
+## labor force participation rate
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_lfpr_df()
+
+```
+
+
+## saipe
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_saipe_df()
+
+
+```
+
+
+
+

@@ -22,4 +22,7 @@ Imports:
   matlib,
   magick,
   tmaptools,
-  zoo
+  zoo,
+  leaflet,
+  tidycensus
+

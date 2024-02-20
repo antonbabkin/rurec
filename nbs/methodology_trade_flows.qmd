@@ -1,0 +1,501 @@
+---
+title: "Methodology: trade flows estimation"
+format: html
+---
+
+
+```{r}
+library(tidyverse)
+library(sf)
+library(units)
+library(tmap)
+tmap_mode("plot")
+
+source("R/trade_flows.R", local = (tf <- new.env()))
+source("R/geography.R", local = (geog <- new.env()))
+
+
+x <- tf$test_map_gravity("1111A0", "prox", 300, "55025") |>
+  mutate(imports_from = na_if(imports_from, 0), exports_to = na_if(exports_to, 0))
+ppi <- tm_shape(x) + tm_fill("imports_from")
+ppe <- tm_shape(x) + tm_fill("exports_to")
+
+x <- tf$test_map_gravity("1111A0", "gaus", 300, "55025") |>
+  mutate(
+    imports_from = if_else(imports_from < 0.1, NA, imports_from), 
+    exports_to = if_else(exports_to < 0.1, NA, exports_to))
+pgi <- tm_shape(x) + tm_fill("imports_from")
+pge <- tm_shape(x) + tm_fill("exports_to")
+
+tmap_arrange(ppi, ppe, pgi, pge)
+```
+
+# RAS function
+
+```{r}
+ras_trade_flows <- function(x0, rs1, cs1, tol = 0, maxiter = 10, verbose = TRUE) {
+  
+  mad_break_rel_dif <- 0.001
+  
+  # test if targets sum to same total, within 0.1% tolerance
+  sum_tol <- 0.001
+  sum_dif <- abs(sum(rs1) - sum(cs1)) / sum(cs1)
+  if (sum_dif > sum_tol) stop("sum(rs1) != sum(cs1)")
+
+  # mask away all-zero rows and columns
+  rpos <- (rs1 > 0) & (rowSums(x0) > 0)
+  cpos <- (cs1 > 0) & (colSums(x0) > 0)
+  x <- x0[rpos, cpos, drop=F]
+  nr <- nrow(x)
+  nc <- ncol(x)
+  rs <- rs1[rpos]
+  cs <- cs1[cpos]
+  mad <- Inf
+  rmse <- -1
+  
+  print_progress <- function(x1, rows) {
+    y <- matrix(0, nrow(x0), ncol(x0), dimnames = list(rownames(x0), colnames(x0)))
+    y[rpos, cpos] <- x1
+    if (rows) {
+      rs <- rowSums(y)
+      y <- cbind(y, rs, rs1, rs1 / rs)
+      colnames(y)[-(1:ncol(x0))] <- c("sum", "target", "adj")
+    } else {
+      cs <- colSums(y)
+      y <- rbind(y, cs, cs1, cs1 / cs)
+      rownames(y)[-(1:nrow(x0))] <- c("sum", "target", "adj")
+    }
+    y <- round(y, 3)
+    print(glue("scale {what}", what = if (rows) "rows" else "cols"))
+    print(y)
+  }
+
+  for (i in 1:maxiter) {
+    log_debug("iteration ", i)
+    # scale rows
+    if (verbose) print_progress(x, TRUE)
+    radj <- rs / rowSums(x)
+    x1 <- matrix(radj, nr, nc) * x
+    # scale cols
+    if (verbose) print_progress(x1, FALSE)
+    cadj <- cs / colSums(x1)
+    x1 <- matrix(cadj, nr, nc, byrow = TRUE) * x1
+    mad1 <- mean(abs(rowSums(x1) - rs))
+    mad_rel_dif <- abs(mad - mad1) / mad1
+    if (mad_rel_dif < mad_break_rel_dif) {
+      log_warn("Convergence stalled at relative MAD difference {mad_rel_dif}")
+      break
+    }
+    rmse <- max(max(abs(rowSums(x1) - rs)) , max(abs(colSums(x1) - cs)))
+    mad <- mad1
+    x <- x1
+    if (verbose) cat(paste("  Iteration:", i, "  RMSE:", rmse, " MAD:", mad, "\n"))
+    converged <- (rmse <= tol)
+    if (converged) break
+  }
+  if (i == maxiter) log_debug("Maximum Number of iterations reached")
+  if (verbose) cat(paste("Number of iterations:", i, "RMSE:", rmse, " MAD:", mad, "\n"))
+  # return zero rows and cols back
+  xz <- matrix(0, nrow(x0), ncol(x0))
+  xz[rpos, cpos] <- x
+  rownames(xz) <- rownames(x0)
+  colnames(xz) <- colnames(x0)
+  
+  radj_full <- rep(1, nrow(x0))
+  radj_full[rpos] <- radj
+  radj_full[(rs1 > 0) & (rowSums(x0) == 0)] <- Inf
+  names(radj_full) <- rownames(x0)
+  
+  cadj_full <- rep(1, ncol(x0))
+  cadj_full[cpos] <- cadj
+  cadj_full[(cs1 > 0) & (colSums(x0) == 0)] <- Inf
+  names(cadj_full) <- colnames(x0)
+  
+  out <- list("trade_matrix" = xz, "ras_supply_dim" =  dim(x)[1], "ras_demand_dim" =  dim(x)[2], "iterations" = i, "rmse" = rmse, "mad" = mad, converged = converged, radj = radj_full, cadj = cadj_full)
+  return(out)
+}
+
+
+```
+
+# mock data
+
+```{r}
+n <- 4
+df <- data.frame(
+  place = letters[1:n],
+  demand = c(5, 5, 0, 0),
+  supply = c(0, 0, 7, 3),
+  lon = 1:n,
+  lat = 0
+  ) |>
+  mutate(net_supply = supply - demand) |>
+  rowwise() |>
+  mutate(center = list(st_point(c(lon, 0)))) |>
+  st_as_sf(crs = 4326)
+
+df
+
+st_distance(df) |> set_units(mi)
+
+tm_shape(df) + tm_grid() + tm_bubbles() + tm_text("place") +
+  tm_shape(df) + tm_text("net_supply", ymod = -1)
+```
+
+
+
+
+# solve
+
+```{r}
+
+imp <- st_distance(df) |>
+  geog$prox_impedance_mat(100)
+colnames(imp) <- rownames(imp) <- df$place
+imp
+x0 <- tf$gravity(df$supply, df$demand, imp)
+colnames(x0) <- rownames(x0) <- df$place
+x0
+y <- ras_trade_flows(x0, df$supply, df$demand, 0.01)
+y$trade_matrix
+
+y$cadj
+y$radj
+
+```
+
+# asymmetric proximity with varying distance
+
+```{r}
+
+
+prox_mat_var_dist <- function(dist_mat, dist_from, dist_to) {
+  dist_mat <- dist_mat |> set_units(mi) |> drop_units()
+  dist_from <- dist_from |> set_units(mi) |> drop_units()
+  dist_to <- dist_to |> set_units(mi) |> drop_units()
+  y <- matrix(TRUE, nrow(dist_mat), ncol(dist_mat))
+  prox_from <- sweep(dist_mat, 1, dist_from, "<=")
+  prox_to <- sweep(dist_mat, 2, dist_to, "<=")
+  y <- prox_from & prox_to
+  mode(y) <- "integer"
+  y
+}
+
+# distance between ordered points on a line
+d <- 1:5 |>
+  lapply(\(x) st_point(c(x, 0))) |>
+  st_sfc() |>
+  st_distance() |>
+  set_units(mi)
+d
+
+prox_mat_var_dist(d, 2, 2)
+
+# only 1->2
+prox_mat_var_dist(d, c(1,0,0,0,0), c(0,1,0,0,0))
+
+# 5 -> all, all -> 1
+prox_mat_var_dist(d, c(0,0,0,0,4), c(4,0,0,0,0))
+
+```
+# step by step solve
+
+## 1
+
+With 100 mile radius, can only trade with immediate neighbors.
+`a` and `d` have no partners to trade with.
+
+```{r}
+dist_from <- rep(100, nrow(df)) |> set_units(mi)
+dist_from
+dist_to <- rep(100, nrow(df)) |> set_units(mi)
+dist_to
+imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
+colnames(imp) <- rownames(imp) <- df$place
+imp
+
+x0 <- tf$gravity(df$supply, df$demand, imp)
+colnames(x0) <- rownames(x0) <- df$place
+x0
+
+y <- ras_trade_flows(x0, df$supply, df$demand, 0.01)
+y$converged
+y$trade_matrix
+print("last supply adjustment:")
+y$radj
+print("last demand adjustment:")
+y$cadj
+```
+
+## 2
+
+`c -> a` now becomes available
+
+```{r}
+# increment radius for places with >1 adjustment factor
+dist_from[y$radj > 1] <- dist_from[y$radj > 1] + set_units(100, mi)
+dist_to[y$cadj > 1] <- dist_to[y$cadj > 1] + set_units(100, mi)
+dist_from
+dist_to
+imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
+colnames(imp) <- rownames(imp) <- df$place
+imp
+
+x0 <- tf$gravity(df$supply, df$demand, imp)
+colnames(x0) <- rownames(x0) <- df$place
+x0
+
+y <- ras_trade_flows(x0, df$supply, df$demand, 0.01, verbose = TRUE)
+y$converged
+y$trade_matrix
+print("last supply adjustment:")
+y$radj
+print("last demand adjustment:")
+y$cadj
+```
+
+
+## 3
+
+`d -> a` and `d -> b` become available, everything clears.
+
+```{r}
+# increment radius for places with >1 adjustment factor
+dist_from[y$radj > 1] <- dist_from[y$radj > 1] + set_units(100, mi)
+dist_to[y$cadj > 1] <- dist_to[y$cadj > 1] + set_units(100, mi)
+dist_from
+dist_to
+imp <- prox_mat_var_dist(st_distance(df), dist_from, dist_to)
+colnames(imp) <- rownames(imp) <- df$place
+imp
+
+x0 <- tf$gravity(df$supply, df$demand, imp)
+colnames(x0) <- rownames(x0) <- df$place
+x0
+
+y <- ras_trade_flows(x0, df$supply, df$demand, 0.01, verbose = TRUE)
+y$converged
+y$trade_matrix
+print("last supply adjustment:")
+y$radj
+print("last demand adjustment:")
+y$cadj
+```
+
+
+
+# iterative RAS function
+
+```{r}
+iter_ras_trade_flows <- function(rs1, cs1, dist_mat, dist_from, dist_to, dist_step, var_dist = TRUE, tol = 0, maxiter = 10, verbose = TRUE) {
+  
+  # initial distances
+  dist_from <- rep(dist_from, length(rs1)) |> set_units(mi)
+  dist_to <- rep(dist_to, length(cs1)) |> set_units(mi)
+
+  for (iter in 1:maxiter) {
+    # impedance and gravity estimates from current distances
+    imp_mat <- prox_mat_var_dist(dist_mat, dist_from, dist_to)
+    colnames(imp_mat) <- rownames(imp_mat) <- colnames(dist_mat)
+    x0 <- tf$gravity(rs1, cs1, imp_mat)
+    colnames(x0) <- rownames(x0) <- colnames(dist_mat)
+    
+    if (verbose) {
+      print("impedance")
+      print(imp_mat)
+      print("initial x0")
+      print(x0)
+    }  
+
+    # run RAS algorithm from gravity estimates
+    sol <- ras_trade_flows(x0, rs1, cs1, tol, maxiter = maxiter, verbose = verbose)
+    sol$outer_iter <- iter
+    log_debug(glue("Outer RAS iteration {outer_iter}, inner iterations {iterations}, RMSE {rmse}, MAD {mad}", .envir = sol))
+    
+    if (verbose) {
+      print(sol)
+    }
+    
+    # stop if converged solution found
+    if (sol$converged) {
+      log_info("Outer RAS finished after iteration {iter}")
+      break
+    }
+    
+    if (var_dist) {
+      # increment distances for places with >1 adjustment factor
+      dist_from[sol$radj > 1] <- dist_from[sol$radj > 1] + set_units(dist_step, mi)
+      dist_to[sol$cadj > 1] <- dist_to[sol$cadj > 1] + set_units(dist_step, mi)
+    } else {
+      # increment uniformly for every place
+      dist_from <- dist_from + set_units(dist_step, mi)
+      dist_to <- dist_to + set_units(dist_step, mi)
+    }
+  }
+  
+  out <- list(
+    last_ras = sol,
+    dist_from = dist_from,
+    dist_to = dist_to,
+    imp_mat = imp_mat
+  )
+  return(out)
+}
+```
+
+## apply to mock data
+
+```{r}
+y <- iter_ras_trade_flows(st_distance(df), df$supply, df$demand, 0.01, verbose = FALSE)
+y
+```
+
+# mock more
+
+```{r}
+n <- 5
+df <- data.frame(
+  place = letters[1:n],
+  net_supply = c(-4, 2, 2, -3, 3),
+  lon = 1:n,
+  lat = 0
+  ) |>
+  mutate(supply = pmax(net_supply, 0), demand = pmax(-net_supply, 0)) |>
+  rowwise() |>
+  mutate(center = list(st_point(c(lon, 0)))) |>
+  st_as_sf(crs = 4326)
+
+df
+
+dist <- st_distance(df) |> set_units(mi)
+rownames(dist) <- colnames(dist) <- df$place
+dist
+
+tm_shape(df) + tm_grid() + tm_bubbles() + tm_text("place") +
+  tm_shape(df) + tm_text("net_supply", ymod = -1)
+
+sol <- iter_ras_trade_flows(df$supply, df$demand, dist, 100, 100, 100, var_dist = TRUE, tol = 0.01, maxiter = 1000, verbose = FALSE)
+sol$last_ras$trade_matrix
+sol$dist_from
+sol$dist_to
+
+sol$last_ras$trade_matrix |>
+  as_tibble(rownames = "from") |>
+  pivot_longer(!from, names_to = "to") |>
+  mutate(from = ordered(from, levels = rev(df$place)), value = na_if(value, 0)) |>
+  ggplot() +
+  geom_tile(aes(to, from, fill = value)) +
+  coord_fixed()
+```
+
+Same without varying distance increment.
+
+```{r}
+sol <- iter_ras_trade_flows(df$supply, df$demand, dist, 100, 100, 100, var_dist = FALSE, tol = 0.01, maxiter = 1000, verbose = FALSE)
+sol$last_ras$trade_matrix
+sol$dist_from
+sol$dist_to
+
+sol$last_ras$trade_matrix |>
+  as_tibble(rownames = "from") |>
+  pivot_longer(!from, names_to = "to") |>
+  mutate(from = ordered(from, levels = rev(df$place)), value = na_if(value, 0)) |>
+  ggplot() +
+  geom_tile(aes(to, from, fill = value)) +
+  coord_fixed()
+```
+
+# Wisconsin data
+
+
+```{r}
+source("R/place_output.R", local = (place_output <- new.env()))
+
+df <- geog$call_geog() |>
+  rename_with(str_to_lower) |>
+  filter(state_code == "55")
+
+d <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "demand", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup") |>
+  filter(indcode == "112120", str_starts(place, "55")) |>
+  select(place, demand)
+df <- inner_join(df, d, "place")
+
+d <- place_output$call_intermediate(
+  year = 2012, 
+  schedule = "supply", 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  ilevel = "det",
+  bus_data = "infogroup") |>
+  filter(indcode == "112120", str_starts(place, "55")) |>
+  select(place, supply)
+df <- inner_join(df, d, "place")
+
+df <- df |>
+  mutate(netsup = supply - demand,
+         exsup = pmax(netsup, 0),
+         exdem = pmax(-netsup, 0),
+         exsupb = exsup / sum(exsup) * min(sum(exsup), sum(exdem)),
+         exdemb = exdem / sum(exdem) * min(sum(exsup), sum(exdem)))
+
+df |> as.data.frame() |> summarize(across(c(supply, demand, exsup, exdem, exdemb, exsupb), sum))
+
+
+tmap_mode("view")
+tm_shape(df) + tm_fill("netsup", midpoint = 0, popup.format = list(digits = 0),
+                       popup.vars = c("name", "demand", "supply", "exdem", "exsup", "netsup", "exdemb", "exsupb"))
+
+dist <- st_distance(df)
+colnames(dist) <- rownames(dist) <- df$county_code
+dist |>
+  set_units(mi) |> drop_units() |>
+  as_tibble(rownames = "from") |>
+  pivot_longer(!from, names_to = "to") |>
+  ggplot() +
+  geom_tile(aes(to, from, fill = value)) +
+  coord_fixed() +
+  labs(title = "Distance in miles")
+
+
+sol <- iter_ras_trade_flows(df$exsupb, df$exdemb, dist, 25, 25, 25, var_dist = FALSE, tol = 0.01, maxiter = 1000, verbose = FALSE)
+sol$last_ras$trade_matrix[1:5, 1:5]
+sol$dist_from
+sol$dist_to
+
+sol$last_ras$trade_matrix |>
+  as_tibble(rownames = "from") |>
+  pivot_longer(!from, names_to = "to") |>
+  mutate(value = na_if(value, 0)) |>
+  ggplot() +
+  geom_tile(aes(to, from, fill = value)) +
+  coord_fixed() +
+  labs(title = "Trade flows uniform distance increments")
+
+
+
+solvar <- iter_ras_trade_flows(df$exsupb, df$exdemb, dist, 25, 25, 25, var_dist = TRUE, tol = 0.01, maxiter = 1000, verbose = FALSE)
+solvar$last_ras$trade_matrix[1:5, 1:5]
+solvar$dist_from
+solvar$dist_to
+
+solvar$last_ras$trade_matrix |>
+  as_tibble(rownames = "from") |>
+  pivot_longer(!from, names_to = "to") |>
+  mutate(value = na_if(value, 0)) |>
+  ggplot() +
+  geom_tile(aes(to, from, fill = value)) +
+  coord_fixed() +
+  labs(title = "Trade flows varying distance increments")
+```
+
+
+```{r}
+dist[1:5, 1:5]
+```
+
