@@ -257,6 +257,16 @@ year2bea_concord <- function(year){
   return(as.integer(x))
 }
 
+
+year2bea_profile <- function(year){
+    bea_year = 2022:1969
+    x <- nearest_point(year, bea_year)
+    if(!year %in% bea_year){
+      warning("BEA profile years do not contain [",year,"] using [", x,"]")
+    }
+  return(as.integer(x))
+}
+
 # temporal recursion ----
 
 # return a list of results from a function with a year argument, optional function arguments are permitted

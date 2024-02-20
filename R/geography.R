@@ -303,18 +303,6 @@ call_dist_mat <- function(year = 2013,
   return(df)
 }
 
-# # TODO: depreciate
-# call_dist_matc <- function(year = 2013, 
-#                            cbsa = FALSE) {
-#   return(call_dist_mat(year = year, from = "center", cbsa = cbsa))
-# }
-# 
-# # TODO: depreciate
-# call_dist_matb <- function(year = 2013, 
-#                            cbsa = FALSE) {
-#   return(call_dist_mat(year = year, from = "border", cbsa = cbsa))
-# }
-
 
 # Produce Shared Border Matrix
 call_bprox_mat <- function(year = 2013, 
@@ -335,7 +323,7 @@ call_bprox_mat <- function(year = 2013,
 }
 
 
-#TODO: fix with functional form and update more efficient/flexible algorithm 
+# TODO: fix with functional form and update more efficient/flexible algorithm 
 ############ Generate neighbors of neighbors hierarchical vector for a place ad nauseam
 #Watch out for Nantucket, MA; Staten Island,NY; and San Juan, WA
 # this is slow and can probably be improved by using existing shortest path algorithm

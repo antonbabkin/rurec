@@ -80,6 +80,7 @@ apply_impedance <- function(activity_matrix,
   return(df)
 }
 
+# TODO: refactor function_class to be more flexable 
 # Apply various approaches to generate single "absorption" statistic from n-by-n matrix possibility space
 apply_absorption_metrics <- function(absorption_matrix,
                                      flow_direction = c("out", "in"),
