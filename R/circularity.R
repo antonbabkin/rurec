@@ -19,6 +19,7 @@ ipath <- list(
 )
 
 opath <- list(
+  #circularity_ = "data/circularity/circularity_{year}_{ilevel}_{class_system}_{paradigm}_{bus_data}_{cluster_level}_{cbsa}_{cluster_subset}_{trim}_{spatial}.rds"
   # data products
 )
 
@@ -73,7 +74,8 @@ retention <- function(gross_output_matrix,
   pc <- production_capacity(gross_output_matrix, intermediate_supply_matrix)
   tc <- trade_capacity(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   df <- inner_join(pc, tc, by = "place")
-  df$retention <- df$trade_capacity/df$production_capacity
+  # df$retention <- df$trade_capacity/df$production_capacity
+  df$retention <- (1 - (df$trade_capacity/df$production_capacity))
   df <- subset(df, select = c("place", "retention"))
   return(df)
 }
@@ -109,7 +111,8 @@ autonomy <- function(gross_output_matrix,
   pd <- production_dependency(gross_output_matrix, intermediate_demand_matrix)
   td <- trade_dependency(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   df <- inner_join(pd, td, by = "place")
-  df$autonomy <- df$trade_dependency/df$production_dependency
+  # df$autonomy <- df$trade_dependency/df$production_dependency
+  df$autonomy <- (1 - (df$trade_dependency/df$production_dependency))
   df <- subset(df, select = c("place", "autonomy"))
   return(df)
 }
@@ -120,7 +123,7 @@ trade_balance <- function(gross_output_matrix,
                           intermediate_demand_matrix){
   net_supply <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
   net_demand <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
-  df <-  (rowSums(t(net_demand))-rowSums(t(net_supply)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  df <-  (rowSums(t(net_supply))-rowSums(t(net_demand)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -134,7 +137,7 @@ trade_openness <- function(gross_output_matrix,
                            intermediate_demand_matrix){
   net_supply <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
   net_demand <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
-  df <-  (rowSums(t(net_demand))+rowSums(t(net_supply)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  df <-  (rowSums(t(net_supply))+rowSums(t(net_demand)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -172,6 +175,33 @@ call_circularity_metrics <- function(year,
                                      cluster_subset = NULL,
                                      trim = "^(60|66|69|78)|(999)$", 
                                      spatial = TRUE){
+
+  ilevel <- match.arg(ilevel)
+  class_system <- match.arg(class_system)
+  paradigm <- match.arg(paradigm)
+  bus_data <- match.arg(bus_data)
+  cluster_level <- match.arg(cluster_level)
+
+  # cache_path <- glue(opath$circularity_)
+  # if (file.exists(cache_path)) {
+  #   log_debug(paste("read from cache", cache_path))
+  #   return(readRDS(cache_path))
+  # }
+  
+  gross_output_matrix <- place_output$call_extraction_table(
+    year = year,
+    ilevel = ilevel,
+    class_system = class_system,
+    paradigm = paradigm,
+    bus_data = bus_data,
+    verbose = verbose,
+    cluster_level = cluster_level,
+    cbsa = cbsa,
+    cluster_subset = NULL,
+    trim = trim,
+    spatial = spatial) %>% 
+    {dfcol2matrix(., "gross_output")}
+  
   df <- place_output$call_extraction_table(year = year,
                                            ilevel = ilevel,
                                            class_system = class_system,
@@ -183,10 +213,14 @@ call_circularity_metrics <- function(year,
                                            cluster_subset = cluster_subset,
                                            trim = trim,
                                            spatial = spatial)
-  cm <- circularity_metrics(gross_output_matrix = dfcol2matrix(df, "gross_output"), 
+  cm <- circularity_metrics(gross_output_matrix = gross_output_matrix, 
                             intermediate_supply_matrix = dfcol2matrix(df, "intermediate_supply"), 
                             intermediate_demand_matrix = dfcol2matrix(df, "intermediate_demand"))
   df <- inner_join(df, cm, by = "place")
+  
+  # log_debug(paste("save to cache", cache_path))
+  # saveRDS(df, util$mkdir(cache_path))
+
   return(df)
 }
 
@@ -194,11 +228,13 @@ call_circularity_metrics <- function(year,
 
 test_circ <- function(){
   go <- place_output$call_output(2012, class_system = "commodity") %>% util$long2matrix() 
-  is <- place_output$call_intermediate(2012, schedule = "supply", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix()
-  id <- place_output$call_intermediate(2012, schedule = "demand", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix()
-  circularity_metrics(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
+  is <- place_output$call_intermediate(2012, schedule = "supply", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix() %>% {.[1,,drop=F]}
+  id <- place_output$call_intermediate(2012, schedule = "demand", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix() %>% {.[1,,drop=F]}
+  test <- circ$circularity_metrics(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
   test <- call_circularity_metrics(year = 2012, cluster_subset = "^11", class_system = "commodity", paradigm = "domestic", ilevel = "det")
+  test <- call_circularity_metrics(year = 2012, class_system = "commodity", paradigm = "domestic", ilevel = "det", cluster_level = "det", cluster_subset = NULL)
   # cor(test[,-1])
+  # summary(st_drop_geometry(test[,8:21]))
   # st_drop_geometry(test[,8:21]) %>% cor(use = "complete.obs")
 }
 
