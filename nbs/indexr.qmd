@@ -188,6 +188,28 @@ x <- tf$call_trade_flows("all_industries")
 # util$zip_unpack("tmp/trade_flows_v240221.zip", overwrite = TRUE)
 ```
 
+# Dynamism
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+
+# for(y in 2003:2016){
+#   dataprep$call_econ_dynam_ind(year = y)
+# }
+
+# util$zip_pack("tmp/econ_dynamism_v240221.zip", dataprep$opath$econ_dynam_ind_, overwrite = TRUE)
+# util$zip_unpack("tmp/econ_dynamism_v240221.zip", overwrite = TRUE)
+
+year = 2012
+df <- dataprep$call_econ_dynam_ind(year)
+df
+geo$call_geog(year) %>% left_join(., df, by = "place") %>%
+  {visual$nominal_choro_map(., "employment")}
+
+```
 
 zero
 <lgl>

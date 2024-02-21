@@ -553,6 +553,31 @@ call_sector_histogram_multi <- function(year,
 }
 
 
+# Nominal Choropleth ----
+
+## format data ----
+
+## viz ----
+
+nominal_choro_map <- function(spatial_dataframe,
+                              fill_variable,
+                              caption = NULL,
+                              interactive = TRUE){
+  sdf <- spatial_dataframe
+  fv <- fill_variable
+  tl <- usa_tile_list(sdf)
+  if (is.null(caption)){caption = "\n"} else {caption = caption}
+  df <- boil_tile(tile_list = tl, 
+                  fill_variable = fv, 
+                  caption = caption, 
+                  scale_fill_viridis(direction = -1, option = "C" ) ) %>%
+    {usa_tile_map(tile_plot_list = .,
+                  interactive = interactive)}
+  return(df)
+}
+
+
+
 # Normalized Choropleth ----
 
 ## format data ----
