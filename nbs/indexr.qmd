@@ -182,6 +182,10 @@ x <- tf$call_trade_flows("336414")
 # sum up all trade flows across all industries
 x <- tf$call_trade_flows("all_industries")
 
+# packing and unpacking county aggregates (uncomment as needs)
+# source("R/basic_utilities.R", local = (util <- new.env()))
+# util$zip_pack("tmp/trade_flows_v240221.zip", tf$opath$flows_)
+# util$zip_unpack("tmp/trade_flows_v240221.zip", overwrite = TRUE)
 ```
 
 
