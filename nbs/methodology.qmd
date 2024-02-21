@@ -642,10 +642,78 @@ Code: []()
 
 ## ECA
 
-Code: []()
+Code: `R/connectedness.R`.
 
-TODO
+### absorption
 
+Calculate place-to-place industry (commodity) level measures of connectedness.
+For every source county `i`, destination county `j` and industry (commodity) `k`:
+- `excess_supply(i, k) = max(supply(i, k) - demand(i, k), 0)`
+- `excess_demand(j, k) = max(demand(j, k) - supply(j, k), 0)`
+- `nominal_absorption(i, j, k) = min(excess_supply(i, k), excess_demand(j, k))`
+
+Aggregate across industries (commodities):
+- `total_nominal_absorption(i, j) = sum_k(nominal_absorption(i, j, k))`
+
+Normalize by county `i`'s total excess supply:
+- `normalized_absorption(i, j) = total_nominal_absorption(i, j) / sum_k(excess_supply(i, k))`
+
+Normalized absorption ranges from 0 (county `j` will not accept anything of what `i` has to offer) to 1 (county `j` can accept entire excess supply of county `i`).
+
+For every source county `i`, take max over all potential destination counties `j`.
+- `max_normalized_absorption(i) = max_j(normalized_absorption(i, j))`
+- `top_destination(i) = argmax_j(normalized_absorption(i, j))`
+
+Partition the entire space of counties into three ECA classes:
+1. *ECA cores*. Identify set of ECA "cores" (destinations) as all county `j`'s that are top destination for at least one other county `i`.
+2. *Isolated*. Counties that are not "cores" and have `max_normalized_absorption` below a set threshold (e.g. 5%) are classified as isolated.
+3. *ECA outlying*. For each "core" county `j`, identify set of "outlying" (source) counties that have `j` as their top destination for the list of non-isolated non-core counties.
+
+ECA cores can be broken into two sub-classes: isolated (max absorption below threshold) and not.
+
+#### Impedance
+
+### trade flow
+
+Nominal connectedness measure:
+`trade_flow(i, j, k)`, solution of trade flows transportation cost minimization problem.
+
+Aggregate:
+`total_trade_flow(i, j) = sum_k(trade_flow(i, j, k))`
+
+Normalize:
+```
+trade_flow_share(i, j) = total_trade_flow(i, j) / sum_j(total_trade_flow(i, j))
+  = total_trade_flow(i, j) / total_excess_supply(i)
+```
+
+What is it to be isolated under trade flow connectedness?
+
+- Option 1: same as ECAs, isolated <=> `max_j(trade_flow_share(i, j) < threshold`.
+The weakness of this approach is that trade flow shares sum up to 1, and their max tells more about distribution of exports than about county's connectability.
+
+- Option 2: Use trade capacity as the metric (`excess_supply(i) / total_output(i)`).
+Then counties can be isolated either because they do not produce intermediates, or they process most of their intermediates locally.
+
+
+### implementation
+
+```{r}
+source("R/trade_flows.R", local = (tf <- new.env()))
+source("R/connectedness.R", local = (conn <- new.env()))
+
+x <- tf$call_trade_flows("all_industries")
+
+wi_counties <- str_starts(rownames(x), "55")
+plot_heatmap(x[wi_counties, wi_counties]) + labs(title = "Total trade flows in Wisconsin")
+
+x1 <- sweep(x, 1, rowSums(x), "/")
+x1[is.na(x1)] <- 0
+x2 <- conn$apply_absorption_metrics(x1)
+x3 <- conn$apply_absorption_algorithm(x2)
+x3 |> select(place, cluster_category, eca_membership)
+
+```
 
 
 
