@@ -11,16 +11,30 @@ params:
   map_agg_stats_show: true
   map_agg_stats_year: 2012
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
+  map_agg_prosp_fill_var: "premature.death" # unemployment_rate, bachelors, lfpr, poverty, net.migration, premature.death
   map_ex_supdem_show: true
   map_ex_supdem_year: 2012
-  map_ex_supdem_ind: "1111A0" #"1111A0"
+  map_ex_range_year: "2008-2012"
+  map_ex_supdem_ind: "713900" #"1111A0"
   focus_county: "55025"
-  map_imped_show: true
+  map_imped_show: false
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
   map_imped_param: 500 # scale parameter of the impedance function
-  map_connect_show: false
+  basic_geog_feature: TRUE
+  distance_matrix: TRUE
+  impedance_matrix: TRUE
+  central_impedance_table: TRUE
+  absorption_density_plot: FALSE
+  sector_hist_plot: TRUE
+  sector_hist_plot_multi: TRUE
+  supply_demand_map: TRUE
+  supply_demand_delta_map: TRUE
+  impedance_map: TRUE
+  connectedness_map: TRUE
+  absorption_map: TRUE
+  eca_map: TRUE
+  eca_place_map: TRUE 
 ---
-
 
 ::: panel-tabset
 # intro
@@ -46,6 +60,8 @@ source("R/place_output.R", local = (place_output <- new.env()))
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connect <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+source("R/circularity.R", local = (circ <- new.env()))
 ```
 
 ## params
@@ -93,8 +109,6 @@ call_geo <- function() {
   df <- left_join(df, d, "state_code")
   df
 }
-
-
 
 ```
 
@@ -281,6 +295,7 @@ if (params$map_imped_show) {
 }
 ```
 
+
 # trade flows
 
 ```{r}
@@ -304,22 +319,765 @@ tm_shape(filter(df, contiguous)) + tm_fill("exports") +
 ```
 
 
+# prosperity
+
+```{r}
+if (params$map_agg_stats_show) {
+  # county shapes
+  df <- call_geo()
+
+  # unemployment rate
+  d <- prosperity$call_unemployment_rate_df() |>
+    filter(year == params$map_agg_stats_year, cty != "000") |>
+    mutate(place = str_c(st, cty)) |>
+    rename(unemployment_rate = unemp_rt) |>
+    select(place, unemployment_rate)
+  df <- left_join(df, d, by = "place")
+
+  # % bachelor's or higher
+  d <- prosperity$call_education_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(bachelors = estimate) |>
+    select(place, bachelors)
+  df <- left_join(df, d, by = "place")
+
+  # labor force participation rate
+  d <- prosperity$call_lfpr_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(lfpr = estimate) |>
+    select(place, lfpr)
+  df <- left_join(df, d, by = "place")
+
+  # premature death (years of potential life lost per 100,000)
+  d <- prosperity$call_CHRR_df() |>
+    filter(year == params$map_agg_stats_year, countycode != "000") |>
+    mutate(place = str_c(statecode, countycode)) |>
+    rename(premature.death = v001_rawvalue) |>
+    select(place, premature.death)
+  df <- left_join(df, d, by = "place")
+
+  # net migration rate
+  d <- prosperity$call_netmigration_df() |>
+    mutate(county.fips = substr(fips_str2020,3,5)) |>
+    filter(county.fips != "000") |>
+    mutate(place = fips_str2020) |>
+    rename(net.migration = r1tttt) |>
+    select(place, net.migration)
+  df <- left_join(df, d, by = "place")
+
+  # poverty rate
+  d <- prosperity$call_saipe_df() |>
+    filter(year == params$map_agg_stats_year, county.fips != "000") |>
+    mutate(place = str_c(state.fips, county.fips)) |>
+    rename(poverty = pov) |>
+    select(place, poverty)
+  df <- left_join(df, d, by = "place")
+  
+  fill_var <- params$map_agg_prosp_fill_var
+  d <- df |>
+    filter(contiguous)
+  if (fill_var == "poverty" | fill_var == "premature.death") {
+    pal=colorNumeric("magma", (d[[fill_var]]), reverse = TRUE)
+  }
+  else{pal=colorNumeric("magma", (d[[fill_var]]), reverse = FALSE)}
+  val <- (d[[fill_var]])
+  col <- pal(val)
+  lab <- glue(
+        "{county}",
+        "Unemployment Rate: {unemployment_rate}",
+        "% Bachelor's or Higher: {bachelors}",
+        "Labor Force Participation Rate: {lfpr}",
+        "Poverty Rate: {poverty}",
+        "Premature Death (Years of Potential Life Lost per 100k): {premature.death}",
+        "Net Migration Rate: {net.migration}",
+        .sep = "<br>",
+        .envir = d) |> lapply(HTML)
+  
+  leaflet() |>
+    addTiles() |>
+    addPolygons(
+      data = d,
+      stroke = FALSE,
+      fillColor = col,
+      fillOpacity = 0.6,
+      label = lab,
+      popup = lab
+    ) |>
+    addLegend(pal = pal, values = val, title = glue("{fill_var}"))
+}
+```
+
+
+# geography
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$basic_geog_feature) {
+  #explore simple spatial dataframe 
+  
+  key = list(
+    year = 2013,
+    scale = "20m", # c("20m", "5m", "500k")
+    cbsa = FALSE,
+    verbose = FALSE)
+  
+  df <- geo$call_geog(
+    year = key$year,
+    scale = key$scale,
+    cbsa = key$cbsa,
+    verbose = key$verbose)
+  
+  as_tibble(df)
+
+}
+```
+
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$distance_matrix) {
+  #explore distance matrix 
+  
+  key = list(
+    year = 2013,
+    from = "center", # c("center", "border")
+    cbsa = FALSE)
+  
+  df <- geo$call_dist_mat(
+    year = key$year,
+    from = key$from,
+    cbsa = key$cbsa)
+  
+  df %>% 
+    as.data.frame.table() %>% 
+    as_tibble() %>% 
+    `colnames<-`(c("rows", "cols", "distance"))
+}
+```
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$impedance_matrix) {
+  #explore impedance matrix constructions
+  
+  key = list(
+    year = 2013,
+    cbsa = FALSE,
+    from = "center", # c("center", "border"),
+    functional_form = "distance", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 500,
+    meta = T)
+  
+  df <- geo$call_impedance_mat(
+    year = key$year,
+    cbsa = key$cbsa,
+    from = key$from,
+    functional_form = key$functional_form, 
+    scalar_constant = key$scalar_constant,
+    meta = key$meta)
+  
+  str(df)
+  
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$central_impedance_table) {
+  #explore impedance matrix constructions
+  
+  key = list(
+    central_place = "01001",
+    year = 2013,
+    cbsa = FALSE,
+    from = "center", # c("center", "border"),
+    functional_form = "bisquare", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 500)
+  
+  df <- geo$call_impedance_distribution_table(
+    central_place = key$central_place,
+    year = key$year,
+    cbsa = key$cbsa,
+    from = key$from,
+    functional_form = key$functional_form, 
+    scalar_constant = key$scalar_constant)
+  
+  str(df)
+}
+```
+
+
 # connectedness
 
 ```{r}
-# todo: add relevant data to ipath
-if (params$map_connect_show) {
-
-df <- connect$call_hierarchical_connectedness(year = 2012, 
-                                      paradigm = "domestic", 
-                                      class_system = "commodity", 
-                                      impedance = T, 
-                                      functional_form = "distance", 
-                                      scalar_constant = 300, threshold = .25)
-
-df[["Hierarchical_Connectedness_table"]][["level_6"]] %>% 
-  ggplot() + geom_sf(aes(fill = eca_membership))
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$absorption_density_plot) {
+  #explore distribution of temporal properties of data 
+  
+  key = list(
+    set_of_years = 2000:2020,
+    normalized = TRUE,
+    impedance = FALSE,
+    functional_form = NULL, # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = NULL, # 300
+    from = "center", # c("center", "border")
+    central_place = NULL, # "01001"
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .05,
+    alpha_vector = "max_alpha",
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "factor", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    trim = NULL, # "^(02|15|60|66|69|72|78)|(999)$"
+    verbose = FALSE,
+    bind = TRUE,
+    spatial = FALSE)
+    
+  df <- connect$call_temporal_eca_table(
+    set_of_years = key$set_of_years,
+    normalized = key$normalized,
+    impedance = key$impedance,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    from = key$from,
+    central_place = key$central_place,
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    trim = key$trim,
+    verbose = key$verbose,
+    bind = key$bind,
+    spatial = key$spatial)
+  
+  key = list(
+    temporal_absorption_metric_table = df,
+    fill_variable = "max_alpha",
+    id_variable = "id_year",
+    trans = NULL, # log10
+    colorbreaks = c("#440154FF" = 2000:2006, 
+                    "#1E9C89FF" = 2007:2016, 
+                    "#D64B40FF" = 2017, 
+                    "#FDE725FF" =  2018:2020),
+    interactive = TRUE)
+  
+  visual$absorption_density_plot(
+    temporal_absorption_metric_table = key$temporal_absorption_metric_table, 
+    fill_variable = key$fill_variable, 
+    id_variable = key$id_variable, 
+    trans = key$trans,
+    interactive = key$interactive)
 }
 ```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$sector_hist_plot) {
+  # explore sector output distributions
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    verbose = FALSE,
+    central_place = NULL, # "01001"
+    trim = "^(60|66|69|72|78)|(999)$",
+    cluster_subset = NULL, # "^11"
+    indicator = "gross_output", # c("gross_output", "intermediate_supply", "intermediate_demand", "net_supply", "net_demand")
+    color = "turbo", # c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow")
+    cluster_level = "sec", # c("sec", "sum", "det")
+    interactive = TRUE)
+  
+  visual$call_sector_histogram(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    verbose = key$verbose,
+    central_place = key$central_place,
+    trim = key$trim,
+    cluster_subset = key$cluster_subset,
+    color = key$color,
+    cluster_level = key$cluster_level,
+    interactive = key$interactive)
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$sector_hist_plot_multi) {
+  # explore sector supply/demand distributions
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    verbose = FALSE,
+    central_place = NULL, # "01001"
+    trim = "^(60|66|69|72|78)|(999)$",
+    cluster_subset = NULL, # "^11"
+    color = "turbo", # c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow")
+    cluster_level = "sec", # c("sec", "sum", "det")
+    common_yscale = TRUE,
+    interactive = TRUE)
+  
+  visual$call_sector_histogram_multi(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    verbose = key$verbose,
+    central_place = key$central_place,
+    trim = key$trim,
+    cluster_subset = key$cluster_subset,
+    color = key$color,
+    cluster_level = key$cluster_level,
+    common_yscale = key$common_yscale,
+    interactive = key$interactive)
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$supply_demand_map) {
+  # explore net supply and demand maps
+  
+  ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^312120", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "extract", # column from spatial_dataframe
+    year = 2012,
+    cluster_subset = "^312120", # NULL
+    cluster_level = "det", # c("sec", "sum", "det")
+    scale_style = "inverse_hyperbolic_sine", # c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")
+    interactive = TRUE)
+  
+  visual$flow_potential_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    year = key$year,
+    cluster_subset = key$cluster_subset,
+    cluster_level = key$cluster_level,
+    scale_style = key$scale_style,
+    interactive = key$interactive)
+  
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$supply_demand_delta_map) {
+  # explore place relative supply demand change over time
+  key = list(
+    set_of_years = c(2012, 2017),
+    normalized = TRUE,
+    impedance = FALSE,
+    functional_form = NULL, # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = NULL, # 300
+    from = "center", # c("center", "border")
+    central_place = "01001",
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .05,
+    alpha_vector = "max_alpha",
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "factor", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    trim = NULL, # "^(02|15|60|66|69|72|78)|(999)$"
+    verbose = FALSE,
+    bind = FALSE,
+    spatial = TRUE)
+    
+  df <- connect$call_temporal_eca_table(
+    set_of_years = key$set_of_years,
+    normalized = key$normalized,
+    impedance = key$impedance,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    from = key$from,
+    central_place = key$central_place,
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    trim = key$trim,
+    verbose = key$verbose,
+    bind = key$bind,
+    spatial = key$spatial)
+  
+  df <- df %>% {connect$temporal_delta_central(.[[1]], .[[2]])}
+  
+  
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "delta_export",
+    set_of_years = c(2012,2017), 
+    central_place = "01001",
+    interactive = TRUE)
+    
+  visual$place_trade_delta_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    set_of_years = key$set_of_years, 
+    central_place = key$central_place,
+    interactive = key$interactive)
+  
+}
+
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$impedance_map) {
+  # explore impedance maps
+  
+  key = list(
+    central_place = "01001",
+    year = 2013,
+    cbsa = FALSE,
+    from = "center", # c("center", "border")
+    functional_form = "bisquare", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 200)
+  
+  df <- geo$call_impedance_distribution_table(
+    central_place = key$central_place,
+    year = key$year,
+    cbsa = key$cbsa,
+    from = key$from,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant)
+  
+  key = list(
+    spatial_dataframe = df[[1]],
+    fill_variable = "impedance", # column from spatial_dataframe
+    caption = df[[2]],
+    interactive = TRUE)
+  
+  visual$normal_choro_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    caption = key$caption,
+    interactive = key$interactive)
+}
+
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$connectedness_map) {
+  # explore max alpha connectedness maps
+  
+  key = list(
+    year = 2012,
+    normalized = TRUE, 
+    impedance = TRUE,
+    functional_form = "distance", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 300,
+    from = "center", # c("center", "border")
+    central_place = NULL,
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .25,
+    alpha_vector = "max_alpha",
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE, 
+    trim = "^(60|66|69|78)|(999)$",
+    verbose = FALSE)
+  
+  df <- connect$call_eca_table_spatial(
+    year = key$year,
+    normalized = key$normalized, 
+    impedance = key$impedance,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    from = key$from,
+    central_place = key$central_place,
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa, 
+    trim = key$trim,
+    verbose = key$verbose)
+  
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "max_alpha", # column from spatial_dataframe
+    caption = NULL,
+    interactive = TRUE)
+  
+  visual$normal_choro_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    caption = key$caption,
+    interactive = key$interactive)
+}
+
+```
+  
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$absorption_map) {
+  # explore place relative absorption potential 
+  
+  key = list(
+    year = 2012,
+    normalized = TRUE, 
+    impedance = TRUE,
+    functional_form = "secant", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 200,
+    from = "center", # c("center", "border")
+    central_place = "01001",
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .05,
+    alpha_vector = "max_alpha",
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE, 
+    trim = "^(02|15|60|66|69|72|78)|(999)$",
+    verbose = FALSE)
+  
+  df <- connect$call_eca_table_spatial(
+    year = key$year,
+    normalized = key$normalized, 
+    impedance = key$impedance,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    from = key$from,
+    central_place = key$central_place,
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa, 
+    trim = key$trim,
+    verbose = key$verbose)
+  
+  key = list(
+    place_trade_table = df,
+    fill_variable = "export_absorption", # column from place_trade_table
+    central_place = "01001", 
+    censor_scale_lowerbound = 0.01,
+    interactive = TRUE)
+  
+  visual$place_trade_map(
+    place_trade_table = key$place_trade_table,
+    fill_variable = key$fill_variable,
+    central_place = key$central_place, 
+    censor_scale_lowerbound = key$censor_scale_lowerbound,
+    interactive = key$interactive)
+}
+
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$eca_map) {
+  # explore hierarchical ECA clusters
+  
+  key = list(
+    year = 2012,
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    normalized = TRUE,
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .25,
+    alpha_vector = "max_alpha",
+    impedance = TRUE,
+    from = "center", # c(center, "border")
+    functional_form = "distance", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 300,
+    trim = "^(60|66|69|78)|(999)$",
+    verbose = FALSE)
+
+  df <- connect$call_hierarchical_connectedness(
+    year = key$year,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa, 
+    normalized = key$normalized, 
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    impedance = key$impedance,
+    from = key$from,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    trim = key$trim,
+    verbose = key$verbose)
+  
+  key = list(
+    spatial_dataframe = df$"Hierarchical_Discrete_table"$"level_5",
+    fill_variable = "eca_membership",
+    caption = NULL, 
+    interactive = TRUE)
+  
+  visual$cluster_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    caption = key$caption, 
+    interactive = key$interactive)
+}
+
+
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$eca_place_map) {
+  # explore place relative ECA's 
+  
+  key = list(
+    year = 2012,
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    ilevel = "det", # c("det", "sum", "sec")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    normalized = TRUE,
+    flow_direction = "out", # c("out", "in")
+    function_class = "max", # c("max", "gini", "sum", "mean", "sd")
+    threshold = .25,
+    alpha_vector = "max_alpha",
+    impedance = TRUE,
+    from = "center", # c(center, "border")
+    functional_form = "distance", # c("bisquare", "secant", "gaussian", "exponential", "power", "distance", "queen", "rook", "neighbor")
+    scalar_constant = 300,
+    trim = "^(60|66|69|78)|(999)$",
+    verbose = FALSE)
+
+  df <- connect$call_hierarchical_connectedness(
+    year = key$year,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    ilevel = key$ilevel,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa, 
+    normalized = key$normalized, 
+    flow_direction = key$flow_direction,
+    function_class = key$function_class,
+    threshold = key$threshold,
+    alpha_vector = key$alpha_vector,
+    impedance = key$impedance,
+    from = key$from,
+    functional_form = key$functional_form,
+    scalar_constant = key$scalar_constant,
+    trim = key$trim,
+    verbose = key$verbose)
+  
+  key = list(
+    eca_table = df$"Hierarchical_Discrete_table"$"level_5",
+    fill_variable = "max_alpha",
+    central_place = "01001", 
+    interactive = TRUE)
+  
+  visual$place_cluster_map(
+    eca_table = key$eca_table,
+    fill_variable = key$fill_variable,
+    central_place = key$central_place, 
+    interactive = key$interactive)
+}
+
+```
+
 
 :::
