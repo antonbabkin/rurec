@@ -230,6 +230,17 @@ prosperity$call_netmigration_df()
 
 
 
+## premature death
+
+```{r}
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+prosperity$call_CHRR_df()
+
+
+```
+
+
 ## population growth
 
 ```{r}
