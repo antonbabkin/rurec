@@ -13,7 +13,7 @@ params:
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
   map_ex_supdem_show: true
   map_ex_supdem_year: 2012
-  map_ex_supdem_ind: "713900" #"1111A0"
+  map_ex_supdem_ind: "1111A0" #"1111A0"
   focus_county: "55025"
   map_imped_show: true
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
@@ -34,6 +34,7 @@ library(sf)
 library(units)
 library(leaflet)
 library(htmltools)
+library(tmap)
 
 logger::log_threshold(DEBUG)
 
@@ -43,8 +44,8 @@ source("R/geography.R", local = (geo <- new.env()))
 source("R/dataprep_infogroup.R", local = (infogroup <- new.env()))
 source("R/place_output.R", local = (place_output <- new.env()))
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connect <- new.env()))
-
 ```
 
 ## params
@@ -206,7 +207,7 @@ if (params$map_ex_supdem_show) {
   val <- d$log_supdem
   col <- pal(val)
   lab <- glue(
-        "{county}",
+        "{county} {place}",
         "Supply: {supply}",
         "Demand: {demand}",
         "Net supply: {net_supply}",
@@ -279,6 +280,29 @@ if (params$map_imped_show) {
     labs(title = glue("Impedance factor ({params$map_imped_shape}, {imped_par}) from {name} ({fips})"))
 }
 ```
+
+# trade flows
+
+```{r}
+industry_code <- "1111B0"
+focus_county <- "55025"
+
+x <- trade_flows$call_trade_flows(industry_code)
+d <- data.frame(
+  place = rownames(x),
+  exports = x[focus_county, ],
+  imports = x[, focus_county]
+)
+df <- call_geo() %>%
+  left_join(d, "place")
+
+
+tm_shape(filter(df, contiguous)) + tm_fill("exports") +
+  tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
+  tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders()
+
+```
+
 
 # connectedness
 

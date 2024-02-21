@@ -228,6 +228,62 @@ tm_shape(filter(df, bea_region_name == "Plains")) + tm_fill("value") +
 ```
 
 
+# Implementation
+
+Solver function wrapper passes only positive vectors components to the LP solver.
+
+```{r}
+source("R/trade_flows.R", local = (tf <- new.env()))
+sup <- c(2, 0, 0, 1, 0)
+dem <- c(0, 1, 1, 0, 1)
+dmat <- dist(1:5) |> as.matrix()
+x <- tf$solve_lp_trade_flows(sup, dem, dmat)
+x$solution_full
+```
+
+Data prep saves industry-by-county supply and demand matrices.
+
+```{r}
+tf$prep_demsup_mat()
+```
+
+Solver prep:
+- load data for selected industry
+- align sup-dem counties with distance matrix
+- scale up either supply or demand to make their sums equal
+- calculate excess supply and demand
+
+TODO: Verify that solutions with total demand and supply vs excess are identical.
+This must be true because local trade is zero distance, and should thus be always filled up by the LP solver.
+
+```{r}
+x <- tf$prep_lp_solver_inputs("336213")
+str(x)
+```
+Smaller industries are solved in seconds.
+Solution object is returned for inspection.
+
+```{r}
+x <- tf$prep_lp_solver_inputs("335222")
+y <- tf$solve_lp_trade_flows(x$sup, x$dem, x$dmat)
+plot_heatmap(y$solution[, 1:100])
+```
+
+Interface function only returns full trade flows matrix and saves it to cache on first call.
+
+```{r}
+source("R/trade_flows.R", local = (tf <- new.env()))
+x <- tf$call_trade_flows("335222")
+```
+
+
+## issues
+
+A few industries, notably "1111A0" (oilseed) and "112120" (dairy), fail to solve. Returned trade flows are all zero. Need to investigate.
+
+
+
+
 # RAS + Gravity
 
 An alternative algorithm, used in the literature, uses RAS procedure to achieve balancing flows with demand and supply.

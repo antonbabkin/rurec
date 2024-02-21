@@ -46,6 +46,7 @@ if (CONDOR) {
 } else {
   library(tidyverse)
   library(glue)
+  library(lpSolve)
   
   source("R/geography.R", local = (geog <- new.env()))
   source("R/place_output.R", local = (place_output <- new.env()))
@@ -60,7 +61,8 @@ ipath <- list(
 
 opath <- list(
   demand_ = "data/trade_flows/demsup/demand_{class_sys}_{ilevel}_{year}_{bus_data}.rds",
-  supply_ = "data/trade_flows/demsup/supply_{class_sys}_{ilevel}_{year}_{bus_data}.rds"
+  supply_ = "data/trade_flows/demsup/supply_{class_sys}_{ilevel}_{year}_{bus_data}.rds",
+  flows_ = "data/trade_flows/flows_{class_sys}_{ilevel}_{year}_{bus_data}/{ind_code}.rds"
 )
 
 
@@ -101,6 +103,137 @@ prep_demsup_mat <- function() {
     log_debug("supply matrix saved to ", sup_cache)
   }
 }
+
+
+# LP algorithm ----
+
+#' Prepare data for LP solver
+prep_lp_solver_inputs <- function(ind_code) {
+  # load pre-calculated demand and supply vectors for selected industry
+  sup_mat <- readRDS(glue(opath$supply_, .envir = params_econ))
+  dem_mat <- readRDS(glue(opath$demand_, .envir = params_econ))
+  stopifnot(isTRUE(all.equal(colnames(sup_mat), colnames(dem_mat))))
+  
+  # load pre-calculated distance matrix
+  dmat <- readRDS(ipath$dist_mat) |>
+    drop_units()
+  stopifnot(isTRUE(all.equal(rownames(dmat), colnames(dmat))))
+  
+  # select counties present both in sup/dem vectors and distance matrix
+  common_places <- base::intersect(colnames(sup_mat), rownames(dmat)) |>
+    sort()
+  log_warn("Counties not in dist mat: ", paste(setdiff(rownames(dmat), common_places), collapse = ","))
+  log_warn("Counties not in sup/dem: ", paste(setdiff(colnames(sup_mat), common_places), collapse = ","))
+  
+  # commonly available data
+  sup <- sup_mat[ind_code, common_places]
+  dem <- dem_mat[ind_code, common_places]
+  dmat <- dmat[common_places, common_places]
+  
+  # only trade in excess of local demand/supply (no cross-hauling)
+  exsup <- pmax(sup - dem, 0)
+  exdem <- pmax(dem - sup, 0)
+  
+  # equalize sums of supply and demand:
+  # scale up the smaller vector if sums do not match
+  if (isTRUE(all.equal(sum(exsup), sum(exdem)))) {
+    log_debug("sup == dem")
+  } else if (sum(exsup) > sum(exdem)) {
+    scale_factor <- sum(exsup) / sum(exdem)
+    log_warn("sup > dem, scale dem by ", scale_factor)
+    exdem <- exdem * scale_factor
+  } else if (sum(exdem) > sum(exsup)) {
+    scale_factor <- sum(exdem) / sum(exsup)
+    log_warn("dem > sup, scale sup by ", scale_factor)
+    exsup <- exsup * scale_factor
+  }
+
+  return(list(sup = exsup, dem = exdem, dmat = dmat))
+}
+
+
+solve_lp_trade_flows <- function(sup, dem, dmat) {
+  time_start <- Sys.time()
+  
+  stopifnot(length(sup) == nrow(dmat))
+  stopifnot(length(dem) == ncol(dmat))
+  stopifnot(isTRUE(all.equal(sum(sup), sum(dem))))
+  
+  # reduce dimensions to only positive elements in demand and supply vectors
+  spos <- (sup > 0)
+  dpos <- (dem > 0)
+  sup_ <- sup[spos]
+  dem_ <- dem[dpos]
+  dmat_ <- dmat[spos, dpos, drop = FALSE]
+
+  log_debug("Solving LP problem with {nrow(dmat_)} rows and {ncol(dmat_)} columns...")
+
+  sol <- lp.transport(
+    cost.mat = dmat_,
+    row.signs = rep("=", length(sup_)),
+    row.rhs = sup_,
+    col.signs = rep("=", length(dem_)),
+    col.rhs = dem_,
+    integers = NULL
+  )
+  
+  # attach dim names
+  rownames(sol$solution) <- names(sup_)
+  colnames(sol$solution) <- names(dem_)
+  
+  # create full-size solution matrix with zeros where supply or demand are zero
+  x <- matrix(0, length(sup), length(dem))
+  x[spos, dpos] <- sol$solution
+  rownames(x) <- names(sup)
+  colnames(x) <- names(dem)
+  sol$solution_full <- x
+  
+  time_diff <- Sys.time() - time_start
+  log_debug(paste("LP solved in", round(time_diff, 2), attr(time_diff, "units")))
+  return(sol)
+}
+
+#' Solve trade flows using LP algorithm
+#' 
+#' @param ind_code industry code, use "all_industries" to sum over all.
+call_trade_flows <- function(ind_code) {
+  cache_path <- glue(opath$flows_, .envir = append(params_econ, list(ind_code = ind_code)))
+  if (file.exists(cache_path)) {
+    log_debug("read from cache ", cache_path)
+    y <- readRDS(cache_path)
+  } else {
+    if (ind_code == "all_industries") {
+      y <- total_trade_flows()
+    } else {
+      log_debug("Solving trade flows for industry {ind_code}")
+      x <- prep_lp_solver_inputs(ind_code)
+      sol <- solve_lp_trade_flows(x$sup, x$dem, x$dmat)
+      y <- sol$solution_full
+    }
+    saveRDS(y, util$mkdir(cache_path))
+    log_debug("saved to cache ", cache_path)
+  }
+  return(y)
+}
+
+
+total_trade_flows <- function() {
+  # solve for every industry
+  industry_codes <- glue(opath$demand_, .envir = params_econ) |>
+    readRDS() |>
+    rownames()
+  y <- 0
+  for (ind_code in industry_codes) {
+    x <- call_trade_flows(ind_code)
+    y <- y + x
+  }
+  return(y)
+}
+
+
+
+
+# RAS+Gravity algorithm ----
 
 #' County-to-county impedance matrix
 #' @param form Impedance form - "gaus" or "prox"
@@ -252,145 +385,9 @@ ras_rescale <- function(x0, rs1, cs1, tol = 0, maxiter = 10) {
 
 
 
-#' Calculate trade flows for one industry
-#' @param industry_index index of the industry list in demand and supply matrices
-calc_trade_flows <- function(industry_index) {
-  
-  #input matricies files
-  factor_supply <- readRDS("supply.rds")[industry_index, , drop=F]
-  factor_demand <- readRDS("demand.rds")[industry_index, , drop=F]
-  center2center_distmat <- readRDS("center2center_distmat.rds")
-  
-  
-
-  # Convert miles to meters
-  miles2meters <- function(miles){
-    df <- as.integer(miles)*1609.344
-    return(df)
-  }
-  
-  # Produce Gaussian distance decay impedance matrix
-  gaus_impedance_mat <- function(rms_width = miles2meters(1000),
-                                 df = center2center_distmat,
-                                 ...){
-    df <- exp(-.5*(df/rms_width)^2) 
-    return(df)
-  }
-  
-  # Produce binary Distance Proximity Matrix from polygon center
-  dprox_mat <- function(boundary_limit = miles2meters(1000),
-                        df = center2center_distmat,
-                        ...){
-    df[df < boundary_limit & df > 0] <- 1
-    df[df > boundary_limit] <- 0
-    diag(df) <- 1
-    return(df)
-  }
-  
-  # Find minimum impedance distance that satisfies RAS algorithm
-  min_imp_ras <- function(factor_supply, 
-                          factor_demand,
-                          center2center_distmat,
-                          imp_funct,
-                          crosshaul,
-                          tradeflow_dir,
-                          diag_location,
-                          impedance_dir,
-                          min_d,
-                          max_d,
-                          step_d,
-                          tol,
-                          verbose,
-                          ...){
-    i <- rownames(factor_demand)
-    g <- center2center_distmat
-    fs <- intersect(colnames(factor_supply), colnames(g)) %>% factor_supply[, ., drop=F]
-    fd <- intersect(colnames(factor_demand), colnames(g)) %>% factor_demand[, ., drop=F]
-    pl <- intersect(intersect(colnames(fs), colnames(fd)), intersect(colnames(g), rownames(g))) 
-    
-    if(isTRUE(crosshaul)){
-      fsx <- fs
-      fdx <- fd
-    } else {
-      fsx <- pmax(fs - fd, 0)
-      fdx <- pmax(fd - fs, 0)
-    }
-    
-    # pre-calculate impedance matrices, not useful if running single industry in isolated environment
-    # imprf <- list.files(impedance_dir)
-    # for(d in seq(min_d, max_d, by = step_d)){
-    #   if(!d %in% imprf){
-    #     temp_imp <- do.call(get(imp_funct), list(miles2meters(d)))
-    #     saveRDS(temp_imp, file = file.path(impedance_dir, d))
-    #   }
-    # }
-    
-    df <- data.frame("sector" = c(),
-                     "impedance" = c(),
-                     "ras_supply_dim" = c(),
-                     "ras_demand_dim" = c(),
-                     "iterations" = c(),
-                     "rmse" = c(),
-                     "mad" = c())
-      for(d in seq(min_d, max_d, by = step_d)){
-        print(paste("Industry:", i, " Distance:", d))
-        # impedance_mat <- readRDS(file.path(impedance_dir, d))
-        impedance_mat <- do.call(get(imp_funct), list(miles2meters(d)))
-        xs <- (t(fsx) %*%  fdx) * impedance_mat[pl, pl]
-        tf <- ras_trade_flows(x0 = xs,
-                              rs1 = fsx,
-                              cs1 = fdx,
-                              tol = tol,
-                              maxiter = maxiter,
-                              verbose = verbose)
-        colnames(tf[[1]]) = colnames(fdx)
-        rownames(tf[[1]]) = colnames(fsx)
-        df <- rbind(df, data.frame("sector" = i, 
-                                   "impedance" = d, 
-                                   "ras_supply_dim" = tf[["ras_supply_dim"]], 
-                                   "ras_demand_dim" = tf[["ras_demand_dim"]], 
-                                   "iterations" = tf[["iterations"]], 
-                                   "rmse" = tf[["rmse"]], 
-                                   "mad" = tf[["mad"]]))
-        saveRDS(df, file = paste0("diagnostic_", i))
-        if (max(max(abs(rowSums(tf[[1]]) - fsx)) , max(abs(colSums(tf[[1]]) - fdx))) < tol) {
-          break
-        }
-      }
-      saveRDS(tf[[1]], file = paste0("trade_flows_", i))
-      out <- list("synopsis" = df, 
-                  "matrix" = tf[[1]])
-      return(out) 
-  }
-  
-  
-  test_out <- min_imp_ras(factor_supply = factor_supply, 
-                          factor_demand = factor_demand,
-                          center2center_distmat = center2center_distmat,
-                          imp_funct = imp_funct,
-                          crosshaul = crosshaul,
-                          min_d = min_d,
-                          max_d = max_d,
-                          step_d = step_d,
-                          tol = tol,
-                          verbose = verbose)
-
-
-}
-
 # tests ----
 
 ## impedance ----
-# center <- "55025"
-# imped_form <- "gaus"
-# dist_par <- 700
-# d <- imped_mat(imped_form, dist_par)[, center, drop=FALSE] |>
-#   as_tibble(rownames = "place") |>
-#   rename(all_of(c(impedance = center)))
-# df <- left_join(
-#   geog$call_geog() |> filter(!(STATE_CODE %in% c('02', '15', '60', '66', '69', '72', '78'))),
-#   d, "place")
-# tm_shape(df) + tm_fill("impedance", style = switch(imped_form, prox = "cat", gaus = "cont"))
 
 test_map_gravity <- function(ind_code, imped_form, imped_par, place) {
   imp <- imped_mat(imped_form, imped_par)
@@ -446,29 +443,4 @@ test_ras <- function() {
   tmap_mode("view")
   tm_shape(df) + tm_fill("imports")
 }
-# results ----
 
-
-output_summary <- function(output_dir) {
-  list.files(output_dir, "diagnostic_*") %>%
-    map(\(x) file.path(output_dir, x)) %>%
-    map(\(x) readRDS(x) %>% tail(1)) %>%
-    bind_rows()
-}
-
-# d <- output_summary(rprojroot::find_rstudio_root_file("condor/output"))
-
-
-# CLI ----
-# running script from command line with arguments
-args <- commandArgs(trailingOnly = TRUE)
-print(c("Command line arguments:", args))
-if (length(args) == 0) {
-  print("functions defined")
-} else if (args[1] == "inputs") {
-  print("preparing inputs...")
-  generate_inputs()
-} else if (args[1] == "compute") {
-  print("calculating trade flows...")
-  calc_trade_flows(as.integer(args[2]))
-}
