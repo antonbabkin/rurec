@@ -12,7 +12,7 @@ params:
   map_agg_stats_year: 2012
   map_agg_stats_fill_var: "establishments" # population, employment, establishments
   map_agg_prosp_fill_var: "poverty" # unemployment_rate, bachelors, lfpr, poverty
-  map_ex_supdem_show: true
+  map_ex_supdem_show: false
   map_ex_supdem_year: 2012
   map_ex_range_year: "2008-2012"
   map_ex_supdem_ind: "713900" #"1111A0"
@@ -33,10 +33,12 @@ params:
   connectedness_map: TRUE
   absorption_map: TRUE
   eca_map: TRUE
-  eca_place_map: TRUE 
+  eca_place_map: TRUE
+  circularity: TRUE
 ---
 
 ::: panel-tabset
+
 # intro
 
 ```{r}
@@ -414,10 +416,11 @@ if (params$distance_matrix) {
   
   df %>% 
     as.data.frame.table() %>% 
-    as_tibble() %>% 
+    # as_tibble() %>% 
     `colnames<-`(c("rows", "cols", "distance"))
 }
 ```
+
 ```{r}
 #| warning: false
 # TODO: add relevant data to ipath
@@ -1038,5 +1041,43 @@ if (params$eca_place_map) {
 
 ```
 
+# circularity
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$circularity) {
+  # explore circularity metrics 
+
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = NULL, # ^11
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+ df <- circ$call_circularity_metrics(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim, 
+    spatial = key$spatial)
+ 
+df %>% {st_drop_geometry(.[,8:21])} %>% cor(use = "complete.obs")
+}
+
+```
 
 :::
