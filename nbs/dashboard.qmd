@@ -20,6 +20,7 @@ params:
   map_imped_show: false
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
   map_imped_param: 500 # scale parameter of the impedance function
+  econ_dynam_data: TRUE
   basic_geog_feature: TRUE
   distance_matrix: TRUE
   impedance_matrix: TRUE
@@ -1100,7 +1101,6 @@ if (params$circularity) {
     cluster_level = "det", # c("sec", "sum", "det")
     cbsa = FALSE,
     cluster_subset = NULL, # ^11
-    trim = "^(60|66|69|78)|(999)$", 
     spatial = TRUE)
   
  df <- circ$call_circularity_metrics(
@@ -1113,12 +1113,81 @@ if (params$circularity) {
     cluster_level = key$cluster_level,
     cbsa = key$cbsa,
     cluster_subset = key$cluster_subset,
-    trim = key$trim, 
     spatial = key$spatial)
  
 df %>% {st_drop_geometry(.[,8:21])} %>% cor(use = "complete.obs")
 }
 
 ```
+
+
+
+# economic dynamics
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$econ_dynam_data) {
+  #explore economic dynamism data
+   
+  key = list(
+    year = 2012
+    )
+  
+   df <- dataprep$call_econ_dynam_ind(
+          year = key$year) %>% 
+     {left_join(geo$call_geog(year = key$year), ., by = "place")} 
+   
+  str(df)
+
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$econ_dynam_data) {
+  #map economic dynamism levels
+  
+  key = list(
+    year = 2012,
+    fill_variable = "employment" # c("population", "employment", "establishments", "output", "entry", "exit", "entry_rate", "exit_rate", "population_grow_rate", "employment_grow_rate", "establishments_grow_rate", "output_grow_rate")   
+  )
+  
+   df <- dataprep$call_econ_dynam_ind(
+          year = key$year) %>% 
+     {left_join(geo$call_geog(year = key$year), ., by = "place")} 
+   
+  visual$nominal_choro_map(df, fill_variable = key$fill_variable)
+
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$econ_dynam_data) {
+  #map economic dynamism growth rates
+      ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+      
+  key = list(
+    year = 2012,
+    fill_variable = "employment_grow_rate" # c("population", "employment", "establishments", "output", "entry", "exit", "entry_rate", "exit_rate", "population_grow_rate", "employment_grow_rate", "establishments_grow_rate", "output_grow_rate")   
+  )
+  
+   df <- dataprep$call_econ_dynam_ind(
+          year = key$year) %>% 
+     {left_join(geo$call_geog(year = key$year), ., by = "place")} 
+      
+  
+  visual$diverge_choro_map(df, fill_variable = key$fill_variable)
+
+}
+```
+
+
+
 
 :::

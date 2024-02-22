@@ -24,8 +24,11 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/geography.R", local = (geog <- new.env()))
 source("R/place_output.R", local = (place_output <- new.env()))
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
-source("R/connectedness.R", local = (connect <- new.env()))
 
+source("R/connectedness.R", local = (connect <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+
+options(scipen=999)
 
 # Data objects ----
 ipath <- list(
@@ -566,11 +569,13 @@ nominal_choro_map <- function(spatial_dataframe,
   sdf <- spatial_dataframe
   fv <- fill_variable
   tl <- usa_tile_list(sdf)
+  mn <-  min(sdf[[fv]], na.rm = T)
+  mx <-  max(sdf[[fv]], na.rm = T)
   if (is.null(caption)){caption = "\n"} else {caption = caption}
   df <- boil_tile(tile_list = tl, 
                   fill_variable = fv, 
                   caption = caption, 
-                  scale_fill_viridis(direction = -1, option = "C" ) ) %>%
+                  scale_fill_viridis(direction = -1, limits=c(floor(mn), ceiling(mx) ), option = "D" ) ) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
   return(df)
@@ -586,7 +591,6 @@ substitute(connect$call_eca_table_spatial(year = 2012, impedance = T, functional
 substitute(geog$call_impedance_distribution_table(central_place = "01001", functional_form = "secant", scalar_constant = 200, ...))
 
 ## viz ----
-
 normal_choro_map <- function(spatial_dataframe,
                              fill_variable,
                              caption = NULL,
@@ -604,6 +608,88 @@ normal_choro_map <- function(spatial_dataframe,
   return(df)
 }
 
+# Divergent Choropleth ----
+
+## format data ----
+
+## viz ----
+
+# divergent fill-scale color and distribution options (see trade flow potential map)
+divergent_scales <- function(min_value, 
+                             max_value,
+                             scale_style = c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum"),
+                             colors = rev(brewer.pal(7, "RdBu")),  # see display.brewer.all()
+                             label_min = "Net Negative",
+                             label_max = "Net Positive"){
+  scale_style <- match.arg(scale_style)
+  mn <- min_value
+  mx <- max_value
+  #inverse hyperbolic sine scale transformation
+  if (scale_style == "inverse_hyperbolic_sine"){
+    return(
+      scale_fill_gradientn(colors = colors, 
+                           trans = "ihs", 
+                           breaks = c(mn, 0, mx), 
+                           labels = c(label_min, "0", label_max), 
+                           values = rescale(c(asinh(mn), 0, asinh(mx))), 
+                           limits = c(mn, mx) ) 
+    )
+  }
+  #full spectrum from midpoint transformation
+  if (scale_style == "full_spectrum_midpoint"){
+    return(
+      scale_fill_gradientn(colors = colors,  
+                           breaks = c(mn+1, mx-1), 
+                           labels = c(label_min, label_max),
+                           limits = c(mn-1, mx+1),
+                           values = rescale(c(mn, 0, mx)))
+    )
+  } 
+  #constant spread from midpoint transformation with full spectrum shown
+  if (scale_style == "constant_spread_midpoint"){
+    return(
+      scale_fill_gradientn(colors = colors, 
+                           breaks = c(-max(abs(mn), mx)+1, max(abs(mn), mx)-1), 
+                           labels = c(label_min, label_max), 
+                           limits = c(-max(abs(mn), mx)-1, max(abs(mn), mx)+1) ) 
+    )
+  } 
+  #constant spread from midpoint transformation with only used spectrum shown with value labels
+  if (scale_style == "constant_spread_spectrum"){
+    return(
+      scale_fill_gradient2(low = "#2166AC", 
+                           mid = "#F7F7F7", 
+                           high = "#B2182B", 
+                           midpoint = 0)
+    )
+  } 
+}
+
+
+# map of trade balance
+diverge_choro_map <- function(spatial_dataframe, #table of trade flow potential with spatial components
+                              fill_variable,
+                              caption = NULL,
+                              scale_style = c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum"),
+                              colors = rev(brewer.pal(7, "RdBu")), # see display.brewer.all()
+                              label_min = "Net Negative",
+                              label_max = "Net Positive",
+                              interactive = TRUE){
+  sdf <- spatial_dataframe
+  fv <- fill_variable
+  tl <- usa_tile_list(sdf)
+  if (is.null(caption)){caption = "\n"} else {caption = caption}
+  mn <-  min(sdf[[fv]], na.rm = T)
+  mx <-  max(sdf[[fv]], na.rm = T)
+  df <- boil_tile(tile_list = tl, 
+                  fill_variable = fv, 
+                  caption = caption, 
+                  divergent_scales(min_value = mn,  max_value = mx, scale_style = scale_style, colors = colors, label_min = label_min, label_max = label_max) ) %>%
+    {usa_tile_map(tile_plot_list = .,
+                  interactive = interactive)}
+  return(df)
+}
+
 
 # Trade Potential ----
 
@@ -613,82 +699,34 @@ substitute(place_output$call_extraction_table(2012, paradigm = "domestic", class
 
 ## viz ----
 
-# divergent fill-scale color and distribution options (see trade flow potential map)
-divergent_scales <- function(min_value, 
-                              max_value,
-                              scale_style = c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")){
-  scale_style <- match.arg(scale_style)
-  mn <- min_value
-  mx <- max_value
-  #inverse hyperbolic sine scale transformation
-  if (scale_style == "inverse_hyperbolic_sine"){
-    return(
-      scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")), 
-                           trans = "ihs", 
-                           breaks = c(mn, 0, mx), 
-                           labels = c("Net Demander", "0", "Net Supplier"), 
-                           values = rescale(c(asinh(mn), 0, asinh(mx))), 
-                           limits = c(mn, mx) ) 
-      )
-  }
-  #full spectrum from midpoint transformation
-  if (scale_style == "full_spectrum_midpoint"){
-    return(
-      scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")),  
-                           breaks = c(mn+1, mx-1), 
-                           labels = c("Net Demander", "Net Supplier"),
-                           limits = c(mn-1, mx+1),
-                           values = rescale(c(mn, 0, mx)))
-      )
-  } 
-  #constant spread from midpoint transformation with full spectrum shown
-  if (scale_style == "constant_spread_midpoint"){
-    return(
-      scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")), 
-                           breaks = c(-max(abs(mn), mx)+1, max(abs(mn), mx)-1), 
-                           labels = c("Net Demander", "Net Supplier"), 
-                           limits = c(-max(abs(mn), mx)-1, max(abs(mn), mx)+1) ) 
-      )
-  } 
-  #constant spread from midpoint transformation with only used spectrum shown with value labels
-  if (scale_style == "constant_spread_spectrum"){
-    return(
-      scale_fill_gradient2(low = "#2166AC", 
-                           mid = "#F7F7F7", 
-                           high = "#B2182B", 
-                           midpoint = 0)
-      )
-  } 
-}
 
 # map of trade balance
 flow_potential_map <- function(spatial_dataframe, #table of trade flow potential with spatial components
-                               fill_variable, 
+                               fill_variable,
                                year = 2012,
                                cluster_subset,
                                cluster_level = c("sec", "sum", "det"),
                                scale_style = c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum"),
+                               label_min = "Net Supplier",
+                               label_max = "Net Demander",
                                interactive = TRUE){
   cluster_level <- match.arg(cluster_level)
-  sdf <- spatial_dataframe
-  fv <- fill_variable
-  tl <- usa_tile_list(sdf)
   caption <- bea_io$call_intra_level_concordance(year = year, cluster_level = cluster_level) %>%
     {.[grepl(cluster_subset, .[[1]]), short2long(cluster_level)]} %>%
     unique() %>%
     as.list() %>%
     {lapply(., function(x){paste0(x, ": ", bea_io$beacode2description(code = x, year = year)) }) } %>%
     paste(collapse = "\n")
-  mn <-  min(sdf[[fv]])
-  mx <-  max(sdf[[fv]])
-  df <- boil_tile(tile_list = tl, 
-                  fill_variable = fv, 
-                  caption = caption, 
-                  divergent_scales(min_value = mn,  max_value = mx, scale_style = scale_style) ) %>%
-    {usa_tile_map(tile_plot_list = .,
-                  interactive = interactive)}
+  df <- diverge_choro_map(spatial_dataframe = spatial_dataframe,
+                          fill_variable = fill_variable,
+                          caption = caption,
+                          scale_style = scale_style,
+                          label_min = label_min, 
+                          label_max = label_max,
+                          interactive = interactive )
   return(df)
 }
+
 
 # generate a map of trade flow potential for intermediate supply and demand  
 call_flow_potential_map <- function(year,
@@ -872,7 +910,8 @@ place_trade_delta_map <- function(spatial_dataframe,
                   caption = caption, 
                   scale_fill_gradientn(colors = rev(brewer.pal(7, "RdBu")), 
                                        trans = "ihs", 
-                                       breaks = c(asinh(mn), 0, asinh(mx)), 
+                                       # breaks = c(asinh(mn), 0, asinh(mx)), 
+                                       breaks = c(mn, 0, mx), 
                                        labels = c("Less Trade Potential", "", "More Trade Potential"), 
                                        values = rescale(c(asinh(mn), 0, asinh(mx))), 
                                        limits = c(mn, mx)) ) %>%
@@ -880,6 +919,7 @@ place_trade_delta_map <- function(spatial_dataframe,
                   interactive = interactive)}
   return(df)
 }
+
 
 
 # TODO: Address potential ambiguities in inputs of function flow e.g., flow_potential_map or place_trade_map or place_trade_delta_map
@@ -895,6 +935,15 @@ test_viz <- function() {
     {normal_choro_map(spatial_dataframe = .[[1]], fill_variable = "impedance", caption = .[[2]])}
   connect$call_eca_table_spatial(year = 2012, impedance = T, functional_form = "distance", scalar_constant = 300, threshold = .25, trim = "^(60|66|69|78)|(999)$") %>% 
     {normal_choro_map(spatial_dataframe = ., fill_variable = "max_alpha")}
+  
+  dataprep$call_econ_dynam_ind(year = 2012) %>% 
+    {left_join(geog$call_geog(year = 2012), ., by = "place")} %>%
+    {nominal_choro_map(., fill_variable = "employment")}
+  
+ dataprep$call_econ_dynam_ind(year = 2012) %>% 
+    {left_join(geog$call_geog(year = 2012), ., by = "place")} %>%
+   {diverge_choro_map(., fill_variable = "population_grow_rate")}
+ 
   place_output$call_extraction_table(2012, paradigm = "domestic", class_system = "commodity", cluster_subset = "^312120", ilevel = "det", cluster_level = "det") %>% 
     {flow_potential_map(spatial_dataframe = ., fill_variable = "extract", cluster_subset = "^312120", cluster_level = "det")}
   # call_flow_potential_map(2012, paradigm = "domestic", class_system = "commodity", cluster_subset = "^312120", ilevel = "det", cluster_level = "det")
