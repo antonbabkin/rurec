@@ -1100,7 +1100,6 @@ if (params$circularity) {
     cluster_level = "det", # c("sec", "sum", "det")
     cbsa = FALSE,
     cluster_subset = NULL, # ^11
-    trim = "^(60|66|69|78)|(999)$", 
     spatial = TRUE)
   
  df <- circ$call_circularity_metrics(
@@ -1113,7 +1112,6 @@ if (params$circularity) {
     cluster_level = key$cluster_level,
     cbsa = key$cbsa,
     cluster_subset = key$cluster_subset,
-    trim = key$trim, 
     spatial = key$spatial)
  
 df %>% {st_drop_geometry(.[,8:21])} %>% cor(use = "complete.obs")

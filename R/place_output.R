@@ -145,6 +145,7 @@ call_output <- function(year,
     df <- glue(ig$opath$county_, .envir = list(year = year)) %>%
       open_dataset() %>%
       collect() %>% 
+      {.[c(1:6)]} %>% 
       na.omit() %>% 
       arrange(st, cty) 
     df$place <- paste0(df$st, df$cty)
@@ -168,7 +169,7 @@ call_output <- function(year,
       setdiff(n, cnc$naics) %>% 
         {cat(paste(.,"\n"))}
     }
-    
+
     # BEA industry equivalent industry sales by place
     df <- right_join(cnc, df, by = "naics") %>% 
       select(-naics) %>% 
