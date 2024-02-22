@@ -24,5 +24,7 @@ Imports:
   tmaptools,
   zoo,
   leaflet,
-  tidycensus
+  tmap,
+  tidycensus,
+  rstatix
 

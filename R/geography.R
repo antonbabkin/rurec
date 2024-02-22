@@ -370,8 +370,10 @@ call_neighbor_of_neighbor <- function(central_place,
 # generate a binary proximity distance matrix
 prox_impedance_mat <- function(distance_matrix, 
                                radius = 1000){
-  x <- distance_matrix
-  m <- (x < set_units(radius, mi))
+  x <- distance_matrix |> 
+    set_units(m)
+
+  m <- (x <= set_units(radius, mi))
   mode(m) <- "integer"
   rownames(m) <- colnames(m) <- rownames(x)
   return(m)
@@ -381,6 +383,7 @@ prox_impedance_mat <- function(distance_matrix,
 power_impedance_mat <- function(distance_matrix,
                                 decay_power = 2) {
   x <- distance_matrix |>
+    set_units(m) |>
     drop_units()
   x <- 1 / (x^decay_power)
   x[is.infinite(x)] <- 1
@@ -391,6 +394,7 @@ power_impedance_mat <- function(distance_matrix,
 expo_impedance_mat <- function(distance_matrix,
                                decay_constant = 10000) {
   x <- distance_matrix |>
+    set_units(m) |>
     drop_units()
   x <- exp(- x / decay_constant)
   return(x)
@@ -400,6 +404,7 @@ expo_impedance_mat <- function(distance_matrix,
 gaus_impedance_mat <- function(distance_matrix,
                                rms_width = 1000) {
   x <- distance_matrix |>
+    set_units(m) |>
     drop_units()
   rms_width <- set_units(rms_width, mi) |> 
     set_units(m) |> 
@@ -412,6 +417,7 @@ gaus_impedance_mat <- function(distance_matrix,
 hyper_impedance_mat <- function(distance_matrix,
                                 decay_constant = 200) {
   x <- distance_matrix |>
+    set_units(m) |>
     drop_units()
   decay_constant <- set_units(decay_constant, mi) |> 
     set_units(m) |>
@@ -424,6 +430,7 @@ hyper_impedance_mat <- function(distance_matrix,
 bisquare_impedance_mat <- function(distance_matrix,
                                    decay_zero = 1000) {
   x <- distance_matrix |>
+    set_units(m) |>
     drop_units()
   decay_zero <- set_units(decay_zero, mi) |> 
     set_units(m) |> 
