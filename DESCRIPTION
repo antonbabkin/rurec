@@ -26,5 +26,6 @@ Imports:
   leaflet,
   tmap,
   tidycensus,
-  rstatix
+  rstatix,
+  Hmisc
 
