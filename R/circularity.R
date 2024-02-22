@@ -19,8 +19,8 @@ ipath <- list(
 )
 
 opath <- list(
-  #circularity_ = "data/circularity/circularity_{year}_{ilevel}_{class_system}_{paradigm}_{bus_data}_{cluster_level}_{cbsa}_{cluster_subset}_{trim}_{spatial}.rds"
   # data products
+  circularity_ = "data/circularity/circularity_{year}_{ilevel}_{class_system}_{paradigm}_{bus_data}_{cluster_level}_{cbsa}_{clust_sub}_{spatial}.rds"
 )
 
 clear_outputs <- function() {
@@ -173,7 +173,6 @@ call_circularity_metrics <- function(year,
                                      cluster_level = c("sec", "sum", "det"),
                                      cbsa = FALSE,
                                      cluster_subset = NULL,
-                                     trim = "^(60|66|69|78)|(999)$", 
                                      spatial = TRUE){
 
   ilevel <- match.arg(ilevel)
@@ -182,11 +181,17 @@ call_circularity_metrics <- function(year,
   bus_data <- match.arg(bus_data)
   cluster_level <- match.arg(cluster_level)
 
-  # cache_path <- glue(opath$circularity_)
-  # if (file.exists(cache_path)) {
-  #   log_debug(paste("read from cache", cache_path))
-  #   return(readRDS(cache_path))
-  # }
+  if (is.null(cluster_subset)){
+    clust_sub = "NULL"
+  } else {
+    clust_sub = cluster_subset
+  }
+  
+  cache_path <- glue(opath$circularity_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(readRDS(cache_path))
+  }
   
   gross_output_matrix <- place_output$call_extraction_table(
     year = year,
@@ -198,7 +203,7 @@ call_circularity_metrics <- function(year,
     cluster_level = cluster_level,
     cbsa = cbsa,
     cluster_subset = NULL,
-    trim = trim,
+    trim = NULL,
     spatial = spatial) %>% 
     {dfcol2matrix(., "gross_output")}
   
@@ -211,15 +216,15 @@ call_circularity_metrics <- function(year,
                                            cluster_level = cluster_level,
                                            cbsa = cbsa,
                                            cluster_subset = cluster_subset,
-                                           trim = trim,
+                                           trim = NULL,
                                            spatial = spatial)
   cm <- circularity_metrics(gross_output_matrix = gross_output_matrix, 
                             intermediate_supply_matrix = dfcol2matrix(df, "intermediate_supply"), 
                             intermediate_demand_matrix = dfcol2matrix(df, "intermediate_demand"))
   df <- inner_join(df, cm, by = "place")
   
-  # log_debug(paste("save to cache", cache_path))
-  # saveRDS(df, util$mkdir(cache_path))
+  log_debug(paste("save to cache", cache_path))
+  saveRDS(df, util$mkdir(cache_path))
 
   return(df)
 }

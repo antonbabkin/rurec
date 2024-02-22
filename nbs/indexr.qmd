@@ -170,6 +170,27 @@ source("R/trade_flows.R", local = (tf <- new.env()))
 
 ```
 
+# Circularity
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/circularity.R", local = (circ <- new.env()))
+
+# for(y in 2005:2017){
+#   tmp <- circ$call_circularity_metrics(year = y, 
+#                                        cluster_level = "det", # c("det", "sum", "sec")
+#                                        paradigm = "domestic", # c("factor", "domestic", "capital")
+#                                        class_system = "commodity", # c("industry", "commodity")
+#                                        bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+#                                        verbose = FALSE,
+#                                        cbsa = FALSE)
+# }
+
+# util$zip_pack("tmp/circularity_v240221.zip", circ$opath$circularity_, overwrite = TRUE)
+# util$zip_unpack("tmp/circularity_v240221.zip", overwrite = TRUE)
+
+```
+
 # Dynamism
 
 ```{r}
