@@ -224,20 +224,10 @@ source("R/visualization.R", local = (visual <- new.env()))
 # util$zip_pack("tmp/econ_dynamism_v240221.zip", dataprep$opath$econ_dynam_ind_, overwrite = TRUE)
 # util$zip_unpack("tmp/econ_dynamism_v240221.zip", overwrite = TRUE)
 
-year = 2012
-df <- dataprep$call_econ_dynam_ind(year)
-df
-geo$call_geog(year) %>% left_join(., df, by = "place") %>%
-  {visual$nominal_choro_map(., "employment")}
+df <- dataprep$call_econ_dynam_ind(year = 2012)
+str(df)
 
 ```
-
-zero
-<lgl>
-n
-<int>
-FALSE	344			
-TRUE	29	
 
 
 # Prosperity

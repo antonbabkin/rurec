@@ -1,0 +1,91 @@
+---
+title: "Circularity codebook"
+format: html
+---
+
+# Data
+
+Libraries and sources.
+
+```{r}
+library(tidyverse)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+```
+
+
+Packing and unpacking.
+All data frames are cached as RDS files at locations specified in `circularity$opath` list.
+This chunk can be used to pack all files into or unpack from a single Zip for sharing.
+
+```{r}
+# uncomment as needed
+# util$zip_pack("tmp/dataset_circularity_v240223.zip", circularity$opath)
+# util$zip_unpack("tmp/dataset_circularity_v240223.zip", overwrite = TRUE)
+```
+
+```{r}
+df <- circularity$get_circularity()
+head(df)
+```
+
+
+# Variables
+
+*year* Calendar year.
+
+*county_fips* 5-digit county FIPS code.
+
+*gross_output* Total county output in current dollars.
+Calculated from sales data from InfoGroup (non-agricultural industries) and Census of Agriculture (agricultural industries), adjusted to match national totals from BEA Input-Output tables.
+
+*intermediate_supply* Total supply of intermediates in current dollars.
+Calculated by applying BEA Input-Output framework to *gross_output*.
+
+*intermediate_demand* Total demand for intermediates in current dollars.
+Calculated by applying BEA Input-Output framework to *gross_output*.
+
+*excess_supply* Intermediate supply in excess of intermediate demand.
+Calculated as `max(intermediate_supply - intermediate_demand, 0)`.
+
+*excess_demand* Intermediate demand in excess of intermediate supply.
+Calculated as `max(intermediate_demand - intermediate_supply, 0)`.
+
+## Circularity indicators
+
+*production_capacity* The importance of intermediate production relative to the size of local economy.
+Calculated as `intermediate_supply / gross_output`.
+
+*trade_capacity* The importance of intermediate exports relative to the size of local economy.
+Calculated as `excess_supply / gross_output`.
+
+*retention* What share of intermediate production is used domestically.
+Calculated as `1 - excess_supply / intermediate_supply`.
+
+*production_dependency* The importance of intermediate input needs relative to the total size of local economy.
+Calculated as `intermediate_demand / gross_output`.
+
+*trade_dependency* The importance of intermediate imports relative to the size of local economy.
+Calculated as `excess_demand / gross_output`.
+
+*autonomy* What share of intermediate input needs are satisfied domestically.
+Calculated as `1 - excess_demand / intermediate_demand`.
+
+*trade_balance* Net flow of intermediate trade relative to the size of local economy.
+Calculated as `(excess_supply - excess_demand) / gross_output`.
+
+*trade_openness* The importance of trade in intermediates relative to the size of local economy.
+Calculated as `(excess_supply + excess_demand) / gross_output`.
+
+
+# Summary statistics
+
+## year
+
+```{r}
+df$year |> as.factor() |> summary()
+```
+
+
+

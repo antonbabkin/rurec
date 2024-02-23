@@ -1,10 +1,17 @@
-data/*
 docs/
 tmp/
 cache/
-!data/fai.json
 logs/
 census_api_key.txt
+
+# do not commit data files
+data/*
+*.csv
+*.rds
+*.pq
+*.parquet
+*.xls
+*.xlsx
 
 
 # Vim

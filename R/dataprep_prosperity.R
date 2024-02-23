@@ -6,6 +6,7 @@
 library(logger)
 log_threshold(DEBUG)
 library(tidyverse)
+library(tidycensus)
 library(readxl)
 
 

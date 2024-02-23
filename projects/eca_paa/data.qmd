@@ -1,0 +1,126 @@
+---
+title: "ECA-PAA: data"
+format: html
+---
+
+# Libraries and sources
+
+```{r}
+library(tidyverse)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+```
+
+
+
+# Data
+
+Packing and unpacking.
+All data frames are cached as RDS files at locations specified in `dp$opath` list.
+This chunk can be used to pack all files into or unpack from a single Zip for sharing.
+
+```{r}
+# uncomment as needed
+# util$zip_pack("tmp/eca_paa_data_v240222.zip", dp$opath)
+# util$zip_unpack("tmp/eca_paa_data_v240222.zip", overwrite = TRUE)
+```
+
+
+## County shapes
+
+```{r}
+df_county_shapes <- dp$call_county_shapes()
+df_county_shapes |> head()
+```
+
+
+## CBSA
+
+```{r}
+df_cbsa_delin <- dp$call_cbsa_delin()
+df_cbsa_delin |> head()
+```
+
+
+## ECA
+
+```{r}
+df_eca <- dp$call_eca_df()
+df_eca |> head()
+```
+
+## Econ dynamism
+
+```{r}
+df_econ_dynam <- dp$call_econ_dynam(2012)
+df_econ_dynam |> head()
+
+```
+
+
+## Unemployment rate
+
+```{r}
+df_unemp_rate <- dp$call_unemp_rate()
+df_unemp_rate |> head()
+
+```
+
+
+
+## Net migration
+
+```{r}
+df_netmigration <- dp$call_netmigration()
+df_netmigration |> head()
+
+```
+
+
+
+## Education
+
+```{r}
+df_education <- dp$call_education()
+df_education |> head()
+
+```
+## CHRR
+
+```{r}
+df_chrr <- dp$call_chrr()
+df_chrr |> head()
+```
+## LFPR
+
+```{r}
+df_lfpr <- dp$call_lfpr()
+df_lfpr |> head()
+```
+
+## SAIPE
+
+```{r}
+df_saipe <- dp$call_saipe()
+df_saipe |> head()
+```
+
+# Descriptive statistics
+
+```{r}
+# county by ECA category
+df_eca |>
+  count(eca_cluster_category)
+
+# ECA clusters by size
+df_eca |>
+  count(eca_membership, name = "eca_size") |>
+  count(eca_size)
+```
+
+
+# Maps
+
+
