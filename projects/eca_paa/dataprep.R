@@ -27,6 +27,7 @@ opath <- list(
   county_shapes = "data/projects/eca_paa/county_shapes.rds",
   cbsa_delin = "data/projects/eca_paa/cbsa_delin.rds",
   eca = "data/projects/eca_paa/eca.rds",
+  circ = "data/projects/eca_paa/dataset_circularity.rds",
   econ_dynam_ = "data/projects/eca_paa/econ_dynam_{year}.rds",
   unemp_rate = "data/projects/eca_paa/unemp_rate.rds",
   netmigration = "data/projects/eca_paa/netmigration.rds",
@@ -213,3 +214,18 @@ call_saipe <- function() {
   df
 }
 
+
+# circularity  ----
+
+#' NOTE: if first time accessing circularity RDS, ipath in "else" clause is reading in from unzipped file
+call_circ_df <- function(x) {
+  cache_path = opath$circ
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- readRDS("data/tmp/dataset_circularity_v240223/datasets/circularity/circularity.rds")
+  }
+  df %>%
+    filter(year == x)
+}

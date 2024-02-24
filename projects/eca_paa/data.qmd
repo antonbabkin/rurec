@@ -23,8 +23,9 @@ This chunk can be used to pack all files into or unpack from a single Zip for sh
 
 ```{r}
 # uncomment as needed
-# util$zip_pack("tmp/eca_paa_data_v240222.zip", dp$opath)
-# util$zip_unpack("tmp/eca_paa_data_v240222.zip", overwrite = TRUE)
+# util$zip_pack("data/tmp/eca_paa_data_v240222.zip", dp$opath)
+ util$zip_unpack("data/tmp/eca_paa_data_v240222.zip", overwrite = TRUE)
+ util$zip_unpack("data/tmp/dataset_circularity_v240223.zip", overwrite = TRUE)
 ```
 
 
