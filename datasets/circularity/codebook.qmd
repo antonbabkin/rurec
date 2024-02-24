@@ -1,6 +1,15 @@
 ---
 title: "Circularity codebook"
 format: html
+params:
+  data_pack_path: "data/dashboard_data_v240124.zip"
+  geography_year: 2013
+  focus_county: "55025"
+  map_imped_show: false
+  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
+  map_imped_param: 500 # scale parameter of the impedance function
+  econ_dynam_data: TRUE
+  basic_geog_feature: TRUE
 ---
 
 # Data
@@ -9,9 +18,18 @@ Libraries and sources.
 
 ```{r}
 library(tidyverse)
+library(Hmisc)
+library(rstatix)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
 ```
 
 
@@ -79,13 +97,104 @@ Calculated as `(excess_supply - excess_demand) / gross_output`.
 Calculated as `(excess_supply + excess_demand) / gross_output`.
 
 
-# Summary statistics
-
-## year
+# Preparation of circularity indicators
 
 ```{r}
-df$year |> as.factor() |> summary()
+# SELECT YEAR
+YR = 2012
+df_circ = df %>%  
+  filter(year == YR) %>%
+  select(-year, -gross_output, -intermediate_supply, -intermediate_demand, -excess_supply, -excess_demand)
 ```
+
+
+# Summary Statistics
+
+```{r}
+dstats_circularity = df_circ %>% 
+  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+dstats_circularity = as.data.frame(dstats_circularity)
+dstats_circularity
+```
+
+# Histograms
+
+```{r}
+df_circ %>% select(-county_fips) %>% hist.data.frame()
+
+```
+
+# Maps
+
+```{r}
+# creating function to streamline creation of maps
+
+ipath <- list(
+  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
+  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}")
+)
+
+ipath
+call_geo <- function() {
+  df <- geo$call_geog(params$geography_year) |>
+    rename_with(str_to_lower)
+  d <- geo$pubdata$get_state_df(FALSE) |>
+    rename_with(str_to_lower) |>
+    select(code, contiguous, bea_region_name) |>
+    rename(state_code = code)
+  df <- left_join(df, d, "state_code")
+  df
+}
+df_map = df_circ %>% mutate(place = as.character(county_fips))
+df = call_geo()
+df_map <- left_join(df, df_map, by = "place")
+
+map = function(val, title, rev_scale){
+  lab <- glue(
+        "{county}",
+        "Production Capacity: {production_capacity}", 
+        "Trade Capacity: {trade_capacity}", 
+        "Retention: {retention}", 
+        "Production Dependency: {production_dependency}", 
+        "Trade Dependency: {trade_dependency}", 
+        "Autonomy: {autonomy}", 
+        "Trade Balance: {trade_balance}", 
+        "Trade Openness: {trade_openness}",
+        .sep = "<br>",
+        .envir = df_map)
+  
+  pal = colorNumeric("magma", val, reverse = rev_scale)
+  
+  leaflet() |>
+    addTiles() |>
+    addPolygons(
+      data = df_map,
+      stroke = FALSE,
+      fillColor = ~pal(val),
+      fillOpacity = 0.6,
+      label = lab,
+      popup = val
+    ) |>
+    addLegend(pal = colorNumeric("magma", val, reverse = rev_scale), 
+              values = val, 
+              title = title)
+}
+```
+```{r}
+# creating maps
+map(val = df_map$production_capacity, title = "Production Capacity", rev_scale = FALSE)
+map(val = df_map$trade_capacity, title = "Trade Capacity", rev_scale = FALSE)
+map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+map(val = df_map$production_dependency, title = "Production Dependency", rev_scale = FALSE)
+map(val = df_map$trade_dependency, title = "Trade Dependency", rev_scale = FALSE)
+map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+map(val = df_map$trade_balance, title = "Trade Balance", rev_scale = FALSE)
+map(val = df_map$trade_openness, title = "Trade Openness", rev_scale = FALSE)
+```
+
+
+
+
 
 
 
