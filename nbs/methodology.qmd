@@ -703,19 +703,43 @@ source("R/trade_flows.R", local = (tf <- new.env()))
 source("R/connectedness.R", local = (conn <- new.env()))
 
 x <- tf$call_trade_flows("all_industries")
-
-wi_counties <- str_starts(rownames(x), "55")
-plot_heatmap(x[wi_counties, wi_counties]) + labs(title = "Total trade flows in Wisconsin")
-
-x1 <- sweep(x, 1, rowSums(x), "/")
-x1[is.na(x1)] <- 0
-x2 <- conn$apply_absorption_metrics(x1)
-x3 <- conn$apply_absorption_algorithm(x2)
-x3 |> select(place, cluster_category, eca_membership)
+x_norm <- sweep(x, 1, rowSums(x), "/")
+x_norm[is.na(x_norm)] <- 0
+conn_metrics <- conn$apply_absorption_metrics(x_norm)
+df <- conn$apply_absorption_algorithm(conn_metrics, threshold = 0)
+df
 
 ```
 
 
+### robustness
+
+Comparing ECA's with and without 2 ag industries (oilseed and dairy).
+106 counties change their sink, and 31 among them change between being sinks and sources.
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+# earlier version: with 2 industries missing
+util$zip_unpack("tmp/eca_paa_data_v240222.zip", overwrite = TRUE)
+d0 <- dp$call_eca_df()
+
+# later version with 2 industries added
+util$zip_unpack("tmp/eca_paa_data_v240226.zip", overwrite = TRUE)
+d1 <- dp$call_eca_df()
+
+d <- full_join(d0, d1, "fips", suffix = c("0", "1")) |>
+  mutate(
+    eca_cluster_category_same = (eca_cluster_category0 == eca_cluster_category1),
+    eca_membership_same = (eca_membership0 == eca_membership1),
+    max_trade_share_dev = abs(max_trade_share0 - max_trade_share1)
+  )
+
+d |> count(eca_cluster_category_same, eca_membership_same)
+
+ggplot(d) + geom_boxplot(aes(max_trade_share_dev))
+```
 
 
 

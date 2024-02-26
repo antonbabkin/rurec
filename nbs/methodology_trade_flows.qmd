@@ -147,7 +147,15 @@ plot_heat(sol$solution)
 
 LP solution demonstration for one industry.
 
+In some cases, setting constraints to exact equality fails to yield a feasible solution.
+A way to resolve this is to replace supply constraint with `rowSums(x) <= sup` and demand with `colSums(x) >= dem`.
+This might even be a preferred approach always, because solution might actually more accurately match constraints, and runtime is faster.
+Need to investigate this more.
+
+
 ```{r}
+ind_code <- "1111A0"
+
 # county demand
 df <- place_output$call_intermediate(
   year = 2012, 
@@ -156,7 +164,7 @@ df <- place_output$call_intermediate(
   class_system = "commodity", 
   ilevel = "det",
   bus_data = "infogroup") %>%
-  filter(indcode == "1111A0") %>%
+  filter(indcode == ind_code) %>%
   select(place, demand)
 
 # county supply
@@ -167,21 +175,26 @@ d <- place_output$call_intermediate(
   class_system = "commodity", 
   ilevel = "det",
   bus_data = "infogroup") %>%
-  filter(indcode == "1111A0") %>%
+  filter(indcode == ind_code) %>%
   select(place, supply)
 
 df <- inner_join(df, d, "place") %>%
-  mutate(exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+  mutate(
+    exsup = pmax(supply - demand, 0),
+    exdem = pmax(demand - supply, 0)
+  )
+
+dmat <- geog$call_dist_mat()
+places <- base::intersect(rownames(dmat), df$place)
 
 sup <- df %>%
-  filter(exsup > 0) %>%
+  filter(exsup > 0, place %in% places) %>%
   select(place, exsup)
 
 dem <- df %>%
-  filter(exdem > 0) %>%
+  filter(exdem > 0, place %in% places) %>%
   select(place, exdem)
 
-dmat <- geog$call_dist_mat()
 dmat <- dmat[sup$place, dem$place] %>%
   set_units(mi) %>%
   drop_units()
@@ -189,9 +202,9 @@ dmat <- dmat[sup$place, dem$place] %>%
 system.time({
 sol <- lp.transport(
   cost.mat = dmat,
-  row.signs = rep("=", nrow(sup)),
+  row.signs = rep("<=", nrow(sup)),
   row.rhs = sup$exsup,
-  col.signs = rep("=", nrow(dem)),
+  col.signs = rep(">=", nrow(dem)),
   col.rhs = dem$exdem,
   integers = NULL
 )
@@ -260,8 +273,10 @@ This must be true because local trade is zero distance, and should thus be alway
 x <- tf$prep_lp_solver_inputs("336213")
 str(x)
 ```
+
 Smaller industries are solved in seconds.
 Solution object is returned for inspection.
+If equality constraint fails, a second attempt is made with inequality.
 
 ```{r}
 x <- tf$prep_lp_solver_inputs("335222")
@@ -273,13 +288,56 @@ Interface function only returns full trade flows matrix and saves it to cache on
 
 ```{r}
 source("R/trade_flows.R", local = (tf <- new.env()))
-x <- tf$call_trade_flows("335222")
+x <- tf$call_trade_flows("1111A0")
 ```
 
 
-## issues
+# Diagnostic
 
-A few industries, notably "1111A0" (oilseed) and "112120" (dairy), fail to solve. Returned trade flows are all zero. Need to investigate.
+## overview of all industries
+
+```{r}
+source("R/trade_flows.R")
+sup_mat <- readRDS(glue(opath$supply_, .envir = params_econ))
+dem_mat <- readRDS(glue(opath$demand_, .envir = params_econ))
+
+log_threshold(INFO)
+
+d <- data.frame()
+for (ind_code in rownames(sup_mat)) {
+  x <- call_trade_flows(ind_code)
+  sup <- sup_mat[ind_code, rownames(x)]
+  dem <- dem_mat[ind_code, colnames(x)]
+  ex_sup <- pmax(sup - dem, 0)
+  ex_dem <- pmax(dem - sup, 0)
+  sol_sup <- rowSums(x)
+  sol_dem <- colSums(x)
+  finmax <- \(x) max(x[is.finite(x)])
+  row <- list(
+    ind = ind_code,
+    exsup = sum(ex_sup),
+    exdem = sum(ex_dem),
+    tf_tot = sum(x),
+    sup_rmsd = sqrt(mean((sol_sup - ex_sup)^2)),
+    sup_max_abs_dev = finmax(abs(sol_sup - ex_sup)),
+    sup_max_rel_dev = finmax(abs(sol_sup - ex_sup) / ex_sup),
+    dem_rmsd = sqrt(mean((sol_dem - ex_dem)^2)),
+    dem_max_abs_dev = finmax(abs(sol_dem - ex_dem)),
+    dem_max_rel_dev = finmax(abs(sol_dem - ex_dem) / ex_dem)
+  )
+  d <- rbind(d, row)
+}
+d <- d |>
+  mutate(tot_abs_dev = abs(exsup - tf_tot),
+         tot_rel_dev = tot_abs_dev / exsup)
+# distribution of relative errors
+d$tot_rel_dev |> quantile(seq(0, 1, 0.1), na.rm = TRUE)
+# top relative errors
+d |> slice_max(tot_rel_dev, n = 5)
+
+tf_diag <- d
+d
+```
 
 
 

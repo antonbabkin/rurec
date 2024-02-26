@@ -176,16 +176,16 @@ source("R/trade_flows.R", local = (tf <- new.env()))
 # prepare demand and supply matrices
 tf$prep_demsup_mat()
 
-# solve for single industry industry
-x <- tf$call_trade_flows("336414")
+# solve for single industry
+x <- tf$call_trade_flows("112120")
 
 # sum up all trade flows across all industries
 x <- tf$call_trade_flows("all_industries")
 
 # packing and unpacking county aggregates (uncomment as needs)
 # source("R/basic_utilities.R", local = (util <- new.env()))
-# util$zip_pack("tmp/trade_flows_v240221.zip", tf$opath$flows_)
-# util$zip_unpack("tmp/trade_flows_v240221.zip", overwrite = TRUE)
+# util$zip_pack("tmp/trade_flows_v240226.zip", tf$opath$flows_)
+# util$zip_unpack("tmp/trade_flows_v240226.zip", overwrite = TRUE)
 ```
 
 # Circularity

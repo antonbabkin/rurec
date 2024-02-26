@@ -115,15 +115,21 @@ prep_lp_solver_inputs <- function(ind_code) {
   stopifnot(isTRUE(all.equal(colnames(sup_mat), colnames(dem_mat))))
   
   # load pre-calculated distance matrix
-  dmat <- readRDS(ipath$dist_mat) |>
+  dmat <- readRDS(ipath$dist_mat)
+  rn <- rownames(dmat)
+  cn <- colnames(dmat)
+  stopifnot(isTRUE(all.equal(rn, cn)))
+  dmat <- dmat |>
+    set_units(mi) |> # this operation destroys dim names
     drop_units()
-  stopifnot(isTRUE(all.equal(rownames(dmat), colnames(dmat))))
+  rownames(dmat) <- rn
+  colnames(dmat) <- cn
   
   # select counties present both in sup/dem vectors and distance matrix
   common_places <- base::intersect(colnames(sup_mat), rownames(dmat)) |>
     sort()
-  log_warn("Counties not in dist mat: ", paste(setdiff(rownames(dmat), common_places), collapse = ","))
-  log_warn("Counties not in sup/dem: ", paste(setdiff(colnames(sup_mat), common_places), collapse = ","))
+  log_warn("Counties not in sup/dem: ", paste(setdiff(rownames(dmat), common_places), collapse = ","))
+  log_warn("Counties not in dist mat: ", paste(setdiff(colnames(sup_mat), common_places), collapse = ","))
   
   # commonly available data
   sup <- sup_mat[ind_code, common_places]
@@ -176,6 +182,19 @@ solve_lp_trade_flows <- function(sup, dem, dmat) {
     col.rhs = dem_,
     integers = NULL
   )
+  
+  # if there is no feasibile solution with exact equality constraints, try inequalities
+  if (sol$status > 0) {
+    log_debug("No feasible solution with equality constraints, trying inequality.")
+    sol <- lp.transport(
+      cost.mat = dmat_,
+      row.signs = rep("<=", length(sup_)),
+      row.rhs = sup_,
+      col.signs = rep(">=", length(dem_)),
+      col.rhs = dem_,
+      integers = NULL
+    )
+  }
   
   # attach dim names
   rownames(sol$solution) <- names(sup_)
@@ -386,6 +405,7 @@ ras_rescale <- function(x0, rs1, cs1, tol = 0, maxiter = 10) {
 
 
 # tests ----
+
 
 ## impedance ----
 
