@@ -601,7 +601,8 @@ call_intermediate <- function(year,
                               schedule = schedule,
                               class_system = class_system) %>% 
     as.data.frame.table() %>% 
-    `colnames<-`(c("indcode", "place", schedule))
+    `colnames<-`(c("indcode", "place", schedule)) %>%
+    mutate(place = as.character(place)) # place as factor works incorrectly when using as matrix index
   
   return(df)  
 }
