@@ -1,0 +1,417 @@
+---
+title: "Descriptive Stats: Vitality, Dynamism, Circularity"
+format: html
+editor: source
+params:
+  data_pack_path: "data/dashboard_data_v240124.zip"
+  geography_year: 2013
+  map_agg_stats_year: 2012
+  map_ex_range_year: "2008-2012"
+---
+
+```{r}
+# setting up libraries and data paths
+
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+library(knitr)
+library(Hmisc)
+library(rstatix)
+
+logger::log_threshold(DEBUG)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/dataprep_infogroup.R", local = (infogroup <- new.env()))
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+#source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/connectedness.R", local = (connect <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+source("R/circularity.R", local = (circ <- new.env()))
+
+```
+
+```{r}
+params
+```
+
+## Data import and cleaning
+
+```{r}
+# importing and cleaning select prosperity indicators
+
+source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
+
+unemployment_rate <- prosperity$call_unemployment_rate_df() |>
+    filter(year == params$map_agg_stats_year, cty != "000") |>
+    mutate(place = str_c(st, cty)) |>
+    rename(unemployment.rate = unemp_rt) |>
+    select(place, unemployment.rate)
+bachelors <- prosperity$call_education_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(bachelors = estimate) |>
+    select(place, bachelors)
+labor_force_part_rate <- prosperity$call_lfpr_df() |>
+    filter(YEAR == params$map_ex_range_year) |>
+    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
+    rename(lfpr = estimate) |>
+    select(place, lfpr)
+poverty <- prosperity$call_saipe_df() |>
+    filter(year == params$map_agg_stats_year, county.fips != "000") |>
+    mutate(place = str_c(state.fips, county.fips)) |>
+    rename(poverty = pov) |>
+    select(place, poverty)
+premature_death <- prosperity$call_CHRR_df() |>
+    filter(year == params$map_agg_stats_year, countycode != "000") |>
+    mutate(place = str_c(statecode, countycode)) |>
+    rename(premature.death = v001_rawvalue) |>
+    select(place, premature.death)
+net_migration <- prosperity$call_netmigration_df() |>
+    mutate(county.fips = substr(fips_str2020,3,5)) |>
+    filter(county.fips != "000") |>
+    mutate(place = fips_str2020) |>
+    rename(net.migration = r1tttt) |>
+    select(place, net.migration)
+
+```
+
+```{r}
+# importing and cleaning select economic dynamism indicators
+
+source("R/dataprep.R", local = (data.prep <- new.env()))
+
+population <- data.prep$call_population() |>
+    filter(year == params$map_agg_stats_year, cty != "000") |>
+    mutate(place = str_c(st, cty), population = as.numeric(pop)) |>
+    select(place, population)
+
+employment_establishments <- open_dataset(glue(infogroup$opath$county_, year = params$map_agg_stats_year)) |>
+    mutate(place = str_c(st, cty)) |>
+    select(place, est, emp) |>
+    group_by(place) |>
+    dplyr::summarize(across(everything(), sum)) |>
+    mutate(establishments = as.numeric(est), employment = as.numeric(emp)) |>
+    collect()
+
+```
+
+```{r}
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+df_circ_clean <- dp$call_circ_df(2012)
+#df_circ_clean <- readRDS("data/tmp/dataset_circularity_v240223/datasets/circularity/circularity.rds")
+
+circularity = df_circ_clean %>%
+  select(-year, -gross_output, -intermediate_demand, -intermediate_supply, -excess_supply, -excess_demand) %>%
+  rename("place"="county_fips")
+```
+
+```{r}
+# importing calculations for growth rate indicators
+
+source("R/dataprep.R", local = (data.prep <- new.env()))
+
+
+population_growth = data.prep$growth_rate(start_year = 2010, 
+    end_year = 2015, 
+    function_name = dataprep$call_county_population,
+    bus_data = "census") %>%
+  rename("population.growth"="grow_rate")
+
+#employment_growth = data.prep$growth_rate(start_year = 2010, 
+#    end_year = 2015, 
+#    function_name = dataprep$call_county_employment,
+#    bus_data = "cbp_imp")
+
+```
+
+```{r}
+# joining indicators into single data file
+# calculating log of highly right-skewed indicators
+# replacing and removing integer variabiles
+# removing US non-state and non-DC territories
+
+df1 = unemployment_rate %>%
+  full_join(y = bachelors, by = "place") %>%
+  full_join(y = labor_force_part_rate, by = "place") %>%
+  full_join(y = poverty, by = "place") %>%
+  full_join(y = premature_death, by = "place") %>%
+  full_join(y = net_migration, by = "place") %>%
+  full_join(y = population, by = "place") %>%
+  full_join(y = employment_establishments, by = "place") %>%
+  full_join(y = population_growth, by = "place") %>%
+  full_join(y = circularity, by = "place") %>%
+  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment),
+         st = substr(place,1,2)) %>%
+  select(-est, -emp) %>%
+  filter(st != "72" & st != "78")
+```
+
+## Descriptive Stats
+
+```{r}
+
+# separating indicators into vitality, dynamism, and circularity for the sake of presenting descriptive statistics
+
+df1_vitality = df1 %>%
+  select(place, unemployment.rate, bachelors, lfpr, poverty, premature.death, net.migration)
+df1_dynamism = df1 %>%
+  select(place, population, log.population, establishments, log.establishments, employment, log.employment, population.growth)
+df1_circularity = df1 %>%
+  select(place, production_capacity, trade_capacity, retention, production_dependency, trade_dependency, autonomy, trade_balance, trade_openness)
+
+dstats_vitality = df1_vitality %>% 
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
+dstats_vitality = as.data.frame(dstats_vitality)
+
+dstats_dynamism = df1_dynamism %>% 
+  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+dstats_dynamism = as.data.frame(dstats_dynamism)
+
+dstats_circularity = df1_circularity %>% 
+  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+dstats_circularity = as.data.frame(dstats_circularity)
+
+```
+
+### Vitality
+
+```{r}
+dstats_vitality
+```
+
+### Dynamism
+
+```{r}
+dstats_dynamism
+```
+
+### Circularity
+
+```{r}
+dstats_circularity
+```
+
+## Histograms
+
+### Vitality
+
+```{r}
+
+df1_vitality %>% select(-place) %>% hist.data.frame(mtitle = "test")
+
+```
+
+### Dynamism
+
+```{r}
+df1_dynamism %>% select(-place) %>% hist.data.frame()
+
+```
+
+### Circularity
+
+```{r}
+df1_circularity %>% select(-place) %>% hist.data.frame()
+
+```
+
+## Maps
+
+```{r}
+
+# creating function to streamline creation of maps
+
+call_geo <- function() {
+  df <- geo$call_geog(params$geography_year) |>
+    rename_with(str_to_lower)
+  d <- geo$pubdata$get_state_df(FALSE) |>
+    rename_with(str_to_lower) |>
+    select(code, contiguous, bea_region_name) |>
+    rename(state_code = code)
+  df <- left_join(df, d, "state_code")
+  df
+}
+
+df = call_geo()
+df_map <- left_join(df, df1, by = "place")
+
+map = function(val, title, rev_scale){
+  lab <- glue(
+        "{county}",
+        "Population: {population}",
+        "Employment: {employment}",
+        "Population Growth: {population.growth}",
+        "Poverty Rate: {poverty}",
+        "Unemployment Rate: {unemployment.rate}",
+        "Labor Force Participation Rate: {lfpr}",
+        "% Bachelor's or Higher: {bachelors}",
+        "Establishments: {establishments}",
+        "Premature Death (Years of Potential Life Lost per 100k): {premature.death}",
+        "Net Migration Rate: {net.migration}",
+        "Production Capacity: {production_capacity}", 
+        "Trade Capacity: {trade_capacity}", 
+        "Retention: {retention}", 
+        "Production Dependency: {production_dependency}", 
+        "Trade Dependency: {trade_dependency}", 
+        "Autonomy: {autonomy}", 
+        "Trade Balance: {trade_balance}", 
+        "Trade Openness: {trade_openness}",
+        .sep = "<br>",
+        .envir = df_map) |> lapply(HTML)
+  
+  pal = colorNumeric("magma", val, reverse = rev_scale)
+  
+  leaflet() |>
+    addTiles() |>
+    addPolygons(
+      data = df_map,
+      stroke = FALSE,
+      fillColor = ~pal(val),
+      fillOpacity = 0.6,
+      label = lab,
+      popup = val
+    ) |>
+    addLegend(pal = colorNumeric("magma", val, reverse = rev_scale), 
+              values = val, 
+              title = title)
+}
+```
+
+### Vitality
+
+```{r}
+# creating maps
+map(val = df_map$poverty, title = "Poverty Rate", rev_scale = TRUE)
+map(val = df_map$unemployment.rate, title = "Unemployment Rate", rev_scale = TRUE)
+map(val = df_map$bachelors, title = "% with Bachelor's Degree", rev_scale = FALSE)
+map(val = df_map$premature.death, title = "Premature Death (Years of Potential Life Lost per 100k)", rev_scale = TRUE)
+map(val = df_map$net.migration, title = "Net Migration Rate", rev_scale = FALSE)
+map(val = df_map$lfpr, title = "Labor Force Participation Rate", rev_scale = FALSE)
+```
+
+### Dynamism
+
+```{r}
+# creating maps
+#map(val = df_map$log.population, title = "Population (Log)", rev_scale = FALSE)
+#map(val = df_map$log.establishments, title = "Establishments (Log)", rev_scale = FALSE)
+#map(val = df_map$log.employment, title = "Employment (Log)", rev_scale = FALSE)
+#map(val = df_map$population.growth, title = "Population Growth", rev_scale = FALSE)
+```
+
+### Circularity
+
+```{r}
+# creating maps
+map(val = df_map$production_capacity, title = "Production Capacity", rev_scale = FALSE)
+map(val = df_map$trade_capacity, title = "Trade Capacity", rev_scale = FALSE)
+map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+map(val = df_map$production_dependency, title = "Production Dependency", rev_scale = FALSE)
+map(val = df_map$trade_dependency, title = "Trade Dependency", rev_scale = FALSE)
+map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+map(val = df_map$trade_balance, title = "Trade Balance", rev_scale = FALSE)
+map(val = df_map$trade_openness, title = "Trade Openness", rev_scale = FALSE)
+```
+
+## Regressions
+
+```{r}
+# import ECAs
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+df_eca_clean <- dp$call_eca_df()
+df_eca = df_eca_clean %>%
+  rename("place"="fips") %>%
+  filter(eca_cluster_category == "Cluster Source")
+
+# separating indicator values for places that are "Sources" and "Sinks" 
+
+df1_source = df1 %>%
+  setNames(paste0('source_', names(.))) %>%
+  rename("place"="source_place")
+
+df1_sink = df1 %>%
+  setNames(paste0('sink_', names(.))) %>%
+  rename("eca_membership"="sink_place")
+
+
+# creating table that shows each "Source"'s indicator values along with each's respective "Sink"'s values
+
+regs = df_eca %>%
+  left_join(y = df1_source, by = "place") %>%
+  left_join(y = df1_sink, by = "eca_membership") %>%
+  filter()
+
+```
+
+```{r}
+# run regressions
+
+# vitality
+reg_unemployment.rate = lm(data = regs, source_unemployment.rate ~ sink_unemployment.rate)
+reg_lfpr = lm(data = regs, source_lfpr ~ sink_lfpr)
+reg_population.growth = lm(data = regs, source_population.growth ~ sink_population.growth)
+reg_bachelors = lm(data = regs, source_bachelors ~ sink_bachelors)
+reg_premature.death = lm(data = regs, source_premature.death ~ sink_premature.death)
+
+# dynamism
+reg_log.population = lm(data = regs, source_log.population ~ sink_log.population)
+reg_log.employment = lm(data = regs, source_log.employment ~ sink_log.employment)
+reg_log.establishments = lm(data = regs, source_log.establishments ~ sink_log.establishments)
+
+# circularity
+reg_production_capacity = lm(data = regs, source_production_capacity ~ sink_production_capacity)
+reg_trade_capacity = lm(data = regs, source_trade_capacity ~ sink_trade_capacity)
+reg_retention = lm(data = regs, source_retention ~ sink_retention)
+reg_production_dependency = lm(data = regs, source_production_dependency ~ sink_production_dependency)
+reg_trade_dependency = lm(data = regs, source_trade_dependency ~ sink_trade_dependency)
+reg_autonomy = lm(data = regs, source_autonomy ~ sink_autonomy)
+reg_trade_balance = lm(data = regs, source_trade_balance ~ sink_trade_balance)
+reg_trade_openness = lm(data = regs, source_trade_openness ~ sink_trade_openness)
+reg_net.migration = lm(data = regs, source_net.migration ~ sink_net.migration)
+```
+
+### Vitality
+
+```{r}
+summary(reg_unemployment.rate)
+summary(reg_lfpr)
+summary(reg_population.growth)
+summary(reg_bachelors)
+summary(reg_premature.death)
+summary(reg_net.migration)
+
+```
+
+### Dynamism
+
+```{r}
+summary(reg_log.population)
+summary(reg_log.employment)
+summary(reg_log.establishments)
+```
+
+### Circularity
+
+```{r}
+summary(reg_production_capacity)
+summary(reg_trade_capacity)
+summary(reg_retention)
+summary(reg_production_dependency)
+summary(reg_trade_dependency)
+summary(reg_autonomy)
+summary(reg_trade_balance)
+summary(reg_trade_openness)
+```
