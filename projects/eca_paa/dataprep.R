@@ -217,6 +217,7 @@ call_saipe <- function() {
 
 # circularity  ----
 
+# TODO: fix this to read correctly the first time 
 #' NOTE: if first time accessing circularity RDS, ipath in "else" clause is reading in from unzipped file
 call_circ_df <- function(x) {
   cache_path = opath$circ

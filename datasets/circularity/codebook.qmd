@@ -180,6 +180,7 @@ map = function(val, title, rev_scale){
               title = title)
 }
 ```
+
 ```{r}
 # creating maps
 map(val = df_map$production_capacity, title = "Production Capacity", rev_scale = FALSE)
