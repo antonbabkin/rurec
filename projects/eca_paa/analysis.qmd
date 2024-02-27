@@ -1,7 +1,7 @@
 ---
 title: "Descriptive Stats: Vitality, Dynamism, Circularity"
 format: html
-editor: visual
+editor: source
 params:
   data_pack_path: "data/dashboard_data_v240124.zip"
   geography_year: 2013
