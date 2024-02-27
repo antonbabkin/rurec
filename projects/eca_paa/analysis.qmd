@@ -327,6 +327,8 @@ map(val = df_map$trade_openness, title = "Trade Openness", rev_scale = FALSE)
 
 ## Regressions
 
+### ECAs
+
 ```{r}
 # import ECAs
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
@@ -362,6 +364,7 @@ regs = df_eca %>%
 # vitality
 reg_unemployment.rate = lm(data = regs, source_unemployment.rate ~ sink_unemployment.rate)
 reg_lfpr = lm(data = regs, source_lfpr ~ sink_lfpr)
+reg_poverty = lm(data = regs, source_poverty ~ sink_poverty)
 reg_population.growth = lm(data = regs, source_population.growth ~ sink_population.growth)
 reg_bachelors = lm(data = regs, source_bachelors ~ sink_bachelors)
 reg_premature.death = lm(data = regs, source_premature.death ~ sink_premature.death)
@@ -383,11 +386,12 @@ reg_trade_openness = lm(data = regs, source_trade_openness ~ sink_trade_openness
 reg_net.migration = lm(data = regs, source_net.migration ~ sink_net.migration)
 ```
 
-### Vitality
+#### Vitality
 
 ```{r}
 summary(reg_unemployment.rate)
 summary(reg_lfpr)
+summary(reg_poverty)
 summary(reg_population.growth)
 summary(reg_bachelors)
 summary(reg_premature.death)
@@ -395,7 +399,7 @@ summary(reg_net.migration)
 
 ```
 
-### Dynamism
+#### Dynamism
 
 ```{r}
 summary(reg_log.population)
@@ -403,7 +407,7 @@ summary(reg_log.employment)
 summary(reg_log.establishments)
 ```
 
-### Circularity
+#### Circularity
 
 ```{r}
 summary(reg_production_capacity)
@@ -415,3 +419,102 @@ summary(reg_autonomy)
 summary(reg_trade_balance)
 summary(reg_trade_openness)
 ```
+
+### CBSAs
+
+```{r}
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+cbsa_clean = dp$call_cbsa_delin() 
+
+cbsa_central = cbsa_clean %>%
+  filter(central_outlying == "central" & state_code != 72) %>%
+  select("fips_central" = fips, "county_sink" = county, cbsa_code)
+
+cbsa = full_join(x = cbsa_clean, y = cbsa_central, by = "cbsa_code") %>%
+  filter(state_code != 72 & central_outlying == "outlying") %>%
+  select(fips, cbsa_code, fips_central, county_sink, "county_source" = county)
+
+df_source = df1 %>%
+  setNames(paste0('source_', names(.))) %>%
+  rename("fips"="source_place") %>%
+  select(-source_st)
+
+df_sink = df1 %>%
+  setNames(paste0('sink_', names(.))) %>%
+  rename("fips_central"="sink_place") %>%
+  select(-sink_st)
+
+regs_cbsa = cbsa %>%
+  left_join(y = df_source, by = "fips") %>%
+  left_join(y = df_sink, by = "fips_central")
+```
+
+```{r}
+# run regressions
+
+# vitality
+reg_cbsa_unemployment.rate = lm(data = regs_cbsa, source_unemployment.rate ~ sink_unemployment.rate)
+reg_cbsa_poverty = lm(data = regs_cbsa, source_poverty ~ sink_poverty)
+reg_cbsa_lfpr = lm(data = regs_cbsa, source_lfpr ~ sink_lfpr)
+reg_cbsa_population.growth = lm(data = regs_cbsa, source_population.growth ~ sink_population.growth)
+reg_cbsa_bachelors = lm(data = regs_cbsa, source_bachelors ~ sink_bachelors)
+reg_cbsa_premature.death = lm(data = regs_cbsa, source_premature.death ~ sink_premature.death)
+
+# dynamism
+reg_cbsa_log.population = lm(data = regs_cbsa, source_log.population ~ sink_log.population)
+reg_cbsa_log.employment = lm(data = regs_cbsa, source_log.employment ~ sink_log.employment)
+reg_cbsa_log.establishments = lm(data = regs_cbsa, source_log.establishments ~ sink_log.establishments)
+
+# circularity
+reg_cbsa_production_capacity = lm(data = regs_cbsa, source_production_capacity ~ sink_production_capacity)
+reg_cbsa_trade_capacity = lm(data = regs_cbsa, source_trade_capacity ~ sink_trade_capacity)
+reg_cbsa_retention = lm(data = regs_cbsa, source_retention ~ sink_retention)
+reg_cbsa_production_dependency = lm(data = regs_cbsa, source_production_dependency ~ sink_production_dependency)
+reg_cbsa_trade_dependency = lm(data = regs_cbsa, source_trade_dependency ~ sink_trade_dependency)
+reg_cbsa_autonomy = lm(data = regs_cbsa, source_autonomy ~ sink_autonomy)
+reg_cbsa_trade_balance = lm(data = regs_cbsa, source_trade_balance ~ sink_trade_balance)
+reg_cbsa_trade_openness = lm(data = regs_cbsa, source_trade_openness ~ sink_trade_openness)
+reg_cbsa_net.migration = lm(data = regs_cbsa, source_net.migration ~ sink_net.migration)
+
+```
+
+#### Vitality
+
+```{r}
+
+summary(reg_cbsa_unemployment.rate)
+summary(reg_cbsa_lfpr)
+summary(reg_cbsa_poverty)
+summary(reg_cbsa_population.growth)
+summary(reg_cbsa_bachelors)
+summary(reg_cbsa_premature.death)
+summary(reg_cbsa_net.migration)
+```
+
+#### Dynamism
+
+```{r}
+summary(reg_cbsa_log.population)
+summary(reg_cbsa_log.employment)
+summary(reg_cbsa_log.establishments)
+```
+
+#### Circularity
+
+```{r}
+summary(reg_cbsa_production_capacity)
+summary(reg_cbsa_trade_capacity)
+summary(reg_cbsa_retention)
+summary(reg_cbsa_production_dependency)
+summary(reg_cbsa_trade_dependency)
+summary(reg_cbsa_autonomy)
+summary(reg_cbsa_trade_balance)
+summary(reg_cbsa_trade_openness)
+```
+
+-   randomly assign sinks
+
+-   CZs
+
+-   revise premature death rate
