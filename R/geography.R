@@ -129,7 +129,7 @@ cbsa_spatial_cluster <- function(spatial_dataframe,
                 CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) }%>% 
     {.[order(.$CBSA_CODE), ]} %>% 
     `rownames<-`(1:nrow(.))  %>% 
-    {inner_join(., sdf, by = "place", copy = TRUE)} 
+    {inner_join(sdf, ., by = "place", copy = TRUE)} 
   df <- j %>% 
     select(CBSA_CODE, CBSA_TITLE) %>% 
     distinct(CBSA_CODE, .keep_all = TRUE) %>% 
@@ -189,7 +189,7 @@ call_cbsa_spatial_cluster <- function(year = 2013,
                                       scale = c("20m", "5m", "500k"),
                                       verbose = FALSE) {
   scale <- match.arg(scale)
-  
+  year <- util$year2cbsa(year)  
   cache_path <- glue(opath$cbsa_shapes_)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))

@@ -1,8 +1,6 @@
 
 # This script generates visualizations
 
-
-
 # R libraries ----
 library(logger)
 log_threshold(DEBUG)
@@ -107,8 +105,7 @@ boil_hist_theme <- function(){
     labs(x = element_blank(),
          y = element_blank(),
          subtitle = element_blank(),
-         title = element_blank()),
-    guides(fill = "none")
+         title = element_blank())
   )
 }
 
@@ -123,21 +120,27 @@ base_map <- function(spatial_dataframe, ...){
   return(g)
 }
 
+# overwrite default aesthetics
+# scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+# scale_colour_discrete <- function(...) scale_colour_brewer(..., palette = "Set3")
+
 
 # boilerplate ggplpot/geom_sf theme components for maps
 boil_map_theme <- function(dataframe, 
-                           fill_variable){
+                           fill_variable,
+                           data_id = "place"){
   data <- dataframe
   fv <- fill_variable
+  did <- data_id
   df <- list(
     geom_sf_interactive(
       aes(fill = data[[fv]],
           tooltip = if("STATE" %in% names(dataframe)){
-            glue("Place: {NAME}, {STATE}\nFIPS: {place}\nValue: {round_form({data[[fv]]}, 2)}")
+            glue("Place: {NAME}, {STATE}\nFIPS: {place}\nValue: {if(is.numeric(data[[fv]])){round_form({data[[fv]]}, 2)}else{data[[fv]]}}")
           }else{
-            glue("Place: {NAME}\nFIPS: {place}\nValue: {round_form({data[[fv]]}, 2)}")
+            glue("Place: {NAME}\nFIPS: {place}\nValue: {if(is.numeric(data[[fv]])){round_form({data[[fv]]}, 2)}else{data[[fv]]}}")
           },
-          data_id = data[["place"]]), 
+          data_id = data[[did]]), 
       color = alpha("grey", 0.2)),
     labs(fill = underscores2title(fv)),
     theme_void(),
@@ -200,7 +203,9 @@ usa_tile_map <- function(tile_plot_list,
 boil_tile <- function(tile_list,
                       fill_variable,
                       caption,
-                      ...){
+                      ..., 
+                      data_id = "place",
+                      legend = TRUE){
   tl <- tile_list
   fv <- fill_variable
   cp <- caption
@@ -208,10 +213,14 @@ boil_tile <- function(tile_list,
   df <- list()
   for (l in 1:length(tl)){
     ggp <- tl[[l]] +
-      boil_map_theme(tl[[l]]$data, fv) +
+      boil_map_theme(dataframe = tl[[l]]$data, fill_variable = fv, data_id = data_id) +
       arg +
       coord_sf(crs = switch(l, "+init=EPSG:4326", "+init=EPSG:26934", "+init=EPSG:6629", "+init=EPSG:4437")) + {
-        if (l != 1){theme(legend.position = "none")}
+        if (legend){
+          if (l != 1){theme(legend.position = "none")}
+        } else {
+          theme(legend.position = "none")
+        }
       } + {
         if (l == 1){labs(caption = cp)}
       }
@@ -556,7 +565,35 @@ call_sector_histogram_multi <- function(year,
 }
 
 
-# Nominal Choropleth ----
+
+# Categorical Choropleth ----
+
+## format data ----
+
+## viz ----
+
+cat_choro_map <- function(
+    spatial_dataframe,
+    fill_variable,
+    caption = NULL,
+    legend = FALSE,
+    interactive = TRUE){
+  sdf <- spatial_dataframe
+  fv <- fill_variable
+  tl <- usa_tile_list(sdf)
+  if (is.null(caption)){caption = "\n"} else {caption = caption}
+  df <- boil_tile(tile_list = tl, 
+                  fill_variable = fv, 
+                  caption = caption,
+                  data_id = fv,
+                  legend = legend) %>%
+    {usa_tile_map(tile_plot_list = .,
+                  interactive = interactive)}
+  return(df)
+}
+  
+
+# Nominal (numerical) Choropleth ----
 
 ## format data ----
 
@@ -572,9 +609,9 @@ nominal_choro_map <- function(spatial_dataframe,
   mn <-  min(sdf[[fv]], na.rm = T)
   mx <-  max(sdf[[fv]], na.rm = T)
   if (is.null(caption)){caption = "\n"} else {caption = caption}
-  df <- boil_tile(tile_list = tl, 
-                  fill_variable = fv, 
-                  caption = caption, 
+  df <- boil_tile(tile_list = tl,
+                  fill_variable = fv,
+                  caption = caption,
                   scale_fill_viridis(direction = -1, limits=c(floor(mn), ceiling(mx) ), option = "D" ) ) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
@@ -935,6 +972,11 @@ test_viz <- function() {
     {normal_choro_map(spatial_dataframe = .[[1]], fill_variable = "impedance", caption = .[[2]])}
   connect$call_eca_table_spatial(year = 2012, impedance = T, functional_form = "distance", scalar_constant = 300, threshold = .25, trim = "^(60|66|69|78)|(999)$") %>% 
     {normal_choro_map(spatial_dataframe = ., fill_variable = "max_alpha")}
+  
+  geog$call_geog() %>% 
+    {left_join(., geog$call_cbsa_concord(2013), by = "place")} %>% 
+    mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), "rural", CBSA_CODE)) %>% 
+  {cat_choro_map(., "CBSA_CODE")}
   
   dataprep$call_econ_dynam_ind(year = 2012) %>% 
     {left_join(geog$call_geog(year = 2012), ., by = "place")} %>%

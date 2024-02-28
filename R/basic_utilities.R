@@ -267,6 +267,15 @@ year2bea_profile <- function(year){
   return(as.integer(x))
 }
 
+year2ers_labor <- function(year){
+  ers_year = 2022:2000
+  x <- nearest_point(year, ers_year)
+  if(!year %in% ers_year){
+    warning("ERS labor stats years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
 # temporal recursion ----
 
 # return a list of results from a function with a year argument, optional function arguments are permitted

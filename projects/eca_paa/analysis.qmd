@@ -95,17 +95,20 @@ population <- data.prep$call_population() |>
     mutate(place = str_c(st, cty), population = as.numeric(pop)) |>
     select(place, population)
 
-employment_establishments <- open_dataset(glue(infogroup$opath$county_, year = params$map_agg_stats_year)) |>
+employment_establishments <- glue(infogroup$opath$county_, year = params$map_agg_stats_year) |>
+  open_dataset() |>
+  collect() |>
     mutate(place = str_c(st, cty)) |>
     select(place, est, emp) |>
     group_by(place) |>
     dplyr::summarize(across(everything(), sum)) |>
-    mutate(establishments = as.numeric(est), employment = as.numeric(emp)) |>
-    collect()
+    mutate(establishments = as.numeric(est), employment = as.numeric(emp))
 
 ```
 
 ```{r}
+# TODO: does not work as given
+
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 
 df_circ_clean <- dp$call_circ_df(2012)
