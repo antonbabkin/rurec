@@ -1,8 +1,6 @@
 
 # This script generates visualizations
 
-
-
 # R libraries ----
 library(logger)
 log_threshold(DEBUG)
@@ -107,8 +105,7 @@ boil_hist_theme <- function(){
     labs(x = element_blank(),
          y = element_blank(),
          subtitle = element_blank(),
-         title = element_blank()),
-    guides(fill = "none")
+         title = element_blank())
   )
 }
 
@@ -122,6 +119,10 @@ base_map <- function(spatial_dataframe, ...){
     coord_sf(crs = "+init=EPSG:6579") 
   return(g)
 }
+
+# overwrite default aesthetics
+# scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+# scale_colour_discrete <- function(...) scale_colour_brewer(..., palette = "Set3")
 
 
 # boilerplate ggplpot/geom_sf theme components for maps
@@ -571,10 +572,12 @@ call_sector_histogram_multi <- function(year,
 
 ## viz ----
 
-cat_choro_map <- function(spatial_dataframe,
-                              fill_variable,
-                              caption = NULL,
-                              interactive = TRUE){
+cat_choro_map <- function(
+    spatial_dataframe,
+    fill_variable,
+    caption = NULL,
+    legend = FALSE,
+    interactive = TRUE){
   sdf <- spatial_dataframe
   fv <- fill_variable
   tl <- usa_tile_list(sdf)
@@ -583,7 +586,7 @@ cat_choro_map <- function(spatial_dataframe,
                   fill_variable = fv, 
                   caption = caption,
                   data_id = fv,
-                  legend = FALSE) %>%
+                  legend = legend) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
   return(df)
