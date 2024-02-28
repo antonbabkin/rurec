@@ -20,6 +20,9 @@ params:
   map_imped_show: false
   map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
   map_imped_param: 500 # scale parameter of the impedance function
+  map_tradeflow_show: false
+  map_tradeflow_county: "55025"
+  map_tradeflow_ind: "all_industries" # "all_industries", single code ("1111A0"), comma-separated list ("1111A0,713900") or regex ("^112.*$")
   econ_dynam_data: TRUE
   basic_geog_feature: TRUE
   distance_matrix: TRUE
@@ -112,6 +115,7 @@ call_geo <- function() {
   df <- left_join(df, d, "state_code")
   df
 }
+
 
 ```
 
@@ -302,23 +306,51 @@ if (params$map_imped_show) {
 # trade flows
 
 ```{r}
-industry_code <- "1111B0"
-focus_county <- "55025"
+if (params$map_tradeflow_show) {
+  source("R/trade_flows.R", local = (trade_flows <- new.env()))
 
-x <- trade_flows$call_trade_flows(industry_code)
-d <- data.frame(
-  place = rownames(x),
-  exports = x[focus_county, ],
-  imports = x[, focus_county]
-)
-df <- call_geo() %>%
-  left_join(d, "place")
-
-
-tm_shape(filter(df, contiguous)) + tm_fill("exports") +
-  tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
-  tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders()
-
+  focus_county <- params$map_tradeflow_county
+  industry_code <- params$map_tradeflow_ind
+  # industry_code <- "1111A0"
+  # industry_code <- "1111A0,1111B0"
+  # industry_code <- "^112.*$"
+  
+  if (industry_code == "all_industries" || grepl("^[[:alnum:]]+$", industry_code)) { # single code or all
+    x <- trade_flows$call_trade_flows(industry_code)
+  } else if (grepl(",", industry_code)) { # comma-separated list of codes
+    x <- 0
+    for (ind_code in str_split_1(industry_code, ",")) {
+      x <- x + trade_flows$call_trade_flows(ind_code)
+    }
+  } else { # regex
+    all_codes <- trade_flows$call_industry_codes()
+    x <- 0
+    for (ind_code in grep(industry_code, all_codes, value = TRUE)) {
+      x <- x + trade_flows$call_trade_flows(ind_code)
+    }
+  }
+  d <- data.frame(
+    place = rownames(x),
+    exports = x[focus_county, ],
+    imports = x[, focus_county]
+  ) |>
+    mutate(exports = na_if(exports, 0), imports = na_if(imports, 0))
+  df <- call_geo() %>%
+    left_join(d, "place")
+  
+  p1 <- tm_shape(filter(df, contiguous)) + tm_fill("imports") +
+    tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
+    tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
+    tm_layout(main.title = glue("Imports of \"{industry_code}\" to {focus_county}"))
+  
+  p2 <- tm_shape(filter(df, contiguous)) + tm_fill("exports") +
+    tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
+    tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
+    tm_layout(main.title = glue("Exports of \"{industry_code}\" from {focus_county}"))
+  
+  print(p1)
+  print(p2)
+}
 ```
 
 
@@ -520,6 +552,8 @@ if (params$central_impedance_table) {
 
 # connectedness
 
+## absorption_density_plot
+
 ```{r}
 #| warning: false
 # TODO: add relevant data to ipath
@@ -590,6 +624,7 @@ if (params$absorption_density_plot) {
 }
 ```
 
+## sector_hist_plot
 
 ```{r}
 #| warning: false
@@ -630,6 +665,7 @@ if (params$sector_hist_plot) {
 }
 ```
 
+## sector_hist_plot_multi
 
 ```{r}
 #| warning: false
@@ -671,6 +707,7 @@ if (params$sector_hist_plot_multi) {
 }
 ```
 
+## supply_demand_map
 
 ```{r}
 #| warning: false
@@ -727,6 +764,7 @@ if (params$supply_demand_map) {
 }
 ```
 
+## supply_demand_delta_map
 
 ```{r}
 #| warning: false
@@ -798,6 +836,7 @@ if (params$supply_demand_delta_map) {
 
 ```
 
+## impedance_map
 
 ```{r}
 #| warning: false
@@ -836,6 +875,7 @@ if (params$impedance_map) {
 
 ```
 
+## ! connectedness_map
 
 ```{r}
 #| warning: false
@@ -898,6 +938,7 @@ if (params$connectedness_map) {
 
 ```
   
+## absorption_map
 
 ```{r}
 #| warning: false
@@ -962,6 +1003,7 @@ if (params$absorption_map) {
 
 ```
 
+## ! eca_map
 
 ```{r}
 #| warning: false
@@ -1023,6 +1065,37 @@ if (params$eca_map) {
 
 ```
 
+### from trade flows
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$eca_map) {
+  # explore hierarchical ECA clusters
+  
+  source("R/trade_flows.R", local = (trade_flows <- new.env()))
+  source("R/connectedness.R", local = (connect <- new.env()))
+  source("R/geography.R", local = (geo <- new.env()))
+  source("R/visualization.R", local = (visual <- new.env()))
+  
+  tf <- trade_flows$call_trade_flows("all_industries")
+  tf_norm <- sweep(tf, 1, rowSums(tf), "/")
+  tf_norm[is.na(tf_norm)] <- 0
+  conn_metrics <- connect$apply_absorption_metrics(tf_norm)
+  d <- connect$apply_absorption_algorithm(conn_metrics, threshold = 0)
+  d1 <- right_join(geo$call_tiger(), d, "place")
+  
+  visual$cluster_map(
+    spatial_dataframe = d1,
+    fill_variable = "eca_membership",
+    caption = "ECA from trade flows", 
+    interactive = TRUE)
+}
+
+
+```
+
+## ! eca_place_map
 
 ```{r}
 #| warning: false
