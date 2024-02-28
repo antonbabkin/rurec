@@ -17,14 +17,16 @@ source("R/place_output.R", local = (place_output <- new.env()))
 # Data objects ----
 ipath <- list(
   ig_ = ig$opath$county_,
-  bea_econ_profile = "https://apps.bea.gov/regional/zip/CAINC30.zip"
+  bea_econ_profile = "https://apps.bea.gov/regional/zip/CAINC30.zip",
+  ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv"
 )
 
 opath <- list(
   population = "data/pubdata/population/population.pq",
   bea_econ_profile_raw = "data/bea/raw/CAINC30__ALL_AREAS_1969_2022.csv",
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
-  econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds"
+  econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds",
+  ers_labor_stats_raw = "data/ers/unemployemnt.pq"
 )
 
 clear_outputs <- function() {
@@ -128,6 +130,42 @@ call_bea_econ_profile <- function() {
   return(df)  
 }
 
+
+# Civilian_labor_force, Employed, Unemployed, and Unemployment_rate from 2000:2022 
+# Plus Median_Household_Income_2021, Med_HH_Income_Percent_of_State_Total_2021, Rural_Urban_Continuum_Code_2013, Urban_Influence_Code_2013, and Metro_2013
+call_ers_labor_stats_raw <- function() {
+  cache_path <- glue(opath$ers_labor_stats_raw)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  } else {
+    parent_path <- util$mkdir(file.path(dirname(cache_path), basename(ipath$ers_labor_stats_raw)))
+    download_status <- download.file(url = ipath$ers_labor_stats_raw, 
+                                     destfile = parent_path, 
+                                     mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("data dowloaded to {parent_path}")
+    df <- read_csv(parent_path, show_col_types = FALSE) %>% 
+      mutate(FIPS_Code = sprintf("%05d", FIPS_Code))
+  }
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  return(df)
+}
+
+call_ers_county_stats <- function(year,
+                                  metric = c("Civilian_labor_force", "Employed", "Unemployed", "Unemployment_rate")){
+  gyear <- util$year2ers_labor(year) %>% 
+    {paste0("(", ., ")$")}
+  gmetric <- match.arg(metric) %>% 
+    {paste0("(^", ., ")")}
+  df <- call_ers_labor_stats_raw() %>% 
+    rename(place = FIPS_Code) %>% 
+    {.[!grepl('(0)$', .$place), ]} %>% 
+    {.[grepl(gyear, .$Attribute), ]} %>% 
+    {.[grepl(gmetric, .$Attribute), ]}
+}
+
 # Population ----
 
 call_population <- function() {
@@ -221,9 +259,18 @@ call_infogroup_county_employment <- function(year) {
   return(df)
 }
 
+call_ers_county_employment <- function(year) {
+  df <- call_ers_county_stats(
+    year = year,
+    metric = "Employed") %>% 
+    {.[c("place", "Value")]} %>% 
+    `colnames<-`(c("place", "employment"))
+  return(df)
+}
+
 call_county_employment <- function(
     year,
-    bus_data = c("cbp_imp", "cbp_raw", "infogroup", "bea_profile")
+    bus_data = c("cbp_imp", "cbp_raw", "infogroup", "bea_profile", "ers")
     ){
   bus_data <- match.arg(bus_data)
   if(bus_data == "cbp_imp"){
@@ -237,6 +284,30 @@ call_county_employment <- function(
   }
   if(bus_data == "bea_profile"){
     df <- call_bea_county_employment(year)
+  }
+  if(bus_data == "ers"){
+    df <- call_ers_county_employment(year)
+  }
+  return(df)
+}
+
+# Unemployment ----
+
+call_ers_county_unemployment <- function(year) {
+  df <- call_ers_county_stats(
+    year = year,
+    metric = "Unemployed") 
+  {.[c("place", "Value")]} %>% 
+    `colnames<-`(c("place", "unemployment"))
+  return(df)
+}
+
+call_county_unemployment <- function(
+    year,
+    bus_data = c("ers")
+){
+  if(bus_data == "ers"){
+    df <- call_ers_county_unemployment(year)
   }
   return(df)
 }
@@ -295,6 +366,26 @@ call_county_establishments <- function(
   return(df)
 }
 
+# Labor force  ----
+
+call_ers_county_laborforce <- function(year) {
+  df <- call_ers_county_stats(
+    year = year,
+    metric = "Civilian_labor_force") %>% 
+  {.[c("place", "Value")]} %>% 
+    `colnames<-`(c("place", "laborforce"))
+  return(df)
+}
+
+call_county_laborforce <- function(
+    year,
+    bus_data = c("ers") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "ers"){
+    df <- call_ers_county_laborforce(year)
+  }
+  return(df)
+}
 
 # GDP and Personal Income  ----
 
@@ -487,6 +578,7 @@ call_econ_dynam_ind <- function(
   }
   tmp <- list(
     call_county_population(year = year, bus_data = "census"),
+    call_county_laborforce(year = year, bus_data = "ers"),
     call_county_employment(year = year, bus_data = "infogroup"),
     call_county_establishments(year = year, bus_data = "infogroup"),
     call_county_output(year = year, bus_data = "infogroup", class_system = "commodity", ilevel = "det"),
