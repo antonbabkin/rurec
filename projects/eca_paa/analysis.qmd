@@ -516,8 +516,116 @@ summary(reg_cbsa_trade_balance)
 summary(reg_cbsa_trade_openness)
 ```
 
--   randomly assign sinks
-
--   CZs
 
 -   revise premature death rate
+
+### ECAs - random
+
+```{r}
+# In this robustness check, we randomize assignment of ECAs
+
+# import ECAs
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+df_eca_clean <- dp$call_eca_df()
+df_eca_random = df_eca_clean %>%
+  rename("place"="fips") %>%
+  filter(eca_cluster_category == "Cluster Source")
+
+eca_membership = df_eca_random$eca_membership
+
+#random_eca = sample(eca_membership) 
+
+df_eca_random = cbind(df_eca_random, random_eca)
+
+
+```
+
+
+```{r}
+
+# separating indicator values for places that are "Sources" and "Sinks" 
+
+df1_source_random = df1 %>%
+  setNames(paste0('source_', names(.))) %>%
+  rename("place"="source_place")
+
+df1_sink_random = df1 %>%
+  setNames(paste0('sink_', names(.))) %>%
+  rename("random_eca"="sink_place")
+
+
+# creating table that shows each "Source"'s indicator values along with each's respective "Sink"'s values
+
+regs_random = df_eca_random %>%
+  left_join(y = df1_source_random, by = "place") %>%
+  left_join(y = df1_sink_random, by = "random_eca") %>%
+  filter()
+```
+
+
+
+```{r}
+# run regressions
+
+# vitality
+reg_random_unemployment.rate = lm(data = regs_random, source_unemployment.rate ~ sink_unemployment.rate)
+reg_random_lfpr = lm(data = regs_random, source_lfpr ~ sink_lfpr)
+reg_random_poverty = lm(data = regs_random, source_poverty ~ sink_poverty)
+reg_random_population.growth = lm(data = regs_random, source_population.growth ~ sink_population.growth)
+reg_random_bachelors = lm(data = regs_random, source_bachelors ~ sink_bachelors)
+reg_random_premature.death = lm(data = regs_random, source_premature.death ~ sink_premature.death)
+
+# dynamism
+reg_random_log.population = lm(data = regs_random, source_log.population ~ sink_log.population)
+reg_random_log.employment = lm(data = regs_random, source_log.employment ~ sink_log.employment)
+reg_random_log.establishments = lm(data = regs_random, source_log.establishments ~ sink_log.establishments)
+
+# circularity
+reg_random_production_capacity = lm(data = regs_random, source_production_capacity ~ sink_production_capacity)
+reg_random_trade_capacity = lm(data = regs_random, source_trade_capacity ~ sink_trade_capacity)
+reg_random_retention = lm(data = regs_random, source_retention ~ sink_retention)
+reg_random_production_dependency = lm(data = regs_random, source_production_dependency ~ sink_production_dependency)
+reg_random_trade_dependency = lm(data = regs_random, source_trade_dependency ~ sink_trade_dependency)
+reg_random_autonomy = lm(data = regs_random, source_autonomy ~ sink_autonomy)
+reg_random_trade_balance = lm(data = regs_random, source_trade_balance ~ sink_trade_balance)
+reg_random_trade_openness = lm(data = regs_random, source_trade_openness ~ sink_trade_openness)
+reg_random_net.migration = lm(data = regs_random, source_net.migration ~ sink_net.migration)
+```
+
+#### Vitality
+
+```{r}
+summary(reg_random_unemployment.rate)
+summary(reg_random_lfpr)
+summary(reg_random_poverty)
+summary(reg_random_population.growth)
+summary(reg_random_bachelors)
+summary(reg_random_premature.death)
+summary(reg_random_net.migration)
+
+```
+
+#### Dynamism
+
+```{r}
+summary(reg_random_log.population)
+summary(reg_random_log.employment)
+summary(reg_random_log.establishments)
+```
+
+#### Circularity
+
+```{r}
+summary(reg_random_production_capacity)
+summary(reg_random_trade_capacity)
+summary(reg_random_retention)
+summary(reg_random_production_dependency)
+summary(reg_random_trade_dependency)
+summary(reg_random_autonomy)
+summary(reg_random_trade_balance)
+summary(reg_random_trade_openness)
+```
+
+
+
