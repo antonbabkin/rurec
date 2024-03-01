@@ -875,7 +875,7 @@ if (params$impedance_map) {
 
 ```
 
-## ! connectedness_map
+## connectedness_map
 
 ```{r}
 #| warning: false
@@ -1003,7 +1003,7 @@ if (params$absorption_map) {
 
 ```
 
-## ! eca_map
+## eca_map
 
 ```{r}
 #| warning: false
@@ -1095,7 +1095,7 @@ if (params$eca_map) {
 
 ```
 
-## ! eca_place_map
+## eca_place_map
 
 ```{r}
 #| warning: false

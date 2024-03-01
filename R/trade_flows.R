@@ -104,6 +104,13 @@ prep_demsup_mat <- function() {
   }
 }
 
+#' Return available industry codes
+call_industry_codes <- function() {
+  glue(opath$demand_, .envir = params_econ) |>
+    readRDS() |>
+    rownames()
+}
+
 
 # LP algorithm ----
 
@@ -222,7 +229,13 @@ call_trade_flows <- function(ind_code) {
     y <- readRDS(cache_path)
   } else {
     if (ind_code == "all_industries") {
-      y <- total_trade_flows()
+      # solve for every industry
+      industry_codes <- call_industry_codes()
+      y <- 0
+      for (ind_code in industry_codes) {
+        x <- call_trade_flows(ind_code)
+        y <- y + x
+      }
     } else {
       log_debug("Solving trade flows for industry {ind_code}")
       x <- prep_lp_solver_inputs(ind_code)
@@ -231,20 +244,6 @@ call_trade_flows <- function(ind_code) {
     }
     saveRDS(y, util$mkdir(cache_path))
     log_debug("saved to cache ", cache_path)
-  }
-  return(y)
-}
-
-
-total_trade_flows <- function() {
-  # solve for every industry
-  industry_codes <- glue(opath$demand_, .envir = params_econ) |>
-    readRDS() |>
-    rownames()
-  y <- 0
-  for (ind_code in industry_codes) {
-    x <- call_trade_flows(ind_code)
-    y <- y + x
   }
   return(y)
 }
@@ -406,6 +405,27 @@ ras_rescale <- function(x0, rs1, cs1, tol = 0, maxiter = 10) {
 
 # tests ----
 
+## viz ----
+
+#' Viz matrix as a heat map using ggplot
+plot_heatmap <- function(x, zero_na = TRUE, discrete = FALSE) {
+  
+  if (is.null(rownames(x))) rownames(x) <- 1:nrow(x)
+  if (is.null(colnames(x))) colnames(x) <- 1:ncol(x)
+  x |>
+    as_tibble(rownames = "from") |>
+    pivot_longer(!from, names_to = "to") |>
+    mutate(
+      from = ordered(from, levels = rev(rownames(x))),
+      to = ordered(to, levels = colnames(x)),
+      value = if (zero_na) na_if(value, 0) else value,
+      value = if (discrete) ordered(value) else value
+    ) |>
+    ggplot() +
+    scale_x_discrete(position = "top") +
+    geom_tile(aes(to, from, fill = value)) +
+    coord_fixed()
+}
 
 ## impedance ----
 

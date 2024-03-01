@@ -3,6 +3,7 @@ title: "Methodology: trade flows estimation"
 format: html
 ---
 
+# Intro
 
 ```{r}
 library(tidyverse)
@@ -18,32 +19,13 @@ source("R/trade_flows.R", local = (tf <- new.env()))
 source("R/geography.R", local = (geog <- new.env()))
 ```
 
+Diagnostic tool: heat map plot to visualize trade flow matrices.
 
 ```{r}
-#' Viz matrix as a heat map using ggplot
-plot_heatmap <- function(x, zero_na = TRUE, discrete = FALSE) {
-  if (is.null(rownames(x))) rownames(x) <- 1:nrow(x)
-  if (is.null(colnames(x))) colnames(x) <- 1:ncol(x)
-  x |>
-    as_tibble(rownames = "from") |>
-    pivot_longer(!from, names_to = "to") |>
-    mutate(
-      from = ordered(from, levels = rev(rownames(x))),
-      to = ordered(to, levels = colnames(x)),
-      value = if (zero_na) na_if(value, 0) else value,
-      value = if (discrete) ordered(value) else value
-      ) |>
-    ggplot() +
-    scale_x_discrete(position = "top") +
-    geom_tile(aes(to, from, fill = value)) +
-    coord_fixed()
-}
-
 x <- matrix(runif(25) * 4, 5, 5)
-plot_heatmap(x)
-plot_heatmap(floor(x))
-plot_heatmap(floor(x), discrete = TRUE)
-
+tf$plot_heatmap(x)
+tf$plot_heatmap(floor(x))
+tf$plot_heatmap(floor(x), discrete = TRUE)
 ```
 
 # Problem size
@@ -149,8 +131,6 @@ LP solution demonstration for one industry.
 
 In some cases, setting constraints to exact equality fails to yield a feasible solution.
 A way to resolve this is to replace supply constraint with `rowSums(x) <= sup` and demand with `colSums(x) >= dem`.
-This might even be a preferred approach always, because solution might actually more accurately match constraints, and runtime is faster.
-Need to investigate this more.
 
 
 ```{r}
@@ -279,7 +259,7 @@ Solution object is returned for inspection.
 If equality constraint fails, a second attempt is made with inequality.
 
 ```{r}
-x <- tf$prep_lp_solver_inputs("335222")
+x <- tf$prep_lp_solver_inputs("491000")
 y <- tf$solve_lp_trade_flows(x$sup, x$dem, x$dmat)
 plot_heatmap(y$solution[, 1:100])
 ```
@@ -297,49 +277,88 @@ x <- tf$call_trade_flows("1111A0")
 ## overview of all industries
 
 ```{r}
-source("R/trade_flows.R")
-sup_mat <- readRDS(glue(opath$supply_, .envir = params_econ))
-dem_mat <- readRDS(glue(opath$demand_, .envir = params_econ))
-
-log_threshold(INFO)
-
-d <- data.frame()
-for (ind_code in rownames(sup_mat)) {
-  x <- call_trade_flows(ind_code)
-  sup <- sup_mat[ind_code, rownames(x)]
-  dem <- dem_mat[ind_code, colnames(x)]
-  ex_sup <- pmax(sup - dem, 0)
-  ex_dem <- pmax(dem - sup, 0)
-  sol_sup <- rowSums(x)
-  sol_dem <- colSums(x)
-  finmax <- \(x) max(x[is.finite(x)])
-  row <- list(
-    ind = ind_code,
-    exsup = sum(ex_sup),
-    exdem = sum(ex_dem),
-    tf_tot = sum(x),
-    sup_rmsd = sqrt(mean((sol_sup - ex_sup)^2)),
-    sup_max_abs_dev = finmax(abs(sol_sup - ex_sup)),
-    sup_max_rel_dev = finmax(abs(sol_sup - ex_sup) / ex_sup),
-    dem_rmsd = sqrt(mean((sol_dem - ex_dem)^2)),
-    dem_max_abs_dev = finmax(abs(sol_dem - ex_dem)),
-    dem_max_rel_dev = finmax(abs(sol_dem - ex_dem) / ex_dem)
-  )
-  d <- rbind(d, row)
+solution_deviation_summary <- function() {
+  source("R/trade_flows.R", local = (tf <- new.env()))
+  sup_mat <- readRDS(glue(tf$opath$supply_, .envir = tf$params_econ))
+  dem_mat <- readRDS(glue(tf$opath$demand_, .envir = tf$params_econ))
+  exsup_mat <- pmax(sup_mat - dem_mat, 0)
+  exdem_mat <- pmax(dem_mat - sup_mat, 0)
+  
+  d <- data.frame()
+  for (ind_code in rownames(sup_mat)) {
+    x <- tf$call_trade_flows(ind_code)
+    x <- x[rowSums(x) > 0, colSums(x) > 0, drop = FALSE]
+    if (length(x) == 0) {
+      d <- rbind(d, list(ind = ind_code, sup = 0, tf = 0, rmsd = 0, maxad = 0, maxrd = 0))
+      next
+    }
+    sup <- exsup_mat[ind_code, rownames(x)]
+    dem <- exdem_mat[ind_code, colnames(x)]
+    sol_sup <- rowSums(x)
+    sol_dem <- colSums(x)
+    dev <- c(sol_sup, sol_dem) - c(sup, dem)
+    finmax <- \(x) max(x[is.finite(x)])
+    row <- list(
+      ind = ind_code,
+      sup = sum(sup),
+      tf = sum(x),
+      rmsd = sqrt(mean(dev^2)),
+      maxad = max(abs(dev)),
+      maxrd = finmax(abs(dev) / c(sup, dem))
+    )
+    d <- rbind(d, row)
+  }
+  d <- d |>
+    mutate(abs_dev = abs(tf - sup),
+           rel_dev = replace_na(abs_dev / sup, 0),
+           .after = "tf")
 }
-d <- d |>
-  mutate(tot_abs_dev = abs(exsup - tf_tot),
-         tot_rel_dev = tot_abs_dev / exsup)
-# distribution of relative errors
-d$tot_rel_dev |> quantile(seq(0, 1, 0.1), na.rm = TRUE)
-# top relative errors
-d |> slice_max(tot_rel_dev, n = 5)
-
-tf_diag <- d
-d
 ```
 
 
+
+## LP constraints
+
+Solution with equality constraints.
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+util$zip_unpack("tmp/trade_flows_v240226.zip", overwrite = TRUE)
+
+sol_dev0 <- solution_deviation_summary()
+
+# distribution of relative errors
+sol_dev0$rel_dev |> quantile(seq(0, 1, 0.1), na.rm = TRUE)
+# top relative errors
+sol_dev0 |> slice_max(rel_dev, n = 10)
+```
+
+Solution with inequality constraints.
+
+```{r}
+source("R/basic_utilities.R", local = (util <- new.env()))
+util$zip_unpack("tmp/trade_flows_v240301.zip", overwrite = TRUE)
+
+sol_dev1 <- solution_deviation_summary()
+
+# distribution of relative errors
+sol_dev1$rel_dev |> quantile(seq(0, 1, 0.1), na.rm = TRUE)
+# top relative errors
+sol_dev1 |> slice_max(rel_dev, n = 10)
+
+```
+Top 20 in each metric.
+Overall, equality solution looks better in abs_dev, rel_dev, rmsd and maxad, but worse in maxrd.
+
+```{r}
+
+d <- data.frame(top = 1:20)
+for (x in names(sol_dev0)[-(1:3)]) {
+  d[[paste0("eq_", x)]] <- sol_dev0[[x]] |> sort(TRUE) |> head(20)
+  d[[paste0("ineq_", x)]] <- sol_dev1[[x]] |> sort(TRUE) |> head(20)
+}
+d
+```
 
 
 # RAS + Gravity
