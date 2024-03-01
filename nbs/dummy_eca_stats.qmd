@@ -1,0 +1,684 @@
+---
+title: "dummy_eca_stats"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  year: 2012
+  bus_data: "infogroup"
+  class_system: "commodity"
+  reg_factors: !expr c("gross_output", "population", "laborforce_part_rate", "unemployment_rate", "employment_rate", "entry_rate", "exit_rate")
+  example_coef_index:  2
+---
+
+::: panel-tabset
+
+```{r preamble, include = FALSE}
+
+# additional library list
+library(logger)
+library(tidyverse)
+
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+
+
+# scripts
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/geography.R", local = (geog <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+
+source("R/place_output.R", local = (place_output <- new.env()))
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+# initialize parameters
+params
+
+```
+
+
+
+# data
+
+```{r data}
+
+df_geo <- geog$call_geog(year = params$year) %>% 
+  {left_join(., geog$call_cbsa_concord(params$year), by = "place")} %>% 
+  mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), "rural", CBSA_CODE)) %>%
+  mutate(CBSA_TITLE = ifelse(is.na(CBSA_TITLE), "rural", CBSA_TITLE))
+
+df_geo <- geog$pubdata$get_cbsa_delin_df(year = util$year2cbsa(params$year)) %>% 
+  mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
+  {.[c("place", "CENTRAL_OUTLYING")]} %>% 
+  {left_join(df_geo, ., by = "place")} %>% 
+  mutate(CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING), "rural", CENTRAL_OUTLYING))
+
+
+df_production <- place_output$call_extraction_table(year = params$year, bus_data = params$bus_data, class_system = params$class_system, ilevel = "det") %>% 
+  st_drop_geometry() %>%
+  {.[c("place", "gross_output", "intermediate_supply", "intermediate_demand", "net_supply", "net_demand")]}
+
+dl <- list(
+  dataprep$call_county_population(year = params$year, bus_data = "census"),
+  dataprep$call_county_laborforce(year = params$year, bus_data = "ers"),
+  dataprep$call_county_employment(year = params$year, bus_data = "ers"),
+  dataprep$call_county_laborforce_rate(year = params$year, bus_data = "tidy_acs"),
+  dataprep$call_county_establishments(year = params$year, bus_data = params$bus_data),
+  # dataprep$call_county_output(year = params$year, bus_data = params$bus_data, class_system = params$class_system, ilevel = "det"),
+  dataprep$call_county_entry(year = params$year, bus_data = params$bus_data),
+  dataprep$call_county_exit(year = params$year, bus_data = params$bus_data),
+  dataprep$call_county_entry_rate(year = params$year, bus_data = params$bus_data),
+  dataprep$call_county_exit_rate(year = params$year, bus_data = params$bus_data)
+)
+
+df_econ_dynam = dl[[1]]
+for(i in 2:length(dl)){
+  df_econ_dynam <- full_join(df_econ_dynam, dl[[i]], by = "place")
+}
+
+df <- inner_join(df_geo, df_production,  by = "place") %>% 
+  {inner_join(., df_econ_dynam,  by = "place")}
+
+
+# test <- dataprep$growth_rate(start_year = 2010, end_year = 2015, function_name = dataprep$call_county_population,  bus_data = "census")
+
+
+```
+
+```{r eca}
+
+# work around to get the 2012/det/commodity/infogroup rowmax ECA classification
+# TODO: get  trade_flows$call_trade_flows("all_industries") to work and work across different user supply/demand inputs 
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+util$zip_unpack("tmp/eca_paa_data_v240226.zip", overwrite = TRUE)
+eca_data <- dp$call_eca_df() %>% rename(place = fips)
+
+df <- inner_join(df, eca_data,  by = "place")
+
+```
+
+
+```{r combos}
+
+df <- df %>% 
+  mutate(unemployment = (laborforce - employment), .after = employment) %>% 
+  mutate(unemployment_rate = (unemployment/laborforce), .after = exit_rate) %>% 
+  mutate(employment_rate = (employment/laborforce), .after = exit_rate) %>% 
+  mutate(cbsa_rural_category = factor(CBSA_CODE == "rural", labels = c("nonrural", "rural")) , .after = CBSA_TITLE) %>% 
+  mutate(eca_cbsa_xtab = str_to_title(paste(cbsa_rural_category, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+  mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+  group_by(eca_membership) %>% mutate(cluster_members_count = n(), .after = eca_membership) %>% ungroup() 
+
+```
+
+# summary
+
+```{r summary}
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  summary()
+
+table(df$cbsa_rural_category, df$eca_cluster_category)
+
+```
+
+
+
+```{r density}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  na.omit() %>% 
+  {.[is.finite(rowSums(.)), ]} %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]]), fill="dodgerblue", alpha=0.3) + 
+      geom_vline_interactive(xintercept = mean(df[[i]], na.rm = T), color = "red", linetype="dashed") + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density") 
+    print(p)
+  }
+}
+
+```
+
+
+
+```{r density cluster group}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  na.omit() %>% 
+  {.[is.finite(rowSums(.)), ]} %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]], fill = df$eca_cluster_category), alpha = 0.3) + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density", 
+           fill = element_blank()) 
+    print(p)
+  }
+}
+
+```
+
+
+```{r density cbsa group}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]], fill = df$cbsa_rural_category ), alpha = 0.3) + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density", 
+           fill = element_blank())
+    print(p)
+  }
+}
+
+```
+
+
+```{r density cbsa more group}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]], fill = df$CENTRAL_OUTLYING ), alpha = 0.3) + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density", 
+           fill = element_blank())
+    print(p)
+  }
+}
+
+```
+
+
+```{r density eca cbsa xtab}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]], fill = df$eca_cbsa_xtab ), alpha = 0.3) + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density", 
+           fill = element_blank())
+    print(p)
+  }
+}
+
+```
+
+```{r density eca cbsa more xtab}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  names() %>% 
+{
+  for(i in .){
+    p <- ggplot(df) +
+      geom_density_interactive(aes(x = df[[i]], fill = df$eca_central_out_xtab ), alpha = 0.3) + 
+      visual$boil_hist_theme() + {
+        if (skewness(df[[i]], na.rm = T) > 2){
+          scale_x_continuous(trans = "log10") 
+          } 
+        } +
+      labs(x = visual$underscores2title(i), 
+           y = "Density", 
+           fill = element_blank())
+    print(p)
+  }
+}
+
+```
+
+
+
+# summary maps
+
+```{r maps output}
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  names() 
+
+visual$nominal_choro_map(df, "entry_rate", interactive = T)
+
+```
+
+
+```{r maps eca}
+
+visual$cat_choro_map(df, "eca_membership", interactive = T)
+
+```
+
+
+
+```{r maps cbsa}
+
+visual$cat_choro_map(df, "CBSA_CODE", interactive = T)
+
+```
+
+
+```{r maps eca x cbsa}
+
+#scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+
+visual$cat_choro_map(df, "eca_cbsa_xtab", interactive = T, legend = T)
+
+```
+
+
+# corr
+
+```{r cor}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  na.omit() %>%
+  cor()
+
+```
+
+```{r corr}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  {.[10:30]} %>%
+  correlation()
+
+```
+
+```{r corr more}
+#| warning: false
+
+df %>% 
+  st_drop_geometry() %>% 
+  select(where(is.numeric)) %>% 
+  na.omit() %>% 
+  {.[is.finite(rowSums(.)), ]} %>% 
+chart.Correlation(., histogram = F)
+
+
+```
+
+
+# regress
+
+
+```{r}
+#| warning: false
+
+library(estimatr)
+
+# alpha == source
+# beta == sink
+
+# source = b0 + b1_sink + e
+
+for (i in params$reg_factors ){
+  if (!paste0("sink_value_", i) %in% names(df)){
+    df <- df[df$place == df$eca_membership , c("place", i)] %>% 
+      st_drop_geometry() %>% 
+      `colnames<-`(c("eca_membership", paste0("sink_value_", i))) %>% 
+      {left_join(df, ., by = "eca_membership")}
+  }
+}
+
+y <- params$reg_factors[params$example_coef_index]
+x <- paste0("sink_value_", y)
+
+print(y)
+lm(get(y) ~  get(x), data = df) %>% summary()
+lm(get(y) ~  get(x), data = df[df$cluster_members_count > 1, ]) %>% summary()
+lm(get(y) ~  get(x), data = df[df$eca_cluster_category != "Cluster Sink", ]) %>% summary()
+lm_robust(get(y) ~  get(x), data = df[df$eca_cluster_category != "Cluster Sink", ], cluster = eca_membership) %>% summary()
+
+
+```
+
+```{r}
+
+plot(get(y)  ~  get(x), data = df, ylab = y, xlab = x)
+plot(lm(get(y)  ~  get(x), data = df))
+
+plot(get(y)  ~  get(x), data = df[df$eca_cluster_category != "Cluster Sink", ],  ylab = y, xlab = x)
+plot(lm(get(y)  ~  get(x), data = df[df$eca_cluster_category != "Cluster Sink", ]))
+
+```
+
+```{r}
+
+ggplot(data = df[df$eca_cluster_category != "Cluster Sink", ], aes(x = get(x), y = get(y))) +
+  geom_point() +
+  stat_smooth(method = "lm") + 
+  labs(x = x, y = y)
+
+ggplot(data = df[df$eca_cluster_category != "Cluster Sink", ], aes(x = log(get(x)), y = log(get(y)))) +
+  geom_point() +
+  stat_smooth(method = "lm") + 
+  labs(x = paste("ln", x), y = paste("ln", y))
+
+```
+
+
+```{r reg 1}
+#| warning: false
+
+# outcome on alpha
+
+# alpha == source
+# beta == sink
+
+# source = b0 + b1_sink + e
+
+specif <- list()
+for (i in params$reg_factors ){
+  specif[[i]] <- df %>% 
+    {.[.$eca_cluster_category != "Cluster Sink", ]} %>% 
+    {lm(.[[i]] ~  .[[paste0("sink_value_", i)]] )} 
+  print(i)
+  specif[[i]] %>% summary() %>% print()
+}
+
+```
+
+```{r reg 1 cluster}
+
+specif <- list()
+for (i in params$reg_factors){
+   specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+     {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]], cluster = .[["eca_membership"]], data = .)}
+  specif[[i]] %>% summary() %>% print()
+  print(i)
+}
+
+```
+
+
+```{r reg 1 cluster and share}
+
+specif <- list()
+for (i in params$reg_factors){
+   specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+     {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["max_trade_share"]], cluster = .[["eca_membership"]], data = .)}
+  specif[[i]] %>% summary() %>% print()
+  print(i)
+}
+
+
+```
+
+
+
+```{r}
+#| warning: false
+
+# alpha == source
+# beta == sink
+
+# outcome = b0 + b1_sink_dummy + e
+
+y <- params$reg_factors[params$example_coef_index]
+
+
+# r default calc as "is alpha"
+contrasts(factor(df$eca_cluster_category))
+lm(log(get(y)) ~ eca_cluster_category, data = df) %>% summary()
+
+
+ df %>% 
+   mutate(eca_cluster_category = relevel(factor(eca_cluster_category), ref = "Cluster Source")) %>% 
+   {contrasts(.$eca_cluster_category)}
+ df %>% 
+   mutate(eca_cluster_category = relevel(factor(eca_cluster_category), ref = "Cluster Source")) %>% 
+   {lm(log(get(y)) ~ eca_cluster_category, data = .)} %>% summary()
+
+```
+
+
+
+```{r}
+
+plot(get(y)  ~  factor(eca_cluster_category), data = df, ylab = y)
+plot(lm(get(y)  ~  factor(eca_cluster_category), data = df))
+
+ggplot(data = df, aes(x = factor(eca_cluster_category), y = get(y))) +
+  geom_point() +
+  stat_smooth(method = "lm") + 
+  labs(y = y)
+
+```
+
+
+```{r reg 2}
+#| warning: false
+
+# alpha == source
+# beta == sink
+
+# outcome = b0 + b1_sink_dummy + e
+
+specif <- list()
+for (i in params$reg_factors){
+   specif[[i]] <- df %>%
+     mutate(eca_cluster_category = relevel(factor(eca_cluster_category), ref = "Cluster Source")) %>%
+     {lm(.[[i]] ~ .$eca_cluster_category)}
+   print(i)
+   specif[[i]] %>% summary() %>% print()
+}
+
+
+```
+
+
+
+
+```{r}
+#| warning: false
+
+
+# alpha == source
+# beta == sink
+
+# source = b0 + b1_sink + b3_central + e
+
+# df_central_value <- list()
+# for (i in params$reg_factors ){
+#   df_central_value <- df %>% 
+#     {.[.$CENTRAL_OUTLYING == "central", ]} %>% 
+#     {aggregate(.[[i]], list(.$CBSA_CODE), FUN = mean)} %>% 
+#     `colnames<-`(c("CBSA_CODE", paste0("central_value_", i) )) %>% 
+#     {bind_cols(df_central_value, ., .name_repair = "minimal")} %>% 
+#     {.[!duplicated(as.list(.))]}
+# }
+
+
+for (i in params$reg_factors ){
+  if (!paste0("central_value_", i) %in% names(df)){
+    df <- df %>% 
+      {.[.$CENTRAL_OUTLYING == "central", ]} %>% 
+      {aggregate(.[[i]], list(.$CBSA_CODE), FUN = mean)} %>% 
+      `colnames<-`(c("CBSA_CODE", paste0("central_value_", i) )) %>% 
+      left_join(df, ., by = "CBSA_CODE")
+  }
+}
+
+
+
+```
+
+```{r}
+
+y <- params$reg_factors[params$example_coef_index]
+x1 <- paste0("sink_value_", y)
+x2 <- paste0("central_value_", y)
+
+print(y)
+lm(get(y) ~  get(x1) + get(x2), data = df[df$eca_central_out_xtab == "Outlying Source", ] ) %>% summary()
+lm_robust(get(y) ~  get(x1) + get(x2), data = df[df$eca_central_out_xtab == "Outlying Source", ], cluster = eca_membership) %>% summary()
+
+```
+
+
+
+```{r}
+
+plot(get(y) ~  get(x1) + get(x2), data = df[df$eca_central_out_xtab == "Outlying Source", ], ylab = y, xlab = x)
+plot(lm(get(y) ~  get(x1) + get(x2), data = df[df$eca_central_out_xtab == "Outlying Source", ]))
+
+```
+
+```{r}
+
+ggplot(data = df[df$eca_central_out_xtab == "Outlying Source", ] , aes(x = get(x2), y = get(y))) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  labs(x = x2, y = y)
+
+ggplot(data = df[df$eca_central_out_xtab == "Outlying Source", ] , aes(x = log(get(x2)), y = log(get(y)))) +
+  geom_point() +
+  stat_smooth(method = "lm") +
+  labs(x = paste("ln", x2), y = paste("ln", y))
+
+```
+
+
+```{r reg 3}
+#| warning: false
+
+# alpha == source
+# beta == sink
+
+# source = b0 + b1_sink + b3_central + e
+
+
+specif <- list()
+for (i in params$reg_factors ){
+  specif[[i]] <- df %>% 
+    {.[.$eca_central_out_xtab == "Outlying Source", ] } %>% 
+    {lm(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[[paste0("central_value_", i)]] )} 
+  print(i)
+  specif[[i]] %>% summary() %>% print()
+}
+
+```
+
+```{r reg 3 cluster}
+
+specif <- list()
+for (i in params$reg_factors){
+   specif[[i]] <- df[df$eca_central_out_xtab == "Outlying Source", ] %>% 
+     {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[[paste0("central_value_", i)]], cluster = .[["eca_membership"]], data = .)}
+  specif[[i]] %>% summary() %>% print()
+  print(i)
+}
+
+```
+
+
+```{r reg 3 cluster and share}
+
+specif <- list()
+for (i in params$reg_factors){
+   specif[[i]] <- df[df$eca_central_out_xtab == "Outlying Source", ] %>% 
+     {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["max_trade_share"]] + .[[paste0("central_value_", i)]]*.[["max_trade_share"]], cluster = .[["eca_membership"]], data = .)}
+  specif[[i]] %>% summary() %>% print()
+  print(i)
+}
+
+```
+
+
+
+
+
+
+
+::: 
+
+
+
+
+
+
+
+
+
+
+
+
+
