@@ -27,5 +27,6 @@ Imports:
   tmap,
   tidycensus,
   rstatix,
-  Hmisc
-
+  ggthemes,
+  gt,
+  ggridges

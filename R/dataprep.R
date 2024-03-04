@@ -7,6 +7,8 @@ library(arrow)
 library(tidyverse)
 library(glue)
 
+library(tidycensus)
+
 
 # R scripts ----
 source("R/basic_utilities.R", local = (util <- new.env()))
@@ -26,7 +28,8 @@ opath <- list(
   bea_econ_profile_raw = "data/bea/raw/CAINC30__ALL_AREAS_1969_2022.csv",
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
   econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds",
-  ers_labor_stats_raw = "data/ers/unemployemnt.pq"
+  ers_labor_stats_raw = "data/ers/unemployemnt.pq",
+  tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq"
 )
 
 clear_outputs <- function() {
@@ -102,6 +105,7 @@ call_bea_econ_profile_raw <- function() {
   # download raw data if needed
   if (file.exists(raw_path)) {
     log_debug("raw data found at {raw_path}")
+    return(read.csv(raw_path))
   } else {
     # create parent directories
     parent_path <- util$mkdir(file.path(dirname(raw_path), basename(ipath$bea_econ_profile)))
@@ -164,7 +168,38 @@ call_ers_county_stats <- function(year,
     {.[!grepl('(0)$', .$place), ]} %>% 
     {.[grepl(gyear, .$Attribute), ]} %>% 
     {.[grepl(gmetric, .$Attribute), ]}
+  return(df)
 }
+
+call_tidy_acs_county_stats <- function(
+    year,
+    variables,
+    geography = "county",
+    survey = c("acs5", "acs1")){
+  survey <- match.arg(survey)
+  if (survey == "acs5"){
+    year <- util$year2tidy_acs5(year)
+  }
+  if (survey == "acs1"){
+    year <- util$year2tidy_acs1(year)
+  }
+  cache_path <- glue(opath$tidy_acs_stats_raw_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  
+  df <- get_acs(geography = geography,
+                variables = variables,
+                year = year,
+                survey = survey)
+  
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  
+  return(df)
+}
+
 
 # Population ----
 
@@ -386,6 +421,30 @@ call_county_laborforce <- function(
   }
   return(df)
 }
+
+# Labor force participation rate   ----
+
+call_tidy_acs_county_laborforce_rate <- function(year) {
+  df <- call_tidy_acs_county_stats(
+    year = year,
+    variables = "S2301_C02_001E",
+    geography = "county",
+    survey = "acs5") %>% 
+    {.[c("GEOID", "estimate")]} %>% 
+    `colnames<-`(c("place", "laborforce_part_rate"))
+  return(df)
+}
+
+call_county_laborforce_rate <- function(
+    year,
+    bus_data = c("tidy_acs") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "tidy_acs"){
+    df <- call_tidy_acs_county_laborforce_rate(year)
+  }
+  return(df)
+}
+
 
 # GDP and Personal Income  ----
 

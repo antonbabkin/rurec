@@ -276,6 +276,24 @@ year2ers_labor <- function(year){
   return(as.integer(x))
 }
 
+year2tidy_acs5 <- function(year){
+  tidy_acs_year = 2022:2009
+  x <- nearest_point(year, tidy_acs_year)
+  if(!year %in% tidy_acs_year){
+    warning("tidycensus ACS-5 data years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
+year2tidy_acs1 <- function(year){
+  tidy_acs_year = c(2022:2021, 2019:2005)
+  x <- nearest_point(year, tidy_acs_year)
+  if(!year %in% tidy_acs_year){
+    warning("tidycensus ACS-1 data years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
 # temporal recursion ----
 
 # return a list of results from a function with a year argument, optional function arguments are permitted
