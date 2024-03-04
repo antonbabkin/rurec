@@ -493,6 +493,56 @@ call_county_laborforce_rate <- function(
   return(df)
 }
 
+
+# High school attainment rate   ----
+call_tidy_acs_county_highschool_attainment_rate <- function(year) {
+  if (year < 2015) {
+    df <- call_tidy_acs_county_stats(
+      year = year,
+      variables = "S1501_C01_014E") 
+  } else {
+    nm <- data.frame()
+    for (i in sprintf("%02s", 9:13)){
+      nm <- bind_rows(nm, 
+                      call_tidy_acs_county_stats(
+                        year = year,
+                        variables = paste0("S1501_C01_0", i, "E")))
+    } 
+    nm <- nm %>% 
+      {aggregate(.$estimate, list(.$GEOID), FUN = sum, drop = TRUE)} %>% 
+      `colnames<-`(c("GEOID", "numerator"))
+    if (year < 2017) {ys = 9:16} else {ys = 10:17}
+    dm <- data.frame()
+    for (i in sprintf("%02s", ys)){
+      dm <- bind_rows(dm, 
+                      call_tidy_acs_county_stats(
+                        year = year,
+                        variables = paste0("DP05_00", i, "E")))
+    }
+    dm <- dm %>% 
+      {aggregate(.$estimate, list(.$GEOID), FUN = sum, drop = TRUE)} %>% 
+      `colnames<-`(c("GEOID", "denominator"))
+    
+    df <- inner_join(nm, dm, by = "GEOID") %>% 
+      mutate(estimate = (numerator/denominator)*100)
+  }
+  df <- df %>% 
+    {.[c("GEOID", "estimate")]} %>% 
+    `colnames<-`(c("place", "highschool_attainment_rate"))
+  return(df)
+}
+
+call_county_highschool_attainment_rate <- function(
+    year,
+    bus_data = c("tidy_acs") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "tidy_acs"){
+    df <- call_tidy_acs_county_highschool_attainment_rate(year)
+  }
+  return(df)
+}
+
+
 # GDP and Personal Income  ----
 
 call_bea_county_income <- function(year) {
