@@ -303,6 +303,15 @@ year2saipe <- function(year){
   return(as.integer(x))
 }
 
+year2chr <- function(year){
+  chr_year = c(2023:2011)
+  x <- nearest_point(year, chr_year)
+  if(!year %in% chr_year){
+    warning("CHR data years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
 
 # temporal recursion ----
 

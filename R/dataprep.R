@@ -22,7 +22,8 @@ ipath <- list(
   ig_ = ig$opath$county_,
   bea_econ_profile = "https://apps.bea.gov/regional/zip/CAINC30.zip",
   ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv",
-  saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}"
+  saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}",
+  chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv"
 )
 
 opath <- list(
@@ -32,7 +33,8 @@ opath <- list(
   econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds",
   ers_labor_stats_raw = "data/ers/unemployemnt.pq",
   tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq",
-  saipe_raw_ = "data/saipe/{year}.pq"
+  saipe_raw_ = "data/saipe/{year}.pq",
+  chr_raw_ = "data/chr/{year}.pq"
 )
 
 clear_outputs <- function() {
@@ -245,6 +247,30 @@ call_saipe_county <- function(year) {
   df <- df %>% 
     {.[!grepl('(0)$', .[[2]]), ]} %>% 
     {.[, 1:25]}
+  return(df)  
+}
+
+call_chr_raw <- function(year) {
+  year <- util$year2chr(year)
+  if (year < 2020) {
+    extra_path  = ""
+  } else {
+    extra_path  = "media/document/"
+  }
+  
+  cache_path <- glue(opath$chr_raw_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  tf <- tempfile()
+  download_status <- download.file(url = glue(ipath$chr_raw_), 
+                                   destfile = tf, 
+                                   mode = "wb")
+  stopifnot(download_status == 0)
+  df <- read_csv(tf, show_col_types = FALSE) %>% suppressMessages()
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
   return(df)  
 }
 
@@ -594,6 +620,32 @@ call_county_poverty <- function(
   }
   return(df)
 }
+
+
+# Premature Death rate ----
+
+call_chr_county_ypll75 <- function(year) {
+  df <- call_chr_raw(year = year) %>% 
+    `colnames<-`({.[1,]}) %>% 
+    .[-1, ] %>% 
+    rename(place = fipscode) %>% 
+    {.[!grepl('(0)$', .$place), ]} %>% 
+    {.[c("place", "v001_rawvalue")]} %>% 
+    `colnames<-`(c("place", "ypll75")) %>% 
+    mutate_at(2, as.numeric) 
+  return(df)
+}
+
+call_county_ypll75 <- function(
+    year,
+    bus_data = c("chr") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "chr"){
+    df <- call_chr_county_ypll75(year)
+  }
+  return(df)
+}
+
 
 # Output  ----
 
