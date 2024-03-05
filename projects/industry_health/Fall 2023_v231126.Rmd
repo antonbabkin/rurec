@@ -1,0 +1,3784 @@
+---
+title: "FALL_2023_Analysis"
+author: "Sara Peters"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# install.packages('tinytex')
+# tinytex::install_tinytex()
+# tinytex:::install_prebuilt()
+
+require(kableExtra)
+library(tinytex)
+library(knitr)
+```
+
+## Fall 2023 Analysis
+
+
+
+##RQ: How does community and economic vitality associate with health disparities? 
+Do places with lower values of community and economic vitality (negative net migration; higher economic extraction; higher economic dependence) have more negative health outcomes (higher premature death) than places with higher values of community and economic vitality? 
+-Is there a spatial pattern to the associations
+
+##Variables
+(outcome) Population health - premature death rate (period average 2012-2017)
+(covariate 1) Community vitality - total net migration rate (2010s)
+(covariate 2) Extraction - excess_supply/supply (extraction) 
+share of locally produced intermediate commodities that cannot be processed locally and need to be exported (period average 2012, 2017)
+(covariate 3) Dependence - excess_demand/demand (dependence)
+county’s dependency on imports (vs locally processed commodities) (period average 2012, 2017)
+(moderator) Racial privilege/marginalization - share of total population that is specific race group (AIAN, API, Bl, Lx, Wh) (period average 2012, 2017)
+ 
+##Hypotheses
+- H1: places with lower values of community vitality (negative net migration rates) will have have more negative health outcomes (higher premature death rates) relative to places with higher values of community vitality 
+
+- H0: places with lower values of community vitality (net migration) will have have no difference in negative health outcomes (premature deaths) relative to places with higher values of community vitality 
+
+- H2 and H3: places with lower values of economic vitality (high extraction, 2a; and high dependence, 2b) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality 
+
+- H0: places with lower values of economic vitality (high extraction, 2a; and high dependence, 2b) will have have no difference in negative health outcomes (premature deaths) relative to places with higher values of economic vitality 
+
+H4: There is a spatial pattern to the associations
+
+H0: There is not a spatial pattern to the associtions
+
+##Analysis:
+1. identify counties with no missing data report count and spatial distribution of counties with missing or no data on health and economic variables… 
+2. examine distributions of health outcome (premature death), net migration rates, economic extraction rates, economic dependence rates, racial composition
+- aspatial and spatial: histogram, table (mean, stv, etc. and MI), map; explore total and by state
+- reflect on whether any variable needs to be transformed
+3. bivariate analysis to multivariate analysis examining correlation between outcome and correlates (tests of statistical significance) - cluster counties on state 
+- OLS, MI on OLS residuals, then spatial error regression, then spatial lag regression
+##Models
+1. H1: places with lower values of community vitality (negative net migration rates) will have have more negative health outcomes (higher premature death rates) relative to places with higher values of community vitality - regressing premature deaths on net migration rates; expect significant negative migration coefficient (model 1)
+
+2. H2a: places with lower values of economic vitality (high extraction, 2a) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on extraction; expect significant positive (model 2)
+
+3. H3: places with lower values of economic vitality (high dependence, 2b) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on dependence; expect significant positive (model 3)
+
+4. H4: Multivariate regression OLS, Spatial Error, Spatial Lag
+
+
+Last step. generate some interpretive figure that distills what is and is not significant (like a table of Hs) and predicted values to demonstrate intensity of differences (maybe) - e.g., model 4: predicted premature deaths = constant + B1 net migration (ave net mig) + B2 proportion white (ave prop wh) + B3 (ave net mig * +/- 1 stdev prop wh) … this generates two values of predicted premature deaths; one for +1 stdev prop white (higher privilege) and one for -1 stdev prop white (lower priv)
+
+
+
+#Coding Prep (set working directory, install and load libraries)
+```{r}
+setwd("C:/Users/saraa/OneDrive - UW-Madison/USDA Research/Fall 2023/Data")
+
+# install.packages(vtable)
+# install.packages(dplyr)
+# install.packages(tidyverse)
+# install.packages(ggplot2)
+# install.packages(stringr)
+# install.packages(spdep)
+# install.packages(tidycensus)
+# install.packages(tigris)
+# install.packages("viridis")
+
+
+#library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+
+my_color_palette <- viridis(9, option = "D")
+
+palette(my_color_palette)
+
+
+```
+
+#Load Data
+```{r}
+#Load Data from Working Directory
+ruccdata <- read.csv("ANA_ruralurbancodes2013.csv")
+netmigdata <- read.csv("ANA_NME_1020_75up_data_beta1.csv")
+#LE2012_data<- read.csv("ANA_IHME 2012 Life Expectancy.csv")
+#LE2017_data <- read.csv("ANA_IHME 2017 Life Expectancy.csv")
+conn_growth_analysis <- read.csv("conn_growth_analysis.csv")
+#CHRR_2012 <- read.csv("ANA_2012_CHRR_data.csv")
+CHRR_2017 <- read.csv ("ANA_2017_CHRR_data.csv")
+CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
+#CHRR_2020 <- read.csv ("ANA_2020_CHRR_data.csv")
+
+```
+
+
+
+##Prepare base data
+
+#RUCC Codes 
+#covariate 1) Community vitality - total net migration rate (2010s)
+
+From net migration webiste:  Net migration is the balance of in-migrants minus out-migrants. The data do not include flows of in-migrants or out-migrants, but only the net balance. Age refers to age at the end of the decade.
+
+Estimates were generated using a residual method based on US Census counts at the beginning and end of each decade and intercensal birth and death records. The population counted at the beginning of the decade is aged forward over time, subtracting out deaths and adding in births, to generate an "expected population" at the end of the decade. The observed population counted in the census at the end of the decade is then subtracted from the expected population to estimate the number of net migrants. Net migration estimates were generated following this general process each decade by different research teams to create a coherent dataset spanning 70 years of age-specific net migration for US counties (see References below). Learn more about this method.
+
+Because the estimates do not rely on sampling, they are highly accurate and reliable. Still, there are some limitations that users should consider. Estimates are less accurate for children under age 10, because birth records are occasionally recorded in the county of birth, rather than the county of the mother's residence. Estimates may also be less accurate at the oldest ages, due to challenges associated with death records. Breakdowns by race/ethnicity are less accurate than totals because of differences in how race/ethnic categories are recorded in birth records, death records, the decennial census, and the Population Estimates Program and changes over time. This is particularly true for the youngest and oldest age groups which are more dependent on birth and death records.
+
+For the 2010-2020 decade, the delayed release of Census 2020 detailed results led the current research team to use the Census Bureau's 2020 "blended base" from its Population Estimates Program, vintage 2021, as the ending population in 2020. The use of estimates rather than enumerated data may have introduced problems that the researchers found in calculating net migrants and migration rates. In particular, the initial calculations for migrants ages 75 and older at 2020 seemed implausible. Furthermore, changes in race/Hispanic origin coding of births by the National Center of Health Statistics during the decade created unusual migration rates for children ages 0-9 at 2020 by race, particularly the American Indian/Alaskan Native population. As a result, the research team chose to make this "beta" release without data for ages 75 and over, and users are cautioned to not draw conclusions about the migration pattern of children under 10, especially regarding race and Hispanic origin. Once the Census 2020 data are released, the research team will review and revise as needed to provide the full complement of age, race and Hispanic origin estimates. 
+
+```{r}
+
+
+##prepare rucc data for merging 
+ruccdata = ruccdata %>% 
+  rename(fips = FIPS)
+
+##preparing rucc metro/nonmetro 
+ruccdata = ruccdata %>% 
+  mutate(metro_nonmetro = if_else(RUCC_2013 < 4, "metro", "nonmetro")) 
+
+
+
+##prepare netmigration data for merging
+netmigdata = netmigdata |>
+  rename (fips = fips_str2020) %>% 
+  filter(!CoName2020 %in% "State Total") %>% 
+  select(fips, r1tttt) %>% 
+  rename(NMR = r1tttt)
+
+#join migration and rucc data
+migrationrucc <- left_join(ruccdata,netmigdata, by=c("fips")) 
+
+# migrationrucc<- select(migrationrucc, - STNAME, - STFIPS, -CoName2020)
+
+#Export master net migration file with rucc data included
+
+#write.csv(migrationrucc, file="master_ruccmigration.csv")
+
+#Subset migrationrucc to only include total net migration by race
+# totalmigration_race<-migrationrucc %>% 
+#   select(fips, State, County_Name, RUCC_2013, Description, metro_nonmetro, r1antt, r1bntt, r1thtt, r1ittt, r1wntt) %>%    
+#   rename(RUCC_id= RUCC_2013, RUCC_name = Description, API = r1antt, Black = r1bntt, Latino = r1thtt, AIAN= r1ittt, White = r1wntt )
+# 
+# totalmigration_race_long<- totalmigration_race %>% 
+#   pivot_longer(cols = c(API, Black, Latino, AIAN, White), names_to = "race_name", values_to = "Net_migration_rate")
+
+#net migration rate is for 2010s estimates
+
+
+```
+
+
+
+ 
+##(outcome) Population health - premature death rate (period average 2012-2017)
+#Use CHRR Data to calculate premature death rate for US Counties. Using 2017 measures that are drawn from 2012-2014 data because 2012 data has no denominator. Also using 2019 measures that cover 2015-2017. Multiply by 1,000 instead of 100 or 100,000. 
+
+Rates measure the number of events (i.e., deaths, births) in a given time period (generally one or more years) divided by the average number of people at risk during that period. Rates help us compare data across counties with different population sizes. All the years of potential life lost in a county during a 3-year period are summed and divided by the total population of the county during that same time period. This value is then multiplied by 100,000 to calculate the years of potential life lost under age 75 per 100,000 people. The numerator and denominator are provided without the multiplication.
+
+The premature death numerator is the cumulative number of years of potential life lost from deaths among county residents under age 75, over a three-year period.
+
+The premature death denominator is the aggregate population under age 75 for the three years from the bridged-race postcensal estimates of the July 1 resident population released by the National Center for Health Statistics. 
+
+```{r}
+
+##preparing 2017 county health data set (covering 2012-2014) for merging, filter second header row, remove US and state values, convert fips code to numeric and rename "fips" for merging
+CHRR_2017a = CHRR_2017 %>% 
+  mutate(fips = as.numeric(X5.digit.FIPS.Code)) %>% 
+  mutate(county_fips = as.numeric(County.FIPS.Code)) %>% 
+  filter(county_fips != 000) %>% 
+  select(fips, Premature.death.numerator, Premature.death.denominator)
+
+#for loop to make sure all data is numeric
+for(i in 1:ncol(CHRR_2017a)) {
+  CHRR_2017a[,i] <- as.numeric(CHRR_2017a[,i])
+}
+
+CHRR_2017a <- CHRR_2017a %>% 
+   mutate(prematuredeath_rate = Premature.death.numerator/Premature.death.denominator * 100000) %>% 
+  mutate(year = 2017)
+
+pd_2017 <- CHRR_2017a %>% 
+  select(fips, prematuredeath_rate, year)
+
+
+##preparing 2019 county health data set (covering 2015-2017) for merging, filter second header row, remove US and state values, convert fips code to numeric and rename "fips" for merging
+CHRR_2019a = CHRR_2019 %>% 
+  mutate(fips = as.numeric(X5.digit.FIPS.Code)) %>% 
+  mutate(county_fips = as.numeric(County.FIPS.Code)) %>% 
+  filter(county_fips != 000) %>% 
+  select(fips, Premature.death.numerator, Premature.death.denominator)
+
+#for loop to make sure all data is numeric
+for(i in 1:ncol(CHRR_2019a)) {
+  CHRR_2019a[,i] <- as.numeric(CHRR_2019a[,i])
+}
+
+CHRR_2019a <- CHRR_2019a %>% 
+   mutate(prematuredeath_rate = Premature.death.numerator/Premature.death.denominator * 100000) %>% 
+  mutate(year = 2019)
+
+pd_2019 <- CHRR_2019a %>% 
+  select(fips, prematuredeath_rate, year)
+
+
+
+#Calculate period average for premature death rate for each county
+
+PDJoined_data <- bind_rows(pd_2017, pd_2019)
+
+period_avg_pd <- PDJoined_data %>% 
+  group_by (fips) %>% 
+  summarize (period_avg_pd = mean (prematuredeath_rate)) %>% 
+  ungroup()
+
+#Join PD with base data
+
+RSS_mp<- left_join(migrationrucc, period_avg_pd,  by=c("fips"))
+
+```
+
+
+##Not using Fall 2023
+##(moderator) Racial privilege/marginalization - share of total population that is specific race group (AIAN, API, Bl, Lx, Wh) (period average 2012, 2017)
+#Identify the racial composition of every US county using ACS 2012 and ACS 2017 period average
+```{r}
+
+
+
+#Get American Community Survey Data with Race Composition for every US County
+# Install and load necessary packages
+# install.packages("tidycensus")
+# install.packages("tidyverse")
+
+library(tidycensus)
+library(tidyverse)
+
+# Set your Census API key (get one at https://api.census.gov/data/key_signup.html)
+census_api_key <- "1b78a1efc366bb16d3c04bf00d20009a6f14081a"
+
+
+#get variable names
+v17 <- load_variables(2017, "acs5")
+v12 <- load_variables(2012, "acs5")
+
+
+race_vars <- c(
+  "B03002_003", #Estimate!!Total!!Not Hispanic or Latino!!White alone
+  "B03002_004", #Estimate!!Total!!Not Hispanic or Latino!!Black or African American alone
+  "B03002_006", #Estimate!!Total!!Not Hispanic or Latino!!Asian alone
+  "B03002_007", #Estimate!!Total!!Not Hispanic or Latino!!Native Hawaiian and Other Pacific Islander alone
+  "B03002_005", #Estimate!!Total!!Not Hispanic or Latino!!American Indian and Alaska Native alone
+  "B03002_012"  #Estimate!!Total!!Hispanic or Latino
+) 
+  
+
+race_2017 <- get_acs(
+  geography = "county",
+  variables = race_vars,
+  summary_var = "B03002_001", #Estimate!!Total
+  survey = "acs5",
+  year = 2017, 
+  key = census_api_key
+)
+
+race_2017_recode <- race_2017 %>% 
+  mutate(race_name = case_when(
+    variable == "B03002_003" ~ "White", 
+    variable == "B03002_004" ~ "Black", 
+    variable %in% c("B03002_006","B03002_007" )  ~ "API", 
+    variable == "B03002_005" ~ "AIAN", 
+    variable == "B03002_012" ~ "Latino"
+  ))
+
+race_2017_group <- race_2017_recode %>% 
+  group_by( GEOID, race_name) %>% 
+  summarize(
+    estimate = sum(estimate), 
+    moe = sum(moe), 
+  ) %>% 
+  select(GEOID, race_name, estimate, moe)
+
+population_total_2017 <- race_2017_recode %>% 
+  select(GEOID, race_name, summary_est)
+  
+
+  
+race_2017_comp <- left_join(race_2017_group, population_total_2017, by = c("GEOID", "race_name")) 
+
+racial_summary_est2017 <- distinct(race_2017_comp)
+
+county_race_percent_2017 <- racial_summary_est2017 %>%
+  mutate(percent = 100 * (estimate / summary_est)) %>% 
+  select(GEOID, race_name, percent) %>% 
+  mutate(year = 2017)
+
+
+
+
+
+race_2012 <- get_acs(
+  geography = "county",
+  variables = race_vars,
+  summary_var = "B03002_001",
+  survey = "acs5",
+  year = 2012, 
+  key = census_api_key
+)
+
+
+
+race_2012_recode <- race_2012 %>% 
+  mutate(race_name = case_when(
+    variable == "B03002_003" ~ "White", 
+    variable == "B03002_004" ~ "Black", 
+    variable %in% c("B03002_006","B03002_007" )  ~ "API", 
+    variable == "B03002_005" ~ "AIAN", 
+    variable == "B03002_012" ~ "Latino"
+  ))
+
+race_2012_group <- race_2012_recode %>% 
+  group_by( GEOID, race_name) %>% 
+  summarize(
+    estimate = sum(estimate), 
+    moe = sum(moe), 
+  ) %>% 
+  select(GEOID, race_name, estimate, moe)
+
+population_total_2012 <- race_2012_recode %>% 
+  select(GEOID, race_name, summary_est)
+  
+
+  
+race_2012_comp <- left_join(race_2012_group, population_total_2012, by = c("GEOID", "race_name"))
+
+racial_summary_est2012 <- distinct(race_2017_comp)
+
+county_race_percent_2012 <- racial_summary_est2012 %>%
+  mutate(percent = 100 * (estimate / summary_est)) %>% 
+  select(GEOID, race_name, percent) %>% 
+  mutate(year = 2012)
+
+#join 2012 and 2017 data
+racedata_joined <-bind_rows(county_race_percent_2012,county_race_percent_2017)
+
+
+#Calculate period average for racial composition for each county and racial group
+period_avg_race <- racedata_joined %>% 
+  group_by (GEOID, race_name) %>% 
+  summarize (Period_Avg_race = mean (percent)) %>%
+  pivot_wider(names_from = race_name, values_from = Period_Avg_race, values_fill = 0)
+
+#rename variables from period average racial composition data set
+period_avg_race <- period_avg_race %>% 
+  rename(fips = GEOID, AIAN_RC = AIAN, API_RC = API, Black_RC = Black, Latino_RC = Latino, White_RC = White) 
+
+period_avg_race$fips <- as.integer(period_avg_race$fips)
+  
+#Join racial composition data with RSS base file, now mhr = migration, health, race 
+RSS_mpr <- left_join(RSS_mp, period_avg_race, by = "fips")
+
+# #Convert 0 to NA # Commented out this code so that 0 values remain and indicate populations with 0 percent of a racial group and NA indicate missing data. 
+# RSS_mpr <- RSS_mpr %>% 
+#   mutate(AIAN_RC = ifelse(AIAN_RC == 0, NA, AIAN_RC)) %>% 
+#   mutate(API_RC = ifelse(API_RC == 0, NA, API_RC)) %>% 
+#    mutate(Black_RC = ifelse(Black_RC == 0, NA, Black_RC)) %>%
+#    mutate(Latino_RC = ifelse(Latino_RC == 0, NA, Latino_RC)) %>%
+#    mutate(White_RC = ifelse(White_RC == 0, NA, White_RC))
+```
+
+##Extraction and Dependence Data
+#(covariate 2) Extraction - excess_supply/supply (extraction) 
+share of locally produced intermediate commodities that cannot be processed locally and need to be exported (period average 2012, 2017)
+#(covariate 3) Dependence - excess_demand/demand (dependence)
+county’s dependency on imports (vs locally processed commodities) (period average 2012, 2017)
+
+```{r}
+ 
+
+ #Prepare conntectivity_growth_analysis dataset for merging 
+
+EC_data<-conn_growth_analysis %>% 
+  filter(year>2008) %>% 
+  rename(fips = stcty)  
+  #select(year, fips, metro_micro, intermed_supply, intermed_demand, excess_intermed_supply, excess_intermed_demand)
+
+#Create calculations
+EC_data$exports <- EC_data$excess_intermed_supply/EC_data$intermed_supply
+EC_data$imports <- EC_data$excess_intermed_demand/EC_data$intermed_demand
+
+
+period_avg_ec <- EC_data %>% 
+  group_by (fips) %>% 
+  summarize (period_avg_extraction = mean (exports),
+             period_avg_dependence = mean (imports)) %>% 
+  ungroup()
+
+RSS_mpre <- left_join(RSS_mpr, period_avg_ec, by = "fips")
+
+#write.csv(RSS_mpre, file="RSS_mpre.csv")
+```
+
+
+#Find Complete cases
+
+Identify counties with no missing data. Report count and spatial distribution of counties with missing or no data on health and economic variables… 
+```{r}
+
+# 
+summary(RSS_mpre)
+
+RSS_mpre %>% dim()
+
+RSS_data <- RSS_mpre %>%
+  drop_na()
+
+#RSS_mpre %>% drop_na(ends_with("_RC")) %>% dim()
+
+summary(RSS_data)
+
+#Create a map that shows missing data
+
+
+
+#Result: 
+# [1] 3240   16
+# [1] 3036   16
+# [1] 3218   16
+
+#Export master  file
+
+#write.csv(RSS_data, file="RSS_data.csv")
+
+
+```
+
+
+##Transform dataframe into a structure that is compatible with spatial analysis. 
+
+```{r}
+
+#clean up FIPS and population
+RSS_mpre$fips <- RSS_mpre$fips %>% formatC(width = 5, format = "d", flag = "0")
+RSS_mpre$Population_2010 <- RSS_mpre$Population_2010 %>% gsub(",", "", .) %>% as.numeric()
+
+#get new geometries
+y = 2017
+s = "20m"
+base = "https://www2.census.gov/geo/tiger/"
+shpurl <- paste0(base,"GENZ",y,"/shp/cb_",y,"_us_county_",s,".zip")
+temp <- tempfile()
+download.file(url = shpurl, destfile = temp, quiet=TRUE)
+unzip(zipfile = temp, exdir = getwd(), overwrite = FALSE)
+shape <- read_sf(dsn = ".", layer = "cb_2017_us_county_20m")
+
+#add spatial data
+RSS_mpre_space <- inner_join(shape, RSS_mpre, by = c("GEOID" = "fips"))
+
+#Print master data for spatial analysis
+
+#write.csv(RSS_mpre_space, file="F23_spatial_data.csv")
+
+```
+
+
+# Summary statistics and histograms
+Examine distributions of health outcome (premature death), net migration rates, economic extraction rates, economic dependence rates, racial composition
+- aspatial and spatial: histogram, table (mean, stv, etc. and MI), map; explore total and by state
+reflect on whether any variable needs to be transformed
+
+##Health
+
+```{r}
+# Plot histogram for premature death
+ggplot(data = RSS_data, aes(x = period_avg_pd)) +
+  geom_histogram(binwidth = 100, color = "black", fill = "blue") +
+  labs(title = "Histogram of Premature Death", x = "Premature Death Rate", y = "Frequency")
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+ggplot(RSS_data, aes(period_avg_pd, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Period Average Premature Death Rate",
+       x = "Period Average Premature Death Rate",
+       y = "Density")
+
+#Summary Statistics for Premature Death
+
+# Calculate other summary statistics for NMR
+health_sum<- summarize(RSS_data,
+                           mean = mean(period_avg_pd, na.rm = TRUE),
+                           sd = sd(period_avg_pd, na.rm = TRUE),
+                           min = min(period_avg_pd, na.rm = TRUE),
+                           pctile25 = quantile(period_avg_pd, 0.25, na.rm = TRUE),
+                           pctile75 = quantile(period_avg_pd, 0.75, na.rm = TRUE),
+                           max = max(period_avg_pd, na.rm = TRUE))
+
+#Create Map Presenting how premature death rates are distributed spatially
+#add quintile transformation 
+RSS_mpre_space$period_avg_pd_q <- cut(RSS_mpre_space$period_avg_pd, 
+                                      breaks = seq(min(RSS_mpre_space$period_avg_pd, na.rm = T), 
+                                                   max(RSS_mpre_space$period_avg_pd, na.rm = T), 
+                                                   len = 6))
+
+ g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4326") +
+   scale_fill_viridis_d() +
+   guides(fill = guide_legend(title = "Period Average\nPremature Death Rate\nfor US Counties 2012, 2017")) +
+   theme_void()
+
+ g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:26934") +
+   scale_fill_viridis_d() +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:6629") +
+   scale_fill_viridis_d() +
+   theme_void() +
+   theme(legend.position = "none")
+
+ g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4437") +
+   scale_fill_viridis_d() +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+#package for tiling maps 
+#install.packages("cowplot")
+library("cowplot")
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+  draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+gg_inset_map2
+
+
+#premature death 
+# Create Map Presenting how premature death rates are distributed spatially
+# Add quintile transformation
+RSS_mpre_space$period_avg_pd_q <- cut(
+  RSS_mpre_space$period_avg_pd,
+  breaks = c(-Inf, 350, 550, 750, 975, Inf),
+  labels = c("Less than 350", "350 to 550", "551 to 750", "751 to 975", "More than 975"),
+  include.lowest = TRUE
+)
+
+g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) +
+  geom_sf(aes(fill = period_avg_pd_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:4326") +
+  scale_fill_viridis_d() +
+  guides(fill = guide_legend(title = "Period Average\nPremature Death Rate\nfor US Counties 2012, 2017")) +
+  theme_void()
+
+g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "AK", ]) +
+  geom_sf(aes(fill = period_avg_pd_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:26934") +
+  scale_fill_viridis_d() +
+  theme_void() +
+  theme(legend.position = "none")
+
+g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "HI", ]) +
+  geom_sf(aes(fill = period_avg_pd_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:6629") +
+  scale_fill_viridis_d() +
+  theme_void() +
+  theme(legend.position = "none")
+
+# g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "PR", ]) +
+#   geom_sf(aes(fill = period_avg_pd_q), color = alpha("grey", 0.2)) +
+#   coord_sf(crs = "+init=EPSG:4437") +
+#   scale_fill_viridis_d() +
+#   theme_void() +
+#   theme(legend.position = "none")
+
+# Package for tiling maps
+# install.packages("cowplot")
+library("cowplot")
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) 
+gg_inset_map2
+```
+
+## migration summary statistics (and code for NMR by race that we're not currently using)
+```{r}
+
+# Plot histogram for Net Migration Rate
+ggplot(data = RSS_data, aes(x = NMR)) +
+  geom_histogram(binwidth = 5, color = "black", fill = "blue") +
+  xlim(-350, 275) +
+  labs(title = "Histogram of Total Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+
+# ggplot(RSS_data, aes(period_avg_dependence, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+#    geom_density() +
+#   labs(title = "Density Plot of Period Average Dependence Rate",
+#        x = "Period Average Dependence Rate", 
+#        y = "Density")
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+ggplot(RSS_data, aes(NMR, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Net Migration Rate 2010s",
+       x = "Net Migration Rate 2010s",
+       y = "Density")
+
+# Calculate other summary statistics for NMR
+NMR_sum<-summarize(RSS_data,
+                           mean = mean(NMR, na.rm = TRUE),
+                           sd = sd(NMR, na.rm = TRUE),
+                           min = min(NMR, na.rm = TRUE),
+                           pctile25 = quantile(NMR, 0.25, na.rm = TRUE),
+                           pctile75 = quantile(NMR, 0.75, na.rm = TRUE),
+                           max = max(NMR, na.rm = TRUE))
+
+
+#Create Map Presenting how net migration rates are distributed spatially
+#add quintile transformation 
+RSS_mpre_space$NMR_q <- cut(RSS_mpre_space$NMR, 
+                                      breaks = seq(min(RSS_mpre_space$NMR, na.rm = T), 
+                                                   max(RSS_mpre_space$NMR, na.rm = T), 
+                                                   len = 6))
+
+ g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+   geom_sf(aes(fill = (NMR_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4326") +
+   scale_fill_viridis_d(option = "magma") + 
+   guides(fill = guide_legend(title = "Total Net Migration for\n US Counties 2010s")) +
+   theme_void()
+
+ g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+   geom_sf(aes(fill = (NMR_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:26934") +
+   scale_fill_viridis_d(option = "magma") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+   geom_sf(aes(fill = (NMR_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:6629") +
+   scale_fill_viridis_d(option = "magma") +
+   theme_void() +
+   theme(legend.position = "none")
+
+ g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+   geom_sf(aes(fill = (NMR_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4437") +
+   scale_fill_viridis_d(option = "magma") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+#package for tiling maps 
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+  draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+gg_inset_map2
+
+
+```
+
+
+
+##Summary Statistics for Extraction and Dependence
+```{r}
+ggplot(data = RSS_data, aes(x = period_avg_extraction)) +
+  geom_histogram(binwidth = 0.1, color = "black", fill = "blue") +
+  labs(title = "Histogram of Extraction Rates", x = "Extraction Rate", y = "Frequency")
+
+ggplot(RSS_data, aes(period_avg_extraction, group = metro_nonmetro, color = metro_nonmetro)) +
+   geom_density() +
+  labs(title = "Density Plot of Extraction Rate",
+       x = "Period Average Extraction Rate", 
+       y = "Density")
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+ggplot(RSS_data, aes(period_avg_extraction, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Period Average\n Extraction Rate",
+       x = "Period Average Extraction Rate",
+       y = "Density")
+
+# Calculate other summary statistics
+extract_sum<- summarize(RSS_data,
+                           mean = mean(period_avg_extraction, na.rm = TRUE),
+                           sd = sd(period_avg_extraction, na.rm = TRUE),
+                           min = min(period_avg_extraction, na.rm = TRUE),
+                           pctile25 = quantile(period_avg_extraction, 0.25, na.rm = TRUE),
+                           pctile75 = quantile(period_avg_extraction, 0.75, na.rm = TRUE),
+                           max = max(period_avg_extraction, na.rm = TRUE))
+
+#Create Map Presenting how extraction rates distributed spatially
+#add quintile transformation 
+RSS_mpre_space$period_avg_extraction_q <- cut(RSS_mpre_space$period_avg_extraction, 
+                                      breaks = seq(min(RSS_mpre_space$period_avg_extraction, na.rm = T), 
+                                                   max(RSS_mpre_space$period_avg_extraction, na.rm = T), 
+                                                   len = 6))
+
+ g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_extraction_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4326") +
+   scale_fill_viridis_d(option = "plasma") +
+   guides(fill = guide_legend(title = "Period Average Extraction\n for US Counties, 2012, 2017")) +
+   theme_void()
+
+ g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+   geom_sf(aes(fill = (period_avg_extraction_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:26934") +
+   scale_fill_viridis_d(option = "plasma") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+   geom_sf(aes(fill = (period_avg_extraction_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:6629") +
+   scale_fill_viridis_d(option = "plasma") +
+   theme_void() +
+   theme(legend.position = "none")
+
+ g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_extraction_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4437") +
+   scale_fill_viridis_d(option = "plasma") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+#package for tiling maps 
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+  draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+gg_inset_map2
+
+
+ggplot(data = RSS_data, aes(x = period_avg_dependence)) +
+  geom_histogram(binwidth = 0.1, color = "black", fill = "blue") +
+  labs(title = "Histogram of Dependence Rates", x = "Dependence Rate", y = "Frequency")
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+ggplot(RSS_data, aes(period_avg_dependence, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Period Average Dependence Rate",
+       x = "Period Average Dependence Rate",
+       y = "Density")
+
+#Summarize the dependence
+
+depend_sum<- summarize(RSS_data,
+                           mean = mean(period_avg_dependence, na.rm = TRUE),
+                           sd = sd(period_avg_dependence, na.rm = TRUE),
+                           min = min(period_avg_dependence, na.rm = TRUE),
+                           pctile25 = quantile(period_avg_dependence, 0.25, na.rm = TRUE),
+                           pctile75 = quantile(period_avg_dependence, 0.75, na.rm = TRUE),
+                           max = max(period_avg_dependence, na.rm = TRUE))
+
+#Create Map Presenting how dependence rates distributed spatially
+#add quintile transformation 
+RSS_mpre_space$period_avg_dependence_q <- cut(RSS_mpre_space$period_avg_dependence, 
+                                      breaks = seq(min(RSS_mpre_space$period_avg_dependence, na.rm = T), 
+                                                   max(RSS_mpre_space$period_avg_dependence, na.rm = T), 
+                                                   len = 6))
+
+ g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_dependence_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4326") +
+   scale_fill_viridis_d(option = "rocket") +
+   guides(fill = guide_legend(title = "Period Average Dependence\n for US Counties, 2012, 2017")) +
+   theme_void()
+
+ g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+   geom_sf(aes(fill = (period_avg_dependence_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:26934") +
+   scale_fill_viridis_d(option = "rocket") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+   geom_sf(aes(fill = (period_avg_dependence_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:6629") +
+   scale_fill_viridis_d(option = "rocket") +
+   theme_void() +
+   theme(legend.position = "none")
+
+ g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_dependence_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4437") +
+   scale_fill_viridis_d(option = "rocket") +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ #package for tiling maps 
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+  draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+gg_inset_map2
+
+```
+
+#revised density plots 
+
+```{r}
+
+#Premature death 
+ggplot(RSS_data, aes(period_avg_pd, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+  labs(title = "Density Plot of Period Average Premature Death Rate",
+       x = "Period Average Premature Death Rate",
+       y = "Density")
+
+
+#migration 
+ggplot(RSS_data, aes(NMR, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+  labs(title = "Density Plot of Net Migration Rate 2010s",
+       x = "Net Migration Rate 2010s",
+       y = "Density")
+
+#extraction
+ggplot(RSS_data, aes(period_avg_extraction, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+  labs(title = "Density Plot of Period Average\n Extraction Rate",
+       x = "Period Average Extraction Rate",
+       y = "Density")
+
+
+#dependence
+ggplot(RSS_data, aes(period_avg_dependence, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+  labs(title = "Density Plot of Period Average\n Dependence Rate",
+       x = "Period Average Dependence Rate",
+       y = "Density")
+
+```
+#revised maps
+
+```{r}
+
+#migration 
+# Create Map Presenting how net migration rates are distributed spatially
+# Add quintile transformation
+RSS_mpre_space$NMR_q <- cut(
+  RSS_mpre_space$NMR,
+  breaks = c(-Inf, -5, 0, 4, 20, Inf),
+  labels = c("<= -5", "-4 to 0", "1 to 4", "5 to 20", ">20"),
+  include.lowest = TRUE
+)
+
+g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) +
+  geom_sf(aes(fill = NMR_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:4326") +
+  scale_fill_viridis_d(option = "magma") +
+  guides(fill = guide_legend(title = "Total Net Migration \nfor US Counties\n 2010s")) +
+  theme_void()
+
+g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "AK", ]) +
+  geom_sf(aes(fill = NMR_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:26934") +
+  scale_fill_viridis_d(option = "magma") +
+  theme_void() +
+  theme(legend.position = "none")
+
+g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "HI", ]) +
+  geom_sf(aes(fill = NMR_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:6629") +
+  scale_fill_viridis_d(option = "magma") +
+  theme_void() +
+  theme(legend.position = "none")
+
+# g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == "PR", ]) +
+#   geom_sf(aes(fill = NMR_q), color = alpha("grey", 0.2)) +
+#   coord_sf(crs = "+init=EPSG:4437") +
+#   scale_fill_viridis_d(option = "magma") +
+#   theme_void() +
+#   theme(legend.position = "none")
+
+# Package for tiling maps
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) 
+gg_inset_map2
+
+
+#extraction 
+# Create Map Presenting how extraction rates are distributed spatially
+# Add quintile transformation
+RSS_mpre_space$period_avg_extraction_q <- cut(
+  RSS_mpre_space$period_avg_extraction,
+  breaks = c(-Inf, 0.35, 0.5, 0.64, 0.8, Inf),
+  labels = c("Less than 0.35", "0.4 to 0.5", "0.5 to 0.64", "0.65 to 0.8", "More than 0.8"),
+  include.lowest = TRUE
+)
+
+g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) +
+  geom_sf(aes(fill = period_avg_extraction_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:4326") +
+  scale_fill_viridis_d(option = "plasma") +
+  guides(fill = guide_legend(title = "Period Average Extraction\n for US Counties\n 2012, 2017")) +
+  theme_void()
+
+# Package for tiling maps
+# install.packages("cowplot")
+library("cowplot")
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1)
+gg_inset_map2
+
+#dependance
+
+#Create Map Presenting how dependence rates are distributed spatially
+# Add quintile transformation
+RSS_mpre_space$period_avg_dependence_q <- cut(
+  RSS_mpre_space$period_avg_dependence,
+  breaks = c(-Inf, 0.4, 0.5, 0.65, 0.8, Inf),
+  labels = c("Less than 0.4", "0.4 to 0.5", "0.5 to 0.65", "0.65 to 0.8", "More than 0.8"),
+  include.lowest = TRUE
+)
+
+# Exclude AK, HI, and PR
+RSS_mpre_space <- subset(RSS_mpre_space, !(State %in% c("AK", "HI", "PR")))
+
+g1 <- ggplot(RSS_mpre_space) +
+  geom_sf(aes(fill = period_avg_dependence_q), color = alpha("grey", 0.2)) +
+  coord_sf(crs = "+init=EPSG:4326") +
+  scale_fill_viridis_d(option = "rocket") +
+  guides(fill = guide_legend(title = "Period Average Dependence\n for US Counties\n 2012, 2017")) +
+  theme_void()
+
+# Package for tiling maps
+# install.packages("cowplot")
+library("cowplot")
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1)
+gg_inset_map2
+
+
+```
+
+#summary table 
+
+```{r}
+
+# Add a "variable" column to each dataframe
+health_sum$variable <- "Premature Death Rate"
+NMR_sum$variable <- "Net Migration Rate"
+extract_sum$variable <- "Extraction Rate"
+depend_sum$variable <- "Dependence Rate"
+
+# Combine dataframes with rbind
+summary_stats <- rbind(health_sum, NMR_sum, extract_sum, depend_sum)
+
+
+print(summary_stats)
+
+#write.csv(summary_stats, file= "F2023 Summary Stats_a.csv")
+
+
+
+```
+
+
+
+# Regression analysis
+
+Bivariate analysis to multivariate analysis examining correlation between outcome and correlates (tests of statistical significance) 
+cluster counties on state 
+- OLS, MI on OLS residuals, then spatial error regression
+
+
+## model 1- net migration
+
+H1: places with lower values of community vitality (negative net migration rates) will have have more negative health outcomes (higher premature death rates) relative to places with higher values of community vitality - regressing premature deaths on net migration rates; expect significant negative migration coefficient (model 1)
+
+Net migration rate = NMR
+Premature death rate = period_avg_pd
+
+a)OLS
+b)OLS Cluster on state robustness check
+
+```{r}
+# install.packages("estimatr")
+# install.packages("huxtable")
+# install.packages("margins")
+
+# Load required libraries
+#install.packages(c("lmtest", "sandwich"))
+library("lmtest")
+library("sandwich")
+
+library(estimatr)
+library(huxtable)
+library(margins)
+
+#RSS_data <- RSS_mpre %>% drop_na()
+
+
+
+#first order queen's contiguity neighbors list 
+foqc <- poly2nb(RSS_mpre_space)
+
+#linear regression model 
+model_1 <- lm(period_avg_pd ~ NMR,
+        data = RSS_mpre_space,
+        na.action = na.exclude)
+
+# Lagrange multiplier test for serial correlation
+lm_model_1 <- coeftest(model_1, vcov = NeweyWest(model_1))
+print(lm_model_1)
+
+summary(model_1)
+
+#plot regression and residuals
+plot(model_1)
+plot(density(resid(model_1), na.rm = T))
+
+#linear regression model clustered on state
+model_1_clust <- lm_robust(period_avg_pd ~ NMR,
+                clusters = State,
+                data = RSS_mpre_space)
+
+# # Robust Lagrange multiplier test for serial correlation (clustered)
+# lmr_model_1_clust <- lm_robust(period_avg_pd ~ NMR, clusters = State, data = RSS_mpre_space)
+# 
+# # Extract the score (gradient of the log-likelihood)
+# score <- estfun(lmr_model_1_clust)
+# 
+# # Compute the Lagrange multiplier test statistic
+# LM_stat_cluster <- t(score) %*% solve(vcovHC(lmr_model_1_clust, type = "HC0", cluster = "group")) %*% score
+# df <- nobs(lmr_model_1_clust) - ncol(model.matrix(lmr_model_1_clust))
+# p_value <- 1 - pchisq(LM_stat_cluster, df)
+# 
+# # Print results
+# cat("Robust Lagrange Multiplier Test:\n")
+# cat("LM Statistic:", LM_stat_cluster, "\n")
+# cat("Degrees of Freedom:", df, "\n")
+# cat("P-value:", p_value, "\n")
+# 
+# summary(model_1_clust)
+
+#add scaled predicted values
+RSS_mpre_space$period_avg_pd_fit <- scale(fitted(model_1))[,1]
+
+#add discrete transformation
+RSS_mpre_space$period_avg_pd_fit_q <- cut(RSS_mpre_space$period_avg_pd_fit, 
+                                      breaks = c(seq(min(RSS_mpre_space$period_avg_pd_fit, na.rm = T), -1, len = 5),
+                                                 seq(1, max(RSS_mpre_space$period_avg_pd_fit, na.rm = T), len = 4)))
+
+
+g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4326") +
+   scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+   guides(fill = guide_legend(title = "Premature Death Rate Residuals")) +
+   theme_void()
+ 
+ g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:26934") +
+   scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+ g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:6629") +
+   scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+   theme_void() +
+   theme(legend.position = "none")
+
+ g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+   geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+   coord_sf(crs = "+init=EPSG:4437") +
+   scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+   theme_void() +
+   theme(legend.position = "none")
+ 
+gg_inset_map2 = ggdraw() +
+  draw_plot(g1) +
+  draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+  draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+  draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+gg_inset_map2
+
+#Moran's I test for spatial autocorrelation
+moran.test(resid(model_1), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+
+#package for spatial regression analysis
+#install.packages("spatialreg")
+library("spatialreg")
+model_1_space <- errorsarlm(period_avg_pd ~ NMR, 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+model_1_space
+plot(density(resid(model_1_space), na.rm = T))
+
+
+#huxreg(model_1, model_1_clust, model_1_space)
+
+
+#spatial lag regression
+model_1_lag <- lagsarlm(period_avg_pd ~ NMR, 
+                              data = RSS_mpre_space,
+                              nb2listw(foqc, zero.policy = TRUE), 
+                              zero.policy = TRUE,
+                              method = "eigen", 
+                              quiet = FALSE)
+
+# Display model summary
+summary(model_1_lag)
+
+# Plot density of residuals
+plot(density(resid(model_1_lag), na.rm = TRUE))
+
+huxreg(model_1, model_1_space, model_1_lag)
+
+
+ggplot(RSS_mpre_space, aes(NMR, period_avg_pd)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of NMR and \n Period Average Premature Death Rate",
+        x = "NMR",
+        y = "Premature Death Rate")
+
+
+```
+## Model 1 Result- 
+H1: places with lower values of community vitality (negative net migration rates) will have have more negative health outcomes (higher premature death rates) relative to places with higher values of community vitality - regressing premature deaths on net migration rates; expect significant negative migration coefficient (model 1)
+
+Interpretation: As net migration becomes more positive, premature death rates decline. This association is significant and spatial autocorrlation indicates that there is a spatial pattern to the distribution of errors. 
+
+
+
+
+## model 2- extraction
+
+H2a: places with lower values of economic vitality (high extraction, 2a) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on extraction; expect significant positive (model 2)
+
+Extraction = period_avg_extraction
+Premature death rate = period_avg_pd
+
+
+
+```{r}
+#linear regression model 
+model_2 <- lm(period_avg_pd ~ period_avg_extraction,
+        data = RSS_mpre_space,
+        na.action = na.exclude)
+
+summary(model_2)
+
+#plot regression and residuals
+plot(model_2)
+plot(density(resid(model_2), na.rm = T))
+
+#linear regression model clustered on state
+model_2_clust <- lm_robust(period_avg_pd ~ period_avg_extraction,
+                clusters = State,
+                data = RSS_mpre_space)
+summary(model_2_clust)
+
+#add scaled predicted values
+RSS_mpre_space$period_avg_pd_fit <- scale(fitted(model_2))[,1]
+
+#add discrete transformation
+RSS_mpre_space$period_avg_pd_fit_q <- cut(RSS_mpre_space$period_avg_pd_fit, 
+                                      breaks = c(seq(min(RSS_mpre_space$period_avg_pd_fit, na.rm = T), -1, len = 5),
+                                                 seq(1, max(RSS_mpre_space$period_avg_pd_fit, na.rm = T), len = 4)))
+
+
+
+
+#Moran's I test for spatial autocorrelation
+moran.test(resid(model_2), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+
+#package for spatial regression analysis
+#install.packages("spatialreg")
+library("spatialreg")
+model_2_space <- errorsarlm(period_avg_pd ~ period_avg_extraction, 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+model_2_space
+plot(density(resid(model_2_space), na.rm = T))
+
+
+#huxreg(model_2, model_2_clust, model_2_space)
+
+
+
+#spatial lag regression
+model_2_lag <- lagsarlm(period_avg_pd ~ period_avg_extraction, 
+                              data = RSS_mpre_space,
+                              nb2listw(foqc, zero.policy = TRUE), 
+                              zero.policy = TRUE,
+                              method = "eigen", 
+                              quiet = FALSE)
+
+# Display model summary
+summary(model_2_lag)
+
+# Plot density of residuals
+plot(density(resid(model_2_lag), na.rm = TRUE))
+
+huxreg(model_2, model_2_space, model_2_lag)
+
+
+ggplot(RSS_mpre_space, aes(period_avg_extraction, period_avg_pd)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of Period Average Extraction\n and  Period Average Premature Death Rate",
+        x = "Extraction",
+        y = "Premature Death Rate")
+
+```
+## Model 2 Result- 
+H2a: places with lower values of economic vitality (high extraction, 2a) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on extraction; expect significant positive (model 2)
+
+Interpretation: OLS and Spatial Regression models indicate that there is a significant positive relationship between premature death and extraction rates, i.e., that as rates of extraction increase so do premature death rates. 
+
+
+## model 3- depdence
+
+H2b: places with lower values of economic vitality (high dependence, 2b) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on dependence; expect significant positive (model 3)
+
+data = RSS_mpre_space
+Dependence = period_avg_dependence
+Premature death rate = period_avg_pd
+
+a)OLS
+b)OLS Cluster on state robustness check
+
+```{r}
+
+#linear regression model 
+model_3 <- lm(period_avg_pd ~ period_avg_dependence,
+        data = RSS_mpre_space,
+        na.action = na.exclude)
+
+summary(model_3)
+
+#plot regression and residuals
+plot(model_3)
+plot(density(resid(model_3), na.rm = T))
+
+#linear regression model clustered on state
+model_3_clust <- lm_robust(period_avg_pd ~ period_avg_dependence,
+                clusters = State,
+                data = RSS_mpre_space)
+summary(model_3_clust)
+
+#add scaled predicted values
+RSS_mpre_space$period_avg_pd_fit <- scale(fitted(model_3))[,1]
+
+#add discrete transformation
+RSS_mpre_space$period_avg_pd_fit_q <- cut(RSS_mpre_space$period_avg_pd_fit, 
+                                      breaks = c(seq(min(RSS_mpre_space$period_avg_pd_fit, na.rm = T), -1, len = 5),
+                                                 seq(1, max(RSS_mpre_space$period_avg_pd_fit, na.rm = T), len = 4)))
+
+#Moran's I test for spatial autocorrelation
+moran.test(resid(model_3), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+
+#package for spatial regression analysis
+#install.packages("spatialreg")
+library("spatialreg")
+model_3_space <- errorsarlm(period_avg_pd ~ period_avg_dependence, 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+model_3_space
+plot(density(resid(model_3_space), na.rm = T))
+
+
+
+huxreg(model_3, model_3_clust, model_3_space)
+
+
+#spatial lag regression
+model_3_lag <- lagsarlm(period_avg_pd ~ period_avg_dependence, 
+                              data = RSS_mpre_space,
+                              nb2listw(foqc, zero.policy = TRUE), 
+                              zero.policy = TRUE,
+                              method = "eigen", 
+                              quiet = FALSE)
+
+# Display model summary
+summary(model_3_lag)
+
+# Plot density of residuals
+plot(density(resid(model_3_lag), na.rm = TRUE))
+
+huxreg(model_3, model_3_space, model_3_lag)
+
+
+ggplot(RSS_mpre_space, aes(period_avg_dependence, period_avg_pd)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of Period Average Dependence\n and  Period Average Premature Death Rate",
+        x = "Dependence",
+        y = "Premature Death Rate")
+
+```
+## Model 3 Result- 
+H2b: places with lower values of economic vitality (high dependence, 2b) will have have more negative health outcomes (premature deaths) relative to places with higher values of economic vitality - regressing premature deaths on dependence; expect significant positive (model 3)
+
+
+Interpretation: OLS and Spatial Regression models indicate that there is a significant positive relationship between premature death and dependence rates, i.e., that as rates of dependence increase so do premature death rates. 
+Multiple regression model 
+
+#Multivariate models
+```{r}
+
+#linear regression model 
+model_M <- lm(period_avg_pd ~ NMR + period_avg_extraction + period_avg_dependence,
+        data = RSS_mpre_space,
+        na.action = na.exclude)
+
+#scaled model
+model_M_scale <- lm(period_avg_pd ~ scale(NMR) + scale(period_avg_extraction) + scale(period_avg_dependence),
+        data = RSS_mpre_space,
+        na.action = na.exclude)
+
+summary(model_M)
+
+huxreg(model_M_scale)
+
+#plot regression and residuals
+plot(model_M)
+plot(density(resid(model_M), na.rm = T))
+
+#add scaled predicted values
+RSS_mpre_space$period_avg_pd_fit <- scale(fitted(model_M))[,1]
+
+#add discrete transformation
+RSS_mpre_space$period_avg_pd_fit_q <- cut(RSS_mpre_space$period_avg_pd_fit, 
+                                      breaks = c(seq(min(RSS_mpre_space$period_avg_pd_fit, na.rm = T), -1, len = 5),
+                                                 seq(1, max(RSS_mpre_space$period_avg_pd_fit, na.rm = T), len = 4)))
+
+
+#Moran's I test for spatial autocorrelation
+moran.test(resid(model_M), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+
+
+library("spatialreg")
+model_M_space <- errorsarlm(period_avg_pd ~ NMR + period_avg_extraction + period_avg_dependence, 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+model_M_space
+plot(density(resid(model_M_space), na.rm = T))
+
+summary(model_M_space)
+
+#scaled model 
+#library("spatialreg")
+model_M_se_scaled <- errorsarlm(period_avg_pd ~ scale(NMR) + scale(period_avg_extraction) + scale(period_avg_dependence), 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+
+huxreg(model_M_se_scaled)
+
+
+#spatial lag regression
+model_M_lag <- lagsarlm(period_avg_pd ~ NMR + period_avg_extraction + period_avg_dependence, 
+                              data = RSS_mpre_space,
+                              nb2listw(foqc, zero.policy = TRUE), 
+                              zero.policy = TRUE,
+                              method = "eigen", 
+                              quiet = FALSE)
+
+# Display model summary
+summary(model_M_lag)
+
+#scaled lag model
+model_M_sl_scaled <- lagsarlm(period_avg_pd ~ scale(NMR) + scale(period_avg_extraction) + scale(period_avg_dependence), 
+                      data = RSS_mpre_space,
+                      nb2listw(foqc, zero.policy = TRUE), 
+                      zero.policy = TRUE,
+                      method = "eigen", 
+                      quiet = FALSE)
+
+huxreg(model_M_sl_scaled)
+
+# Plot density of residuals
+plot(density(resid(model_M_lag), na.rm = TRUE))
+
+
+
+huxreg(model_M, model_M_space, model_M_lag)
+huxreg (model_M_scale, model_M_se_scaled, model_M_sl_scaled)
+
+```
+
+
+
+
+##Not using models below this point
+## model 4-6
+
+H3a: the association between community and economic vitality and health outcomes will be less pronounced in places with larger shares of racially privileged groups (proportion white) - model 1 plus proportion white and interaction term between net migration rate and proportion white (net migration X proportion white) (model 4); model 2 plus proportion white and interaction term between extraction and proportion white (extraction X proportion white) (model 5); model 3 plus proportion white and interaction term between net migration rate and proportion white (dependence X proportion white) (model 6)
+
+Data = RSS_data
+
+model 4) period_avg_pd, NMR, White_RC
+model 5) period_avg_pd, period_avg_extraction, White_RC
+model 6) period_avg_pd, Period_avg_dependence, White_RC
+
+```{r}
+# rural areas are less senstitive to NMR than metro
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = as.factor(metro_nonmetro))) +
+#   geom_point() +
+#   geom_smooth(method = "lm")
+
+
+
+```
+
+#model 4) White, NMR, premature death
+
+```{r}
+
+# 
+# #model 4) period_avg_pd, NMR, White_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# 
+# # scatterplot pd ~ NMR at hi and low White_RC
+# q <- quantile(RSS_data_space$White_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_white = case_when(
+#     White_RC <= q[["50%"]] ~ "low",
+#     White_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_white)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of NMR and Period Average Premature Death Rate",
+#        x = "NMR",
+#        y = "Premature Death Rate")
+# 
+# 
+# 
+# # Fit linear models
+# model_4a <- lm(period_avg_pd ~ NMR + White_RC, data = RSS_data_space)
+# # model_4b <- lm(period_avg_pd ~ NMR * White_RC, data = RSS_data_space)
+# model_4b <- lm(period_avg_pd ~ NMR * White_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_4c <- lm_robust(period_avg_pd ~ NMR * White_RC, clusters = State, data = RSS_data_space)
+# 
+# huxreg(model_4a, model_4b, model_4c)
+# 
+# #Spatial Test for 4a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_4a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_4a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 4b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_4b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_4b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 4c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_4c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# #moran.test(resid(model_4c), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# #Spatial Regression for model 4
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_4a_space <- errorsarlm(period_avg_pd ~ NMR + White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_4a_space
+# plot(density(resid(model_4a_space), na.rm = T))
+# 
+# 
+# model_4b_space <- errorsarlm(period_avg_pd ~ NMR * White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_4b_space
+# plot(density(resid(model_4b_space), na.rm = T))
+# 
+# 
+# #summarize spatial models
+# huxreg(model_4a_space, model_4b_space)
+# 
+# 
+# 
+# #Plot prediction of NMR and White_RC Interaction
+# qx = quantile(model_4b$model$NMR, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_4b$model$White_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_4b_pred <- prediction(model_4b, at = list(NMR = qx, White_RC = qc)) %>%
+#   summary() %>%
+#   rename(NMR = `at(NMR)`, White_RC = `at(White_RC)`, premature_death = Prediction) %>%
+#   mutate(White_RC_q = case_match(
+#     White_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_4b_pred
+# 
+# ggplot(model_4b_pred, aes(NMR, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = White_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = White_RC_q))
+
+
+```
+## Model 4 Result- 
+H3a: the association between community and economic vitality and health outcomes will be less pronounced in places with larger shares of racially privileged groups (proportion white) - model 1 plus proportion white and interaction term between net migration rate and proportion white (net migration X proportion white) (model 4); 
+
+Interpretation: In counties where Net Migration was more positive, premature death rates were reduced. Regression models that consider the interaction of the percentage of the white population in a county indicate that as the percentage of the white population increases this positive effect of net migration is reduced. Where net migration is more positive, and there is a larger white population, premature death rates also increase. This models indicate that this relationship is significant though the coefficients are not very large.  
+
+The negative association between premature death rate and net migration rate is weaker where the proportion of the population that is white is higher. This moderating effect of racial composition is statistically significant. 
+
+
+# model 5-White, extraction, premature death
+```{r}
+
+# #model 5) period_avg_pd, period_avg_extraction, White_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# 
+# 
+# # scatterplot pd ~ extraction at hi and low White_RC
+# q <- quantile(RSS_data_space$White_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_white = case_when(
+#     White_RC <= q[["50%"]] ~ "low",
+#     White_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_extraction, period_avg_pd, color = percent_white)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Extraction and Period Average Premature Death Rate",
+#        x = "Extraction Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_5a <- lm(period_avg_pd ~ period_avg_extraction + White_RC, data = RSS_data_space)
+# # model_5b <- lm(period_avg_pd ~ period_avg_extraction * White_RC, data = RSS_data_space)
+# model_5b <- lm(period_avg_pd ~ period_avg_extraction * White_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_5c <- lm_robust(period_avg_pd ~ period_avg_extraction * White_RC, clusters = State, data = RSS_data_space)
+# 
+# huxreg(model_5a, model_5b, model_5c)
+# 
+# #Spatial Test for 5a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_5a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_5a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 5b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_5b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_5b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 5c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_5c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 4
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_5a_space <- errorsarlm(period_avg_pd ~ period_avg_extraction + White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_5a_space
+# plot(density(resid(model_5a_space), na.rm = T))
+# 
+# 
+# model_5b_space <- errorsarlm(period_avg_pd ~ period_avg_extraction * White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_5b_space
+# plot(density(resid(model_5b_space), na.rm = T))
+# 
+# 
+# 
+# huxreg(model_5a_space, model_5b_space)
+# 
+# 
+# 
+# 
+# #Plot prediction of extraction and White_RC interaction
+# qx = quantile(model_5b$model$period_avg_extraction, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_5b$model$White_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_5b_pred <- prediction(model_5b, at = list(period_avg_extraction = qx, White_RC = qc)) %>%
+#   summary() %>%
+#   rename(extraction = `at(period_avg_extraction)`, White_RC = `at(White_RC)`, premature_death = Prediction) %>%
+#   mutate(White_RC_q = case_match(
+#     White_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_5b_pred
+# 
+# ggplot(model_5b_pred, aes(extraction, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = White_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = White_RC_q))
+
+
+```
+## Model 5 Result- 
+
+H3a: the association between community and economic vitality and health outcomes will be less pronounced in places with larger shares of racially privileged groups (proportion white) -  model 2 plus proportion white and interaction term between extraction and proportion white (extraction X proportion white) (model 5); 
+
+Interpretation: Model 2 indicated that when extraction rates increase, premature death rates increase. When the proportion of the population that is white is higher the relationship is negative and significant- as the white population increases, premature death rates go down. When the interaction between extraction and the white composition of a county is considered this association holds though it is no longer significant in spatial regression models. In short, the impact of extraction on premature death is less pronounced in counties with larger shares of racially priviledged groups. 
+
+
+# model 6- white, dependence, premature death
+```{r}
+# # #model 6) period_avg_pd, Period_avg_dependence, White_RC
+# # 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# 
+# 
+# # scatterplot pd ~ Dependence at hi and low White_RC
+# q <- quantile(RSS_data_space$White_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_white = case_when(
+#     White_RC <= q[["50%"]] ~ "low",
+#     White_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_dependence, period_avg_pd, color = percent_white)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Dependence Rate and Period Average Premature Death Rate",
+#        x = "Dependence Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_6a <- lm(period_avg_pd ~ period_avg_dependence + White_RC, data = RSS_data_space)
+# # model_6b <- lm(period_avg_pd ~ period_avg_extraction * White_RC, data = RSS_data_space)
+# model_6b <- lm(period_avg_pd ~ period_avg_dependence * White_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_6c <- lm_robust(period_avg_pd ~ period_avg_dependence * White_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_6a, model_6b, model_6c)
+# 
+# #Spatial Test for 6a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_6a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_6a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 6b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_6b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_6b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 6c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_6c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# 
+# #Spatial Regression for model 4
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_6a_space <- errorsarlm(period_avg_pd ~ period_avg_dependence + White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_6a_space
+# plot(density(resid(model_6a_space), na.rm = T))
+# 
+# 
+# model_6b_space <- errorsarlm(period_avg_pd ~ period_avg_dependence * White_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_6b_space
+# plot(density(resid(model_6b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_6a_space, model_6b_space)
+# 
+# 
+# 
+# #Plot prediction of interaction with dependence and White_RC
+# qx = quantile(model_6b$model$period_avg_dependence, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_6b$model$White_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_6b_pred <- prediction(model_6b, at = list(period_avg_dependence = qx, White_RC = qc)) %>%
+#   summary() %>%
+#   rename(dependence = `at(period_avg_dependence)`, White_RC = `at(White_RC)`, premature_death = Prediction) %>%
+#   mutate(White_RC_q = case_match(
+#     White_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_6b_pred
+# 
+# ggplot(model_6b_pred, aes(dependence, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = White_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = White_RC_q))
+
+```
+## Model 6  Result- 
+
+H3a: the association between community and economic vitality and health outcomes will be less pronounced in places with larger shares of racially privileged groups (proportion white) -  model 3 plus proportion white and interaction term between net migration rate and proportion white (dependence X proportion white) (model 6)
+
+Interpretation: The results of model 3 indicated that higher rates of economic dependence in a county are associated with higher rates of premature death. In places with larger shares of racially priviledged groups (proportion white) the effect of rates of dependence are less prounounced.  
+
+
+##Models 7-18
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups (proportion AIAN, API, Bl, Lx) - models 1, 2, and 3 (separately) plus proportion AIAN, API, Bl, Lx (separately) and interaction term between economic extraction and dependence (separately) and proportion AIAN, API, Bl, Lx (separately) (e.g., extraction X proportion AIAN) (models 7-10 for net migration, models 11-14 for extraction, and models 15-18 for dependence)
+
+models 7-10 for period_avg_pd, NMR, [marginalized groups]
+models 11-14 for period_avg_pd, period_avg_extraction, [marginalized groups 
+models 15-18 for period_avg_pd, Period_avg_dependence, [marginalized groups]
+
+Models 7-10 for period_avg_pd, NMR and [marginalized groups]
+7)AIAN
+8)API
+9)Black
+10)Latine
+
+
+
+#model 7) NMR, AIAN_RC, period_avg_pd, 
+
+```{r}
+
+# #model 7) period_avg_pd, NMR, AIAN_RC
+# 
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ NMR at hi and low AIAN_RC
+# q <- quantile(RSS_data_space$AIAN_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_AIAN = case_when(
+#     AIAN_RC <= q[["50%"]] ~ "low",
+#     AIAN_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_AIAN)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Net Migration Rate and Period Average Premature Death Rate",
+#        x = "Net Migration Rate",
+#        y = "Premature Death Rate")
+# 
+# 
+# 
+# 
+# # Fit linear models
+# model_7a <- lm(period_avg_pd ~ NMR + AIAN_RC, data = RSS_data_space)
+# #model_7b <- lm(period_avg_pd ~ NMR * AIAN_RC, data = RSS_data_space)
+# model_7b <- lm(period_avg_pd ~ NMR * AIAN_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_7c <- lm_robust(period_avg_pd ~ NMR * AIAN_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_7a, model_7b, model_7c)
+# 
+# #Spatial Test for 7a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_7a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_7a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 7b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_7b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_7b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 7c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_7c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 4
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_7a_space <- errorsarlm(period_avg_pd ~ NMR + AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_7a_space
+# plot(density(resid(model_7a_space), na.rm = T))
+# 
+# 
+# model_7b_space <- errorsarlm(period_avg_pd ~ NMR * AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_7b_space
+# plot(density(resid(model_7b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_7a_space, model_7b_space)
+# 
+# 
+# #Plot prediction with NMR and AIAN_RC interaction
+# qx = quantile(model_7b$model$NMR, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_7b$model$AIAN_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_7b_pred <- prediction(model_7b, at = list(NMR = qx, AIAN_RC = qc)) %>%
+#   summary() %>%
+#   rename(NMR = `at(NMR)`, AIAN_RC = `at(AIAN_RC)`, premature_death = Prediction) %>%
+#   mutate(AIAN_RC_q = case_match(
+#     AIAN_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_7b_pred
+# 
+# ggplot(model_7b_pred, aes(NMR, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = AIAN_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = AIAN_RC_q))
+
+```
+## Model 7 Result- 
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The positive effect of net migration on premature death rates in counties with higher proportions of American Indian/Alaska native populations is reduced. While premature deaths still decline as net migration increases, as the proportion of AI/AN population increases the impact is reduced. This association is significant. 
+
+The negative association between premature death rate and net migration rate is weaker where the proportion of the population that is AI/AN is higher. This moderating effect of racial composition is statistically significant. 
+
+#model 8) NMR, API_RC, period_avg_pd, 
+```{r}
+
+# #model 8) period_avg_pd, NMR, API_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ NMR at hi and low API_RC
+# q <- quantile(RSS_data_space$API_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_API = case_when(
+#     API_RC <= q[["50%"]] ~ "low",
+#     API_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_API)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Net Migration Rate and\n Period Average Premature Death Rate",
+#        x = "Net Migration Rate",
+#        y = "Premature Death Rate")
+# 
+# 
+# # Fit linear models
+# model_8a <- lm(period_avg_pd ~ NMR + API_RC, data = RSS_data_space)
+# #model_8b <- lm(period_avg_pd ~ NMR * API_RC, data = RSS_data_space)
+# model_8b <- lm(period_avg_pd ~ NMR * API_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_8c <- lm_robust(period_avg_pd ~ NMR * API_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_8a, model_8b, model_8c)
+# 
+# #Spatial Test for 8a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_8a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_8a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 8b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_8b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_8b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 8c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_8c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 8
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_8a_space <- errorsarlm(period_avg_pd ~ NMR + API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_8a_space
+# plot(density(resid(model_8a_space), na.rm = T))
+# 
+# 
+# model_8b_space <- errorsarlm(period_avg_pd ~ NMR * API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_8b_space
+# plot(density(resid(model_8b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_8a_space, model_8b_space)
+# 
+# #Plot Prediction of NMR and API_RC Interaction
+# qx = quantile(model_8b$model$NMR, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_8b$model$API_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_8b_pred <- prediction(model_8b, at = list(NMR = qx, API_RC = qc)) %>%
+#   summary() %>%
+#   rename(NMR = `at(NMR)`, API_RC = `at(API_RC)`, premature_death = Prediction) %>%
+#   mutate(API_RC_q = case_match(
+#     API_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_8b_pred
+# 
+# ggplot(model_8b_pred, aes(NMR, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = API_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = API_RC_q))
+
+```
+## Model 8 Result- 
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The positive impact of Net Migration on premature death rates remains in counties with higher proporations of Asian and Pacific Islander populations.  
+
+
+#model 9) NMR, Black_RC, period_avg_pd, 
+```{r}
+# #model 9) period_avg_pd, NMR, Black_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ NMR at hi and low Black_RC
+# q <- quantile(RSS_data_space$Black_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Black = case_when(
+#     Black_RC <= q[["50%"]] ~ "low",
+#     Black_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_Black)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Net Migration Rate and\n Period Average Premature Death Rate",
+#        x = "Net Migration Rate",
+#        y = "Premature Death Rate")
+# 
+# 
+# # Fit linear models
+# model_9a <- lm(period_avg_pd ~ NMR + Black_RC, data = RSS_data_space)
+# #model_9b <- lm(period_avg_pd ~ NMR * Black_RC, data = RSS_data_space)
+# model_9b <- lm(period_avg_pd ~ NMR * Black_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_9c <- lm_robust(period_avg_pd ~ NMR * Black_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS Models
+# huxreg(model_9a, model_9b, model_9c)
+# 
+# #Spatial Test for 9a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_9a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_9a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 9b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_9b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_9b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 9c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_9c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 4
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_9a_space <- errorsarlm(period_avg_pd ~ NMR + Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_9a_space
+# plot(density(resid(model_9a_space), na.rm = T))
+# 
+# 
+# model_9b_space <- errorsarlm(period_avg_pd ~ NMR * Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_9b_space
+# plot(density(resid(model_9b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_9a_space, model_9b_space)
+# 
+# 
+# #Plot prediction with NMR and Black_RC
+# qx = quantile(model_9b$model$NMR, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_9b$model$Black_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_9b_pred <- prediction(model_9b, at = list(NMR = qx, Black_RC = qc)) %>%
+#   summary() %>%
+#   rename(NMR = `at(NMR)`, Black_RC = `at(Black_RC)`, premature_death = Prediction) %>%
+#   mutate(Black_RC_q = case_match(
+#     Black_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_9b_pred
+# 
+# ggplot(model_9b_pred, aes(NMR, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Black_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Black_RC_q))
+```
+## Model 9 Result- 
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups. 
+
+Interpretation: Positive Net migration has a positive impact on premature death rates in counties with larger black populations. This association is significant. 
+
+The negative association between premature death rate and net migration rate is stronger where the proportion of the population that is black is higher. This moderating effect of racial composition is statistically significant. 
+
+#model 10) NMR, Latino_RC, period_avg_pd, 
+```{r}
+# #model 10) period_avg_pd, NMR, Latino_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ NMR at hi and low Latino_RC
+# q <- quantile(RSS_data_space$Latino_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Latino = case_when(
+#     Latino_RC <= q[["50%"]] ~ "low",
+#     Latino_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_Latino)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Net Migration Rate and\n Period Average Premature Death Rate",
+#        x = "Net Migration Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_10a <- lm(period_avg_pd ~ NMR + Latino_RC, data = RSS_data_space)
+# #model_10b <- lm(period_avg_pd ~ NMR * Latino_RC, data = RSS_data_space)
+# model_10b <- lm(period_avg_pd ~ NMR * Latino_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_10c <- lm_robust(period_avg_pd ~ NMR * Latino_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_10a, model_10b, model_10c)
+# 
+# #Spatial Test for 9a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_10a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_10a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 9b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_10b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_10b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 9c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_10c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# 
+# #Spatial Regression for model 10
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_10a_space <- errorsarlm(period_avg_pd ~ NMR + Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_10a_space
+# plot(density(resid(model_10a_space), na.rm = T))
+# 
+# 
+# model_10b_space <- errorsarlm(period_avg_pd ~ NMR * Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_10b_space
+# plot(density(resid(model_10b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_10a_space, model_10b_space)
+# 
+# #Plot prediction with NMR and Latino_RC
+# qx = quantile(model_10b$model$NMR, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_10b$model$Latino_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_10b_pred <- prediction(model_10b, at = list(NMR = qx, Latino_RC = qc)) %>%
+#   summary() %>%
+#   rename(NMR = `at(NMR)`, Latino_RC = `at(Latino_RC)`, premature_death = Prediction) %>%
+#   mutate(Latino_RC_q = case_match(
+#     Latino_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_10b_pred
+# 
+# ggplot(model_10b_pred, aes(NMR, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Latino_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Latino_RC_q))
+
+```
+## Model 10 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: Positive Net migration has a positive impact on premature death rates in counties with larger latine populations. 
+
+#Models 11-14 for period_avg_pd, period_avg_extraction, [marginalized groups]
+11)AIAN
+12)API
+13)Black
+14)Latine
+
+#Model 11 - extraction, AIAN, period_avg_pd, 
+
+```{r}
+
+# #model 11) period_avg_pd, period_avg_extraction, AIAN
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ Extraction at hi and low AIAN_RC
+# q <- quantile(RSS_data_space$AIAN_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_AIAN = case_when(
+#     AIAN_RC <= q[["50%"]] ~ "low",
+#     AIAN_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_extraction, period_avg_pd, color = percent_AIAN)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Extraction Rate and Period Average Premature Death Rate",
+#        x = "Extraction Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_11a <- lm(period_avg_pd ~ period_avg_extraction + AIAN_RC, data = RSS_data_space)
+# #model_11b <- lm(period_avg_pd ~ period_avg_extraction * AIAN_RC, data = RSS_data_space)
+# model_11b <- lm(period_avg_pd ~ period_avg_extraction * AIAN_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_11c <- lm_robust(period_avg_pd ~ period_avg_extraction * AIAN_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_11a, model_11b, model_11c)
+# 
+# #Spatial Test for 11a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_11a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_11a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 11b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_11b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_11b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 11c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_11c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 11
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_11a_space <- errorsarlm(period_avg_pd ~ period_avg_extraction + AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_11a_space
+# plot(density(resid(model_11a_space), na.rm = T))
+# 
+# 
+# model_11b_space <- errorsarlm(period_avg_pd ~ period_avg_extraction * AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_11b_space
+# plot(density(resid(model_11b_space), na.rm = T))
+# 
+# 
+# 
+# huxreg(model_11a_space, model_11b_space)
+# 
+# 
+# #Plot prediction with Extraction and AIAN_RC
+# qx = quantile(model_11b$model$period_avg_extraction, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_11b$model$AIAN_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_11b_pred <- prediction(model_11b, at = list(period_avg_extraction = qx, AIAN_RC = qc)) %>%
+#   summary() %>%
+#   rename(extraction = `at(period_avg_extraction)`, AIAN_RC = `at(AIAN_RC)`, premature_death = Prediction) %>%
+#   mutate(AIAN_RC_q = case_match(
+#     AIAN_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_11b_pred
+# 
+# ggplot(model_11b_pred, aes(extraction, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = AIAN_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = AIAN_RC_q))
+
+```
+## Model 11 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: Extraction is associated with higher rates of premature death in counties with higher proportions of AI/AN populations. 
+
+#Model 12 - extraction, API, period_avg_pd, 
+```{r}
+# #Model 12 for period_avg_pd, period_avg_extraction, API_RC
+# 
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ Extraction at hi and low API_RC
+# q <- quantile(RSS_data_space$API_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_API = case_when(
+#     API_RC <= q[["50%"]] ~ "low",
+#     API_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_extraction, period_avg_pd, color = percent_API)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Extraction and\n Period Average Premature Death Rate",
+#        x = "Extraction Rate",
+#        y = "Premature Death Rate")
+# 
+# 
+# # Fit linear models
+# model_12a <- lm(period_avg_pd ~ period_avg_extraction + API_RC, data = RSS_data_space)
+# #model_12b <- lm(period_avg_pd ~ period_avg_extraction * API_RC, data = RSS_data_space)
+# model_12b <- lm(period_avg_pd ~ period_avg_extraction * API_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_12c <- lm_robust(period_avg_pd ~ period_avg_extraction * API_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS Models
+# huxreg(model_12a, model_12b, model_12c)
+# 
+# #Spatial Test for 12a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_12a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_12a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 12b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_12b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_12b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 12c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_12c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 12
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_12a_space <- errorsarlm(period_avg_pd ~ period_avg_extraction + API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_12a_space
+# plot(density(resid(model_12a_space), na.rm = T))
+# 
+# 
+# model_12b_space <- errorsarlm(period_avg_pd ~ period_avg_extraction * API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_12b_space
+# plot(density(resid(model_12b_space), na.rm = T))
+# 
+# 
+# #Summary of spatial models
+# huxreg(model_12a_space, model_12b_space)
+# 
+# #Plot prediction with Extraction and API_RC
+# qx = quantile(model_12b$model$period_avg_extraction, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_12b$model$API_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_12b_pred <- prediction(model_12b, at = list(period_avg_extraction = qx, API_RC = qc)) %>%
+#   summary() %>%
+#   rename(extraction = `at(period_avg_extraction)`, API_RC = `at(API_RC)`, premature_death = Prediction) %>%
+#   mutate(API_RC_q = case_match(
+#     API_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_12b_pred
+# 
+# ggplot(model_12b_pred, aes(extraction, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = API_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = API_RC_q))
+
+```
+## Model 12 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of extraction on premature death rates is reduced in counties with higher proportions of Asian and Pacific Islander populations. This association is significant. 
+
+
+#Model 13 - extraction, Black_RC, period_avg_pd, 
+```{r}
+# #Model 13 for period_avg_pd, period_avg_extraction, Black_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ Extraction at hi and low Black_RC
+# q <- quantile(RSS_data_space$Black_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Black = case_when(
+#     Black_RC <= q[["50%"]] ~ "low",
+#     Black_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_extraction, period_avg_pd, color = percent_Black)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Extraction Rate and\n Period Average Premature Death Rate",
+#        x = "Extraction Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_13a <- lm(period_avg_pd ~ period_avg_extraction + Black_RC, data = RSS_data_space)
+# #model_13b <- lm(period_avg_pd ~ period_avg_extraction * Black_RC, data = RSS_data_space)
+# model_13b <- lm(period_avg_pd ~ period_avg_extraction * Black_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_13c <- lm_robust(period_avg_pd ~ period_avg_extraction * Black_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_13a, model_13b, model_13c)
+# 
+# #Spatial Test for 13a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_13a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_13a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 13b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_13b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_13b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 13c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_13c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 13
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_13a_space <- errorsarlm(period_avg_pd ~ period_avg_extraction + Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_13a_space
+# plot(density(resid(model_13a_space), na.rm = T))
+# 
+# 
+# model_13b_space <- errorsarlm(period_avg_pd ~ period_avg_extraction * Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_13b_space
+# plot(density(resid(model_13b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_13a_space, model_13b_space)
+# 
+# #Plot prediction with extraction and Black_RC
+# qx = quantile(model_13b$model$period_avg_extraction, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_13b$model$Black_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_13b_pred <- prediction(model_13b, at = list(period_avg_extraction = qx, Black_RC = qc)) %>%
+#   summary() %>%
+#   rename(extraction = `at(period_avg_extraction)`, Black_RC = `at(Black_RC)`, premature_death = Prediction) %>%
+#   mutate(Black_RC_q = case_match(
+#     Black_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_13b_pred
+# 
+# ggplot(model_13b_pred, aes(extraction, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Black_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Black_RC_q))
+```
+
+## Model 13 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of extraction on premature death rates increases as the proportion of the population of a county that is black increases. 
+
+
+#Model 14 - extraction, Latino, period_avg_pd, 
+```{r}
+
+# #Model 14 for period_avg_pd, period_avg_extraction, Latino_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ Extraction at hi and low Latino_RC
+# q <- quantile(RSS_data_space$Latino_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Latino = case_when(
+#     Latino_RC <= q[["50%"]] ~ "low",
+#     Latino_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_extraction, period_avg_pd, color = percent_Latino)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Extraction Rate and\n Period Average Premature Death Rate",
+#        x = "Extraction Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_14a <- lm(period_avg_pd ~ period_avg_extraction + Latino_RC, data = RSS_data_space)
+# #model_14b <- lm(period_avg_pd ~ period_avg_extraction * Latino_RC, data = RSS_data_space)
+# model_14b <- lm(period_avg_pd ~ period_avg_extraction * Latino_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_14c <- lm_robust(period_avg_pd ~ period_avg_extraction * Latino_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_14a, model_14b, model_14c)
+# 
+# #Spatial Test for 14a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_14a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_14a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 14b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_14b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_14b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 14c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_14c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 14
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_14a_space <- errorsarlm(period_avg_pd ~ period_avg_extraction + Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_14a_space
+# plot(density(resid(model_14a_space), na.rm = T))
+# 
+# 
+# model_14b_space <- errorsarlm(period_avg_pd ~ period_avg_extraction * Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_14b_space
+# plot(density(resid(model_14b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_14a_space, model_14b_space)
+# 
+# #Plot prediction with extraction and Latino_RC
+# qx = quantile(model_14b$model$period_avg_extraction, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_14b$model$Latino_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_14b_pred <- prediction(model_14b, at = list(period_avg_extraction = qx, Latino_RC = qc)) %>%
+#   summary() %>%
+#   rename(extraction = `at(period_avg_extraction)`, Latino_RC = `at(Latino_RC)`, premature_death = Prediction) %>%
+#   mutate(Latino_RC_q = case_match(
+#     Latino_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_14b_pred
+# 
+# ggplot(model_14b_pred, aes(extraction, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Latino_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Latino_RC_q))
+
+```
+## Model 14 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of extraction on premature death rates is less pronounced in counties with higher proportions of Latine populations. 
+
+
+##Models 15-18 for period_avg_pd, Period_avg_dependence, [marginalized groups]
+
+15)AIAN
+16)API
+17)Black
+18)Latine
+
+##Model 15 - dependence, AIAN, period_avg_pd, 
+
+```{r}
+
+# #model 15) period_avg_pd, period_avg_dependence, AIAN_RC
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ dependence at hi and low AIAN_RC
+# q <- quantile(RSS_data_space$AIAN_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_AIAN = case_when(
+#     AIAN_RC <= q[["50%"]] ~ "low",
+#     AIAN_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_dependence, period_avg_pd, color = percent_AIAN)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Dependence Rate and Period Average Premature Death Rate",
+#        x = "Dependence Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_15a <- lm(period_avg_pd ~ period_avg_dependence + AIAN_RC, data = RSS_data_space)
+# #model_15b <- lm(period_avg_pd ~ period_avg_dependence * AIAN_RC, data = RSS_data_space)
+# model_15b <- lm(period_avg_pd ~ period_avg_dependence * AIAN_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_15c <- lm_robust(period_avg_pd ~ period_avg_dependence * AIAN_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_15a, model_15b, model_15c)
+# 
+# #Spatial Test for 15a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_15a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_15a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 15b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_15b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_15b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 15c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_15c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 15
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_15a_space <- errorsarlm(period_avg_pd ~ period_avg_dependence + AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_15a_space
+# plot(density(resid(model_15a_space), na.rm = T))
+# 
+# 
+# model_15b_space <- errorsarlm(period_avg_pd ~ period_avg_dependence * AIAN_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_15b_space
+# plot(density(resid(model_15b_space), na.rm = T))
+# 
+# 
+# #Summary of spatial models
+# huxreg(model_15a_space, model_15b_space)
+# 
+# #Plot prediction with dependence and AIAN_RC
+# qx = quantile(model_15b$model$period_avg_dependence, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_15b$model$AIAN_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_15b_pred <- prediction(model_15b, at = list(period_avg_dependence = qx, AIAN_RC = qc)) %>%
+#   summary() %>%
+#   rename(dependence = `at(period_avg_dependence)`, AIAN_RC = `at(AIAN_RC)`, premature_death = Prediction) %>%
+#   mutate(AIAN_RC_q = case_match(
+#     AIAN_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_15b_pred
+# 
+# ggplot(model_15b_pred, aes(dependence, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = AIAN_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = AIAN_RC_q))
+
+```
+## Model 15 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of higher rates of dependence on premature death rates are reduced in counties with higher proportions of AI/AN populations. This association is significant. 
+
+##Model 16 - dependence, API, period_avg_pd, 
+
+```{r}
+
+# #model 16) period_avg_pd, period_avg_dependence, API_RC
+# 
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ dependence at hi and low API_RC
+# q <- quantile(RSS_data_space$API_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_API = case_when(
+#     API_RC <= q[["50%"]] ~ "low",
+#     API_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_dependence, period_avg_pd, color = percent_API)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Dependence and Period Average Premature Death Rate",
+#        x = "Dependence Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_16a <- lm(period_avg_pd ~ period_avg_dependence + API_RC, data = RSS_data_space)
+# #model_16b <- lm(period_avg_pd ~ period_avg_dependence * API_RC, data = RSS_data_space)
+# model_16b <- lm(period_avg_pd ~ period_avg_dependence * API_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_16c <- lm_robust(period_avg_pd ~ period_avg_dependence * API_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS models
+# huxreg(model_16a, model_16b, model_16c)
+# 
+# 
+# #Spatial Test for 16a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_16a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_16a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 16b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_16b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_16b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 16c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_16c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 16
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_16a_space <- errorsarlm(period_avg_pd ~ period_avg_dependence + API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_16a_space
+# plot(density(resid(model_16a_space), na.rm = T))
+# 
+# 
+# model_16b_space <- errorsarlm(period_avg_pd ~ period_avg_dependence * API_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_16b_space
+# plot(density(resid(model_16b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_16a_space, model_16b_space)
+# 
+# #Plot prediction with dependence and API_RC
+# qx = quantile(model_16b$model$period_avg_dependence, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_16b$model$API_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_16b_pred <- prediction(model_16b, at = list(period_avg_dependence = qx, API_RC = qc)) %>%
+#   summary() %>%
+#   rename(dependence = `at(period_avg_dependence)`, API_RC = `at(API_RC)`, premature_death = Prediction) %>%
+#   mutate(API_RC_q = case_match(
+#     API_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_16b_pred
+# 
+# ggplot(model_16b_pred, aes(dependence, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = API_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = API_RC_q))
+
+```
+## Model 16 Result- 
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of higher rates of dependence on premature death rates is reduced in counties with higher proportions of Asian and Pacific Islander populations. This association is significant. 
+
+
+##Model 17 - dependence, Black, period_avg_pd, 
+```{r}
+
+# #model 17) period_avg_pd, period_avg_dependence, Black_RC
+# 
+# 
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ depdence at hi and low Black_RC
+# q <- quantile(RSS_data_space$Black_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Black = case_when(
+#     Black_RC <= q[["50%"]] ~ "low",
+#     Black_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_dependence, period_avg_pd, color = percent_Black)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Dependence and\n Period Average Premature Death Rate",
+#        x = "Dependence Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_17a <- lm(period_avg_pd ~ period_avg_dependence + Black_RC, data = RSS_data_space)
+# #model_17b <- lm(period_avg_pd ~ period_avg_dependence * Black_RC, data = RSS_data_space)
+# model_17b <- lm(period_avg_pd ~ period_avg_dependence * Black_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_17c <- lm_robust(period_avg_pd ~ period_avg_dependence * Black_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS Models
+# huxreg(model_17a, model_17b, model_17c)
+# 
+# 
+# #Spatial Test for 17a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_17a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_17a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 17b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_17b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_17b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 17c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_17c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Spatial Regression for model 17
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_17a_space <- errorsarlm(period_avg_pd ~ period_avg_dependence + Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_17a_space
+# plot(density(resid(model_17a_space), na.rm = T))
+# 
+# 
+# model_17b_space <- errorsarlm(period_avg_pd ~ period_avg_dependence * Black_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_17b_space
+# plot(density(resid(model_17b_space), na.rm = T))
+# 
+# 
+# #Summary of spatial models
+# huxreg(model_17a_space, model_17b_space)
+# 
+# #Plot prediction with dependence and Black_RC
+# qx = quantile(model_17b$model$period_avg_dependence, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_17b$model$Black_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_17b_pred <- prediction(model_17b, at = list(period_avg_dependence = qx, Black_RC = qc)) %>%
+#   summary() %>%
+#   rename(dependence = `at(period_avg_dependence)`, Black_RC = `at(Black_RC)`, premature_death = Prediction) %>%
+#   mutate(Black_RC_q = case_match(
+#     Black_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_17b_pred
+# 
+# ggplot(model_17b_pred, aes(dependence, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Black_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Black_RC_q))
+
+```
+## Model 17 Result- 
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of higher rates of dependence on premature death rates increases with the size of the black population in a county. 
+
+
+##Model 18 - dependence, Latino_RC, period_avg_pd, 
+```{r}
+
+# #model 18) period_avg_pd, period_avg_dependence, Latino_RC
+# 
+# 
+# RSS_data_space <- RSS_mpre_space %>% drop_na()
+# 
+# #first order queen's contiguity neighbors list 
+# foqc <- poly2nb(RSS_data_space)
+# 
+# # scatterplot pd ~ Dependence at hi and low Latino_RC
+# q <- quantile(RSS_data_space$Latino_RC)
+# RSS_data_space <- RSS_data_space %>%
+#   mutate(percent_Latino = case_when(
+#     Latino_RC <= q[["50%"]] ~ "low",
+#     Latino_RC > q[["50%"]] ~ "hi"
+#   ))
+# 
+# #with new color palatte 
+# ggplot(RSS_data_space, aes(period_avg_dependence, period_avg_pd, color = percent_Latino)) +
+#   geom_point() +
+#   geom_smooth(method = "lm") +
+#   scale_color_manual(values = my_colors) +
+#   labs(title = "Scatter Plot of Period Average Dependence and\n Period Average Premature Death Rate",
+#        x = "Dependence Rate",
+#        y = "Premature Death Rate")
+# 
+# # Fit linear models
+# model_18a <- lm(period_avg_pd ~ period_avg_dependence + Latino_RC, data = RSS_data_space)
+# #model_18b <- lm(period_avg_pd ~ period_avg_dependence * Latino_RC, data = RSS_data_space)
+# model_18b <- lm(period_avg_pd ~ period_avg_dependence * Latino_RC, 
+#                data = RSS_data_space %>% select(!geometry) %>% as_tibble())
+# model_18c <- lm_robust(period_avg_pd ~ period_avg_dependence * Latino_RC, clusters = State, data = RSS_data_space)
+# 
+# #Summary of OLS Models
+# huxreg(model_18a, model_18b, model_18c)
+# 
+# 
+# #Spatial Test for 18a
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_18a))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_18a), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 18b
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_18b))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# #Moran's I test for spatial autocorrelation
+# moran.test(resid(model_18b), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+# 
+# ##Spatial tests for 18c
+# # Add scaled predicted values
+# RSS_data_space$period_avg_pd_fit <- scale(fitted(model_18c))[, 1]
+# 
+# # Add discrete transformation
+# RSS_data_space$period_avg_pd_fit_q <- cut(RSS_data_space$period_avg_pd_fit, 
+#                                           breaks = c(seq(min(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), -1, len = 5),
+#                                                      seq(1, max(RSS_data_space$period_avg_pd_fit, na.rm = TRUE), len = 4)))
+# 
+# 
+# #Spatial Regression for model 18
+# #package for spatial regression analysis
+# #install.packages("spatialreg")
+# library("spatialreg")
+# model_18a_space <- errorsarlm(period_avg_pd ~ period_avg_dependence + Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_18a_space
+# plot(density(resid(model_18a_space), na.rm = T))
+# 
+# 
+# model_18b_space <- errorsarlm(period_avg_pd ~ period_avg_dependence * Latino_RC, 
+#                       data = RSS_data_space,
+#                       nb2listw(foqc, zero.policy = TRUE), 
+#                       zero.policy = TRUE,
+#                       method = "eigen", 
+#                       quiet = FALSE)
+# model_18b_space
+# plot(density(resid(model_18b_space), na.rm = T))
+# 
+# 
+# #Summary of Spatial Models
+# huxreg(model_18a_space, model_18b_space)
+# 
+# #Plot prediction with dependence and Latino_RC
+# qx = quantile(model_18b$model$period_avg_dependence, c(0.2, 0.5, 0.8), na.rm = TRUE)
+# qc = quantile(model_18b$model$Latino_RC, c(0.2, 0.8), na.rm = TRUE)
+# model_18b_pred <- prediction(model_18b, at = list(period_avg_dependence = qx, Latino_RC = qc)) %>%
+#   summary() %>%
+#   rename(dependence = `at(period_avg_dependence)`, Latino_RC = `at(Latino_RC)`, premature_death = Prediction) %>%
+#   mutate(Latino_RC_q = case_match(
+#     Latino_RC,
+#     qc[1] ~ paste("percentile", names(qc)[1]),
+#     qc[2] ~ paste("percentile", names(qc)[2])
+#   ))
+# 
+# model_18b_pred
+# 
+# ggplot(model_18b_pred, aes(dependence, premature_death)) +
+#   geom_ribbon(aes(ymin = lower, ymax = upper, fill = Latino_RC_q), alpha = 0.3) +
+#   geom_line(aes(color = Latino_RC_q))
+
+```
+
+## Model 18 Result- 
+
+H3b: the association between community and economic vitality and health outcomes will be more pronounced in places with larger shares of racially marginalized groups
+
+Interpretation: The negative impact of higher dependence rates on premature death rates is reduced in counties with higher proportions of latine populations. 
+
+#Unused Code
+```{r}
+# #Prepare life expectancy data for joining
+# LEJoined_data <- bind_rows(LE2012_data,LE2017_data)
+# 
+# LEJoined_data<- LEJoined_data %>% 
+#   filter(fips >999) %>% 
+#   filter (age_name == "<1 year") %>% 
+#   rename (life_expec = val)
+# 
+# LE_data <- LEJoined_data %>% 
+#   select(location_name, fips, race_id, race_name, year, life_expec)
+# 
+# 
+# #Calculate period average for life expectancy for each county and racial group
+# period_avg_life_expectancy <- LE_data %>% 
+#   group_by (fips, race_name) %>% 
+#   summarize (Period_Avg_LE = mean (life_expec)) %>% 
+#   ungroup()
+# 
+# 
+#  migration_health_race <- left_join(totalmigration_race_long,period_avg_life_expectancy, by=c("fips", "race_name")) 
+#  
+#  #pivot migration_health_race data to wide format to calculate differences between life expectancy and net migration and in preparation to add on economic data. GOAL: each county has one row of data so that counties with complete data can be more easily identified. 
+# 
+# #Calculate differences in life expectancy
+# mhr_wide_le <- migration_health_race %>%
+#   group_by(fips, race_name) %>%
+#   mutate(row_id = row_number()) %>%
+#   pivot_wider(
+#     id_cols = fips,
+#     names_from = race_name,
+#     values_from = Period_Avg_LE,
+#     values_fn = list,
+#     values_fill = NA
+#   ) %>%
+#   ungroup() %>%
+#   unnest(cols = API:White) %>%
+#   mutate(across(API:White, ~ as.numeric(.)), .keep = "unused") %>% 
+#   rename(API_LE = API, Black_LE = Black, Latino_LE = Latino, AIAN_LE = AIAN, White_LE = White)
+# 
+# 
+# 
+#    
+#  mhr_wide_le_diff <- mhr_wide_le %>%          
+#    mutate(
+#     B_W_LE = ifelse(!is.na(Black_LE) & !is.na(White_LE), Black_LE - White_LE, NA),
+#     L_W_LE = ifelse(!is.na(Latino_LE) & !is.na(White_LE), Latino_LE - White_LE, NA),
+#     API_W_LE = ifelse(!is.na(API_LE) & !is.na(White_LE), API_LE - White_LE, NA),
+#     AIAN_W_LE = ifelse(!is.na(AIAN_LE) & !is.na(White_LE), AIAN_LE - White_LE, NA),
+#     .keep = "unused" # Add this to keep ungrouped columns
+#   ) 
+#    
+#  #join life expectancy and differences in life expectancy data by race
+#  RSS_le <- left_join(mhr_wide_le, mhr_wide_le_diff, by=c("fips"))
+#  
+#  
+# #Calculate differences in net migration rate by race 
+# mhr_wide_nmr <- migration_health_race %>%
+#   group_by(fips, race_name) %>%
+#   mutate(row_id = row_number()) %>%
+#   pivot_wider(
+#     id_cols = fips,
+#     names_from = race_name,
+#     values_from = Net_migration_rate,
+#     values_fn = list,
+#     values_fill = NA
+#   ) %>%
+#   ungroup() %>%
+#   unnest(cols = API:White) %>%
+#   mutate(across(API:White, ~ as.numeric(.)), .keep = "unused") %>% 
+#   rename(API_NMR = API, Black_NMR = Black, Latino_NMR = Latino, AIAN_NMR = AIAN, White_NMR = White)
+# 
+#  mhr_wide_NMR_diff <- mhr_wide_nmr %>%          
+#    mutate(
+#     B_W_NMR = ifelse(!is.na(Black_NMR) & !is.na(White_NMR), Black_NMR - White_NMR, NA),
+#     L_W_NMR = ifelse(!is.na(Latino_NMR) & !is.na(White_NMR), Latino_NMR - White_NMR, NA),
+#     API_W_NMR = ifelse(!is.na(API_NMR) & !is.na(White_NMR), API_NMR - White_NMR, NA),
+#     AIAN_W_NMR = ifelse(!is.na(AIAN_NMR) & !is.na(White_NMR), AIAN_NMR - White_NMR, NA),
+#     .keep = "unused" 
+#   )
+# 
+# 
+#  #Join net migration rate data with differences between net migration rate by race
+#  RSS_nmr <- left_join(mhr_wide_nmr, mhr_wide_NMR_diff, by=c("fips"))
+ 
+ # #create base file
+ # RSS_base <- migrationrucc %>% 
+ #   select(fips, State, RUCC_2013, Description, metro_nonmetro) 
+ # 
+ # #Join net migration rates with differences file to base file 
+ # RSS_base_nmr <- left_join( RSS_base, RSS_nmr, by=c("fips"))
+ 
+ 
+ #Join life expectancy with differences file to base and net migration file 
+ # RSS_mh<-left_join(  RSS_base_nmr, RSS_le, by=c("fips"))
+
+```
+
+```{r}
+#Create subsets if helpful
+
+# #subset health
+# RSS_subset_pmd<-RSS_mpre %>% 
+#    select(fips, State, RUCC_2013, Description, metro_nonmetro, period_avg_pd, API_RC, AIAN_RC, Black_RC, Latino_RC, White_RC) 
+# 
+# #subset migration-race
+# RSS_subset_nmr<-RSS_mpre %>% 
+#    select(fips, State, RUCC_2013, Description, metro_nonmetro, NMR) 
+# 
+# # #subset migration-rate difference
+# # RSS_subset_nmrdiff<-RSS_cleaned %>% 
+# #   select(fips, State, RUCC_2013, Description, metro_nonmetro, API_W_NMR, AIAN_W_NMR, B_W_NMR, L_W_NMR) 
+# 
+# #subset extraction
+# RSS_subset_extraction<- RSS_mpre %>% 
+#    select(fips, State, RUCC_2013, Description, metro_nonmetro, period_avg_extraction)
+# 
+# #subset dependence
+# RSS_subset_dependence<- RSS_mpre %>% 
+#    select(fips, State, RUCC_2013, Description, metro_nonmetro, period_avg_dependence)
+
+
+
+# # Plot histogram for AI/AN Net Migration Rate
+# ggplot(data = RSS_subset_nmr, aes(x = AIAN_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   xlim(-350, 275) +
+#   labs(title = "Histogram of AI/AN Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmr,
+#                            mean = mean(AIAN_NMR, na.rm = TRUE),
+#                            sd = sd(AIAN_NMR, na.rm = TRUE),
+#                            min = min(AIAN_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(AIAN_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(AIAN_NMR, 0.75, na.rm = TRUE),
+#                            max = max(AIAN_NMR, na.rm = TRUE))
+# 
+# # Plot histogram for API Net Migration Rate
+# ggplot(data = RSS_subset_nmr, aes(x = API_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of API Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmr,
+#                            mean = mean(API_NMR, na.rm = TRUE),
+#                            sd = sd(API_NMR, na.rm = TRUE),
+#                            min = min(API_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(API_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(API_NMR, 0.75, na.rm = TRUE),
+#                            max = max(API_NMR, na.rm = TRUE))
+# 
+# # Plot histogram for AI/AN Net Migration Rate
+# ggplot(data = RSS_subset_nmr, aes(x = Black_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of Black Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmr,
+#                            mean = mean(Black_NMR, na.rm = TRUE),
+#                            sd = sd(Black_NMR, na.rm = TRUE),
+#                            min = min(Black_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(Black_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(Black_NMR, 0.75, na.rm = TRUE),
+#                            max = max(Black_NMR, na.rm = TRUE))
+# 
+# # Plot histogram for Latino Net Migration Rate
+# ggplot(data = RSS_subset_nmr, aes(x = Latino_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of Latino Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmr,
+#                            mean = mean(Latino_NMR, na.rm = TRUE),
+#                            sd = sd(Latino_NMR, na.rm = TRUE),
+#                            min = min(Latino_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(Latino_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(Latino_NMR, 0.75, na.rm = TRUE),
+#                            max = max(Latino_NMR, na.rm = TRUE))
+# 
+# # Plot histogram for AI/AN Net Migration Rate
+# ggplot(data = RSS_subset_nmr, aes(x = White_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of White Net Migration Rate", x = "Net Migration Rate", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmr,
+#                            mean = mean(White_NMR, na.rm = TRUE),
+#                            sd = sd(White_NMR, na.rm = TRUE),
+#                            min = min(White_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(White_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(White_NMR, 0.75, na.rm = TRUE),
+#                            max = max(White_NMR, na.rm = TRUE))
+
+```
+
+
+```{r}
+
+#Summary Statistics for Differences in Net Migration by Race (not currently using)
+# # Plot histogram for AI/AN Net Migration Rate
+# ggplot(data = RSS_subset_nmrdiff, aes(x = AIAN_W_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of White-AI/AN Net Migration Rate Difference", x = "Difference in NMR", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmrdiff,
+#                            mean = mean(AIAN_W_NMR, na.rm = TRUE),
+#                            sd = sd(AIAN_W_NMR, na.rm = TRUE),
+#                            min = min(AIAN_W_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(AIAN_W_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(AIAN_W_NMR, 0.75, na.rm = TRUE),
+#                            max = max(AIAN_W_NMR, na.rm = TRUE))
+# 
+# ggplot(data = RSS_subset_nmrdiff, aes(x = API_W_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of White-API Net Migration Rate Difference", x = "Difference in NMR", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmrdiff,
+#                            mean = mean(API_W_NMR, na.rm = TRUE),
+#                            sd = sd(API_W_NMR, na.rm = TRUE),
+#                            min = min(API_W_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(API_W_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(API_W_NMR, 0.75, na.rm = TRUE),
+#                            max = max(API_W_NMR, na.rm = TRUE))
+# 
+# ggplot(data = RSS_subset_nmrdiff, aes(x = B_W_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of White-Black Net Migration Rate Difference", x = "Difference in NMR", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmrdiff,
+#                            mean = mean(B_W_NMR, na.rm = TRUE),
+#                            sd = sd(B_W_NMR, na.rm = TRUE),
+#                            min = min(B_W_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(B_W_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(B_W_NMR, 0.75, na.rm = TRUE),
+#                            max = max(B_W_NMR, na.rm = TRUE))
+# 
+# ggplot(data = RSS_subset_nmrdiff, aes(x = L_W_NMR)) +
+#   geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+#   labs(title = "Histogram of White-Latino Net Migration Rate Difference", x = "Difference in NMR", y = "Frequency")
+# 
+# # Calculate other summary statistics
+# summarize(RSS_subset_nmrdiff,
+#                            mean = mean(L_W_NMR, na.rm = TRUE),
+#                            sd = sd(L_W_NMR, na.rm = TRUE),
+#                            min = min(L_W_NMR, na.rm = TRUE),
+#                            pctile25 = quantile(L_W_NMR, 0.25, na.rm = TRUE),
+#                            pctile75 = quantile(L_W_NMR, 0.75, na.rm = TRUE),
+#                            max = max(L_W_NMR, na.rm = TRUE))
+
+```
+
+
+#Unused Code
+```{r}
+
+# x_mean <- mean(RSS_data$NMR)
+# x_plus_sd <- x_mean + sd(RSS_data$NMR)
+# x_minus_sd <- x_mean - sd(RSS_data$NMR)
+
+#prediction(model_1, at = list(NMR = c(x_minus_sd, x_mean, x_plus_sd))) %>% summary()
+
+#plot regression models
+# cplot(model_1)
+# cplot(model_1_clust)
+
+#this didn't work when translated to model 2
+# g1 <- ggplot(RSS_mpre_space[!RSS_mpre_space$State %in% c("AK", "HI", "PR"), ]) + 
+#    geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+#    coord_sf(crs = "+init=EPSG:4326") +
+#    scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+#    guides(fill = guide_legend(title = "Premature Death Rate Residuals")) +
+#    theme_void()
+#  
+#  g2 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("AK"), ]) + 
+#    geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+#    coord_sf(crs = "+init=EPSG:26934") +
+#    scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+#    theme_void() +
+#    theme(legend.position = "none")
+#  
+#  g3 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("HI"), ]) + 
+#    geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+#    coord_sf(crs = "+init=EPSG:6629") +
+#    scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+#    theme_void() +
+#    theme(legend.position = "none")
+# 
+#  g4 <- ggplot(RSS_mpre_space[RSS_mpre_space$State == c("PR"), ]) + 
+#    geom_sf(aes(fill = (period_avg_pd_fit_q)), color = alpha("grey", 0.2)) + 
+#    coord_sf(crs = "+init=EPSG:4437") +
+#    scale_fill_manual(values = RColorBrewer::brewer.pal(7, "RdBu")) +
+#    theme_void() +
+#    theme(legend.position = "none")
+#  
+# gg_inset_map2 = ggdraw() +
+#   draw_plot(g1) +
+#   draw_plot(g2, x = 0.02, y = 0.02, width = 0.35, height = 0.35) +
+#   draw_plot(g3, x = 0.38, y = 0.06, width = 0.1, height = 0.1) +
+#   draw_plot(g4, x = 0.52, y = 0.06, width = 0.1, height = 0.1)
+# gg_inset_map2
+
+
+# ggplot(RSS_data_space, aes(NMR, period_avg_pd, color = percent_white)) +
+#   geom_point() +
+#   geom_smooth(method = "lm")
+
+
+# install.packages("texreg")
+#library(texreg)
+
+
+#Moran's I test for spatial autocorrelation
+#moran.test(resid(model_4), nb2listw(foqc, zero.policy = TRUE), na.action = na.exclude, zero.policy = TRUE)
+
+# # Create an empty list to store the models
+# model_4 <- list()
+# 
+# # Fit linear models
+# model_4[["NMR + white"]] <- lm(period_avg_pd ~ NMR + White_RC, data = RSS_data_space)
+# model_4[["NMR * white"]] <- lm(period_avg_pd ~ NMR * White_RC, data = RSS_data_space)
+# model_4[["NMR * white, clust"]] <- lm_robust(period_avg_pd ~ NMR * White_RC, clusters = State, data = RSS_data_space)
+# 
+# # Display model summaries using texreg
+# huxreg(model_4)
+# 
+# # Access the summaries separately if needed
+# summary(model_4[["NMR + white"]])
+
+# x_mean <- mean(RSS_data$NMR)
+# x_plus_sd <- x_mean + sd(RSS_data$NMR)
+# x_minus_sd <- x_mean - sd(RSS_data$NMR)
+
+#prediction(model_3, at = list(NMR = c(x_minus_sd, x_mean, x_plus_sd))) %>% summary()
+
+# summary(RSS_data)
+# sd(RSS_data$NMR) # keep this if you want to print standard deviation of variable
+# 
+# 
+# # specify which model from the list you want to visualize
+# # cplot(model_4[["NMR * white"]])
+# # cplot(model_4[["NMR * white, clust"]])
+# 
+# # you can use this code as template to get prediction points on other variables such as White_RC
+
+
+#replace it with reference to a specific model which you want to predict from
+
+```
+
