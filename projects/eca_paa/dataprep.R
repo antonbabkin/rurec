@@ -6,6 +6,7 @@
 library(tidyverse)
 library(logger)
 library(glue)
+library(readxl)
 log_threshold(DEBUG)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
@@ -20,7 +21,7 @@ source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
 
 # many inputs are required indirectly through sourced scripts
 ipath <- list(
-
+  RUCC = "https://www.ers.usda.gov/webdocs/DataFiles/53251/ruralurbancodes2013.xls?v=8014.1"
 )
 
 opath <- list(
@@ -34,7 +35,8 @@ opath <- list(
   education = "data/projects/eca_paa/education.rds",
   chrr = "data/projects/eca_paa/chrr.rds",
   lfpr = "data/projects/eca_paa/lfpr.rds",
-  saipe = "data/projects/eca_paa/saipe_2004-2022.rds"
+  saipe = "data/projects/eca_paa/saipe_2004-2022.rds",
+  RUCC = "data/projects/eca_paa/rucc2012.xlsx"
 )
 
 # County shapes ----
@@ -230,3 +232,30 @@ call_circ_df <- function(x) {
   df %>%
     filter(year == x)
 }
+
+
+# RUCC  ----
+call_RUCC <- function() {
+  raw_path <- opath$RUCC
+  
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+  } else {
+    # create parent directories
+    raw_path <- util$mkdir(raw_path)
+    download_status <- download.file(url = ipath$RUCC, destfile = raw_path, mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("raw data dowloaded to {raw_path}")
+  }
+  
+  df <- read_xls(raw_path)
+  
+  return(df)
+}
+
+call_RUCC()
+
+raw_path <- opath$RUCC
+read_xls(raw_path)
+
