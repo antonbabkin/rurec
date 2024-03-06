@@ -70,10 +70,8 @@ H0: There is not a spatial pattern to the associtions
 Last step. generate some interpretive figure that distills what is and is not significant (like a table of Hs) and predicted values to demonstrate intensity of differences (maybe) - e.g., model 4: predicted premature deaths = constant + B1 net migration (ave net mig) + B2 proportion white (ave prop wh) + B3 (ave net mig * +/- 1 stdev prop wh) … this generates two values of predicted premature deaths; one for +1 stdev prop white (higher privilege) and one for -1 stdev prop white (lower priv)
 
 
-
 #Coding Prep (set working directory, install and load libraries)
 ```{r}
-setwd("C:/Users/saraa/OneDrive - UW-Madison/USDA Research/Fall 2023/Data")
 
 # install.packages(vtable)
 # install.packages(dplyr)
@@ -100,20 +98,21 @@ my_color_palette <- viridis(9, option = "D")
 palette(my_color_palette)
 
 
+source("projects/eca_paa/dataprep.R", local = (eca_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circ <- new.env()))
+
 ```
 
 #Load Data
+
+
 ```{r}
 #Load Data from Working Directory
-ruccdata <- read.csv("ANA_ruralurbancodes2013.csv")
-netmigdata <- read.csv("ANA_NME_1020_75up_data_beta1.csv")
-#LE2012_data<- read.csv("ANA_IHME 2012 Life Expectancy.csv")
-#LE2017_data <- read.csv("ANA_IHME 2017 Life Expectancy.csv")
-conn_growth_analysis <- read.csv("conn_growth_analysis.csv")
-#CHRR_2012 <- read.csv("ANA_2012_CHRR_data.csv")
+ruccdata <- eca_dp$call_RUCC()
+netmigration <- eca_dp$call_netmigration()
+conn_growth_analysis <- circ$get_circularity()
 CHRR_2017 <- read.csv ("ANA_2017_CHRR_data.csv")
 CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
-#CHRR_2020 <- read.csv ("ANA_2020_CHRR_data.csv")
 
 ```
 
