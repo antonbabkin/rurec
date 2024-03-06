@@ -8,6 +8,7 @@ library(tidyverse)
 library(glue)
 
 library(tidycensus)
+library(readxl)
 
 
 # R scripts ----
@@ -20,7 +21,9 @@ source("R/place_output.R", local = (place_output <- new.env()))
 ipath <- list(
   ig_ = ig$opath$county_,
   bea_econ_profile = "https://apps.bea.gov/regional/zip/CAINC30.zip",
-  ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv"
+  ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv",
+  saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}",
+  chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv"
 )
 
 opath <- list(
@@ -29,7 +32,9 @@ opath <- list(
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
   econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds",
   ers_labor_stats_raw = "data/ers/unemployemnt.pq",
-  tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq"
+  tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq",
+  saipe_raw_ = "data/saipe/{year}.pq",
+  chr_raw_ = "data/chr/{year}.pq"
 )
 
 clear_outputs <- function() {
@@ -100,6 +105,7 @@ exit_rate <- function(exit_l, est_t, est_l){
 # TODO: add Quarterly Census of Employment and Wages, American Community Survey, Current Population Survey, National Agricultural Workers Survey, Agricultural Resource Management Survey, Census of Agriculture, Farm Labor Survey
 # e.g., "https://data.bls.gov/cew/data/files/2023/xls/2023_all_county_high_level.zip"
 
+# TODO: make better use of parquet capabilities for bea_econ_profile
 call_bea_econ_profile_raw <- function() {
   raw_path <- opath$bea_econ_profile_raw
   # download raw data if needed
@@ -142,16 +148,15 @@ call_ers_labor_stats_raw <- function() {
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
     return(read_parquet(cache_path))
-  } else {
-    parent_path <- util$mkdir(file.path(dirname(cache_path), basename(ipath$ers_labor_stats_raw)))
-    download_status <- download.file(url = ipath$ers_labor_stats_raw, 
-                                     destfile = parent_path, 
-                                     mode = "wb")
-    stopifnot(download_status == 0)
-    log_debug("data dowloaded to {parent_path}")
-    df <- read_csv(parent_path, show_col_types = FALSE) %>% 
-      mutate(FIPS_Code = sprintf("%05d", FIPS_Code))
   }
+  parent_path <- util$mkdir(file.path(dirname(cache_path), basename(ipath$ers_labor_stats_raw)))
+  download_status <- download.file(url = ipath$ers_labor_stats_raw, 
+                                   destfile = parent_path, 
+                                   mode = "wb")
+  stopifnot(download_status == 0)
+  log_debug("data dowloaded to {parent_path}")
+  df <- read_csv(parent_path, show_col_types = FALSE) %>% 
+    mutate(FIPS_Code = sprintf("%05d", FIPS_Code))
   log_debug(paste("save to cache", cache_path))
   write_parquet(df, util$mkdir(cache_path))
   return(df)
@@ -201,6 +206,73 @@ call_tidy_acs_county_stats <- function(
 }
 
 
+call_saipe_raw <- function(year) {
+  year <- util$year2saipe(year)
+  if (year > 2002){ext = "xls"} else {ext = "dat"}
+  cache_path <- glue(opath$saipe_raw_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  tf <- tempfile()
+  download_status <- download.file(url = glue(ipath$saipe_raw_), 
+                                   destfile = tf, 
+                                   mode = "wb")
+  stopifnot(download_status == 0)
+  if (ext == "xls"){
+    df <- read_excel(tf) %>% suppressMessages()
+  } else if (ext == "dat"){
+    df <- read.table(tf, fill = TRUE)
+  } 
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  return(df)  
+}
+
+call_saipe_county <- function(year) {
+  df <- call_saipe_raw(year = year)
+    if (grep("^0", df[[1]])[1] != 1 ) {
+      df <- df %>%
+        .[(grep("^0", .[[1]])[1]-1):nrow(.),] %>% 
+        `colnames<-`(.[1,]) %>% 
+        .[-1, ]
+    }
+    if (any(is.na(df[[1]]))){
+      df <- df %>% 
+        .[(1:which(is.na(.[[1]]))-1),]
+    }
+  df[[1]] = sprintf("%02s", df[[1]])
+  df[[2]] = sprintf("%03s", df[[2]])
+  df <- df %>% 
+    {.[!grepl('(0)$', .[[2]]), ]} %>% 
+    {.[, 1:25]}
+  return(df)  
+}
+
+call_chr_raw <- function(year) {
+  year <- util$year2chr(year)
+  if (year < 2020) {
+    extra_path  = ""
+  } else {
+    extra_path  = "media/document/"
+  }
+  cache_path <- glue(opath$chr_raw_)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  tf <- tempfile()
+  download_status <- download.file(url = glue(ipath$chr_raw_), 
+                                   destfile = tf, 
+                                   mode = "wb")
+  stopifnot(download_status == 0)
+  df <- read_csv(tf, show_col_types = FALSE) %>% suppressMessages()
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  return(df)  
+}
+
+
 # Population ----
 
 call_population <- function() {
@@ -232,9 +304,20 @@ call_bea_county_population <- function(year) {
 return(df)
 }
 
+call_tidy_acs_county_population <- function(year) {
+  df <- call_tidy_acs_county_stats(
+    year = year,
+    variables = "DP05_0001E",
+    geography = "county",
+    survey = "acs5") %>% 
+    {.[c("GEOID", "estimate")]} %>% 
+    `colnames<-`(c("place", "population"))
+  return(df)
+}
+
 call_county_population <- function(
     year,
-    bus_data = c("census", "bea_profile")
+    bus_data = c("census", "bea_profile", "tidy_acs")
 ){
   bus_data <- match.arg(bus_data)
   if(bus_data == "census"){
@@ -242,6 +325,9 @@ call_county_population <- function(
   }
   if(bus_data == "bea_profile"){
     df <- call_bea_county_population(year)
+  }
+  if(bus_data == "tidy_acs"){
+    df <- call_tidy_acs_county_population(year)
   }
   return(df)
 }
@@ -282,13 +368,13 @@ call_cbp_county_employment_efcy <- function(year) {
 }
 
 call_infogroup_county_employment <- function(year) {
-  df <- glue(ig$opath$county_, .envir = list(year = year)) %>%
+  df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
     open_dataset() %>%
     collect() %>% 
-    na.omit() %>% 
     arrange(st, cty) %>% 
     mutate(place = {paste0(.$st, .$cty)}) %>% 
     {.[c("place", "emp")]} %>% 
+    na.omit() %>% 
     {aggregate(.$emp, list(.$place), FUN=sum)} %>% 
     `colnames<-`(c("place", "employment")) 
   return(df)
@@ -372,13 +458,13 @@ call_cbp_county_estab_efcy <- function(year) {
 }
 
 call_infogroup_county_estab <- function(year) {
-  df <- glue(ig$opath$county_, .envir = list(year = year)) %>%
+  df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
     open_dataset() %>%
     collect() %>% 
-    na.omit() %>% 
     arrange(st, cty) %>% 
     mutate(place = {paste0(.$st, .$cty)}) %>% 
     {.[c("place", "est")]} %>% 
+    na.omit() %>% 
     {aggregate(.$est, list(.$place), FUN=sum)} %>% 
     `colnames<-`(c("place", "establishments")) 
   return(df)
@@ -446,6 +532,56 @@ call_county_laborforce_rate <- function(
 }
 
 
+# High school attainment rate   ----
+
+call_tidy_acs_county_highschool_attainment_rate <- function(year) {
+  if (year < 2015) {
+    df <- call_tidy_acs_county_stats(
+      year = year,
+      variables = "S1501_C01_014E") 
+  } else {
+    nm <- data.frame()
+    for (i in sprintf("%02s", 9:13)){
+      nm <- bind_rows(nm, 
+                      call_tidy_acs_county_stats(
+                        year = year,
+                        variables = paste0("S1501_C01_0", i, "E")))
+    } 
+    nm <- nm %>% 
+      {aggregate(.$estimate, list(.$GEOID), FUN = sum, drop = TRUE)} %>% 
+      `colnames<-`(c("GEOID", "numerator"))
+    if (year < 2017) {ys = 9:16} else {ys = 10:17}
+    dm <- data.frame()
+    for (i in sprintf("%02s", ys)){
+      dm <- bind_rows(dm, 
+                      call_tidy_acs_county_stats(
+                        year = year,
+                        variables = paste0("DP05_00", i, "E")))
+    }
+    dm <- dm %>% 
+      {aggregate(.$estimate, list(.$GEOID), FUN = sum, drop = TRUE)} %>% 
+      `colnames<-`(c("GEOID", "denominator"))
+    
+    df <- inner_join(nm, dm, by = "GEOID") %>% 
+      mutate(estimate = (numerator/denominator)*100)
+  }
+  df <- df %>% 
+    {.[c("GEOID", "estimate")]} %>% 
+    `colnames<-`(c("place", "highschool_attainment_rate"))
+  return(df)
+}
+
+call_county_highschool_attainment_rate <- function(
+    year,
+    bus_data = c("tidy_acs") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "tidy_acs"){
+    df <- call_tidy_acs_county_highschool_attainment_rate(year)
+  }
+  return(df)
+}
+
+
 # GDP and Personal Income  ----
 
 call_bea_county_income <- function(year) {
@@ -456,7 +592,8 @@ call_bea_county_income <- function(year) {
     {.[!grepl('(0)$', .$GeoFIPS), ]} %>%
     {.[c("GeoFIPS", paste0("X", year))]} %>%
     `colnames<-`(c("place", "income")) %>%
-    mutate_at(2, as.numeric) %>% 
+    mutate(across(2, as.numeric)) %>% 
+    na.omit()
     `rownames<-`({1:nrow(.)})
   return(df)
 }
@@ -471,6 +608,62 @@ call_county_income <- function(
   }
   return(df)
 }
+
+# Poverty ----
+
+call_saipe_county_poverty <- function(year) {
+  df <- call_saipe_county(year = year) 
+  if (year > 2002){
+    df <- df[, c(1, 2, 5)]
+  } else {
+    df <- df[, 1:3]
+  }
+  df <- df %>% 
+    `colnames<-`(c("st", "cty", "poverty")) %>% 
+    mutate(place = {paste0(.$st, .$cty)}) %>% 
+    {.[c("place", "poverty")]} %>% 
+    mutate(across(2, as.numeric)) %>% 
+    na.omit()
+  return(df)
+}
+
+call_county_poverty <- function(
+    year,
+    bus_data = c("saipe") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "saipe"){
+    df <- call_saipe_county_poverty(year)
+  }
+  return(df)
+}
+
+
+# Premature Death rate ----
+
+call_chr_county_ypll75 <- function(year) {
+  #(per 100,000)
+  df <- call_chr_raw(year = year) %>% 
+    `colnames<-`({.[1,]}) %>% 
+    .[-1, ] %>% 
+    rename(place = fipscode) %>% 
+    {.[!grepl('(0)$', .$place), ]} %>% 
+    {.[c("place", "v001_rawvalue")]} %>% 
+    `colnames<-`(c("place", "ypll75")) %>% 
+    mutate(across(2, as.numeric)) %>% 
+    na.omit()
+  return(df)
+}
+
+call_county_ypll75 <- function(
+    year,
+    bus_data = c("chr") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "chr"){
+    df <- call_chr_county_ypll75(year)
+  }
+  return(df)
+}
+
 
 # Output  ----
 
@@ -492,26 +685,26 @@ call_county_output <- function(
 # Dynamism ----
 
 call_infogroup_county_entry <- function(year) {
-  df <- glue(ig$opath$county_, .envir = list(year = year)) %>%
+  df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
     open_dataset() %>%
     collect() %>% 
-    na.omit() %>% 
     arrange(st, cty) %>% 
     mutate(place = {paste0(.$st, .$cty)}) %>% 
     {.[c("place", "entry")]} %>% 
+    na.omit() %>% 
     {aggregate(.$entry, list(.$place), FUN=sum)} %>% 
     `colnames<-`(c("place", "entry")) 
   return(df)
 }
 
 call_infogroup_county_exit <- function(year) {
-  df <- glue(ig$opath$county_, .envir = list(year = year)) %>%
+  df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
     open_dataset() %>%
     collect() %>% 
-    na.omit() %>% 
     arrange(st, cty) %>% 
     mutate(place = {paste0(.$st, .$cty)}) %>% 
     {.[c("place", "exit")]} %>% 
+    na.omit() %>% 
     {aggregate(.$exit, list(.$place), FUN=sum)} %>% 
     `colnames<-`(c("place", "exit")) 
   return(df)
