@@ -353,8 +353,9 @@ data %>%
 
 ```{r}
 data %>%
-  select(-eca_membership, -max_trade_share, -eca_cluster_category, -central_outlying) %>%
-  pivot_wider(names_from = RUCC,
+  mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
+  select(-eca_membership, -max_trade_share, -eca_cluster_category, -central_outlying, -RUCC) %>%
+  pivot_wider(names_from = RUCC2,
               values_from = c(population, employment, establishments, output, log.population, log.employment, log.establishments, log.output, population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)) %>%
   get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   filter(variable != "bachelors" & variable != "rural" & variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share") %>%
@@ -377,8 +378,9 @@ data %>%
   )
 
 data %>%
-  select(place, RUCC, bachelors, lfpr, poverty, premature.death, net.migration) %>%
-  pivot_wider(names_from = RUCC,
+  mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
+  select(place, RUCC2, bachelors, lfpr, poverty, premature.death, net.migration) %>%
+  pivot_wider(names_from = RUCC2,
               values_from = c(bachelors, lfpr, poverty, premature.death, net.migration)) %>%
   get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
@@ -708,6 +710,35 @@ for (i in indicators) {
     xlab(i)))
   
   }
+
+
+```
+
+#### RUC code
+
+```{r}
+
+indicators = data %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  colnames()
+
+temp = data %>% mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2)))
+
+
+for (i in indicators) {
+  print(ggplot(temp, aes(x = temp[ , i], y = RUCC2, fill = ..x..)) +
+  geom_density_ridges_gradient(scale = 1.8, rel_min_height = 0.01) +
+  scale_fill_viridis(option = "G") +
+  labs(title = i) +
+    theme(
+      legend.position="none",
+      panel.spacing = unit(0.1, "lines"),
+      strip.text.x = element_text(size = 8)
+    ) +
+    xlab(i) +
+    ylab("RUC code"))
+  
+}
 
 
 ```

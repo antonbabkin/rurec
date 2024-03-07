@@ -354,6 +354,38 @@ if (params$map_tradeflow_show) {
 ```
 
 
+
+```{r}
+if (params$map_tradeflow_show) {
+  source("R/trade_flows.R", local = (trade_flows <- new.env()))
+
+  focus_county <- params$map_tradeflow_county
+  industry_code <- params$map_tradeflow_ind
+  # industry_code <- "1111A0"
+  # industry_code <- "1111A0,1111B0"
+  # industry_code <- "^112.*$"
+  
+  trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connectedness$eca_table_central(focus_county, .)} %>% 
+    {inner_join(geog$call_geog(), ., by = "place")} %>% 
+    {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = "export_absorption", 
+                            censor_scale_lowerbound = min(.[["export_absorption"]][.[["export_absorption"]] > 0]) )}
+
+  trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connectedness$eca_table_central(focus_county, .)} %>% 
+    {inner_join(geog$call_geog(), ., by = "place")} %>% 
+    {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = "import_absorption", 
+                            censor_scale_lowerbound = min(.[["import_absorption"]][.[["import_absorption"]] > 0]) )}
+ 
+}
+```
+
+
+
 # prosperity
 
 ```{r}

@@ -249,6 +249,56 @@ call_trade_flows <- function(ind_code) {
 }
 
 
+# TODO: reconsile with the other version of this functin above
+# call_industry_codes <- function(file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
+#   df <- file_directory %>%
+#     dirname() %>%
+#     list.files() %>%
+#     tools::file_path_sans_ext()
+#   return(df)
+# }
+
+
+# industry_code: single code or all, or comma-separated list of codes, or regex
+filter_industry_codes <- function(cluster_subset, industry_code_vector){
+  cs <- cluster_subset
+  icv <- industry_code_vector
+  if (cs == "all_industries" || grepl("^[[:alnum:]]+$", cs)) { # single code or all
+    if (cs %in% icv){
+      df <- cs
+      return(df)
+    } else {stop("Selection not feasible")}
+  } else if (grepl(",", cs)) { # comma-separated list of codes
+    if (all(str_split_1(cs, ",") %in% icv)){
+      df <- str_split_1(cs, ",")
+      return(df)
+    } else if (any(str_split_1(cs, ",") %in% icv)) {
+      nf <- str_split_1(cs, ",") %>%
+        {.[which(!. %in% icv)]}
+      warning("Select codes: ", nf ," not feasible")
+      df <- str_split_1(cs, ",") %>%
+        {.[which(. %in% icv)]}
+      return(df)
+    } else {stop("Selection not feasible")}
+  } else { # regex
+    if (length(grep(cs, icv)) > 0){
+      df <- grep(cs, icv, value = TRUE)
+      return(df)
+    } else {stop("Selection not feasible")}
+  }
+}
+
+call_trade_flows_custom <- function(cluster_subset,
+                                    file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
+  stop("this needs to be aligned with call_industry_codes()")
+  lp <- call_industry_codes(file_directory = file_directory) %>%
+    {filter_industry_codes(cluster_subset, .)}
+  df <- 0
+    for (i in lp) {
+      df <- df + call_trade_flows(i)
+    }
+  return(df)
+}
 
 
 # RAS+Gravity algorithm ----

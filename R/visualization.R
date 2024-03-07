@@ -190,7 +190,7 @@ usa_tile_map <- function(tile_plot_list,
   tpl <- tile_plot_list
   ggp <- ggdraw() +
     draw_plot(tpl[[1]])
-  if (AK & nrow(tpl[[2]]$data)!=0){ggp <- ggp + draw_plot(tpl[[2]], x = 0.02, y = 0.02, width = 0.5, height = 0.35)}
+  if (AK & nrow(tpl[[2]]$data)!=0){ggp <- ggp + draw_plot(tpl[[2]], x = 0.02, y = 0.02, width = 0.5, height = 0.33)}
   if (HI & nrow(tpl[[3]]$data)!=0){ggp <- ggp + draw_plot(tpl[[3]], x = 0.5, y = 0.07, width = 0.15, height = 0.15)}
   if (PR & nrow(tpl[[4]]$data)!=0){ggp <- ggp + draw_plot(tpl[[4]], x = 0.65, y = 0.02, width = 0.15, height = 0.15)}
   if (interactive){
