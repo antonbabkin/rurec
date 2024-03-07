@@ -230,6 +230,16 @@ year2bea <- function(year,
   return(as.integer(x))
 }
 
+year2bea_rea <- function(year){
+  bea_rea = c(2022:2017)
+  x <- nearest_point(year, bea_rea)
+  if(!year %in% bea_rea){
+    warning("BEA-REA data years do not contain [",year,"] using [", x,"]")
+  }
+  return(as.integer(x))
+}
+
+
 year2agcensus <- function(year){
   ag_year = c(2017, 2012, 2007, 2002)
   x <- nearest_point(year, ag_year)

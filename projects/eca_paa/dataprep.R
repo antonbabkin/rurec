@@ -15,15 +15,12 @@ source("R/place_output.R", local = (place_output <- new.env()))
 source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connectedness <- new.env()))
 source("R/dataprep.R", local = (dataprep_misc <- new.env()))
-source("R/dataprep_prosperity.R", local = (prosperity <- new.env()))
-
 
 
 # paths ----
 
 # many inputs are required indirectly through sourced scripts
 ipath <- list(
-  RUCC = "https://www.ers.usda.gov/webdocs/DataFiles/53251/ruralurbancodes2013.xls?v=8014.1"
 )
 
 opath <- list(
@@ -34,27 +31,20 @@ opath <- list(
   population_ = "data/projects/eca_paa/population/{bus_data}/{year}.rds",
   laborforce_ = "data/projects/eca_paa/laborforce/{bus_data}/{year}.rds",
   employment_ = "data/projects/eca_paa/employment/{bus_data}/{year}.rds",
+  income_ = "data/projects/eca_paa/income/{bus_data}/{year}.rds",
+  income_rate_ = "data/projects/eca_paa/income_rate/{bus_data}/{year}.rds",
+  gdp_ = "data/projects/eca_paa/gdp/{bus_data}/{price_level}/{year}.rds",
   laborforce_rate_ = "data/projects/eca_paa/laborforce_rate/{bus_data}/{year}.rds",
   highschool_attainment_rate_ = "data/projects/eca_paa/highschool_attainment_rate/{bus_data}/{year}.rds",
   poverty_ = "data/projects/eca_paa/poverty/{bus_data}/{year}.rds",
+  poverty_rate_ = "data/projects/eca_paa/poverty_rate/{bus_data}/{year}.rds",
   ypll75_ = "data/projects/eca_paa/ypll75/{bus_data}/{year}.rds",
   establishments_ = "data/projects/eca_paa/establishments/{bus_data}/{year}.rds",
   entry_ = "data/projects/eca_paa/entry/{bus_data}/{year}.rds",
   exit_ = "data/projects/eca_paa/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/eca_paa/entry_rate/{bus_data}/{year}.rds",
   exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds",
-  county_shapes = "data/projects/eca_paa/county_shapes.rds",
-  cbsa_delin = "data/projects/eca_paa/cbsa_delin.rds",
-  eca_df = "data/projects/eca_paa/eca.rds",
-  circ = "data/projects/eca_paa/dataset_circularity.rds",
-  econ_dynam_ = "data/projects/eca_paa/econ_dynam_{year}.rds",
-  unemp_rate = "data/projects/eca_paa/unemp_rate.rds",
-  netmigration = "data/projects/eca_paa/netmigration.rds",
-  education = "data/projects/eca_paa/education.rds",
-  chrr = "data/projects/eca_paa/chrr.rds",
-  lfpr = "data/projects/eca_paa/lfpr.rds",
-  saipe = "data/projects/eca_paa/saipe_2004-2022.rds",
-  RUCC = "data/projects/eca_paa/rucc2012.xlsx"
+  eca_df = "data/projects/eca_paa/eca.rds"
 )
 
 
@@ -109,7 +99,7 @@ call_cbsa_delin_df <- function(year) {
 # Production ----
 
 call_production <- function(year, 
-                            bus_data = "infogroup",
+                            bus_data = "cbp_imp",
                             class_system = "commodity",
                             ilevel = "det") {
   cache_path = glue(opath$production_)
@@ -131,6 +121,86 @@ call_production <- function(year,
   return(df)
 }
 
+# Gross Output ----
+
+call_gross_output <- function(
+    year, 
+    bus_data = "cbp_imp",
+    class_system = "commodity",
+    ilevel = "det") {
+    df <- call_production(
+      year = year, 
+      bus_data = bus_data,
+      class_system = class_system,
+      ilevel = ilevel) %>% 
+      select(place, gross_output)
+  return(df)
+}
+
+# Intermediate Supply ----
+
+call_intermediate_supply <- function(
+    year, 
+    bus_data = "cbp_imp",
+    class_system = "commodity",
+    ilevel = "det") {
+  df <- call_production(
+    year = year, 
+    bus_data = bus_data,
+    class_system = class_system,
+    ilevel = ilevel) %>% 
+    select(place, intermediate_supply)
+  return(df)
+}
+
+
+# Intermediate Demand ----
+
+call_intermediate_demand <- function(
+    year, 
+    bus_data = "cbp_imp",
+    class_system = "commodity",
+    ilevel = "det") {
+  df <- call_production(
+    year = year, 
+    bus_data = bus_data,
+    class_system = class_system,
+    ilevel = ilevel) %>% 
+    select(place, intermediate_demand)
+  return(df)
+}
+
+# Net Supply ----
+
+call_net_supply <- function(
+    year, 
+    bus_data = "cbp_imp",
+    class_system = "commodity",
+    ilevel = "det") {
+  df <- call_production(
+    year = year, 
+    bus_data = bus_data,
+    class_system = class_system,
+    ilevel = ilevel) %>% 
+    select(place, net_supply)
+  return(df)
+}
+
+# Net Demand ----
+
+call_net_demand <- function(
+    year, 
+    bus_data = "cbp_imp",
+    class_system = "commodity",
+    ilevel = "det") {
+  df <- call_production(
+    year = year, 
+    bus_data = bus_data,
+    class_system = class_system,
+    ilevel = ilevel) %>% 
+    select(place, net_demand)
+  return(df)
+}
 
 # Population ----
 
@@ -182,6 +252,79 @@ call_employment <- function(year,
     df <- dataprep_misc$call_county_employment(
       year = year, 
       bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
+# Jobs ----
+
+call_jobs <- function(year,
+                      bus_data = "cbp_imp") {
+    df <- call_employment(
+      year = year, 
+      bus_data = bus_data) %>% 
+      rename(jobs = employment)
+  return(df)
+}
+
+
+# Income----
+
+call_income <- function(
+    year,
+    bus_data = "bea_profile") {
+  cache_path = glue(opath$income_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_income(
+      year = year, 
+      bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
+# Income per capita ----
+
+call_income_rate <- function(year,
+                               bus_data = "bea_profile") {
+  cache_path = glue(opath$income_rate_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_income_rate(
+      year = year, 
+      bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
+# GDP ----
+
+call_gdp <- function(
+    year,
+    bus_data = "bea_rea",
+    price_level = "real") {
+  cache_path = glue(opath$gdp_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_gdp(
+      year = year, 
+      bus_data = bus_data,
+      price_level = price_level)
     
     saveRDS(df, util$mkdir(cache_path))
     log_debug("save to cache {cache_path}")
@@ -247,6 +390,25 @@ call_poverty <- function(year,
   return(df)
 }
 
+# Poverty percent ----
+
+call_poverty_rate <- function(year,
+                         bus_data = "saipe") {
+  cache_path = glue(opath$poverty_rate_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_poverty_rate(
+      year = year, 
+      bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
 # Years of Potential Life Lost (YPLL75) ----
 
 call_ypll75 <- function(year,
@@ -269,7 +431,7 @@ call_ypll75 <- function(year,
 # Establishments ----
 
 call_establishments <- function(year,
-                                bus_data = "infogroup") {
+                                bus_data = "cbp_imp") {
   cache_path = glue(opath$establishments_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -288,7 +450,7 @@ call_establishments <- function(year,
 # Entry ----
 
 call_entry <- function(year,
-                                bus_data = "infogroup") {
+                       bus_data = "infogroup") {
   cache_path = glue(opath$entry_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -361,47 +523,6 @@ call_exit_rate <- function(year,
   return(df)
 }
 
-
-
-# County shapes ----
-
-call_county_shapes <- function() {
-  cache_path = opath$county_shapes
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- geography$call_geog(2013) |>
-      rename_with(str_to_lower) |>
-      rename(fips = place)
-    d <- geography$pubdata$get_state_df(FALSE) |>
-      rename_with(str_to_lower) |>
-      select(code, contiguous, bea_region_name) |>
-      rename(state_code = code)
-    df <- left_join(df, d, "state_code")
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-# CBSA ----
-
-call_cbsa_delin <- function() {
-  cache_path = opath$cbsa_delin
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- geography$pubdata$get_cbsa_delin_df(2013) |>
-      rename_with(str_to_lower) |>
-      mutate(fips = paste0(state_code, county_code), .before = 1)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
 # ECA ----
 
 #' County classification by ECA
@@ -425,156 +546,11 @@ call_eca_df <- function() {
 }
 
 
-# Econ dynamism ----
-
-call_econ_dynam <- function(year) {
-  cache_path <- glue(opath$econ_dynam_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_econ_dynam_ind(year) |>
-      rename(fips = place)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-# Unemployment rate ----
-
-call_unemp_rate <- function() {
-  cache_path <- opath$unemp_rate
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_unemployment_rate_df() |>
-      mutate(fips = paste0(st, cty), .before = 1)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}  
-
 
 # Net migration ----
 
-call_netmigration <- function() {
-  cache_path <- opath$netmigration
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_netmigration_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-
-# Education ----
-
-call_education <- function() {
-  cache_path <- opath$education
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_education_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# CHRR ----
-
-call_chrr <- function() {
-  cache_path <- opath$chrr
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_CHRR_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# LFPR ----
-
-call_lfpr <- function() {
-  cache_path <- opath$lfpr
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_lfpr_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# SAIPE ----
-
-
-call_saipe <- function() {
-  cache_path <- glue(opath$saipe)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_saipe_df() |>
-      mutate(fips = paste0(state.fips, county.fips), .before = 1)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# circularity  ----
-
-# TODO: fix this to read correctly the first time 
-#' NOTE: if first time accessing circularity RDS, ipath in "else" clause is reading in from unzipped file
-call_circ_df <- function(x) {
-  cache_path = opath$circ
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- readRDS("data/tmp/dataset_circularity_v240223/datasets/circularity/circularity.rds")
-  }
-  df %>%
-    filter(year == x)
-}
 
 
 # RUCC  ----
-call_RUCC <- function() {
-  raw_path <- opath$RUCC
-  
-  # download raw data if needed
-  if (file.exists(raw_path)) {
-    log_debug("raw data found at {raw_path}")
-  } else {
-    # create parent directories
-    raw_path <- util$mkdir(raw_path)
-    download_status <- download.file(url = ipath$RUCC, destfile = raw_path, mode = "wb")
-    stopifnot(download_status == 0)
-    log_debug("raw data dowloaded to {raw_path}")
-  }
-  
-  df <- read_xls(raw_path)
-  
-  return(df)
-}
+
 
