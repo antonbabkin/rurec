@@ -135,7 +135,7 @@ boil_map_theme <- function(dataframe,
   df <- list(
     geom_sf_interactive(
       aes(fill = data[[fv]],
-          tooltip = if("STATE" %in% names(dataframe)){
+          tooltip = if("STATE" %in% names(data)){
             glue("Place: {NAME}, {STATE}\nFIPS: {place}\nValue: {if(is.numeric(data[[fv]])){round_form({data[[fv]]}, 2)}else{data[[fv]]}}")
           }else{
             glue("Place: {NAME}\nFIPS: {place}\nValue: {if(is.numeric(data[[fv]])){round_form({data[[fv]]}, 2)}else{data[[fv]]}}")
@@ -252,6 +252,44 @@ girafe_plot <- function(ggobj){
                                              border-radius:5px;"),
            opts_toolbar = opts_toolbar(position = "top", saveaspng = TRUE) ))
 }
+
+# Density ----
+## format data ----
+
+## viz ----
+
+density_dist_plot <- function(
+    dataframe,
+    density_variable_name,
+    group_variable_name = NULL,
+    adaptive_scaling = TRUE){
+  data <- dataframe
+  vn <- density_variable_name
+  gn <- group_variable_name
+  p <- ggplot(data) + {
+    if(is.null(gn)) {
+      geom_density_interactive(aes(x = data[[vn]]), fill = "dodgerblue", alpha = 0.3)
+    } else {
+      geom_density_interactive(aes(x = data[[vn]], fill = data[[gn]]), alpha = 0.3) 
+    }
+  } + {
+    if(is.null(gn)) {
+      geom_vline_interactive(xintercept = mean(data[[vn]], na.rm = T), color = "red", linetype = "dashed")
+    }
+  } +
+    visual$boil_hist_theme() + {
+      if (adaptive_scaling){
+        if (isTRUE(skewness(data[[vn]], na.rm = T) > 2)) {
+          scale_x_continuous(trans = "log10")
+        }
+      }
+    } +
+    labs(x = visual$underscores2title(vn),
+         y = "Density",
+         fill = element_blank())
+  return(p)
+}
+
 
 # Temporal Absorption Density ----
 ## format data ----
