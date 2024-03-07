@@ -11,6 +11,7 @@ format:
 params:
   year: 2012
   show_descriptive_density: TRUE
+  show_descriptive_density_rural: TRUE
   show_descriptive_maps: TRUE
   show_corr: F
   show_test_regression: FALSE
@@ -28,7 +29,9 @@ params:
 # TODO: map all "sinks" unfiltered by algorithm
 # TODO: regress unfiltered "sinks" and "sources"
 # TODO: regress change over time data 
+# TODO: add spatial regressions
 # TODO: add remaining social/economic data (netmigration rate)
+# TODO: make individual calls for call_production function
 
 ```
 
@@ -66,8 +69,6 @@ params
 
 ```
 
-
-
 ```{r zip pack}
 # uncomment and pack/unpack as necessary
 
@@ -77,6 +78,17 @@ params
 ```
 
 
+```{r utility functions}
+
+strip_dataframe <- function(df){
+  df <- df %>% 
+    st_drop_geometry() %>% 
+    select(where(is.numeric)) %>% 
+    na.omit()
+  return(df)
+}
+
+```
 
 # data
 
@@ -181,7 +193,6 @@ df <- df %>%
   group_by(eca_membership) %>% mutate(cluster_members_count = n(), .after = eca_membership) %>% ungroup() %>% 
   group_by(CBSA_CODE) %>% mutate(cbsa_members_count = n(), .after = CBSA_CODE) %>% ungroup() 
 
-
 ```
 
 # summation {.tabset}
@@ -201,9 +212,78 @@ df %>%
 
 ```{r contingency table}
 
+# alpha == source
+# beta == sink
+
 table(df$cbsa_rural_category, df$eca_cluster_category)
 
+table(df$CENTRAL_OUTLYING, df$eca_cluster_category)
+
 ```
+## change over time
+
+```{r}
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+
+if (FALSE) { 
+  tmp <- dataprep$growth_rate(start_year = 2012, end_year = 2017, function_name = dataprep$call_county_output,  bus_data = "infogroup") %>% {left_join(df_space, .,  by = "place") } %>%
+    na.omit() 
+  
+  tmp %>% 
+    {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+    {visual$diverge_choro_map(., "grow_rate", caption = "Output Growth rate 2012-2017", interactive = T)}
+  
+  tmp %>% 
+    {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+    {.$grow_rate} %>% 
+    summary()
+    
+  # dp$call_production(2012, bus_data = "infogroup") %>% head()
+  # dp$call_production(2017, bus_data = "infogroup") %>% head()
+}
+
+```
+
+```{r}
+
+if (FALSE) { 
+tmp <- dataprep$growth_rate(start_year = 2012, end_year = 2017, function_name = dp$call_population,  bus_data = "tidy_acs") %>% {left_join(df_space, .,  by = "place") } %>%
+  na.omit() 
+
+tmp %>% 
+  {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+  {visual$diverge_choro_map(., "grow_rate", caption = "Population Growth rate 2012-2017", interactive = T)}
+
+tmp %>% 
+  {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+  {.$grow_rate} %>% 
+  summary()
+}
+
+```
+
+
+
+```{r}
+
+if (FALSE) { 
+  tmp <- dataprep$growth_rate(start_year = 2012, end_year = 2017, function_name = dp$call_establishments,  bus_data = "infogroup") %>% {left_join(df_space, .,  by = "place") } %>%
+    na.omit() 
+  
+  tmp %>% 
+    {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+    {visual$diverge_choro_map(., "grow_rate", caption = "Establishment Growth rate 2012-2017", interactive = T)}
+  
+  tmp %>% 
+    {.[!grepl("^(60|66|69|72|78)|(999)$", .$place), ]} %>% 
+    {.$grow_rate} %>% 
+    summary()
+  }
+
+```
+
+
+
 
 
 ## density plots
@@ -214,55 +294,25 @@ table(df$cbsa_rural_category, df$eca_cluster_category)
 #| warning: false
 if (params$show_descriptive_density) { 
   df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    na.omit() %>% 
-    {.[is.finite(rowSums(.)), ]} %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]]), fill="dodgerblue", alpha=0.3) + 
-        geom_vline_interactive(xintercept = mean(df[[i]], na.rm = T), color = "red", linetype="dashed") + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density") 
-      print(p)
+    strip_dataframe() %>% 
+    {for(i in names(.)){
+      visual$density_dist_plot(., i) %>% 
+        print(.)
     }
   }
 }
 
 ```
 
-
 ### cluster category 
 
 ```{r density cluster group}
 #| warning: false
 if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    na.omit() %>% 
-    {.[is.finite(rowSums(.)), ]} %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$eca_cluster_category), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank()) 
-      print(p)
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "eca_cluster_category") %>% 
+        print(.)
     }
   }
 }
@@ -275,23 +325,10 @@ if (params$show_descriptive_density) {
 ```{r density cbsa group}
 #| warning: false
 if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$cbsa_rural_category ), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank())
-      print(p)
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "cbsa_rural_category") %>% 
+        print(.)
     }
   }
 }
@@ -303,27 +340,14 @@ if (params$show_descriptive_density) {
 
 ```{r density cbsa more group}
 #| warning: false
- if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$CENTRAL_OUTLYING ), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank())
-      print(p)
+if (params$show_descriptive_density) { 
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "CENTRAL_OUTLYING") %>% 
+        print(.)
     }
   }
- }
+}
 
 ```
 
@@ -332,27 +356,15 @@ if (params$show_descriptive_density) {
 
 ```{r density eca cbsa xtab}
 #| warning: false
- if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$eca_cbsa_xtab ), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank())
-      print(p)
+if (params$show_descriptive_density) { 
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "eca_cbsa_xtab") %>% 
+        print(.)
     }
   }
 }
+
 ```
 
 
@@ -361,27 +373,78 @@ if (params$show_descriptive_density) {
 ```{r density eca cbsa more xtab}
 #| warning: false
 if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$eca_central_out_xtab ), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank())
-      print(p)
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "eca_central_out_xtab") %>% 
+        print(.)
     }
   }
 }
+
 ```
+
+### rural only
+
+```{r density rural}
+#| warning: false
+if (params$show_descriptive_density_rural) { 
+  df %>% 
+    {.[.$cbsa_rural_category == "rural", ]} %>% 
+    strip_dataframe() %>% 
+    {for(i in names(.)){
+      visual$density_dist_plot(., i) %>% 
+        print(.)
+    }
+  }
+}
+
+``` 
+
+```{r density rural cluster}
+#| warning: false
+if (params$show_descriptive_density_rural) { 
+  df %>%
+    {.[.$cbsa_rural_category == "rural", ]} %>% 
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "eca_cluster_category") %>% 
+        print(.)
+    }
+  }
+}
+
+``` 
+
+
+```{r scatter rural }
+#| warning: false
+if (FALSE) { 
+  df %>%
+  {.[.$cbsa_rural_category == "rural", ]} %>%
+  {ggplot(., aes(y = .[["ypll75"]], x = .[["cluster_members_count"]])  ) +
+    geom_point(aes(color = .[["eca_cluster_category"]], size = .[["population"]]), alpha = 1/2) +
+    stat_smooth(method = "lm") }
+
+
+  df %>%
+  {.[.$cbsa_rural_category == "rural", ]} %>%
+  {ggplot(., aes(y = .[["ypll75"]], x = .[["max_trade_share"]])  ) +
+    geom_point(aes(color = .[["eca_cluster_category"]], size = .[["population"]]), alpha = 1/2) +
+    stat_smooth(method = "lm") }
+
+
+  df %>%
+  {.[.$cbsa_rural_category == "rural", ]} %>%
+  {ggplot(., aes(y = .[["ypll75"]], x = .[["max_trade_share"]])  ) +
+    geom_point(aes(color = .[["eca_membership"]], size = .[["population"]]), alpha = 1/2) +
+    stat_smooth(method = "lm") +
+      theme(legend.position = "none")}
+}
+
+
+``` 
+
+
+
 
 ## numeric variables
 
@@ -393,24 +456,82 @@ if (params$show_descriptive_density) {
     names() 
 
 ```
-```{r sink filter, include = FALSE}
 
-# df %>% 
-#   mutate(sink_filter = ifelse(cluster_members_count == 1, "sink/source", 
-#                               ifelse(place %in% max_trade_place, "sink/sink", 
-#                                      "source/source"))) %>% 
-#   {visual$cat_choro_map(., "sink_filter", legend = T)}
-# 
-# df %>% 
-#   mutate(sink_filter = ifelse(cluster_members_count == 1, "sink/source", 
-#                               ifelse(place %in% max_trade_place, "sink/sink", 
-#                                      "source/source"))) %>%
-#   {sum(.$sink_filter == "sink/source")}
-
-```
 
 ## descriptive maps
 
+```{r sink filter, include = FALSE}
+if (FALSE) { 
+  tmp <- scale_fill_discrete
+  scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set2")
+  df %>%
+    mutate(sink_filter = ifelse(cluster_members_count == 1, "sink/source",
+                                ifelse(place %in% max_trade_place, "sink/sink",
+                                       "source/source"))) %>%
+    {visual$cat_choro_map(., "sink_filter", legend = T)}
+  scale_fill_discrete <- tmp
+
+  df %>%
+    mutate(sink_filter = ifelse(cluster_members_count == 1, "sink/source",
+                                ifelse(place %in% max_trade_place, "sink/sink",
+                                       "source/source"))) %>%
+    {sum(.$sink_filter == "sink/source")}
+  
+}
+
+```
+
+```{r}
+
+# if (params$show_descriptive_maps) { 
+#   visual$nominal_choro_map(df, "laborforce_part_rate", interactive = F)
+# }
+
+if (params$show_descriptive_maps) { 
+  df %>% 
+    mutate(labor_force_participation = laborforce_part_rate/100) %>% 
+  {visual$normal_choro_map(., "labor_force_participation", interactive = F)}
+}
+
+if (params$show_descriptive_maps) { 
+  df %>% 
+    mutate(labor_force_participation = laborforce_part_rate/100) %>% 
+    mutate(labor_force_participation = ifelse(cbsa_rural_category == "rural", NA, labor_force_participation)) %>% 
+  {visual$normal_choro_map(., "labor_force_participation", interactive = F)}
+}
+
+if (params$show_descriptive_maps) { 
+  df %>% 
+    mutate(labor_force_participation = laborforce_part_rate/100) %>% 
+    mutate(labor_force_participation = ifelse(cbsa_rural_category != "rural", NA, labor_force_participation)) %>% 
+  {visual$normal_choro_map(., "labor_force_participation", interactive = F)}
+}
+
+
+
+```
+
+
+```{r}
+
+if (FALSE) { 
+  if (params$show_descriptive_maps) {
+    for (i in "population" ){
+     p <- df %>% 
+       {mutate(tmp = ifelse(.[["cbsa_rural_category"]]  != "rural", NA, .[[i]]))} %>% 
+       {visual$nominal_choro_map(., deparse(substitute(tmp)), interactive = F)}
+     print(p)
+    }
+  }
+}
+```
+
+
+
+
+
+  
+  
 ```{r maps output}
 
 if (params$show_descriptive_maps) { 
@@ -440,10 +561,14 @@ if (params$show_descriptive_maps) {
 
 ```{r maps eca x cbsa}
 
-#scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+# tmp <- scale_fill_discrete
+# scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+# visual$cat_choro_map(df, "eca_cbsa_xtab", interactive = T, legend = T)
+# scale_fill_discrete <- tmp
 
-visual$cat_choro_map(df, "eca_cbsa_xtab", interactive = T, legend = T)
-
+if (params$show_descriptive_maps) {
+  visual$cat_choro_map(df, "eca_cbsa_xtab", interactive = T, legend = T)
+}
 ```
 
 
@@ -621,6 +746,7 @@ if (params$show_lm_cluster_regression) {
 }
 
 ```
+
 
 
 ```{r reg 1 cluster and share}
@@ -962,7 +1088,7 @@ if (params$show_lm_regression) {
 
 # outlying = b0 + b1_central + e
 
-if (params$show_lm_regression) {
+if (params$show_lm_cluster_regression) {
   specif <- list()
   for (i in params$reg_factors ){
     specif[[i]] <- df %>% 
