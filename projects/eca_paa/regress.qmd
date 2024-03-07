@@ -311,7 +311,7 @@ if (params$show_descriptive_density) {
 if (params$show_descriptive_density) { 
   df %>%
     {for(i in names(strip_dataframe(.))){
-      density_dist_plot(., i, "eca_cluster_category") %>% 
+      visual$density_dist_plot(., i, "eca_cluster_category") %>% 
         print(.)
     }
   }
@@ -327,7 +327,7 @@ if (params$show_descriptive_density) {
 if (params$show_descriptive_density) { 
   df %>%
     {for(i in names(strip_dataframe(.))){
-      density_dist_plot(., i, "cbsa_rural_category") %>% 
+      visual$density_dist_plot(., i, "cbsa_rural_category") %>% 
         print(.)
     }
   }
@@ -343,7 +343,7 @@ if (params$show_descriptive_density) {
 if (params$show_descriptive_density) { 
   df %>%
     {for(i in names(strip_dataframe(.))){
-      density_dist_plot(., i, "CENTRAL_OUTLYING") %>% 
+      visual$density_dist_plot(., i, "CENTRAL_OUTLYING") %>% 
         print(.)
     }
   }
@@ -359,7 +359,7 @@ if (params$show_descriptive_density) {
 if (params$show_descriptive_density) { 
   df %>%
     {for(i in names(strip_dataframe(.))){
-      density_dist_plot(., i, "eca_cbsa_xtab") %>% 
+      visual$density_dist_plot(., i, "eca_cbsa_xtab") %>% 
         print(.)
     }
   }
@@ -373,26 +373,14 @@ if (params$show_descriptive_density) {
 ```{r density eca cbsa more xtab}
 #| warning: false
 if (params$show_descriptive_density) { 
-  df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    names() %>% 
-  {
-    for(i in .){
-      p <- ggplot(df) +
-        geom_density_interactive(aes(x = df[[i]], fill = df$eca_central_out_xtab ), alpha = 0.3) + 
-        visual$boil_hist_theme() + {
-          if (skewness(df[[i]], na.rm = T) > 2){
-            scale_x_continuous(trans = "log10") 
-            } 
-          } +
-        labs(x = visual$underscores2title(i), 
-             y = "Density", 
-             fill = element_blank())
-      print(p)
+  df %>%
+    {for(i in names(strip_dataframe(.))){
+      visual$density_dist_plot(., i, "eca_central_out_xtab") %>% 
+        print(.)
     }
   }
 }
+
 ```
 
 ### rural only
@@ -418,7 +406,7 @@ if (params$show_descriptive_density_rural) {
   df %>%
     {.[.$cbsa_rural_category == "rural", ]} %>% 
     {for(i in names(strip_dataframe(.))){
-      density_dist_plot(., i, "eca_cluster_category") %>% 
+      visual$density_dist_plot(., i, "eca_cluster_category") %>% 
         print(.)
     }
   }
