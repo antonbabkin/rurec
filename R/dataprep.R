@@ -84,7 +84,7 @@ growth_rate <- function(
     ...) %>% 
     {inner_join(.[[1]], .[[2]], by = "place")} %>% 
     na.omit() %>% 
-    mutate(gr = {((.[[3]] - .[[2]])/.[[2]])*100})  %>%
+    mutate(gr = {((.[[3]] - .[[2]]) * 2/ (.[[2]] + .[[3]]))*100})  %>%
     {.[c(1, 4)]} %>%
     `colnames<-`(c("place", "grow_rate"))
   return(df)
@@ -408,6 +408,33 @@ call_county_employment <- function(
   }
   if(bus_data == "ers"){
     df <- call_ers_county_employment(year)
+  }
+  return(df)
+}
+
+
+# Payroll ----
+
+call_cbp_county_payroll <- function(year) {
+  df <- cbp$call_cbp(
+    year = year,
+    cbp_scale = "county",
+    imputed = FALSE) %>% 
+    {.[.$naics == "", ]} %>% 
+    {.[c("place", "ap")]} %>% 
+    `colnames<-`(c("place", "payroll"))
+  return(df)
+}
+
+call_county_payroll <- function(
+    year,
+    bus_data = c("cbp_imp", "cbp_raw")
+){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "cbp_raw"){
+    df <- call_cbp_county_payroll(year)
+  } else {
+    stop(paste("Not implemented:", bus_data))
   }
   return(df)
 }

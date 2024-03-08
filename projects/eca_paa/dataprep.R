@@ -39,6 +39,7 @@ opath <- list(
   poverty_ = "data/projects/eca_paa/poverty/{bus_data}/{year}.rds",
   ypll75_ = "data/projects/eca_paa/ypll75/{bus_data}/{year}.rds",
   establishments_ = "data/projects/eca_paa/establishments/{bus_data}/{year}.rds",
+  payroll_ = "data/projects/eca_paa/payroll/{bus_data}/{year}.rds",
   entry_ = "data/projects/eca_paa/entry/{bus_data}/{year}.rds",
   exit_ = "data/projects/eca_paa/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/eca_paa/entry_rate/{bus_data}/{year}.rds",
@@ -56,6 +57,11 @@ opath <- list(
   saipe = "data/projects/eca_paa/saipe_2004-2022.rds",
   RUCC = "data/projects/eca_paa/rucc2012.xlsx"
 )
+
+
+# Basic utility functions ----
+
+growth_rate <- dataprep_misc$growth_rate
 
 
 # Geog ----
@@ -232,6 +238,7 @@ call_highschool_attainment_rate <- function(year,
 
 call_poverty <- function(year,
                          bus_data = "saipe") {
+  stop("Use call_poverty_rate()")
   cache_path = glue(opath$poverty_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -284,6 +291,41 @@ call_establishments <- function(year,
   }    
   return(df)
 }
+
+# Payroll ----
+
+call_payroll <- function(year,
+                         bus_data = "cbp_raw") {
+  cache_path = glue(opath$payroll_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_payroll(
+      year = year, 
+      bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
+# Wage ----
+
+call_wage <- function(year,
+                      bus_data = "cbp_raw") {
+  pay <- call_payroll(year = year, bus_data = bus_data)
+  emp <- call_employment(year = year, bus_data = bus_data)
+  df <- full_join(pay, emp, "place") |>
+    mutate(wage = 1000 * payroll / employment) |>
+    mutate(wage = if_else(is.finite(wage), wage, NA)) |>
+    select(place, wage) |>
+    filter(!is.na(wage))
+  return(df)
+}
+
+
 
 # Entry ----
 
@@ -425,25 +467,20 @@ call_eca_df <- function() {
 }
 
 
-# Econ dynamism ----
-
-call_econ_dynam <- function(year) {
-  cache_path <- glue(opath$econ_dynam_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_econ_dynam_ind(year) |>
-      rename(fips = place)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
 
 # Unemployment rate ----
 
-call_unemp_rate <- function() {
+call_unemp_rate <- function(year) {
+  lf <- call_laborforce(year, bus_data = "ers")
+  emp <- call_employment(year, bus_data = "ers")
+  stop("FINISH THIS")
+  # df <- full_join(pay, emp, "place") |>
+  #   mutate(wage = 1000 * payroll / employment) |>
+  #   mutate(wage = if_else(is.finite(wage), wage, NA)) |>
+  #   select(place, wage) |>
+  #   filter(!is.na(wage))
+  # return(df)  
+  
   cache_path <- opath$unemp_rate
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -475,87 +512,6 @@ call_netmigration <- function() {
 
 
 
-# Education ----
-
-call_education <- function() {
-  cache_path <- opath$education
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_education_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# CHRR ----
-
-call_chrr <- function() {
-  cache_path <- opath$chrr
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_CHRR_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# LFPR ----
-
-call_lfpr <- function() {
-  cache_path <- opath$lfpr
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_lfpr_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# SAIPE ----
-
-
-call_saipe <- function() {
-  cache_path <- glue(opath$saipe)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_saipe_df() |>
-      mutate(fips = paste0(state.fips, county.fips), .before = 1)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-
-# circularity  ----
-
-# TODO: fix this to read correctly the first time 
-#' NOTE: if first time accessing circularity RDS, ipath in "else" clause is reading in from unzipped file
-call_circ_df <- function(x) {
-  cache_path = opath$circ
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- readRDS("data/tmp/dataset_circularity_v240223/datasets/circularity/circularity.rds")
-  }
-  df %>%
-    filter(year == x)
-}
 
 
 # RUCC  ----

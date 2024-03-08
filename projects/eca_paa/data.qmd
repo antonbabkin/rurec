@@ -24,6 +24,9 @@ source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 
 ```
 
+```{r}
+dataprep_misc$call_population() |> count(year)
+```
 
 
 # Data
@@ -51,8 +54,12 @@ df_county_shapes |> head()
 ## CBSA
 
 ```{r}
-df_cbsa_delin <- dp$call_cbsa_delin()
-df_cbsa_delin |> head()
+dp$call_cbsa_conc(2013)
+
+dp$call_cbsa_delin_df(2013)
+
+df_space
+
 ```
 
 
@@ -63,21 +70,97 @@ df_eca <- dp$call_eca_df()
 df_eca |> head()
 ```
 
-## Econ dynamism
+## Population
 
 ```{r}
-df_econ_dynam <- dp$call_econ_dynam(2012)
-df_econ_dynam |> head()
+dp$call_population(2012, bus_data = "tidy_acs") |> head()
+
+# create full cache
+# for (year in 2009:2019) {
+#   dp$call_population(year, "tidy_acs")
+# }
+
+dp$growth_rate(2012, 2017, dp$call_population, bus_data = "tidy_acs") |> head()
 
 ```
+## Employment
+
+```{r}
+dp$call_employment(2012, bus_data = "ers") |> head()
+
+# create full cache
+# for (year in 2002:2022) {
+#   dp$call_employment(year, bus_data = "ers")
+# }
+
+dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "ers") |> head()
+```
+
+## Jobs
+
+```{r}
+dp$call_employment(2002, bus_data = "cbp_raw") |> head()
+
+# create full cache
+for (year in 2002:2021) {
+  dp$call_employment(year, bus_data = "cbp_raw")
+}
+
+dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "cbp_raw") |> head()
+```
+
+## Establishments
+
+```{r}
+dp$call_establishments(2002, bus_data = "cbp_raw") |> head()
+
+# create full cache
+# for (year in 2002:2021) {
+#   dp$call_establishments(year, bus_data = "cbp_raw")
+# }
+
+dp$growth_rate(2012, 2017, dp$call_establishments, bus_data = "cbp_raw") |> head()
+```
+
+
+## Payroll
+
+```{r}
+dp$call_payroll(2012, bus_data = "cbp_raw") |> head()
+
+# create full cache
+# for (year in 2002:2021) {
+#   dp$call_payroll(year, bus_data = "cbp_raw")
+# }
+
+dp$growth_rate(2012, 2017, dp$call_payroll, bus_data = "cbp_raw") |> head()
+```
+
+## Wage
+
+```{r}
+dp$call_wage(2012) |> head()
+
+# TODO: fix this
+dp$growth_rate(2012, 2017, dp$call_wage) |> head()
+```
+
+
+
 
 
 ## Unemployment rate
 
 ```{r}
-df_unemp_rate <- dp$call_unemp_rate()
+dp$call_unemp_rate() |> head() |> count(year)
 df_unemp_rate |> head()
 
+```
+
+## Labor force participation rate
+
+```{r}
+dp$call_laborforce_rate(2012) |> head()
 ```
 
 
@@ -85,8 +168,7 @@ df_unemp_rate |> head()
 ## Net migration
 
 ```{r}
-df_netmigration <- dp$call_netmigration()
-df_netmigration |> head()
+dp$call_netmigration() |> head()
 
 ```
 
@@ -94,16 +176,21 @@ df_netmigration |> head()
 
 ## Education
 
+High school attainment rate.
+
 ```{r}
-df_education <- dp$call_education()
-df_education |> head()
+dp$call_highschool_attainment_rate(2022) |> head()
 
 ```
-## CHRR
+## YPLL75
+
+Years of potential life lost.
 
 ```{r}
-df_chrr <- dp$call_chrr()
-df_chrr |> head()
+dp$call_ypll75(2023) |> head()
+
+# TODO add caching
+# 2011 - 2023
 ```
 ## LFPR
 
@@ -112,11 +199,11 @@ df_lfpr <- dp$call_lfpr()
 df_lfpr |> head()
 ```
 
-## SAIPE
+## Poverty rate
 
 ```{r}
-df_saipe <- dp$call_saipe()
-df_saipe |> head()
+dp$call_poverty_rate(2012)
+# TODO: review after Austin's commit
 ```
 ## RUCC
 ```{r}
