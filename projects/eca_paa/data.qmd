@@ -2,8 +2,6 @@
 title: "ECA-PAA: data"
 format: html
 params:
-  data_pack_path: "data/dashboard_data_v240124.zip"
-  geography_year: 2013
   map_agg_stats_year: 2012
   map_ex_range_year: "2008-2012"
 ---
@@ -19,13 +17,8 @@ library(viridis)
 library(tmap)
 library(gt)
 
-source("R/basic_utilities.R", local = (util <- new.env()))
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 
-```
-
-```{r}
-dataprep_misc$call_population() |> count(year)
 ```
 
 
@@ -37,135 +30,172 @@ This chunk can be used to pack all files into or unpack from a single Zip for sh
 
 ```{r}
 # uncomment as needed
-# util$zip_pack("tmp/eca_paa_data_v240226.zip", dp$opath)
-# util$zip_unpack("tmp/eca_paa_data_v240226.zip", overwrite = TRUE)
+
+# build from scratch and cache all data
+# dp$create_complete_cache()
+
+# pack all data into a single Zip file
+# dp$util$zip_pack("tmp/eca_paa_data_v240308.zip", dp$opath)
+
+# unpack all data from a single Zip file
+# dp$util$zip_unpack("tmp/eca_paa_data_v240308.zip", overwrite = TRUE)
 ```
 
+## Classifications and geo
 
-## County shapes
+### County shapes
 
 ```{r}
-df_county_shapes <- dp$call_county_shapes() %>%
-  rename("place"="fips")
-df_county_shapes |> head()
+dp$call_geog(2013) |> head()
 ```
 
 
-## CBSA
+### CBSA
 
 ```{r}
-dp$call_cbsa_conc(2013)
-
-dp$call_cbsa_delin_df(2013)
-
-df_space
-
+dp$call_cbsa_conc(2013) |> head()
+dp$call_cbsa_delin_df(2013) |> head()
 ```
 
 
-## ECA
+### ECA
 
 ```{r}
-df_eca <- dp$call_eca_df()
-df_eca |> head()
+dp$call_eca_df() |> head()
 ```
 
-## Population
+### RUC
+
+Rural-Urban Continuum codes.
+
+```{r}
+dp$call_ruc(2013) |> head()
+```
+
+
+
+
+## Outcomes
+
+### Population
 
 ```{r}
 dp$call_population(2012, bus_data = "tidy_acs") |> head()
-
-# create full cache
-# for (year in 2009:2019) {
-#   dp$call_population(year, "tidy_acs")
-# }
-
 dp$growth_rate(2012, 2017, dp$call_population, bus_data = "tidy_acs") |> head()
-
 ```
-## Employment
+### Employment
+
+Residents of a county that are employed.
 
 ```{r}
 dp$call_employment(2012, bus_data = "ers") |> head()
-
-# create full cache
-# for (year in 2002:2022) {
-#   dp$call_employment(year, bus_data = "ers")
-# }
-
 dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "ers") |> head()
 ```
 
-## Jobs
-
-```{r}
-dp$call_employment(2002, bus_data = "cbp_raw") |> head()
-
-# create full cache
-for (year in 2002:2021) {
-  dp$call_employment(year, bus_data = "cbp_raw")
-}
-
-dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "cbp_raw") |> head()
-```
-
-## Establishments
-
-```{r}
-dp$call_establishments(2002, bus_data = "cbp_raw") |> head()
-
-# create full cache
-# for (year in 2002:2021) {
-#   dp$call_establishments(year, bus_data = "cbp_raw")
-# }
-
-dp$growth_rate(2012, 2017, dp$call_establishments, bus_data = "cbp_raw") |> head()
-```
-
-
-## Payroll
-
-```{r}
-dp$call_payroll(2012, bus_data = "cbp_raw") |> head()
-
-# create full cache
-# for (year in 2002:2021) {
-#   dp$call_payroll(year, bus_data = "cbp_raw")
-# }
-
-dp$growth_rate(2012, 2017, dp$call_payroll, bus_data = "cbp_raw") |> head()
-```
-
-## Wage
-
-```{r}
-dp$call_wage(2012) |> head()
-
-# TODO: fix this
-dp$growth_rate(2012, 2017, dp$call_wage) |> head()
-```
-
-
-
-
-
-## Unemployment rate
-
-```{r}
-dp$call_unemp_rate() |> head() |> count(year)
-df_unemp_rate |> head()
-
-```
-
-## Labor force participation rate
+### Labor force participation rate
 
 ```{r}
 dp$call_laborforce_rate(2012) |> head()
 ```
 
+### Unemployment rate
+
+```{r}
+dp$call_unemp_rate(2012) |> head()
+```
 
 
-## Net migration
+### Jobs
+
+Number of employees county businesses.
+
+```{r}
+dp$call_employment(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "cbp_raw") |> head()
+```
+
+### Establishments
+
+```{r}
+dp$call_establishments(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_establishments, bus_data = "cbp_raw") |> head()
+```
+
+### Entry and exit rate
+
+```{r}
+dp$call_entry_rate(2012, bus_data = "bds")
+dp$call_exit_rate(2012, bus_data = "bds")
+```
+
+
+
+### Payroll
+
+```{r}
+dp$call_payroll(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_payroll, bus_data = "cbp_raw") |> head()
+```
+
+### Wage
+
+```{r}
+dp$call_wage(2017) |> head()
+# TODO: growth calculation throws an error
+# dp$growth_rate(2012, 2017, dp$call_wage) |> head()
+
+```
+
+
+### Personal income
+
+Per capita.
+
+```{r}
+dp$call_income_rate(2012) |> head()
+# TODO: growth calculation throws an error
+# dp$growth_rate(2012, 2017, dp$call_income_rate) |> head()
+```
+
+### GDP
+
+```{r}
+dp$call_gdp(2022, price_level = "nominal") |> head()
+# TODO: growth calculation throws an error
+# dp$growth_rate(2017, 2019, dp$call_gdp) |> head()
+```
+
+
+
+### Education
+
+High school attainment rate.
+
+```{r}
+dp$call_highschool_attainment_rate(2012) |> head()
+```
+
+
+### Premature death
+
+YPLL75 = Years of potential life lost.
+"75" means ???
+
+```{r}
+dp$call_ypll75(2012) |> head()
+```
+
+
+### Poverty rate
+
+```{r}
+dp$call_poverty_rate(2012) |> head()
+```
+
+
+
+
+### Net migration
 
 ```{r}
 dp$call_netmigration() |> head()
@@ -173,45 +203,6 @@ dp$call_netmigration() |> head()
 ```
 
 
-
-## Education
-
-High school attainment rate.
-
-```{r}
-dp$call_highschool_attainment_rate(2022) |> head()
-
-```
-## YPLL75
-
-Years of potential life lost.
-
-```{r}
-dp$call_ypll75(2023) |> head()
-
-# TODO add caching
-# 2011 - 2023
-```
-## LFPR
-
-```{r}
-df_lfpr <- dp$call_lfpr()
-df_lfpr |> head()
-```
-
-## Poverty rate
-
-```{r}
-dp$call_poverty_rate(2012)
-# TODO: review after Austin's commit
-```
-## RUCC
-```{r}
-df_RUCC <- dp$call_RUCC() %>%
-  mutate(rural = ifelse(RUCC_2013 > 3, "non-metro", "metro")) %>%
-  select("place"=FIPS, "RUCC"=RUCC_2013, rural)
-df_RUCC |> head()
-```
 
 # Data assembly
 

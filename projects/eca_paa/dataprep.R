@@ -25,8 +25,10 @@ ipath <- list(
 
 opath <- list(
   geog_ = "data/projects/eca_paa/geog/{year}.rds",
+  ruc_ = "data/projects/eca_paa/ers_ruc/{year}.rds",
   cbsa_conc_ = "data/projects/eca_paa/cbsa_conc/{year}.rds",
   cbsa_delin_ = "data/projects/eca_paa/cbsa_delin/{year}.rds",
+  eca_df = "data/projects/eca_paa/eca.rds",
   production_ = "data/projects/eca_paa/production/{bus_data}/{ilevel}/{class_system}/{year}.rds",
   population_ = "data/projects/eca_paa/population/{bus_data}/{year}.rds",
   laborforce_ = "data/projects/eca_paa/laborforce/{bus_data}/{year}.rds",
@@ -44,14 +46,65 @@ opath <- list(
   entry_ = "data/projects/eca_paa/entry/{bus_data}/{year}.rds",
   exit_ = "data/projects/eca_paa/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/eca_paa/entry_rate/{bus_data}/{year}.rds",
-  exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds",
-  eca_df = "data/projects/eca_paa/eca.rds"
+  exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds"
 )
 
 
-# Basic utility functions ----
+# Utility functions ----
 
+#' (x1 - x0) / (0.5 * (x1 + x0))
 growth_rate <- dataprep_misc$growth_rate
+
+#' Call every data-generating function for each applicable parameter value
+#' for the purpose of caching returned values
+create_complete_cache <- function() {
+  for (year in c(2010, 2013:2020)) {
+    call_geog(year)
+  }
+  for (year in c(2013, 2015, 2017, 2018, 2020, 2023)) {
+    call_cbsa_conc(year)
+    call_cbsa_delin_df(year)
+  }
+  call_eca_df()
+  for (year in c(2003, 2013)) {
+    call_ruc(year)
+  }
+  for (year in 2009:2019) {
+    call_population(year, bus_data = "tidy_acs")
+  }
+  for (year in 2002:2022) {
+    call_employment(year, bus_data = "ers")
+    call_unemp_rate(year)
+  }
+  for (year in 2012:2022) {
+    call_laborforce_rate(year)
+  }
+  for (year in 2002:2021) {
+    call_employment(year, bus_data = "cbp_raw")
+    call_establishments(year, bus_data = "cbp_raw")
+    call_payroll(year, bus_data = "cbp_raw")
+    call_wage(year, bus_data = "cbp_raw")
+  }
+  for (year in 2002:2021) {
+    call_exit_rate(year, bus_data = "bds")
+    call_entry_rate(year, bus_data = "bds")
+  }  
+  for (year in 2002:2022) {
+    call_income_rate(year)
+  }
+  for (year in 2017:2022) {
+    call_gdp(year, price_level = "nominal")
+  }
+  for (year in 2002:2022) {
+    call_poverty_rate(year)
+  }
+  for (year in 2011:2023) {
+    call_ypll75(year)
+  }
+  for (year in 2010:2022) {
+    call_highschool_attainment_rate(year)
+  }
+}
 
 
 # Geog ----
@@ -101,6 +154,48 @@ call_cbsa_delin_df <- function(year) {
   }    
   return(df)
 }
+
+
+# ECA ----
+
+#' County classification by ECA
+call_eca_df <- function() {
+  cache_path = opath$eca_df
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    tf <- trade_flows$call_trade_flows("all_industries")
+    tf_norm <- sweep(tf, 1, rowSums(tf), "/")
+    tf_norm[is.na(tf_norm)] <- 0
+    conn_metrics <- connectedness$apply_absorption_metrics(tf_norm)
+    df <- connectedness$apply_absorption_algorithm(conn_metrics, threshold = 0) |>
+      select(place, cluster_category, eca_membership, max_alpha, match) |>
+      rename(fips = place, eca_cluster_category = cluster_category, max_trade_share = max_alpha, max_trade_place = match)
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }
+  df
+}
+
+
+
+# RUC  ----
+call_ruc <- function(year) {
+  cache_path <- glue(opath$ruc_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$pubdata$ers_ruc() |>
+      filter(ruc_year == year) |>
+      select(fips, ruc_code)
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  df
+}
+
 
 # Production ----
 
@@ -475,21 +570,19 @@ call_payroll <- function(year,
 
 # Wage ----
 
-call_wage <- function(year,
-                      bus_data = "cbp_raw") {
+call_wage <- function(year, bus_data = "cbp_raw") {
   pay <- call_payroll(year = year, bus_data = bus_data)
   emp <- call_employment(year = year, bus_data = bus_data)
-  df <- full_join(pay, emp, "place") |>
+  df <- inner_join(pay, emp, "place") |>
     mutate(wage = 1000 * payroll / employment) |>
-    mutate(wage = if_else(is.finite(wage), wage, NA)) |>
     select(place, wage) |>
-    filter(!is.na(wage))
-  return(df)
+    filter(is.finite(wage))
+  df
 }
 
 
 
-# Entry ----
+# Establishment entry & exit ----
 
 call_entry <- function(year,
                        bus_data = "infogroup") {
@@ -508,8 +601,6 @@ call_entry <- function(year,
   return(df)
 }
 
-# Exit ----
-
 call_exit <- function(year,
                       bus_data = "infogroup") {
   cache_path = glue(opath$exit_)
@@ -527,10 +618,10 @@ call_exit <- function(year,
   return(df)
 }
 
-# Entry rate ----
 
 call_entry_rate <- function(year,
-                            bus_data = "infogroup") {
+                            bus_data = c("bds", "infogroup")) {
+  bus_data <- match.arg(bus_data)
   cache_path = glue(opath$entry_rate_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -546,10 +637,9 @@ call_entry_rate <- function(year,
   return(df)
 }
 
-# Exit rate ----
-
 call_exit_rate <- function(year,
-                           bus_data = "infogroup") {
+                           bus_data = c("bds", "infogroup")) {
+  bus_data <- match.arg(bus_data)
   cache_path = glue(opath$exit_rate_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -565,27 +655,6 @@ call_exit_rate <- function(year,
   return(df)
 }
 
-# ECA ----
-
-#' County classification by ECA
-call_eca_df <- function() {
-  cache_path = opath$eca_df
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    tf <- trade_flows$call_trade_flows("all_industries")
-    tf_norm <- sweep(tf, 1, rowSums(tf), "/")
-    tf_norm[is.na(tf_norm)] <- 0
-    conn_metrics <- connectedness$apply_absorption_metrics(tf_norm)
-    df <- connectedness$apply_absorption_algorithm(conn_metrics, threshold = 0) |>
-      select(place, cluster_category, eca_membership, max_alpha, match) |>
-      rename(fips = place, eca_cluster_category = cluster_category, max_trade_share = max_alpha, max_trade_place = match)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }
-  df
-}
 
 
 # Unemployment rate ----
@@ -593,24 +662,10 @@ call_eca_df <- function() {
 call_unemp_rate <- function(year) {
   lf <- call_laborforce(year, bus_data = "ers")
   emp <- call_employment(year, bus_data = "ers")
-  stop("FINISH THIS")
-  # df <- full_join(pay, emp, "place") |>
-  #   mutate(wage = 1000 * payroll / employment) |>
-  #   mutate(wage = if_else(is.finite(wage), wage, NA)) |>
-  #   select(place, wage) |>
-  #   filter(!is.na(wage))
-  # return(df)  
-  
-  cache_path <- opath$unemp_rate
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_unemployment_rate_df() |>
-      mutate(fips = paste0(st, cty), .before = 1)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
+  df <- inner_join(lf, emp, "place") |>
+    mutate(unemp_rate = 100 * (1 - employment / laborforce)) |>
+    select(place, unemp_rate) |>
+    filter(is.finite(unemp_rate))
   df
 }  
 
@@ -633,8 +688,5 @@ call_netmigration <- function() {
 
 
 
-
-
-# RUCC  ----
 
 

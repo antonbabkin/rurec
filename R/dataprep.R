@@ -29,6 +29,7 @@ ipath <- list(
 
 opath <- list(
   population = "data/pubdata/population/population.pq",
+  ers_rurality_ruc = "data/ers/rurality/ruc.pq",
   bea_econ_profile_raw = "data/bea/raw/CAINC30__ALL_AREAS_1969_2022.csv",
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
   bea_rea_gdp_raw = "data/bea/raw/CAGDP1__ALL_AREAS_2017_2022.csv",
@@ -56,6 +57,8 @@ pymod$init <- function() {
   library(reticulate)
   use_condaenv("rurec")
   pymod$population <- import("rurec.pubdata.population")
+  pymod$bds <- import("rurec.pubdata.bds")
+  pymod$ers_rurality <- import("rurec.pubdata.ers_rurality")
   pymod$initialized <- TRUE
 }
 
@@ -68,6 +71,21 @@ pubdata$prep_population <- function() {
     pymod$init()
     pymod$population$get_df()
   }
+}
+
+pubdata$ers_ruc <- function() {
+  cache_path <- opath$ers_rurality_ruc
+  if (file.exists(cache_path)) {
+    df <- read_parquet(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    pymod$init()
+    df <- pymod$ers_rurality$get_ruc_df() |>
+      rename_with(str_to_lower)
+    write_parquet(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  df
 }
 
 # Utility functions----
@@ -915,20 +933,36 @@ call_infogroup_county_exit_rate <- function(year){
 
 call_county_entry_rate <- function(
     year,
-    bus_data = c("infogroup")){
+    bus_data = c("bds", "infogroup")){
   bus_data <- match.arg(bus_data)
   if(bus_data == "infogroup"){
     df <- call_infogroup_county_entry_rate(year)
+  } else if (bus_data == "bds") {
+    # TODO: add caching around python
+    pymod$init()
+    df <- pymod$bds$get_df("st_cty") |>
+      filter(year == !!year) |>
+      mutate(place = paste0(st, cty)) |>
+      select(place, estabs_entry_rate) |>
+      rename(entry_rate = estabs_entry_rate)
   }
   return(df)
 }
 
 call_county_exit_rate <- function(
     year,
-    bus_data = c("infogroup")){
+    bus_data = c("bds", "infogroup")){
   bus_data <- match.arg(bus_data)
   if(bus_data == "infogroup"){
     df <- call_infogroup_county_exit_rate(year)
+  } else if (bus_data == "bds") {
+    # TODO: add caching around python
+    pymod$init()
+    df <- pymod$bds$get_df("st_cty") |>
+      filter(year == !!year) |>
+      mutate(place = paste0(st, cty)) |>
+      select(place, estabs_exit_rate) |>
+      rename(exit_rate = estabs_exit_rate)
   }
   return(df)
 }
