@@ -69,7 +69,7 @@ dp$call_eca_df() |> head()
 Rural-Urban Continuum codes.
 
 ```{r}
-dp$call_ruc(2013) |> head()
+dp$call_ruc(2020) |> head()
 ```
 
 
@@ -198,7 +198,8 @@ dp$call_poverty_rate(2012) |> head()
 ### Net migration
 
 ```{r}
-dp$call_netmigration() |> head()
+# TODO: NFG
+# dp$call_netmigration() |> head()
 
 ```
 

@@ -81,7 +81,8 @@ pubdata$ers_ruc <- function() {
   } else {
     pymod$init()
     df <- pymod$ers_rurality$get_ruc_df() |>
-      rename_with(str_to_lower)
+      rename_with(str_to_lower) |>
+      mutate(ruc_code_description = unlist(ruc_code_description))
     write_parquet(df, util$mkdir(cache_path))
     log_debug("save to cache {cache_path}")
   }    

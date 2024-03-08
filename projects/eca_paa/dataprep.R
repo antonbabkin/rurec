@@ -188,7 +188,7 @@ call_ruc <- function(year) {
     log_debug("read from cache {cache_path}")
   } else {
     df <- dataprep_misc$pubdata$ers_ruc() |>
-      filter(ruc_year == year) |>
+      filter(ruc_year == util$year2rucc(year)) |>
       select(fips, ruc_code)
     saveRDS(df, util$mkdir(cache_path))
     log_debug("save to cache {cache_path}")
