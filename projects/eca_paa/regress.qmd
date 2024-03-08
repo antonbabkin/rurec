@@ -31,7 +31,6 @@ params:
 # TODO: regress change over time data 
 # TODO: add spatial regressions
 # TODO: add remaining social/economic data (netmigration rate)
-# TODO: make individual calls for call_production function
 
 ```
 
@@ -52,7 +51,6 @@ library(estimatr)
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 source("R/visualization.R", local = (visual <- new.env()))
-
 source("R/dataprep.R", local = (dataprep <- new.env()))
 
 # chunk behavior 
@@ -115,24 +113,27 @@ df_space <- df_geo %>%
 ```
 
 
-```{r data production}
-
-df_production <- dp$call_production(params$year, bus_data = "infogroup")
-
-```
-
-
 ```{r data dynamism}
 
 dl <- list(
   dp$call_population(year = params$year, bus_data = "tidy_acs"),
   dp$call_laborforce(year = params$year, bus_data = "ers"),
   dp$call_employment(year = params$year, bus_data = "ers"),
+  dp$call_jobs(year = params$year, bus_data = "cbp_imp"), 
+  dp$call_gross_output(year = params$year, bus_data = "cbp_imp"),
+  dp$call_intermediate_supply(year = params$year, bus_data = "cbp_imp"),
+  dp$call_intermediate_demand(year = params$year, bus_data = "cbp_imp"),
+  dp$call_net_supply(year = params$year, bus_data = "cbp_imp"),
+  dp$call_net_demand(year = params$year, bus_data = "cbp_imp"),
   dp$call_laborforce_rate(year = params$year, bus_data = "tidy_acs"),
+  dp$call_income(year = params$year, bus_data = "bea_profile"),
+  dp$call_income_rate(year = params$year, bus_data = "bea_profile"),
   dp$call_highschool_attainment_rate(year = params$year, bus_data = "tidy_acs"),
   dp$call_poverty(year = params$year, bus_data = "saipe"),
+  dp$call_poverty_rate(year = params$year, bus_data = "saipe"),
+  dp$call_gdp(year = params$year, bus_data = "bea_rea"),
   dp$call_ypll75(year = params$year, bus_data = "chr"),
-  dp$call_establishments(year = params$year, bus_data = "infogroup"),
+  dp$call_establishments(year = params$year, bus_data = "cbp_raw"),
   dp$call_entry(year = params$year, bus_data = "infogroup"),
   dp$call_exit(year = params$year, bus_data = "infogroup"),
   dp$call_entry_rate(year = params$year, bus_data = "infogroup"),
@@ -159,7 +160,6 @@ df_eca <- dp$call_eca_df() %>%
 
 df <- left_join(df_space, df_eca,  by = "place")  %>%
   na.omit() %>% 
-  {left_join(., df_production,  by = "place")}  %>%
   {left_join(., df_econ_dynam,  by = "place")}
 
 ```
@@ -168,7 +168,6 @@ df <- left_join(df_space, df_eca,  by = "place")  %>%
 ```{r growth rates}
 
 # test <- dataprep$growth_rate(start_year = 2010, end_year = 2015, function_name = dataprep$call_county_population,  bus_data = "census")
-
 
 ```
 
@@ -183,7 +182,7 @@ df <- df %>%
   relocate(cbsa_of_eca, .after = eca_membership)
 
 df <- df %>% 
-  mutate(poverty_rate = poverty/population, .after = poverty) %>% 
+  # mutate(poverty_rate = poverty/population, .after = poverty) %>% 
   mutate(unemployment = (laborforce - employment), .after = employment) %>% 
   mutate(unemployment_rate = (unemployment/laborforce), .after = exit_rate) %>% 
   mutate(employment_rate = (employment/laborforce), .after = exit_rate) %>% 

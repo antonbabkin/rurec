@@ -21,6 +21,7 @@ source("R/place_output.R", local = (place_output <- new.env()))
 ipath <- list(
   ig_ = ig$opath$county_,
   bea_econ_profile = "https://apps.bea.gov/regional/zip/CAINC30.zip",
+  bea_rea_gdp = "https://apps.bea.gov/regional/zip/CAGDP1.zip",
   ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv",
   saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}",
   chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv"
@@ -30,6 +31,8 @@ opath <- list(
   population = "data/pubdata/population/population.pq",
   bea_econ_profile_raw = "data/bea/raw/CAINC30__ALL_AREAS_1969_2022.csv",
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
+  bea_rea_gdp_raw = "data/bea/raw/CAGDP1__ALL_AREAS_2017_2022.csv",
+  bea_rea_gdp = "data/bea/CAGDP1__ALL_AREAS_2017_2022.csv",
   econ_dynam_ind_ = "data/econ_dynam/econ_dynam_ind_{year}.rds",
   ers_labor_stats_raw = "data/ers/unemployemnt.pq",
   tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq",
@@ -139,6 +142,41 @@ call_bea_econ_profile <- function() {
   write_parquet(df, util$mkdir(cache_path))
   return(df)  
 }
+
+call_bea_rea_gdp_raw <- function() {
+  raw_path <- opath$bea_rea_gdp_raw
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+    return(read.csv(raw_path))
+  } else {
+    # create parent directories
+    parent_path <- util$mkdir(file.path(dirname(raw_path), basename(ipath$bea_rea_gdp)))
+    download_status <- download.file(url = ipath$bea_rea_gdp, 
+                                     destfile = parent_path, 
+                                     mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("zip data dowloaded to {parent_path}")
+    df <- unzip(parent_path,
+                files = basename(raw_path),
+                exdir = dirname(raw_path))
+  }
+  df <- read.csv(raw_path)
+  return(df)
+}
+
+call_bea_rea_gdp <- function() {
+  cache_path <- glue(opath$bea_rea_gdp)
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  df <- call_bea_rea_gdp_raw()
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  return(df)  
+}
+
 
 
 # Civilian_labor_force, Employed, Unemployed, and Unemployment_rate from 2000:2022 
@@ -609,7 +647,41 @@ call_county_highschool_attainment_rate <- function(
 }
 
 
-# GDP and Personal Income  ----
+# GDP  ----
+
+call_bea_rea_county_gdp <- function(
+    year, 
+    price_level = c("nominal", "real")) {
+  #(thousands of dollars)
+  year <- util$year2bea_rea(year)
+  price_level <- match.arg(price_level)
+  if (price_level == "nominal") {plc = 3} 
+  if (price_level == "real") {plc = 1} 
+  df <- call_bea_rea_gdp() %>%
+    {.[.$LineCode == plc, ]} %>%
+    {.[!grepl('(0)$', .$GeoFIPS), ]} %>%
+    {.[c("GeoFIPS", paste0("X", year))]} %>%
+    mutate(across(2, as.numeric)) %>% 
+    na.omit() %>% 
+    `colnames<-`(c("place", "gdp")) %>%
+    `rownames<-`({1:nrow(.)}) %>% 
+    mutate(place = sprintf("%05s", trimws(place))) 
+  return(df)
+}
+
+call_county_gdp <- function(
+    year,
+    bus_data = c("bea_rea"),
+    price_level = "real"
+){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "bea_rea"){
+    df <- call_bea_rea_county_gdp(year, price_level)
+  }
+  return(df)
+}
+
+# Personal Income  ----
 
 call_bea_county_income <- function(year) {
   #(thousands of dollars)
@@ -620,10 +692,12 @@ call_bea_county_income <- function(year) {
     {.[c("GeoFIPS", paste0("X", year))]} %>%
     `colnames<-`(c("place", "income")) %>%
     mutate(across(2, as.numeric)) %>% 
-    na.omit()
+    mutate(place = sprintf("%05s", trimws(place))) %>% 
+    na.omit() %>% 
     `rownames<-`({1:nrow(.)})
   return(df)
 }
+
 
 call_county_income <- function(
     year,
@@ -632,6 +706,36 @@ call_county_income <- function(
   bus_data <- match.arg(bus_data)
   if(bus_data == "bea_profile"){
     df <- call_bea_county_income(year)
+  }
+  return(df)
+}
+
+
+# Personal Income per capita ----
+
+call_bea_county_income_rate <- function(year) {
+  #(dollars)
+  year <- util$year2bea_profile(year)
+  df <- call_bea_econ_profile() %>%
+    {.[.$LineCode == 110, ]} %>%
+    {.[!grepl('(0)$', .$GeoFIPS), ]} %>%
+    {.[c("GeoFIPS", paste0("X", year))]} %>%
+    `colnames<-`(c("place", "income_rate")) %>%
+    mutate(across(2, as.numeric)) %>% 
+    mutate(place = sprintf("%05s", trimws(place))) %>% 
+    na.omit() %>% 
+    `rownames<-`({1:nrow(.)})
+  return(df)
+}
+
+
+call_county_income_rate <- function(
+    year,
+    bus_data = c("bea_profile")
+){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "bea_profile"){
+    df <- call_bea_county_income_rate(year)
   }
   return(df)
 }
@@ -660,6 +764,35 @@ call_county_poverty <- function(
   bus_data <- match.arg(bus_data)
   if(bus_data == "saipe"){
     df <- call_saipe_county_poverty(year)
+  }
+  return(df)
+}
+
+
+# Poverty percentage ----
+
+call_saipe_county_poverty_rate <- function(year) {
+  df <- call_saipe_county(year = year) 
+  if (year > 2002){
+    df <- df[, c(1, 2, 8)]
+  } else {
+    df <- df[, c(1, 2, 6)]
+  }
+  df <- df %>% 
+    `colnames<-`(c("st", "cty", "poverty_rate")) %>% 
+    mutate(place = {paste0(.$st, .$cty)}) %>% 
+    {.[c("place", "poverty_rate")]} %>% 
+    mutate(across(2, as.numeric)) %>% 
+    na.omit()
+  return(df)
+}
+
+call_county_poverty_rate <- function(
+    year,
+    bus_data = c("saipe") ){
+  bus_data <- match.arg(bus_data)
+  if(bus_data == "saipe"){
+    df <- call_saipe_county_poverty_rate(year)
   }
   return(df)
 }
