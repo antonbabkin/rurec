@@ -29,6 +29,7 @@ ipath <- list(
 
 opath <- list(
   population = "data/pubdata/population/population.pq",
+  bds_st_cty = "data/pubdata/bds/st_cty.pq",
   ers_rurality_ruc = "data/ers/rurality/ruc.pq",
   bea_econ_profile_raw = "data/bea/raw/CAINC30__ALL_AREAS_1969_2022.csv",
   bea_econ_profile = "data/bea/CAINC30__ALL_AREAS_1969_2022.pq",
@@ -72,6 +73,21 @@ pubdata$prep_population <- function() {
     pymod$population$get_df()
   }
 }
+
+pubdata$bds_st_cty <- function() {
+  cache_path <- opath$bds_st_cty
+  if (file.exists(cache_path)) {
+    df <- read_parquet(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    pymod$init()
+    df <- pymod$bds$get_df("st_cty")
+    write_parquet(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  df
+}
+
 
 pubdata$ers_ruc <- function() {
   cache_path <- opath$ers_rurality_ruc
@@ -374,18 +390,11 @@ call_tidy_acs_county_population <- function(year) {
 
 call_county_population <- function(
     year,
-    bus_data = c("census", "bea_profile", "tidy_acs")
-){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "census"){
-    df <- call_census_county_population(year)
-  }
-  if(bus_data == "bea_profile"){
-    df <- call_bea_county_population(year)
-  }
-  if(bus_data == "tidy_acs"){
-    df <- call_tidy_acs_county_population(year)
-  }
+    bus_data = c("census", "bea_profile", "tidy_acs") ){
+  switch(match.arg(bus_data),
+         "census" = {assign("df", call_census_county_population(year))},
+         "bea_profile" = {assign("df", call_bea_county_population(year))},
+         "tidy_acs" = {assign("df", call_tidy_acs_county_population(year))} )
   return(df)
 }
 
@@ -448,24 +457,13 @@ call_ers_county_employment <- function(year) {
 
 call_county_employment <- function(
     year,
-    bus_data = c("cbp_imp", "cbp_raw", "infogroup", "bea_profile", "ers")
-    ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "cbp_imp"){
-    df <- call_cbp_county_employment_efcy(year)
-  }
-  if(bus_data == "cbp_raw"){
-    df <- call_cbp_county_employment(year)
-  }
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_employment(year)
-  }
-  if(bus_data == "bea_profile"){
-    df <- call_bea_county_employment(year)
-  }
-  if(bus_data == "ers"){
-    df <- call_ers_county_employment(year)
-  }
+    bus_data = c("cbp_imp", "cbp_raw", "infogroup", "bea_profile", "ers") ){
+  switch(match.arg(bus_data),
+         "cbp_imp" = {assign("df", call_cbp_county_employment_efcy(year))},
+         "cbp_raw" = {assign("df", call_cbp_county_employment(year))},
+         "infogroup" = {assign("df", call_infogroup_county_employment(year))},
+         "bea_profile" = {assign("df", call_bea_county_employment(year))},
+         "ers" = {assign("df", call_ers_county_employment(year))} )
   return(df)
 }
 
@@ -483,16 +481,23 @@ call_cbp_county_payroll <- function(year) {
   return(df)
 }
 
+call_cbp_county_payroll_efcy <- function(year) {
+  df <- cbp$call_cbp(
+    year = year,
+    cbp_scale = "county",
+    imputed = TRUE) %>% 
+    {.[.$naics == "", ]} %>% 
+    {.[c("place", "ap")]} %>% 
+    `colnames<-`(c("place", "payroll"))
+  return(df)
+}
+
 call_county_payroll <- function(
     year,
-    bus_data = c("cbp_imp", "cbp_raw")
-){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "cbp_raw"){
-    df <- call_cbp_county_payroll(year)
-  } else {
-    stop(paste("Not implemented:", bus_data))
-  }
+    bus_data = c("cbp_imp", "cbp_raw") ){
+  switch(match.arg(bus_data),
+         "cbp_imp" = {assign("df", call_cbp_county_payroll_efcy(year))},
+         "cbp_raw" = {assign("df", call_cbp_county_payroll(year))} )
   return(df)
 }
 
@@ -501,19 +506,17 @@ call_county_payroll <- function(
 call_ers_county_unemployment <- function(year) {
   df <- call_ers_county_stats(
     year = year,
-    metric = "Unemployed") 
-  {.[c("place", "Value")]} %>% 
+    metric = "Unemployed") %>% 
+    {.[c("place", "Value")]} %>% 
     `colnames<-`(c("place", "unemployment"))
   return(df)
 }
 
 call_county_unemployment <- function(
     year,
-    bus_data = c("ers")
-){
-  if(bus_data == "ers"){
-    df <- call_ers_county_unemployment(year)
-  }
+    bus_data = c("ers") ){
+  switch(match.arg(bus_data),
+         "ers" = {assign("df", call_ers_county_unemployment(year))} )
   return(df)
 }
 
@@ -556,18 +559,11 @@ call_infogroup_county_estab <- function(year) {
 
 call_county_establishments <- function(
     year,
-    bus_data = c("cbp_imp", "cbp_raw", "infogroup")
-    ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "cbp_imp"){
-    df <- call_cbp_county_estab_efcy(year)
-  }
-  if(bus_data == "cbp_raw"){
-    df <- call_cbp_county_estab(year)
-  }
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_estab(year)
-  }
+    bus_data = c("cbp_imp", "cbp_raw", "infogroup") ){
+  switch(match.arg(bus_data),
+         "cbp_imp" = {assign("df", call_cbp_county_estab_efcy(year))},
+         "cbp_raw" = {assign("df", call_cbp_county_estab(year))},
+         "infogroup" = {assign("df", call_infogroup_county_estab(year))} )
   return(df)
 }
 
@@ -577,7 +573,7 @@ call_ers_county_laborforce <- function(year) {
   df <- call_ers_county_stats(
     year = year,
     metric = "Civilian_labor_force") %>% 
-  {.[c("place", "Value")]} %>% 
+    {.[c("place", "Value")]} %>% 
     `colnames<-`(c("place", "laborforce"))
   return(df)
 }
@@ -585,10 +581,8 @@ call_ers_county_laborforce <- function(year) {
 call_county_laborforce <- function(
     year,
     bus_data = c("ers") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "ers"){
-    df <- call_ers_county_laborforce(year)
-  }
+  switch(match.arg(bus_data), 
+         "ers" = {assign("df", call_ers_county_laborforce(year))} )
   return(df)
 }
 
@@ -608,10 +602,8 @@ call_tidy_acs_county_laborforce_rate <- function(year) {
 call_county_laborforce_rate <- function(
     year,
     bus_data = c("tidy_acs") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "tidy_acs"){
-    df <- call_tidy_acs_county_laborforce_rate(year)
-  }
+  switch(match.arg(bus_data), 
+         "tidy_acs" = {assign("df", call_tidy_acs_county_laborforce_rate(year))} )
   return(df)
 }
 
@@ -658,10 +650,8 @@ call_tidy_acs_county_highschool_attainment_rate <- function(year) {
 call_county_highschool_attainment_rate <- function(
     year,
     bus_data = c("tidy_acs") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "tidy_acs"){
-    df <- call_tidy_acs_county_highschool_attainment_rate(year)
-  }
+  switch(match.arg(bus_data), 
+         "tidy_acs" = {assign("df", call_tidy_acs_county_highschool_attainment_rate(year))} )
   return(df)
 }
 
@@ -691,12 +681,9 @@ call_bea_rea_county_gdp <- function(
 call_county_gdp <- function(
     year,
     bus_data = c("bea_rea"),
-    price_level = "real"
-){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "bea_rea"){
-    df <- call_bea_rea_county_gdp(year, price_level)
-  }
+    price_level = "real" ){
+  switch(match.arg(bus_data), 
+         "bea_rea" = {assign("df", call_bea_rea_county_gdp(year, price_level))} )
   return(df)
 }
 
@@ -720,12 +707,9 @@ call_bea_county_income <- function(year) {
 
 call_county_income <- function(
     year,
-    bus_data = c("bea_profile")
-){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "bea_profile"){
-    df <- call_bea_county_income(year)
-  }
+    bus_data = c("bea_profile") ){
+  switch(match.arg(bus_data), 
+         "bea_profile" = {assign("df", call_bea_county_income(year))} )
   return(df)
 }
 
@@ -750,12 +734,9 @@ call_bea_county_income_rate <- function(year) {
 
 call_county_income_rate <- function(
     year,
-    bus_data = c("bea_profile")
-){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "bea_profile"){
-    df <- call_bea_county_income_rate(year)
-  }
+    bus_data = c("bea_profile") ){
+  switch(match.arg(bus_data), 
+         "bea_profile" = {assign("df", call_bea_county_income_rate(year))} )
   return(df)
 }
 
@@ -780,10 +761,8 @@ call_saipe_county_poverty <- function(year) {
 call_county_poverty <- function(
     year,
     bus_data = c("saipe") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "saipe"){
-    df <- call_saipe_county_poverty(year)
-  }
+  switch(match.arg(bus_data), 
+         "saipe" = {assign("df", call_saipe_county_poverty(year))} )
   return(df)
 }
 
@@ -809,10 +788,8 @@ call_saipe_county_poverty_rate <- function(year) {
 call_county_poverty_rate <- function(
     year,
     bus_data = c("saipe") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "saipe"){
-    df <- call_saipe_county_poverty_rate(year)
-  }
+  switch(match.arg(bus_data), 
+         "saipe" = {assign("df", call_saipe_county_poverty_rate(year))} )
   return(df)
 }
 
@@ -836,10 +813,8 @@ call_chr_county_ypll75 <- function(year) {
 call_county_ypll75 <- function(
     year,
     bus_data = c("chr") ){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "chr"){
-    df <- call_chr_county_ypll75(year)
-  }
+  switch(match.arg(bus_data), 
+         "chr" = {assign("df", call_chr_county_ypll75(year))} )
   return(df)
 }
 
@@ -862,6 +837,7 @@ call_county_output <- function(
 }
 
 # Dynamism ----
+## Entry ----
 
 call_infogroup_county_entry <- function(year) {
   df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
@@ -876,6 +852,16 @@ call_infogroup_county_entry <- function(year) {
   return(df)
 }
 
+call_county_entry <- function(
+    year,
+    bus_data = c("infogroup") ){
+  switch(match.arg(bus_data), 
+         "infogroup" = {assign("df", call_infogroup_county_entry(year))} )
+  return(df)
+}
+
+## Exit ----
+
 call_infogroup_county_exit <- function(year) {
   df <- glue(ig$opath$county_, .envir = list(year = util$year2infogroup(year))) %>%
     open_dataset() %>%
@@ -889,25 +875,15 @@ call_infogroup_county_exit <- function(year) {
   return(df)
 }
 
-call_county_entry <- function(
+call_county_exit <- function(
     year,
-    bus_data = c("infogroup")){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_entry(year)
-  }
+    bus_data = c("infogroup") ){
+  switch(match.arg(bus_data), 
+         "infogroup" = {assign("df", call_infogroup_county_exit(year))} )
   return(df)
 }
 
-call_county_exit <- function(
-    year,
-    bus_data = c("infogroup")){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_exit(year)
-  }
-  return(df)
-}
+## Entry rate----
 
 call_infogroup_county_entry_rate <- function(year){
   entry_t <- call_infogroup_county_entry(year = year)
@@ -920,6 +896,26 @@ call_infogroup_county_entry_rate <- function(year){
   return(df)
 }
 
+call_bds_county_entry_rate <- function(year){
+  df <- pubdata$bds_st_cty() |>
+    filter(year == !!year) |>
+    mutate(place = paste0(st, cty)) |>
+    select(place, estabs_entry_rate) |>
+    rename(entry_rate = estabs_entry_rate)
+  return(df)
+}
+
+call_county_entry_rate <- function(
+    year,
+    bus_data = c("bds", "infogroup") ){
+  switch(match.arg(bus_data),
+         "bds" = {assign("df", call_bds_county_entry_rate(year))},
+         "infogroup" = {assign("df", call_infogroup_county_entry_rate(year))} )
+  return(df)
+}
+
+
+## Exit rate----
 
 call_infogroup_county_exit_rate <- function(year){
   exit_l <- call_infogroup_county_exit(year = (year-1))
@@ -932,55 +928,24 @@ call_infogroup_county_exit_rate <- function(year){
   return(df)
 }
 
-call_county_entry_rate <- function(
-    year,
-    bus_data = c("bds", "infogroup")){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_entry_rate(year)
-  } else if (bus_data == "bds") {
-    # TODO: add caching around python
-    pymod$init()
-    df <- pymod$bds$get_df("st_cty") |>
-      filter(year == !!year) |>
-      mutate(place = paste0(st, cty)) |>
-      select(place, estabs_entry_rate) |>
-      rename(entry_rate = estabs_entry_rate)
-  }
+call_bds_county_exit_rate <- function(year){
+  df <- pubdata$bds_st_cty() |>
+    filter(year == !!year) |>
+    mutate(place = paste0(st, cty)) |>
+    select(place, estabs_exit_rate) |>
+    rename(entry_rate = estabs_exit_rate)
   return(df)
 }
+
 
 call_county_exit_rate <- function(
     year,
-    bus_data = c("bds", "infogroup")){
-  bus_data <- match.arg(bus_data)
-  if(bus_data == "infogroup"){
-    df <- call_infogroup_county_exit_rate(year)
-  } else if (bus_data == "bds") {
-    # TODO: add caching around python
-    pymod$init()
-    df <- pymod$bds$get_df("st_cty") |>
-      filter(year == !!year) |>
-      mutate(place = paste0(st, cty)) |>
-      select(place, estabs_exit_rate) |>
-      rename(exit_rate = estabs_exit_rate)
-  }
+    bus_data = c("bds", "infogroup") ){
+  switch(match.arg(bus_data),
+         "bds" = {assign("df", call_bds_county_exit_rate(year))},
+         "infogroup" = {assign("df", call_infogroup_county_exit_rate(year))} )
   return(df)
 }
-
-
-
-# Growth Rates  ----
-
-# test <- growth_rate(start_year = 2010, end_year = 2015, function_name = call_county_population,  bus_data = "census")
-# 
-# test <- growth_rate(start_year = 2010, end_year = 2015, function_name = call_county_employment,  bus_data = "infogroup")
-# 
-# test <- growth_rate(start_year = 2010, end_year = 2015, function_name = call_county_establishments,  bus_data = "infogroup")
-# 
-# test <- growth_rate(start_year = 2010, end_year = 2015, function_name = call_county_income,  bus_data = "bea_profile")
-# 
-# test <- growth_rate(start_year = 2010, end_year = 2015, function_name = call_county_output,  bus_data = "infogroup", class_system = "commodity", ilevel = "det")
 
 
 # All indicators  ----
