@@ -333,12 +333,14 @@ temp_fun_recur_list <- function(set_of_years = 2000:2020,
   names(df) <- set_of_years
   x <- list(set_of_years = set_of_years)
   opargs <- list(...)
-  for(i in 1:length(opargs)){
-    assign(paste(names(opargs[i])), opargs[[i]][1])
+  if (length(opargs) > 0){
+    for(i in 1:length(opargs)){
+      assign(paste(names(opargs[i])), opargs[[i]][1])
+    }
   }
   for (y in 1:length(set_of_years)){
         year <- x$set_of_years[[y]]
-        df[[y]] <- do.call(deparse(substitute(function_name)), c(list(year=year, ...)) )
+        df[[y]] <- do.call(deparse(substitute(function_name)), c(list(year = year, ... )) )
   }
   return(df)
 }
