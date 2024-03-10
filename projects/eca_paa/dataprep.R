@@ -15,7 +15,7 @@ source("R/place_output.R", local = (place_output <- new.env()))
 source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connectedness <- new.env()))
 source("R/dataprep.R", local = (dataprep_misc <- new.env()))
-
+source("R/visualization.R", local = (visualization <- new.env()))
 
 # paths ----
 
@@ -28,6 +28,7 @@ opath <- list(
   ruc_ = "data/projects/eca_paa/ers_ruc/{year}.rds",
   cbsa_conc_ = "data/projects/eca_paa/cbsa_conc/{year}.rds",
   cbsa_delin_ = "data/projects/eca_paa/cbsa_delin/{year}.rds",
+  cbsa_ = "data/projects/eca_paa/cbsa/{year}.rds",
   eca_df = "data/projects/eca_paa/eca.rds",
   production_ = "data/projects/eca_paa/production/{bus_data}/{ilevel}/{class_system}/{year}.rds",
   population_ = "data/projects/eca_paa/population/{bus_data}/{year}.rds",
@@ -62,8 +63,9 @@ create_complete_cache <- function() {
     call_geog(year)
   }
   for (year in c(2013, 2015, 2017, 2018, 2020, 2023)) {
-    call_cbsa_conc(year)
-    call_cbsa_delin_df(year)
+    # call_cbsa_conc(year)
+    # call_cbsa_delin_df(year)
+    call_cbsa(year)
   }
   call_eca_df()
   for (year in c(2003, 2013)) {
@@ -74,10 +76,10 @@ create_complete_cache <- function() {
   }
   for (year in 2002:2022) {
     call_employment(year, bus_data = "ers")
-    call_unemp_rate(year)
+    call_unemp_rate(year, bus_data = "ers")
   }
   for (year in 2012:2022) {
-    call_laborforce_rate(year)
+    call_laborforce_rate(year, bus_data = "tidy_acs")
   }
   for (year in 2002:2021) {
     call_employment(year, bus_data = "cbp_raw")
@@ -90,21 +92,40 @@ create_complete_cache <- function() {
     call_entry_rate(year, bus_data = "bds")
   }  
   for (year in 2002:2022) {
-    call_income_rate(year)
+    call_income_rate(year, bus_data = "bea_profile")
   }
   for (year in 2017:2022) {
     call_gdp(year, price_level = "nominal")
   }
   for (year in 2002:2022) {
-    call_poverty_rate(year)
+    call_poverty_rate(year, bus_data = "saipe")
   }
   for (year in 2011:2023) {
-    call_ypll75(year)
+    call_ypll75(year, bus_data = "chr")
   }
   for (year in 2010:2022) {
-    call_highschool_attainment_rate(year)
+    call_highschool_attainment_rate(year, bus_data = "tidy_acs")
   }
 }
+
+#' clean up a df for better time with visualizations
+strip_dataframe <- function(df){
+  df <- df %>% 
+    st_drop_geometry() %>% 
+    select(where(is.numeric)) %>% 
+    na.omit()
+  return(df)
+}
+
+
+# Data Viz functions ----
+
+viz <- new.env()
+viz$diverge_choro_map <- visualization$diverge_choro_map
+viz$density_dist_plot <- visualization$density_dist_plot
+viz$cat_choro_map <- visualization$cat_choro_map
+viz$nominal_choro_map <- visualization$nominal_choro_map
+viz$normal_choro_map <- visualization$normal_choro_map
 
 
 # Geog ----
@@ -125,6 +146,7 @@ call_geog <- function(year) {
 # CBSA concordance ----
 
 call_cbsa_conc <- function(year) {
+  stop("Use call_cbsa()")
   cache_path = glue(opath$cbsa_conc_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -140,6 +162,7 @@ call_cbsa_conc <- function(year) {
 # CBSA delineation ----
 
 call_cbsa_delin_df <- function(year) {
+  stop("Use call_cbsa()")
   year = util$year2cbsa(year)
   cache_path = glue(opath$cbsa_delin_)
   if (file.exists(cache_path)) {
@@ -149,6 +172,26 @@ call_cbsa_delin_df <- function(year) {
     df <- geography$pubdata$get_cbsa_delin_df(year) %>% 
       mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
       {.[c("place", "METRO_MICRO", "CENTRAL_OUTLYING")]} 
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
+
+# CBSA  ----
+
+call_cbsa <- function(year) {
+  year = util$year2cbsa(year)
+  cache_path = glue(opath$cbsa_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- geography$pubdata$get_cbsa_delin_df(year) %>% 
+      mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
+      mutate(CBSA_TITLE = {paste(str_split_i(.$CBSA_TITLE, ",", 1), "CBSA")}) %>% 
+      {.[c("place", "CBSA_CODE", "CBSA_TITLE", "METRO_MICRO", "CENTRAL_OUTLYING")]} 
     saveRDS(df, util$mkdir(cache_path))
     log_debug("save to cache {cache_path}")
   }    
@@ -395,7 +438,7 @@ call_income <- function(
 # Income per capita ----
 
 call_income_rate <- function(year,
-                               bus_data = "bea_profile") {
+                             bus_data = "bea_profile") {
   cache_path = glue(opath$income_rate_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
@@ -659,9 +702,9 @@ call_exit_rate <- function(year,
 
 # Unemployment rate ----
 
-call_unemp_rate <- function(year) {
-  lf <- call_laborforce(year, bus_data = "ers")
-  emp <- call_employment(year, bus_data = "ers")
+call_unemp_rate <- function(year, bus_data = "ers") {
+  lf <- call_laborforce(year, bus_data = bus_data)
+  emp <- call_employment(year, bus_data = bus_data)
   df <- inner_join(lf, emp, "place") |>
     mutate(unemp_rate = 100 * (1 - employment / laborforce)) |>
     select(place, unemp_rate) |>
@@ -684,6 +727,102 @@ call_netmigration <- function() {
   }    
   df
 }
+
+
+# Data merge  ----
+
+
+## Space  ----
+
+call_space_df <- function(year){
+  df_geo <- call_geog(year)
+  df_cbsa <- call_cbsa(year)
+  df_ruc <- call_ruc(year)
+  df <- left_join(df_geo, df_cbsa, by = "place") %>% 
+    replace_na(list(CBSA_CODE = "rural", 
+                    CBSA_TITLE = "rural", 
+                    CENTRAL_OUTLYING = "rural", 
+                    METRO_MICRO = "rural")) %>% 
+    mutate(cbsa_rural_category = factor(CBSA_CODE == "rural", labels = c("nonrural", "rural")) ) %>% 
+    {left_join(., df_ruc, by = join_by(place == fips))} %>% 
+    group_by(CBSA_CODE) %>% mutate(cbsa_members_count = n(), .after = CBSA_CODE) %>% ungroup() 
+  return(df)
+}
+
+## Prosperity  ----
+
+call_prosperity_outcomes <- function(year){
+  dl <- list(
+    call_population(year = year, bus_data = "tidy_acs"),
+    call_employment(year = year, bus_data = "ers"),
+    call_jobs(year = year, bus_data = "cbp_imp"),
+    call_laborforce_rate(year = year, bus_data = "tidy_acs"),
+    call_unemp_rate(year = year, bus_data = "ers"),
+    call_payroll(year = year, bus_data = "cbp_raw"),
+    call_wage(year = year, bus_data = "cbp_raw"),
+    call_income_rate(year = year, bus_data = "bea_profile"),
+    call_establishments(year = year, bus_data = "cbp_raw"),
+    call_entry_rate(year = year, bus_data = "bds"),
+    call_exit_rate(year = year, bus_data = "bds"),
+    call_gdp(year = year, bus_data = "bea_rea"),
+    call_gross_output(year = year, bus_data = "cbp_imp"),
+    call_intermediate_supply(year = year, bus_data = "cbp_imp"),
+    call_intermediate_demand(year = year, bus_data = "cbp_imp"),
+    call_net_supply(year = year, bus_data = "cbp_imp"),
+    call_net_demand(year = year, bus_data = "cbp_imp"),
+    call_poverty_rate(year = year, bus_data = "saipe"),
+    call_highschool_attainment_rate(year = year, bus_data = "tidy_acs"),
+    call_ypll75(year = year, bus_data = "chr")
+  )
+  df = dl[[1]]
+  for(i in 2:length(dl)){
+    df <- full_join(df, dl[[i]], by = "place")
+  }
+  return(df)
+}
+
+## Spatial ECA  ----
+
+call_eca_space_df <- function(year){
+  df_space <- call_space_df(year)
+  df_eca <- call_eca_df() %>% 
+    rename(place = fips)
+  df <- left_join(df_space, df_eca,  by = "place")  %>%
+    na.omit() %>% 
+    group_by(eca_membership) %>% 
+    mutate(cluster_members_count = n(), .after = eca_membership) %>% 
+    ungroup() 
+  df <- df %>% 
+    {.[which(.$place  == .$eca_membership), ]} %>% 
+    select(place, CBSA_CODE) %>% 
+    st_drop_geometry() %>% 
+    `colnames<-`(c("eca_membership", "cbsa_of_eca")) %>% 
+    {left_join(df, . , by = "eca_membership")} %>% 
+    relocate(cbsa_of_eca, .after = eca_membership)
+  return(df)
+}
+
+## ALL  ----
+
+#' For analytical consistency a single place to call a dataframe for a given year 
+call_proj_df <- function(year){
+  df <- left_join(call_eca_space_df(year), call_prosperity_outcomes(year),  by = "place")  %>% 
+    mutate(eca_cbsa_xtab = str_to_title(paste(cbsa_rural_category, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+    mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category)
+return(df)
+}
+
+# TODO: optional spatial toggle 
+#' For analytical consistency a single place to call a dataframe for a set of years
+call_temporal_range_df <- function(
+    set_of_years, # 2002:2023 or c(2012, 2015, 2017)
+    bind = TRUE){
+  df <- util$temp_fun_recur_list(set_of_years, call_proj_df)
+  if(bind){df <- bind_rows(df, .id = "id_year")}
+  return(df)
+}
+
+
 
 
 
