@@ -2,8 +2,6 @@
 title: "ECA-PAA: data"
 format: html
 params:
-  data_pack_path: "data/dashboard_data_v240124.zip"
-  geography_year: 2013
   map_agg_stats_year: 2012
   map_ex_range_year: "2008-2012"
 ---
@@ -19,11 +17,9 @@ library(viridis)
 library(tmap)
 library(gt)
 
-source("R/basic_utilities.R", local = (util <- new.env()))
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 
 ```
-
 
 
 # Data
@@ -34,97 +30,181 @@ This chunk can be used to pack all files into or unpack from a single Zip for sh
 
 ```{r}
 # uncomment as needed
-# util$zip_pack("tmp/eca_paa_data_v240226.zip", dp$opath)
-# util$zip_unpack("tmp/eca_paa_data_v240226.zip", overwrite = TRUE)
+
+# build from scratch and cache all data
+# dp$create_complete_cache()
+
+# pack all data into a single Zip file
+# dp$util$zip_pack("tmp/eca_paa_data_v240308.zip", dp$opath)
+
+# unpack all data from a single Zip file
+# dp$util$zip_unpack("tmp/eca_paa_data_v240308.zip", overwrite = TRUE)
 ```
 
+## Classifications and geo
 
-## County shapes
+### County shapes
 
 ```{r}
-df_county_shapes <- dp$call_county_shapes() %>%
-  rename("place"="fips")
-df_county_shapes |> head()
+dp$call_geog(2013) |> head()
 ```
 
 
-## CBSA
+### CBSA
 
 ```{r}
-df_cbsa_delin <- dp$call_cbsa_delin()
-df_cbsa_delin |> head()
+dp$call_cbsa(2013) |> head()
 ```
 
 
-## ECA
+### ECA
 
 ```{r}
-df_eca <- dp$call_eca_df()
-df_eca |> head()
+dp$call_eca_df() |> head()
 ```
 
-## Econ dynamism
+### RUC
+
+Rural-Urban Continuum codes.
 
 ```{r}
-df_econ_dynam <- dp$call_econ_dynam(2012)
-df_econ_dynam |> head()
-
+dp$call_ruc(2013) |> head()
 ```
 
 
-## Unemployment rate
+
+
+## Outcomes
+
+### Population
 
 ```{r}
-df_unemp_rate <- dp$call_unemp_rate()
-df_unemp_rate |> head()
+dp$call_population(2012, bus_data = "tidy_acs") |> head()
+dp$growth_rate(2012, 2017, dp$call_population, bus_data = "tidy_acs") |> head()
 
 ```
+### Employment
 
-
-
-## Net migration
+Residents of a county that are employed.
 
 ```{r}
-df_netmigration <- dp$call_netmigration()
-df_netmigration |> head()
-
+dp$call_employment(2012, bus_data = "ers") |> head()
+dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "ers") |> head()
 ```
 
-
-
-## Education
+### Labor force participation rate
 
 ```{r}
-df_education <- dp$call_education()
-df_education |> head()
-
+dp$call_laborforce_rate(2012) |> head()
 ```
-## CHRR
 
-```{r}
-df_chrr <- dp$call_chrr()
-df_chrr |> head()
-```
-## LFPR
+### Unemployment rate
 
 ```{r}
-df_lfpr <- dp$call_lfpr()
-df_lfpr |> head()
+dp$call_unemp_rate(2012) |> head()
 ```
 
-## SAIPE
+
+### Jobs
+
+Number of employees county businesses.
 
 ```{r}
-df_saipe <- dp$call_saipe()
-df_saipe |> head()
+dp$call_employment(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "cbp_raw") |> head()
 ```
-## RUCC
+
+### Establishments
+
 ```{r}
-df_RUCC <- dp$call_RUCC() %>%
-  mutate(rural = ifelse(RUCC_2013 > 3, "non-metro", "metro")) %>%
-  select("place"=FIPS, "RUCC"=RUCC_2013, rural)
-df_RUCC |> head()
+dp$call_establishments(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_establishments, bus_data = "cbp_raw") |> head()
 ```
+
+### Entry and exit rate
+
+```{r}
+dp$call_entry_rate(2012, bus_data = "bds")
+dp$call_exit_rate(2012, bus_data = "bds")
+```
+
+
+
+### Payroll
+
+```{r}
+dp$call_payroll(2012, bus_data = "cbp_raw") |> head()
+dp$growth_rate(2012, 2017, dp$call_payroll, bus_data = "cbp_raw") |> head()
+```
+
+### Wage
+
+```{r}
+dp$call_wage(2017) |> head()
+
+dp$growth_rate(2012, 2017, dp$call_wage, bus_data = "cbp_raw") |> head()
+
+```
+
+
+### Personal income
+
+Per capita.
+
+```{r}
+dp$call_income_rate(2012) |> head()
+dp$growth_rate(2012, 2017, dp$call_income_rate, bus_data = "bea_profile") |> head()
+```
+
+### GDP
+
+```{r}
+dp$call_gdp(2022, price_level = "nominal") |> head()
+dp$growth_rate(2017, 2019, dp$call_gdp) |> head()
+```
+
+
+
+### Education
+
+High school attainment rate.
+
+```{r}
+dp$call_highschool_attainment_rate(2012) |> head()
+dp$growth_rate(2012, 2017, dp$call_highschool_attainment_rate) |> head()
+```
+
+
+### Premature death
+
+YPLL75 = Years of potential life lost.
+"years of potential life lost before age 75" (YPLL75)
+
+```{r}
+dp$call_ypll75(2012) |> head()
+dp$growth_rate(2012, 2017, dp$call_ypll75) |> head()
+```
+
+
+### Poverty rate
+
+```{r}
+dp$call_poverty_rate(2012) |> head()
+dp$growth_rate(2012, 2017, dp$call_poverty_rate) |> head()
+```
+
+
+
+
+### Net migration
+
+```{r}
+# TODO: NFG
+# dp$call_netmigration() |> head()
+
+```
+
+
 
 # Data assembly
 

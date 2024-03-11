@@ -104,6 +104,13 @@ prep_demsup_mat <- function() {
   }
 }
 
+#' Return available industry codes
+call_industry_codes <- function() {
+  glue(opath$demand_, .envir = params_econ) |>
+    readRDS() |>
+    rownames()
+}
+
 
 # LP algorithm ----
 
@@ -222,7 +229,13 @@ call_trade_flows <- function(ind_code) {
     y <- readRDS(cache_path)
   } else {
     if (ind_code == "all_industries") {
-      y <- total_trade_flows()
+      # solve for every industry
+      industry_codes <- call_industry_codes()
+      y <- 0
+      for (ind_code in industry_codes) {
+        x <- call_trade_flows(ind_code)
+        y <- y + x
+      }
     } else {
       log_debug("Solving trade flows for industry {ind_code}")
       x <- prep_lp_solver_inputs(ind_code)
@@ -236,27 +249,14 @@ call_trade_flows <- function(ind_code) {
 }
 
 
-total_trade_flows <- function() {
-  # solve for every industry
-  industry_codes <- glue(opath$demand_, .envir = params_econ) |>
-    readRDS() |>
-    rownames()
-  y <- 0
-  for (ind_code in industry_codes) {
-    x <- call_trade_flows(ind_code)
-    y <- y + x
-  }
-  return(y)
-}
-
-
-call_industry_codes <- function(file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
-  df <- file_directory %>% 
-    dirname() %>% 
-    list.files() %>% 
-    tools::file_path_sans_ext() 
-  return(df)
-}
+# TODO: reconsile with the other version of this functin above
+# call_industry_codes <- function(file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
+#   df <- file_directory %>%
+#     dirname() %>%
+#     list.files() %>%
+#     tools::file_path_sans_ext()
+#   return(df)
+# }
 
 
 # industry_code: single code or all, or comma-separated list of codes, or regex
@@ -273,10 +273,10 @@ filter_industry_codes <- function(cluster_subset, industry_code_vector){
       df <- str_split_1(cs, ",")
       return(df)
     } else if (any(str_split_1(cs, ",") %in% icv)) {
-      nf <- str_split_1(cs, ",") %>% 
+      nf <- str_split_1(cs, ",") %>%
         {.[which(!. %in% icv)]}
       warning("Select codes: ", nf ," not feasible")
-      df <- str_split_1(cs, ",") %>% 
+      df <- str_split_1(cs, ",") %>%
         {.[which(. %in% icv)]}
       return(df)
     } else {stop("Selection not feasible")}
@@ -288,17 +288,17 @@ filter_industry_codes <- function(cluster_subset, industry_code_vector){
   }
 }
 
-call_trade_flows_custom <- function(cluster_subset, 
+call_trade_flows_custom <- function(cluster_subset,
                                     file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
-  lp <- call_industry_codes(file_directory = file_directory) %>% 
-    {filter_industry_codes(cluster_subset, .)} 
+  stop("this needs to be aligned with call_industry_codes()")
+  lp <- call_industry_codes(file_directory = file_directory) %>%
+    {filter_industry_codes(cluster_subset, .)}
   df <- 0
     for (i in lp) {
       df <- df + call_trade_flows(i)
     }
   return(df)
 }
-
 
 
 # RAS+Gravity algorithm ----
@@ -455,6 +455,27 @@ ras_rescale <- function(x0, rs1, cs1, tol = 0, maxiter = 10) {
 
 # tests ----
 
+## viz ----
+
+#' Viz matrix as a heat map using ggplot
+plot_heatmap <- function(x, zero_na = TRUE, discrete = FALSE) {
+  
+  if (is.null(rownames(x))) rownames(x) <- 1:nrow(x)
+  if (is.null(colnames(x))) colnames(x) <- 1:ncol(x)
+  x |>
+    as_tibble(rownames = "from") |>
+    pivot_longer(!from, names_to = "to") |>
+    mutate(
+      from = ordered(from, levels = rev(rownames(x))),
+      to = ordered(to, levels = colnames(x)),
+      value = if (zero_na) na_if(value, 0) else value,
+      value = if (discrete) ordered(value) else value
+    ) |>
+    ggplot() +
+    scale_x_discrete(position = "top") +
+    geom_tile(aes(to, from, fill = value)) +
+    coord_fixed()
+}
 
 ## impedance ----
 

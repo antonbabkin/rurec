@@ -139,9 +139,9 @@ df_eca <- trade_flows$call_trade_flows_custom(params$trade_flow_industry_set) %>
 
 
 ```{r data join}
-df <- inner_join(df_space, df_eca,  by = "place")  %>%
-  {inner_join(., df_production,  by = "place")}  %>%
-  {inner_join(., df_econ_dynam,  by = "place")}
+df <- left_join(df_space, df_eca,  by = "place")  %>%
+  {left_join(., df_production,  by = "place")}  %>%
+  {left_join(., df_econ_dynam,  by = "place")}
 
 # test <- dataprep$growth_rate(start_year = 2010, end_year = 2015, function_name = dataprep$call_county_population,  bus_data = "census")
 
