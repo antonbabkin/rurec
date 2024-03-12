@@ -25,7 +25,8 @@ ipath <- list(
   ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv",
   saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}",
   chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv",
-  net_migration = "data/prosperity/NME_1020_data.csv"
+  # net_migration = "data/prosperity/NME_1020_data.csv"
+  net_migration_raw = "https://testb.apl.wisc.edu/documents/NME_1020_data.zip"
 )
 
 opath <- list(
@@ -40,7 +41,8 @@ opath <- list(
   ers_labor_stats_raw = "data/ers/unemployemnt.pq",
   tidy_acs_stats_raw_ = "data/tidy_acs/{survey}/{geography}/{variables}/{year}.pq",
   saipe_raw_ = "data/saipe/{year}.pq",
-  chr_raw_ = "data/chr/{year}.pq"
+  chr_raw_ = "data/chr/{year}.pq",
+  nme_raw = "data/nme/NME_1020_data.csv"
 )
 
 clear_outputs <- function() {
@@ -347,15 +349,25 @@ call_chr_raw <- function(year) {
 }
 
 call_net_migration_raw <- function() {
-  raw_path <- ipath$net_migration
-  # download raw data if needed
+  raw_path <- opath$nme_raw
   if (file.exists(raw_path)) {
     log_debug("raw data found at {raw_path}")
     return(read.csv(raw_path))
   } else {
-    stop(glue("raw net migration file must be in {raw_path}"))
+    parent_path <- util$mkdir(file.path(dirname(raw_path), basename(ipath$net_migration_raw)))
+    download_status <- download.file(url = ipath$net_migration_raw, 
+                                     destfile = parent_path, 
+                                     mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("zip data dowloaded to {parent_path}")
+    df <- unzip(parent_path,
+                files = basename(raw_path),
+                exdir = dirname(raw_path))
+  df <- read.csv(raw_path)
+  return(df)
   }
 }
+
 
 # Population ----
 
@@ -835,7 +847,7 @@ call_net_migration <- function() {
   df <- call_net_migration_raw() %>%
     mutate(place = sprintf("%05d",fips_str2020)) %>%
     filter(CoName2020 != "State Total") %>%
-    select(place, net_migration_rate="r1tttt")
+    select(place, net_migration_rate = "r1tttt")
   return(df)
 }
 
