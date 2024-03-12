@@ -36,10 +36,10 @@ This chunk can be used to pack all files into or unpack from a single Zip for sh
 
 # pack all data into a single Zip file
 # TODO: does not work for Clay
- dp$util$zip_pack("tmp/eca_paa_data_v240312.zip", dp$opath)
+# dp$util$zip_pack("tmp/eca_paa_data_v240311.zip", dp$opath)
 
 # unpack all data from a single Zip file
-# dp$util$zip_unpack("tmp/eca_paa_data_v240312.zip", overwrite = TRUE)
+# dp$util$zip_unpack("tmp/eca_paa_data_v240311.zip", overwrite = TRUE)
 ```
 
 ## Classifications and geo
