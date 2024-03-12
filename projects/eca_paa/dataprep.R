@@ -144,6 +144,7 @@ viz$density_dist_plot <- visualization$density_dist_plot
 viz$cat_choro_map <- visualization$cat_choro_map
 viz$nominal_choro_map <- visualization$nominal_choro_map
 viz$normal_choro_map <- visualization$normal_choro_map
+viz$absorption_density_plot <- visualization$absorption_density_plot
 
 
 # Geog ----
