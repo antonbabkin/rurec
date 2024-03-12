@@ -117,6 +117,24 @@ strip_dataframe <- function(df){
   return(df)
 }
 
+round_stats <- function(reg_object,
+                        stat_list = c("coefficients", "std.error", "statistic", "p.value", "conf.low", "conf.high"),
+                        round_level = 6){
+  round_level = 6
+  l = c("coefficients", "std.error", "statistic", "p.value", "conf.low", "conf.high")
+  for (i in stat_list){
+    reg_object[[i]] <- round(reg_object[[i]], round_level)
+  }
+  return(reg_object)
+}
+
+temporal_permutations <- function(year_range){
+  df <- c(year_range) %>% 
+    expand_grid(., .) %>% 
+    .[.[1] < .[2], ]
+  return(df)
+}
+
 
 # Data Viz functions ----
 
@@ -808,7 +826,14 @@ call_eca_space_df <- function(year){
 call_proj_df <- function(year){
   df <- left_join(call_eca_space_df(year), call_prosperity_outcomes(year),  by = "place")  %>% 
     mutate(eca_cbsa_xtab = str_to_title(paste(cbsa_rural_category, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
-    mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category)
+    mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+    mutate(sink_filter = ifelse(cluster_members_count == 1, "sink/source",
+                                ifelse(place %in% max_trade_place, "sink/sink",
+                                       "source/source")), .before = eca_membership) %>% 
+    mutate(cbsa_by_eca = ifelse(eca_central_out_xtab == "Central Source", "only CBSA", 
+                                ifelse(eca_central_out_xtab == "Central Sink", "ECA and CBSA", 
+                                       ifelse(eca_central_out_xtab %in% c("Rural Sink", "Outlying Sink"), "only ECA", 
+                                              NA))), .before = eca_membership)
 return(df)
 }
 
@@ -818,7 +843,9 @@ call_temporal_range_df <- function(
     set_of_years, # 2002:2023 or c(2012, 2015, 2017)
     bind = TRUE){
   df <- util$temp_fun_recur_list(set_of_years, call_proj_df)
-  if(bind){df <- bind_rows(df, .id = "id_year")}
+  if(bind){
+    df <- bind_rows(df, .id = "id_year")
+  }
   return(df)
 }
 
