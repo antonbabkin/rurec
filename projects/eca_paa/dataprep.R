@@ -47,7 +47,8 @@ opath <- list(
   entry_ = "data/projects/eca_paa/entry/{bus_data}/{year}.rds",
   exit_ = "data/projects/eca_paa/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/eca_paa/entry_rate/{bus_data}/{year}.rds",
-  exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds"
+  exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds",
+  net_migration = "data/projects/eca_paa/net_migration.rds"
 )
 
 
@@ -106,6 +107,7 @@ create_complete_cache <- function() {
   for (year in 2010:2022) {
     call_highschool_attainment_rate(year, bus_data = "tidy_acs")
   }
+  call_net_migration()
 }
 
 #' clean up a df for better time with visualizations
@@ -715,13 +717,13 @@ call_unemp_rate <- function(year, bus_data = "ers") {
 
 # Net migration ----
 
-call_netmigration <- function() {
-  cache_path <- opath$netmigration
+call_net_migration <- function() {
+  cache_path <- opath$net_migration
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
     log_debug("read from cache {cache_path}")
   } else {
-    df <- prosperity$call_netmigration_df()
+    df <- dataprep_misc$call_net_migration()
     saveRDS(df, util$mkdir(cache_path))
     log_debug("save to cache {cache_path}")
   }    
