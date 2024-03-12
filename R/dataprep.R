@@ -24,7 +24,8 @@ ipath <- list(
   bea_rea_gdp = "https://apps.bea.gov/regional/zip/CAGDP1.zip",
   ers_labor_stats_raw = "https://www.ers.usda.gov/webdocs/DataFiles/48747/Unemployment.csv",
   saipe_raw_ = "https://www2.census.gov/programs-surveys/saipe/datasets/{year}/{year}-state-and-county/est{substr(year, 3, 4)}all.{ext}",
-  chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv"
+  chr_raw_ = "https://www.countyhealthrankings.org/sites/default/files/{extra_path}analytic_data{year}.csv",
+  net_migration = "data/prosperity/NME_1020_data.csv"
 )
 
 opath <- list(
@@ -345,6 +346,16 @@ call_chr_raw <- function(year) {
   return(df)  
 }
 
+call_net_migration_raw <- function() {
+  raw_path <- ipath$net_migration
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+    return(read.csv(raw_path))
+  } else {
+    stop(glue("raw net migration file must be in {raw_path}"))
+  }
+}
 
 # Population ----
 
@@ -815,6 +826,16 @@ call_county_ypll75 <- function(
     bus_data = c("chr") ){
   switch(match.arg(bus_data), 
          "chr" = {assign("df", call_chr_county_ypll75(year))} )
+  return(df)
+}
+
+# Net Migration Rate ----
+
+call_net_migration <- function() {
+  df <- call_net_migration_raw() %>%
+    mutate(place = sprintf("%05d",fips_str2020)) %>%
+    filter(CoName2020 != "State Total") %>%
+    select(place, net_migration_rate="r1tttt")
   return(df)
 }
 
