@@ -15,13 +15,13 @@ params:
   show_descriptive_density: TRUE
   show_descriptive_density_rural: TRUE
   show_descriptive_maps: TRUE
-  interactive_maps: TRUE
-  show_corr: TRUE
-  show_test_regression: TRUE
+  interactive_maps: FALSE
+  show_corr: FALSE
+  show_test_regression: FALSE
   show_lm_regression: TRUE
   show_lm_cluster_regression: TRUE
-  reg_factors: !expr c("gross_output", "population", "employment", "jobs", "laborforce_part_rate", "unemp_rate", "payroll", "wage", "income_rate", "establishments", "entry_rate", "exit_rate", "poverty_rate", "ypll75", "highschool_attainment_rate")
-  reg_factor_funs: !expr c("call_gross_output","call_population", "call_employment","call_unemp_rate", "call_laborforce_rate", "call_jobs", "call_establishments", "call_payroll", "call_wage", "call_exit_rate", "call_entry_rate", "call_income_rate", "call_poverty_rate", "call_ypll75", "call_highschool_attainment_rate")
+  reg_factors: !expr c("gross_output", "population", "employment", "jobs", "laborforce_part_rate", "unemp_rate", "payroll", "wage", "income_rate", "establishments", "entry_rate", "exit_rate", "poverty_rate", "ypll75", "highschool_attainment_rate", "net_migration_rate")
+  reg_factor_funs: !expr c("call_gross_output","call_population", "call_employment","call_unemp_rate", "call_laborforce_rate", "call_jobs", "call_establishments", "call_payroll", "call_wage", "call_exit_rate", "call_entry_rate", "call_income_rate", "call_poverty_rate", "call_ypll75", "call_highschool_attainment_rate", "call_net_migration")
   example_coef_index:  2
 ---
 
@@ -36,6 +36,7 @@ params:
 # TODO: add remaining social/economic data (netmigration rate)
 # TODO: Diff in diff
 # TODO: center to center distances and share weighted distance
+
 ```
 
 ```{r preamble, include = FALSE}
@@ -80,8 +81,6 @@ params
 
 # data
 
-::: panel-tabset 
-
 ```{r data cashe, include = FALSE}
 
 # uncomment as necessary
@@ -95,6 +94,7 @@ df <- dp$call_proj_df(params$year)
 
 ```
 
+::: panel-tabset 
 ## numeric variables
 
 ```{r numeric vars}
@@ -239,19 +239,6 @@ if (FALSE) {
 
 ```{r density}
 #| warning: false
-# if (params$show_descriptive_density) { 
-#   df %>% 
-#     dp$strip_dataframe() %>% 
-#     {for(i in names(.)){
-#       cat('\n')
-#       cat('####', i, ' \n')
-#       print(dp$viz$density_dist_plot(., i))
-#       frame()
-#       cat('\n')
-#     }
-#   }
-# }
-
 if (params$show_descriptive_density) {
   df %>%
     {for(i in names(dp$strip_dataframe(.))){
@@ -374,6 +361,7 @@ if (params$show_descriptive_density_rural) {
 }
 
 ``` 
+
 
 ### rural scatter
 
@@ -501,6 +489,15 @@ if (params$show_descriptive_maps) {
 
 ```
 
+### migration
+  
+```{r maps output}
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+if (params$show_descriptive_maps) { 
+  dp$viz$diverge_choro_map(df, "net_migration_rate", interactive = params$interactive_map)
+}
+
+```
 
 ### eca
 ```{r maps eca}
@@ -618,9 +615,9 @@ for (i in params$reg_factors ){
 
 
 ## specification 1
+
 ::: panel-tabset 
 ### exploration
-
 ```{r specification test 1}
 #| warning: false
 
@@ -1117,6 +1114,135 @@ if (params$show_lm_cluster_regression) {
 ```
 :::
 ::: 
+
+## specification 5
+::: panel-tabset 
+
+### lm clustered errors
+::: panel-tabset 
+```{r specification test 5}
+#| warning: false
+
+# variation over rural places only 
+# source = b0 + b1_sink + e
+
+if (params$show_lm_cluster_regression) {
+  contrasts(factor(df$cbsa_rural_category))
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+
+if (FALSE){
+  # log-log 
+  if (params$show_lm_cluster_regression) {
+  contrasts(factor(df$cbsa_rural_category))
+  specif <- list()
+  cl <- c("gross_output", "population", "employment", "jobs", "payroll", "establishments")
+  for (i in cl){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink" & df[[i]] > 0 & !is.na(df[[i]]), ] %>%
+       {lm_robust(log(.[[i]]) ~  log(.[[paste0("sink_value_", i)]]), cluster = .[["eca_membership"]])} %>%
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+}
+
+
+```
+:::
+
+### lm clustered errors pop weighted
+::: panel-tabset 
+```{r specification test 5 weighted}
+#| warning: false
+
+# variation over rural places only population weighted
+# source = b0 + b1_sink + e
+
+if (params$show_lm_cluster_regression) {
+    # population weights
+  contrasts(factor(df$cbsa_rural_category))
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]], cluster = .[["eca_membership"]], weight = .[["population"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+
+```
+:::
+
+
+### lm plot
+::: panel-tabset 
+
+```{r specification test 5 plot}
+#| warning: false
+
+# variation over rural places only 
+# source = b0 + b1_sink + e
+
+for (i in params$reg_factors){
+  y <- i
+  x <- paste0("sink_value_", y)
+  p <- ggplot(data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ], aes(x = get(x), y = get(y))) +
+    geom_point() +
+    stat_smooth(method = "lm") +
+    labs(x = x, y = y)
+  print(p)
+}
+
+```
+::: 
+
+### lm plot log
+::: panel-tabset 
+```{r specification test 5 plot log}
+#| warning: false
+
+# variation over rural places only 
+# source = b0 + b1_sink + e
+
+for (i in params$reg_factors){
+  y <- i
+  x <- paste0("sink_value_", y)
+  p <- ggplot(data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ], aes(x = log(get(x)), y = log(get(y)))) +
+    geom_point() +
+    stat_smooth(method = "lm") + 
+    labs(x = paste("ln", x), y = paste("ln", y))
+  print(p)
+}
+
+```
+::: 
+
+:::
+
+
+
+
 :::
 :::
 ::: 
