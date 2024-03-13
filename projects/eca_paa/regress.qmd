@@ -10,7 +10,7 @@ format:
     latex_engine: pdflatex
 params:
   year: 2012
-  year_range: !expr c(2012:2014) # or c(2012, 2015, 2017)
+  year_range: !expr c(2010:2020) # or c(2012, 2015, 2017)
   show_temporal_density: TRUE
   show_descriptive_density: TRUE
   show_descriptive_density_rural: TRUE
@@ -28,14 +28,13 @@ params:
 
 ```{r notes, include = FALSE}
 
-# TODO: add change over time functionality (e.g., pop growth) (time-series, repeat cross-section)
+# TODO: (time-series, repeat cross-section)
 # TODO: map all "sinks" unfiltered by algorithm
 # TODO: regress unfiltered "sinks" and "sources"
 # TODO: regress change over time data 
 # TODO: add spatial regressions
-# TODO: add remaining social/economic data (netmigration rate)
 # TODO: Diff in diff
-# TODO: center to center distances and share weighted distance
+# TODO: share weighted distance
 
 ```
 
@@ -506,6 +505,14 @@ if (params$show_descriptive_maps) {
   dp$viz$cat_choro_map(df, "eca_membership", interactive = params$interactive_map)
 }
 
+# if (params$show_descriptive_maps) { 
+#   tmp <- scale_fill_discrete
+#   scale_fill_discrete <- function(...) scale_fill_manual(values = c("#DC267F", "#FE6100", "#785EF0"), na.value ="#E0DEDD")
+#   p <- dp$viz$cat_choro_map(df, "CBSA_CODE", legend = T, interactive = params$interactive_maps)
+#     print(p)
+#   scale_fill_discrete <- tmp
+# }
+
 ```
 
 ### cbsa
@@ -528,9 +535,39 @@ if (params$show_descriptive_maps) {
   scale_fill_discrete <- tmp
 }
 
+
 # if (params$show_descriptive_maps) {
 #   dp$viz$cat_choro_map(df, "eca_cbsa_xtab", interactive = T, legend = T)
 # }
+```
+
+### eca x cbsa central
+```{r}
+
+if (params$show_descriptive_maps) {
+  tmp <- scale_fill_discrete
+  # scale_fill_discrete <- function(...) scale_fill_brewer(... , palette = "Set3")
+  scale_fill_discrete <- function(...) scale_fill_manual(values = c("#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c"), na.value ="#E0DEDD")
+  p <- dp$viz$cat_choro_map(df, "eca_central_out_xtab", interactive = params$interactive_map, legend = T)
+    print(p)
+  scale_fill_discrete <- tmp
+}
+
+
+```
+
+### eca x cbsa central
+```{r}
+
+if (params$show_descriptive_maps) {
+  tmp <- scale_fill_discrete
+  scale_fill_discrete <- function(...) scale_fill_manual(values = c("#1f78b4", "#a6cee3", "#33a02c", "#b2df8a", "#ff7f00"), na.value ="#E0DEDD")
+  p <- dp$viz$cat_choro_map(df, "metro_micro_sink", interactive = params$interactive_maps, legend = T)
+    print(p)
+  scale_fill_discrete <- tmp
+}
+
+
 ```
 
 :::
@@ -1194,6 +1231,34 @@ if (params$show_lm_cluster_regression) {
 ```
 :::
 
+### lm clustered errors distance control
+::: panel-tabset 
+```{r specification test 5 distance}
+#| warning: false
+
+# variation over rural places only distance controlled
+# source = b0 + b1_sink + b2_dist2sink + e
+
+df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$eca_center_distance %>% summary()
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[["eca_center_distance"]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    specif[[i]]$term[3] <- "distance"
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+
+```
+:::
 
 ### lm plot
 ::: panel-tabset 

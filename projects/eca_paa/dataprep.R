@@ -868,7 +868,13 @@ call_proj_df <- function(year){
     mutate(cbsa_by_eca = ifelse(eca_central_out_xtab == "Central Source", "only CBSA", 
                                 ifelse(eca_central_out_xtab == "Central Sink", "ECA and CBSA", 
                                        ifelse(eca_central_out_xtab %in% c("Rural Sink", "Outlying Sink"), "only ECA", 
-                                              NA))), .before = eca_membership)
+                                              NA))), .before = eca_membership) %>% 
+    mutate(metro_micro_sink = ifelse(METRO_MICRO == "metro" & eca_cluster_category != "Cluster Sink", "Metro only",
+                                     ifelse(METRO_MICRO == "micro" & eca_cluster_category != "Cluster Sink", "Micro only",
+                                            ifelse(METRO_MICRO == "metro" & eca_cluster_category == "Cluster Sink", "Sink and Metro ",
+                                                   ifelse(METRO_MICRO == "micro" & eca_cluster_category == "Cluster Sink", "Sink and Micro",
+                                                          ifelse(METRO_MICRO == "rural" & eca_cluster_category == "Cluster Sink", "Sink only",
+                                                          NA))))), .before = eca_membership) 
 return(df)
 }
 
