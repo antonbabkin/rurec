@@ -338,19 +338,21 @@ cbsa_comp = df1 %>%
 
 data_map <- left_join(df_county_shapes, data, by = "place")
 
-comp_map = data_map %>% mutate(comp = ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Destination"), "both", ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Source"), "CBSA only", ifelse(((CENTRAL_OUTLYING != "central" | is.na(CENTRAL_OUTLYING)) & eca_cluster_category == "Destination"), "ECA only", "neither"))), comp = ifelse(is.na(comp), "neither", comp), comp = ifelse((eca_cluster_category == "Destination" & is.na(CENTRAL_OUTLYING)), "ECA only", comp)) %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+comp_map = data_map %>% mutate(comp = ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Destination"), "both", ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Source"), "CBSA only", ifelse(((CENTRAL_OUTLYING != "central" | is.na(CENTRAL_OUTLYING)) & eca_cluster_category == "Destination"), "ECA only", "neither"))), comp = ifelse(is.na(comp), "neither", comp), comp = ifelse((eca_cluster_category == "Destination" & is.na(CENTRAL_OUTLYING)), "ECA only", comp)) %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72") %>%
+  mutate(comp = ifelse((comp == "CBSA only" & METRO_MICRO == "metro"), "Metro only", ifelse((comp == "CBSA only" & METRO_MICRO == "micro"), "Micro only", comp)), comp = ifelse((comp == "both" & METRO_MICRO == "metro"), "Destination & metro", ifelse((comp == "both" & METRO_MICRO == "micro"), "Destination & micro", comp)), comp = ifelse(comp == "ECA only", "Destination only", comp))
 
   
 
-MyPalette <- c("#97c08d", "#3d85c6", "gold", "grey")
+MyPalette <- c("#38761d","#97c08d", "gold", "#0b5394", "#9fc5e8", "grey90")
 
 
 tmap_mode("plot")
 
 print(comp_map %>%
   tm_shape() + 
-  tm_polygons(col = "comp", title = "County Centrality, ECAs & CBSAs", border.alpha = 0.0, style = "cat", palette = MyPalette) +
-  tm_layout(legend.title.size = 1.0, legend.position = c("left","bottom")))
+  tm_polygons(col = "comp", title = "County Centrality
+ECAs & CBSAs", border.alpha = 0.0, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("right","bottom"), frame = FALSE))
 
 
 ```
@@ -365,20 +367,23 @@ print(comp_map %>%
 
 data_map <- left_join(df_county_shapes, data, by = "place")
 
-comp_map = data_map %>% mutate(comp = ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Destination"), "both", ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Source"), "CBSA only", ifelse(((CENTRAL_OUTLYING != "central" | is.na(CENTRAL_OUTLYING)) & eca_cluster_category == "Destination"), "ECA only", "neither"))), comp = ifelse(is.na(comp), "neither", comp), comp = ifelse((eca_cluster_category == "Destination" & is.na(CENTRAL_OUTLYING)), "ECA only", comp)) %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+comp_map = data_map %>% 
+#  filter(eca_membership == "55117") %>% 
+  filter(STATE_CODE == "55") %>%
+  mutate(CENTRAL_OUTLYING = replace_na(CENTRAL_OUTLYING, "non-CBSA"), comp = ifelse((eca_membership == place & CENTRAL_OUTLYING == "central"), "ECA dest, own CBSA center", ifelse((eca_cluster_category == "Source" & CENTRAL_OUTLYING == "central"), "ECA source, own CBSA center", ifelse((eca_cluster_category == "Source" & CENTRAL_OUTLYING == "non-CBSA"), "ECA source, non-CBSA", NA)))) %>%
+  mutate(comp = ifelse(eca_membership == "55117", comp, "NaN"))
 
-  
-
-MyPalette <- c("#97c08d", "#3d85c6", "gold", "grey")
-
+MyPalette <- c("#97c08d", "#3d85c6", "gold", "white")
 
 tmap_mode("plot")
 
 print(comp_map %>%
   tm_shape() + 
-  tm_polygons(col = "comp", title = "County Centrality, ECAs & CBSAs", border.alpha = 0.0, style = "cat", palette = MyPalette) +
-  tm_layout(legend.title.size = 1.0, legend.position = c("left","bottom")))
-
+  tm_polygons(col = "comp", title = "CBSA Statuses
+Sheboygan County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c(-0.1, 0),
+            title = "", frame = FALSE)
+)
 
 ```
 
