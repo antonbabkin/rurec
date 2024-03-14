@@ -1584,7 +1584,9 @@ ECA_map = data_map %>%
   dplyr::group_by(eca_membership) %>% 
   dplyr::summarise()
 
-data_map <- left_join(ECA_map, temp3, by = "eca_membership")
+data_map <- left_join(ECA_map, temp3, by = "eca_membership") %>%
+  mutate(log.employment = ifelse(log.employment == "-Inf", NA, log.employment),
+         log.gdp = ifelse(log.gdp == "-Inf", NA, log.gdp))
 
 
 
@@ -1652,7 +1654,9 @@ cbsa_map = df_county_shapes %>%
   dplyr::group_by(CBSA_CODE) %>% 
   dplyr::summarise()
 
-data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE")
+data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE") %>%
+  mutate(log.employment = ifelse(log.employment == "-Inf", NA, log.employment),
+         log.gdp = ifelse(log.gdp == "-Inf", NA, log.gdp))
 
 
 tmap_mode("plot")
@@ -1761,7 +1765,9 @@ ECA_map = data_map %>%
   dplyr::group_by(eca_membership) %>% 
   dplyr::summarise()
 
-data_map <- left_join(ECA_map, temp3, by = "eca_membership")
+data_map <- left_join(ECA_map, temp3, by = "eca_membership") %>%
+  mutate(log.employment = ifelse(log.employment == "-Inf", NA, log.employment),
+         log.gdp = ifelse(log.gdp == "-Inf", NA, log.gdp))
 
 
 for (i in indicators) {
@@ -1827,7 +1833,9 @@ cbsa_map = df_county_shapes %>%
   dplyr::group_by(CBSA_CODE) %>% 
   dplyr::summarise()
 
-data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE")
+data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE") %>%
+  mutate(log.employment = ifelse(log.employment == "-Inf", NA, log.employment),
+         log.gdp = ifelse(log.gdp == "-Inf", NA, log.gdp))
 
 tmap_mode("view")
 
