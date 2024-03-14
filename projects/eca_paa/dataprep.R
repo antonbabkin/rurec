@@ -25,6 +25,7 @@ ipath <- list(
 
 opath <- list(
   geog_ = "data/projects/eca_paa/geog/{year}.rds",
+  dist_mat_ = "data/projects/eca_paa/distmat/{from}/{cbsa}/{year}.rds",
   ruc_ = "data/projects/eca_paa/ers_ruc/{year}.rds",
   cbsa_conc_ = "data/projects/eca_paa/cbsa_conc/{year}.rds",
   cbsa_delin_ = "data/projects/eca_paa/cbsa_delin/{year}.rds",
@@ -62,6 +63,7 @@ growth_rate <- dataprep_misc$growth_rate
 create_complete_cache <- function() {
   for (year in c(2010, 2013:2020)) {
     call_geog(year)
+    call_dist_mat(year)
   }
   for (year in c(2013, 2015, 2017, 2018, 2020, 2023)) {
     # call_cbsa_conc(year)
@@ -163,6 +165,25 @@ call_geog <- function(year) {
   }    
   return(df)
 }
+
+# Distance matrix ----
+
+call_dist_mat <- function(
+    year, 
+    from = "center", 
+    cbsa = FALSE) {
+  cache_path = glue(opath$dist_mat_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- geography$call_dist_mat(year, from, cbsa)
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
 
 # CBSA concordance ----
 
@@ -793,7 +814,8 @@ call_prosperity_outcomes <- function(year){
     call_net_demand(year = year, bus_data = "cbp_imp"),
     call_poverty_rate(year = year, bus_data = "saipe"),
     call_highschool_attainment_rate(year = year, bus_data = "tidy_acs"),
-    call_ypll75(year = year, bus_data = "chr")
+    call_ypll75(year = year, bus_data = "chr"), 
+    call_net_migration()
   )
   df = dl[[1]]
   for(i in 2:length(dl)){
@@ -820,6 +842,16 @@ call_eca_space_df <- function(year){
     `colnames<-`(c("eca_membership", "cbsa_of_eca")) %>% 
     {left_join(df, . , by = "eca_membership")} %>% 
     relocate(cbsa_of_eca, .after = eca_membership)
+  # TODO: can speed up with use of saved distance matrix(s)
+  # df <- df %>% mutate(eca_sink_id = apply(df, 1, function(x) {which(x$eca_membership == df$place) }), .after = eca_membership)
+  # df <- df %>% mutate(eca_center = df[df$eca_sink_id, ]$center, .after = eca_membership)
+  # df[ , "eca_center_distance"] <- NA
+  # for (i in 1:nrow(df)){
+  #   df$eca_center_distance[[i]] = as.numeric(drop_units(st_distance(df$eca_center[i], df$center[i])))
+  # }
+  dist_mat <- call_dist_mat(year)
+  df <- df %>% 
+    mutate(eca_center_distance = apply(df, 1, function(x){drop_units(dist_mat[x$place, x$eca_membership])}))
   return(df)
 }
 
@@ -836,7 +868,13 @@ call_proj_df <- function(year){
     mutate(cbsa_by_eca = ifelse(eca_central_out_xtab == "Central Source", "only CBSA", 
                                 ifelse(eca_central_out_xtab == "Central Sink", "ECA and CBSA", 
                                        ifelse(eca_central_out_xtab %in% c("Rural Sink", "Outlying Sink"), "only ECA", 
-                                              NA))), .before = eca_membership)
+                                              NA))), .before = eca_membership) %>% 
+    mutate(metro_micro_sink = ifelse(METRO_MICRO == "metro" & eca_cluster_category != "Cluster Sink", "Metro only",
+                                     ifelse(METRO_MICRO == "micro" & eca_cluster_category != "Cluster Sink", "Micro only",
+                                            ifelse(METRO_MICRO == "metro" & eca_cluster_category == "Cluster Sink", "Sink and Metro ",
+                                                   ifelse(METRO_MICRO == "micro" & eca_cluster_category == "Cluster Sink", "Sink and Micro",
+                                                          ifelse(METRO_MICRO == "rural" & eca_cluster_category == "Cluster Sink", "Sink only",
+                                                          NA))))), .before = eca_membership) 
 return(df)
 }
 
