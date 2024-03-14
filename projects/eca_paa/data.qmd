@@ -213,67 +213,83 @@ dp$growth_rate(2012, 2017, dp$call_poverty_rate) |> head()
 # calculating log of highly right-skewed indicators
 # replacing and removing integer variabiles
 # removing US non-state and non-DC territories
-unemployment_rate <- df_unemp_rate |>
-    filter(year == params$map_agg_stats_year, cty != "000") |>
-    mutate(place = str_c(st, cty)) |>
-    rename(unemployment.rate = unemp_rt) |>
-    select(place, unemployment.rate)
-bachelors <- df_education |>
-    filter(YEAR == params$map_ex_range_year) |>
-    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
-    rename(bachelors = estimate) |>
-    select(place, bachelors)
-labor_force_part_rate <- df_lfpr |>
-    filter(YEAR == params$map_ex_range_year) |>
-    mutate(place = sprintf("%05d", as.numeric(GEOID))) |>
-    rename(lfpr = estimate) |>
-    select(place, lfpr)
-poverty <- df_saipe |>
-    filter(year == params$map_agg_stats_year, county.fips != "000") |>
-    mutate(place = str_c(state.fips, county.fips)) |>
-    rename(poverty = pov) |>
-    select(place, poverty)
-premature_death <- df_chrr |>
-    filter(year == params$map_agg_stats_year, countycode != "000") |>
-    mutate(place = str_c(statecode, countycode)) |>
-    rename(premature.death = v001_rawvalue) |>
-    select(place, premature.death)
-net_migration <- df_netmigration |>
-    mutate(county.fips = substr(fips_str2020,3,5)) |>
-    filter(county.fips != "000") |>
-    mutate(place = fips_str2020) |>
-    rename(net.migration = r1tttt) |>
-    select(place, net.migration)
-dynamism <- df_econ_dynam |>
-  mutate(population.grow.rate=population_grow_rate/100, employment.grow.rate=employment_grow_rate/100,
-         establishments.grow.rate=establishments_grow_rate/100,
-         output.grow.rate=output_grow_rate/100) |>
-  select("place"=fips, population, employment, establishments, output,
-         population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)
-CBSA = df_cbsa_delin %>%
-  select("place"=fips, "cbsa"=cbsa_code, central_outlying)
+df_county_shapes = dp$call_geog(2013)
+CBSA = dp$call_cbsa(2013)
+RUCC = dp$call_ruc(2013) %>% rename("place"="fips") %>% mutate(rural = ifelse(ruc_code > 3, 1, 0))  
+ECA = dp$call_eca_df() %>% rename("place"="fips") %>%
+  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "Destination", ifelse(eca_cluster_category == "Cluster Source", "Source", NA)))
+population = dp$call_population(2012, bus_data = "tidy_acs")
+population_growth = dp$growth_rate(2012, 2017, dp$call_population, bus_data = "tidy_acs") %>% rename("population_growth"="grow_rate")
+employment = dp$call_employment(2012, bus_data = "ers")
+employment_growth = dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "ers") %>% rename("employment_growth"="grow_rate")
+labor_force_part_rate = dp$call_laborforce_rate(2012)
+unemployment_rate = dp$call_unemp_rate(2012)
+jobs = dp$call_employment(2012, bus_data = "cbp_raw") %>% rename("jobs"="employment")
+job_growth = dp$growth_rate(2012, 2017, dp$call_employment, bus_data = "cbp_raw") %>% rename("job_growth"="grow_rate")
+establishments = dp$call_establishments(2012, bus_data = "cbp_raw")
+establishments_growth = dp$growth_rate(2012, 2017, dp$call_establishments, bus_data = "cbp_raw") %>% rename("establishments_growth"="grow_rate")
+entry_rate = dp$call_entry_rate(2012, bus_data = "bds")
+exit_rate = dp$call_exit_rate(2012, bus_data = "bds")
+payroll = dp$call_payroll(2012, bus_data = "cbp_raw")
+payroll_growth = dp$growth_rate(2012, 2017, dp$call_payroll, bus_data = "cbp_raw") %>% rename("payroll_growth"="grow_rate")
+wages = dp$call_wage(2017)
+wage_growth = dp$growth_rate(2012, 2017, dp$call_wage, bus_data = "cbp_raw") %>% rename("wage_growth"="grow_rate")
+income = dp$call_income_rate(2012)
+income_growth = dp$growth_rate(2012, 2017, dp$call_income_rate, bus_data = "bea_profile") %>% rename("income_growth"="grow_rate")
+gdp = dp$call_gdp(2022, price_level = "nominal")
+gdp_growth = dp$growth_rate(2017, 2019, dp$call_gdp) %>% rename("gdp_growth"="grow_rate")
+education = dp$call_highschool_attainment_rate(2012)
+education_growth = dp$growth_rate(2012, 2017, dp$call_highschool_attainment_rate) %>% rename("education_growth"="grow_rate")
+premature_death = dp$call_ypll75(2012)
+premature_death_growth = dp$growth_rate(2012, 2017, dp$call_ypll75) %>% rename("premature_death_growth"="grow_rate")
+poverty = dp$call_poverty_rate(2012)
+poverty_growth = dp$growth_rate(2012, 2017, dp$call_poverty_rate) %>% rename("poverty_growth"="grow_rate")
+net_migration = dp$call_net_migration()
 
 # joining dataframes
-df1 = dynamism %>%
-  full_join(y = bachelors, by = "place") %>%
-  full_join(y = labor_force_part_rate, by = "place") %>%
-  full_join(y = poverty, by = "place") %>%
-  full_join(y = premature_death, by = "place") %>%
-  full_join(y = net_migration, by = "place") %>%
+df1 = population %>%
+  left_join(y = population_growth, by = "place") %>%
+  left_join(y = employment, by = "place") %>%
+  left_join(y = employment_growth, by = "place") %>%
+  left_join(y = labor_force_part_rate, by = "place") %>%
+  left_join(y = unemployment_rate, by = "place") %>%
+  left_join(y = jobs, by = "place") %>%
+  left_join(y = job_growth, by = "place") %>%
+  left_join(y = establishments, by = "place") %>%
+  left_join(y = establishments_growth, by = "place") %>%
+  left_join(y = entry_rate, by = "place") %>%
+  left_join(y = exit_rate, by = "place") %>%
+  left_join(y = payroll, by = "place") %>%
+  left_join(y = payroll_growth, by = "place") %>%
+  left_join(y = wages, by = "place") %>%
+  left_join(y = wage_growth, by = "place") %>%
+  left_join(y = income, by = "place") %>%
+  left_join(y = income_growth, by = "place") %>%
+  left_join(y = gdp, by = "place") %>%
+  left_join(y = gdp_growth, by = "place") %>%
+  left_join(y = education, by = "place") %>%
+  left_join(y = education_growth, by = "place") %>%
+  left_join(y = premature_death, by = "place") %>%
+  left_join(y = premature_death_growth, by = "place") %>%
+  left_join(y = poverty, by = "place") %>%
+  left_join(y = poverty_growth, by = "place") %>%
+  left_join(y = net_migration, by = "place") %>%
   mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment),
-         log.output = log(output), st = substr(place,1,2)) %>%
+         log.gdp = log(gdp), st = substr(place,1,2)) %>%
   filter(st != "72" & st != "78") %>%
+  select(-st) %>%
   distinct()
 
-# reading indicators into ECA
-data = df_eca %>%
-  rename("place"="fips") %>%
-  left_join(y=df1, by="place") %>%
-  left_join(y=df_RUCC, by="place") %>%
-  left_join(y=CBSA, by="place") %>%
-  mutate(central_outlying = ifelse(rural == "non-metro" & is.na(central_outlying), "rural (non-CBSA)", central_outlying)) %>%
-  filter(st != "72")
 
+
+# reading indicators into ECA
+data = ECA %>%
+  left_join(y=CBSA, by="place") %>%
+  left_join(y=RUCC, by="place") %>%
+  left_join(y=df1, by="place") %>%
+  mutate(CENTRAL_OUTLYING = ifelse(rural == "non-metro" & is.na(CENTRAL_OUTLYING), "rural (non-CBSA)", CENTRAL_OUTLYING), st = substr(place,1,2)) %>%
+  filter(st != "72") %>%
+  select(-st)
 
 # creating table that shows each "Source"'s indicator values along with each's respective "Sink"'s values
 
@@ -281,36 +297,497 @@ df1_source = df1 %>%
   setNames(paste0('source_', names(.))) %>%
   rename("place"="source_place")
 df1_sink = df1 %>%
-  setNames(paste0('sink_', names(.))) %>%
-  rename("eca_membership"="sink_place")
-eca_comp = df_eca %>%
-  rename("place"="fips") %>%
+  setNames(paste0('destination_', names(.))) %>%
+  rename("eca_membership"="destination_place")
+eca_comp = ECA %>%
   left_join(y = df1_source, by = "place") %>%
   left_join(y = df1_sink, by = "eca_membership") %>%
   filter()
 
+
 # creating table that shows each CBSA's central counties
 
-cbsa_central = df_cbsa_delin %>%
-  filter(central_outlying == "central" & state_code != 72) %>%
-  select("central_place" = fips, cbsa_code)
+cbsa_central = CBSA %>%
+  mutate(st = substr(place,1,2)) %>%
+  filter(CENTRAL_OUTLYING == "central" & st != 72) %>%
+  select("central_place" = place, CBSA_CODE)
 
-cbsa = full_join(x = df_cbsa_delin, y = cbsa_central, by = "cbsa_code") %>%
-  filter(state_code != 72) %>%
-  select(central_place, "place"=fips)
+cbsa = full_join(x = CBSA, y = cbsa_central, by = "CBSA_CODE") %>%
+  mutate(st = substr(place,1,2)) %>%
+  filter(st != 72) %>%
+  select(central_place, place)
 
 df1_central = cbsa_central %>%
   rename("place"="central_place") %>%
   left_join(y=df1, by="place") %>%
-  select(-cbsa_code, -st) %>%
+  select(-CBSA_CODE) %>%
   setNames(paste0('central_', names(.)))
 
 cbsa_comp = df1 %>%
   left_join(y=cbsa, by="place") %>%
   left_join(y=df1_central, by="central_place") %>%
-  left_join(y=CBSA, by="place")
+  left_join(y=CBSA, by="place") %>%
+  drop_na(central_place)
 
 ```
+
+# Priority graphics
+## Map, centrality of ECA/CBSA
+
+```{r}
+
+data_map <- left_join(df_county_shapes, data, by = "place")
+
+comp_map = data_map %>% mutate(comp = ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Destination"), "both", ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Source"), "CBSA only", ifelse(((CENTRAL_OUTLYING != "central" | is.na(CENTRAL_OUTLYING)) & eca_cluster_category == "Destination"), "ECA only", "neither"))), comp = ifelse(is.na(comp), "neither", comp), comp = ifelse((eca_cluster_category == "Destination" & is.na(CENTRAL_OUTLYING)), "ECA only", comp)) %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+
+  
+
+MyPalette <- c("#97c08d", "#3d85c6", "gold", "grey")
+
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "County Centrality, ECAs & CBSAs", border.alpha = 0.0, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("left","bottom")))
+
+
+```
+
+## Map, ECA/CBSA comparison
+<!-- Find examples (Wisconsin and around Midwest) comparing a single CBSA and ECA. ECA should not be too big (max 7-8 counties) and not too spread out spatially. Make a map similar to Cedar Rapids example from the abstract. -->
+<!-- CBSA and ECA that have the same core county. -->
+<!-- An outlying CBSA county connected to a ECA core that is not part of the CBSA. -->
+
+
+```{r}
+
+data_map <- left_join(df_county_shapes, data, by = "place")
+
+comp_map = data_map %>% mutate(comp = ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Destination"), "both", ifelse((CENTRAL_OUTLYING == "central" & eca_cluster_category == "Source"), "CBSA only", ifelse(((CENTRAL_OUTLYING != "central" | is.na(CENTRAL_OUTLYING)) & eca_cluster_category == "Destination"), "ECA only", "neither"))), comp = ifelse(is.na(comp), "neither", comp), comp = ifelse((eca_cluster_category == "Destination" & is.na(CENTRAL_OUTLYING)), "ECA only", comp)) %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+
+  
+
+MyPalette <- c("#97c08d", "#3d85c6", "gold", "grey")
+
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "County Centrality, ECAs & CBSAs", border.alpha = 0.0, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("left","bottom")))
+
+
+```
+
+
+## Summary tables
+### county (n & %)
+
+```{r}
+
+temp = data %>%
+  mutate(METRO_MICRO = ifelse(is.na(METRO_MICRO),"non-core", METRO_MICRO), CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING),"non-core", CENTRAL_OUTLYING))
+
+
+ECAtotal = temp %>%
+  group_by(METRO_MICRO) %>%
+  summarize(total = length(unique(place)))
+ECAtotal2 = ECAtotal %>%
+  summarize(total = sum(total)) %>%
+  mutate(METRO_MICRO = "total")
+ECAtotal = rbind(ECAtotal, ECAtotal2)
+
+ECAdestination = temp %>%
+  filter(eca_cluster_category == "Destination") %>%
+  group_by(METRO_MICRO) %>%
+  summarize(destination = length(unique(place)))
+ECAdestination2 = ECAdestination %>%
+  summarize(destination = sum(destination)) %>%
+  mutate(METRO_MICRO = "destination")
+ECAdestination = rbind(ECAdestination, ECAdestination2) %>%
+  mutate(METRO_MICRO = ifelse(METRO_MICRO == "destination", "total", METRO_MICRO))
+
+ECAsource = temp %>%
+  filter(eca_cluster_category == "Source") %>%
+  group_by(METRO_MICRO) %>%
+  summarize(source = length(unique(place)))
+ECAsource2 = ECAsource %>%
+  summarize(source = sum(source)) %>%
+  mutate(METRO_MICRO = "source")
+ECAsource = rbind(ECAsource, ECAsource2) %>%
+  mutate(METRO_MICRO = ifelse(METRO_MICRO == "source", "total", METRO_MICRO))
+
+table1 = ECAdestination %>% left_join(y = ECAsource, by = "METRO_MICRO") %>%
+  left_join(y = ECAtotal, by = "METRO_MICRO") %>%
+  rename("CBSA"="METRO_MICRO")
+
+
+gt(table1, rownames_to_stub = TRUE) |>
+tab_header(
+  title = md("**ECA & CBSA components**"),
+  subtitle = md("*Number of Counties*")
+) |>
+tab_options(
+  heading.title.font.size = "medium",
+  table.font.size = "small",
+  heading.subtitle.font.size = "medium",
+  table.width = pct(50)
+)
+
+ECAtotal = temp %>%
+  group_by(CENTRAL_OUTLYING) %>%
+  summarize(total = length(unique(place)))
+ECAtotal2 = ECAtotal %>%
+  summarize(total = sum(total)) %>%
+  mutate(CENTRAL_OUTLYING = "total")
+ECAtotal = rbind(ECAtotal, ECAtotal2)
+
+ECAdestination = temp %>%
+  filter(eca_cluster_category == "Destination") %>%
+  group_by(CENTRAL_OUTLYING) %>%
+  summarize(destination = length(unique(place)))
+ECAdestination2 = ECAdestination %>%
+  summarize(destination = sum(destination)) %>%
+  mutate(CENTRAL_OUTLYING = "destination")
+ECAdestination = rbind(ECAdestination, ECAdestination2) %>%
+  mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "destination", "total", CENTRAL_OUTLYING))
+
+ECAsource = temp %>%
+  filter(eca_cluster_category == "Source") %>%
+  group_by(CENTRAL_OUTLYING) %>%
+  summarize(source = length(unique(place)))
+ECAsource2 = ECAsource %>%
+  summarize(source = sum(source)) %>%
+  mutate(CENTRAL_OUTLYING = "source")
+ECAsource = rbind(ECAsource, ECAsource2) %>%
+  mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "source", "total", CENTRAL_OUTLYING))
+
+table2 = ECAdestination %>% left_join(y = ECAsource, by = "CENTRAL_OUTLYING") %>%
+  left_join(y = ECAtotal, by = "CENTRAL_OUTLYING") %>%
+  rename("CBSA"="CENTRAL_OUTLYING")
+
+
+gt(table2, rownames_to_stub = TRUE) |>
+tab_header(
+  title = md("**ECA & CBSA components**"),
+  subtitle = md("*Number of Counties*")
+) |>
+tab_options(
+  heading.title.font.size = "medium",
+  table.font.size = "small",
+  heading.subtitle.font.size = "medium",
+  table.width = pct(50)
+)
+
+table3 = table1 %>%
+  mutate(max = max(total), destination = destination / max, source = source / max, total = total / max) %>%
+  select(c(CBSA, source, destination, total))
+
+gt(table3, rownames_to_stub = TRUE) |>
+tab_header(
+  title = md("**ECA & CBSA components**"),
+  subtitle = md("*Percent of Counties*")
+) |>
+tab_options(
+  heading.title.font.size = "medium",
+  table.font.size = "small",
+  heading.subtitle.font.size = "medium",
+  table.width = pct(50)
+) %>%
+  fmt_percent(decimals = 0)
+
+table4 = table2 %>%
+  mutate(max = max(total), destination = destination / max, source = source / max, total = total / max) %>%
+  select(c(CBSA, source, destination, total))
+
+gt(table4, rownames_to_stub = TRUE) |>
+tab_header(
+  title = md("**ECA & CBSA components**"),
+  subtitle = md("*Percent of Counties*")
+) |>
+tab_options(
+  heading.title.font.size = "medium",
+  table.font.size = "small",
+  heading.subtitle.font.size = "medium",
+  table.width = pct(50)
+) %>%
+  fmt_percent(decimals = 0)
+
+
+```
+
+### sums
+
+```{r}
+countvars <- c("population", "employment", "establishments", "gdp", "jobs", "payroll")
+
+for (col in countvars) {
+  ECAtotal <- temp %>%
+    group_by(METRO_MICRO) %>%
+    summarize(total = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAtotal2 <- ECAtotal %>%
+    summarize(total = sum(total)) %>%
+    mutate(METRO_MICRO = "total")
+  
+  ECAtotal <- rbind(ECAtotal, ECAtotal2)
+  
+  ECAdestination <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    group_by(METRO_MICRO) %>%
+    summarize(destination = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAdestination2 <- ECAdestination %>%
+    summarize(destination = sum(destination)) %>%
+    mutate(METRO_MICRO = "destination")
+  
+  ECAdestination <- rbind(ECAdestination, ECAdestination2) %>%
+    mutate(METRO_MICRO = ifelse(METRO_MICRO == "destination", "total", METRO_MICRO))
+  
+  ECAsource <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    group_by(METRO_MICRO) %>%
+    summarize(source = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAsource2 <- ECAsource %>%
+    summarize(source = sum(source)) %>%
+    mutate(METRO_MICRO = "source")
+  
+  ECAsource <- rbind(ECAsource, ECAsource2) %>%
+    mutate(METRO_MICRO = ifelse(METRO_MICRO == "source", "total", METRO_MICRO))
+  
+  table1 <- ECAdestination %>%
+    left_join(y = ECAsource, by = "METRO_MICRO") %>%
+    left_join(y = ECAtotal, by = "METRO_MICRO") %>%
+    rename("CBSA" = "METRO_MICRO")
+  
+  print(gt(table1, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (n)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            )%>%
+          fmt_number(suffixing = TRUE))
+  
+  ECAtotal <- temp %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(total = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAtotal2 <- ECAtotal %>%
+    summarize(total = sum(total)) %>%
+    mutate(CENTRAL_OUTLYING = "total")
+  
+  ECAtotal <- rbind(ECAtotal, ECAtotal2)
+  
+  ECAdestination <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(destination = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAdestination2 <- ECAdestination %>%
+    summarize(destination = sum(destination)) %>%
+    mutate(CENTRAL_OUTLYING = "destination")
+  
+  ECAdestination <- rbind(ECAdestination, ECAdestination2) %>%
+    mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "destination", "total", CENTRAL_OUTLYING))
+  
+  ECAsource <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(source = sum(!!sym(col), na.rm = TRUE))
+  
+  ECAsource2 <- ECAsource %>%
+    summarize(source = sum(source)) %>%
+    mutate(CENTRAL_OUTLYING = "source")
+  
+  ECAsource <- rbind(ECAsource, ECAsource2) %>%
+    mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "source", "total", CENTRAL_OUTLYING))
+  
+  table2 <- ECAdestination %>%
+    left_join(y = ECAsource, by = "CENTRAL_OUTLYING") %>%
+    left_join(y = ECAtotal, by = "CENTRAL_OUTLYING") %>%
+    rename("CBSA" = "CENTRAL_OUTLYING")
+  
+  print(gt(table2, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (n)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            )%>%
+          fmt_number(suffixing = TRUE))
+  
+  table3 <- table1 %>%
+    mutate(max = max(total), destination = destination / max, source = source / max, total = total / max) %>%
+    select(c(CBSA, source, destination, total))
+  
+  print(gt(table3, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (%)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            ) %>%
+            fmt_percent(decimals = 0))
+  
+  table4 <- table2 %>%
+    mutate(max = max(total), destination = destination / max, source = source / max, total = total / max) %>%
+    select(c(CBSA, source, destination, total))
+  
+  print(gt(table4, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (%)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            ) %>%
+            fmt_percent(decimals = 0))
+}
+
+
+```
+
+### means
+
+```{r}
+indicators = data %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
+  colnames()
+
+for (col in indicators) {
+  ECAtotal <- temp %>%
+    group_by(METRO_MICRO) %>%
+    summarize(total = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAtotal2 <- temp %>%
+    summarize(total = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(METRO_MICRO = "total")
+  
+  ECAtotal <- rbind(ECAtotal, ECAtotal2)
+  
+  ECAdestination <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    group_by(METRO_MICRO) %>%
+    summarize(destination = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAdestination2 <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    summarize(destination = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(METRO_MICRO = "destination")
+  
+  ECAdestination <- rbind(ECAdestination, ECAdestination2) %>%
+    mutate(METRO_MICRO = ifelse(METRO_MICRO == "destination", "total", METRO_MICRO))
+  
+  ECAsource <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    group_by(METRO_MICRO) %>%
+    summarize(source = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAsource2 <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    summarize(source = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(METRO_MICRO = "source")
+  
+  ECAsource <- rbind(ECAsource, ECAsource2) %>%
+    mutate(METRO_MICRO = ifelse(METRO_MICRO == "source", "total", METRO_MICRO))
+  
+  table1 <- ECAdestination %>%
+    left_join(y = ECAsource, by = "METRO_MICRO") %>%
+    left_join(y = ECAtotal, by = "METRO_MICRO") %>%
+    rename("CBSA" = "METRO_MICRO")
+  
+  print(gt(table1, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (means)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            )%>%
+          fmt_number(decimals = 1, sep_mark = ","))
+  
+  ECAtotal <- temp %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(total = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAtotal2 <- temp %>%
+    summarize(total = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(CENTRAL_OUTLYING = "total")
+  
+  ECAtotal <- rbind(ECAtotal, ECAtotal2)
+  
+  ECAdestination <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(destination = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAdestination2 <- temp %>%
+    filter(eca_cluster_category == "Destination") %>%
+    summarize(destination = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(CENTRAL_OUTLYING = "destination")
+  
+  ECAdestination <- rbind(ECAdestination, ECAdestination2) %>%
+    mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "destination", "total", CENTRAL_OUTLYING))
+  
+  ECAsource <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    group_by(CENTRAL_OUTLYING) %>%
+    summarize(source = mean(!!sym(col), na.rm = TRUE))
+  
+  ECAsource2 <- temp %>%
+    filter(eca_cluster_category == "Source") %>%
+    summarize(source = mean(!!sym(col), na.rm = TRUE)) %>%
+    mutate(CENTRAL_OUTLYING = "source")
+  
+  ECAsource <- rbind(ECAsource, ECAsource2) %>%
+    mutate(CENTRAL_OUTLYING = ifelse(CENTRAL_OUTLYING == "source", "total", CENTRAL_OUTLYING))
+  
+  table2 <- ECAdestination %>%
+    left_join(y = ECAsource, by = "CENTRAL_OUTLYING") %>%
+    left_join(y = ECAtotal, by = "CENTRAL_OUTLYING") %>%
+    rename("CBSA" = "CENTRAL_OUTLYING")
+  
+  print(gt(table2, rownames_to_stub = TRUE) |>
+            tab_header(
+              title = md("**ECA & CBSA components**"),
+              subtitle = md(glue("*",col," (means)*"))
+            ) |>
+            tab_options(
+              heading.title.font.size = "medium",
+              table.font.size = "small",
+              heading.subtitle.font.size = "medium",
+              table.width = pct(50)
+            )%>%
+          fmt_number(decimals = 1, sep_mark = ","))
+
+}
+
+
+```
+
 
 
 # Descriptive statistics
@@ -320,7 +797,7 @@ cbsa_comp = df1 %>%
 
 ```{r}
 
-df_eca |>
+ECA |>
   count(eca_cluster_category) |>
   gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -341,7 +818,7 @@ df_eca |>
 
 data %>% 
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable != "bachelors" & variable != "rural" &  variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share" & variable != "central_outlying") %>%
+  filter(variable != "max_trade_share" & variable != "rural" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -358,8 +835,7 @@ data %>%
 
 data %>% 
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable == "bachelors" | variable == "lfpr" | variable == "poverty" | 
-           variable == "premature.death" | variable == "net.migration") %>%
+  filter(variable == "place" |  variable == "laborforce_part_rate"|variable == "unemp_rate"|variable == "highschool_attainment_rate" | variable == "education_growth" | variable == "ypll75"|variable == "premature_death_growth" | variable == "poverty_rate" | variable == "poverty_growth" | variable == "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -381,11 +857,13 @@ data %>%
 
 ```{r}
 data %>%
-  select(-eca_membership, -max_trade_share, -eca_cluster_category, -central_outlying) %>%
+  mutate(rural = ifelse(rural == 1, "non-CBSA", "CBSA")) %>%
+  rename("population.growth"="population_growth", "employment.growth"="employment_growth", "gdp.growth"="gdp_growth", "establishments.growth"="establishments_growth", "job.growth"="job_growth", "payroll.growth"="payroll_growth", "income.growth"="income_growth", "entry.rate"="entry_rate", "exit.rate"="exit_rate", "wage.growth"="wage_growth", "income.rate"="income_rate") %>%
+  select(-eca_membership, -max_trade_share, -eca_cluster_category, -CENTRAL_OUTLYING) %>%
   pivot_wider(names_from = rural,
-              values_from = c(population, employment, establishments, output, log.population, log.employment, log.establishments, log.output, population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)) %>%
+              values_from = c(population, employment, establishments, gdp, log.population, log.employment, log.establishments, log.gdp, population.growth, employment.growth, establishments.growth, jobs, job.growth, gdp.growth, entry.rate, exit.rate, payroll, payroll.growth, wage, wage.growth, income.rate, income.growth)) %>%
   get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
-  filter(variable != "bachelors" & variable != "RUCC" & variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share") %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
     rowname_col = "variable",
@@ -405,9 +883,11 @@ data %>%
   )
 
 data %>%
-  select(place, rural, bachelors, lfpr, poverty, premature.death, net.migration) %>%
+  mutate(rural = ifelse(rural == 1, "non-CBSA", "CBSA")) %>%
+  select(place, laborforce_part_rate, unemp_rate, highschool_attainment_rate, education_growth, ypll75, premature_death_growth, poverty_rate, poverty_growth, net_migration_rate, rural) %>%
+  rename("highschool.attainment.rate"="highschool_attainment_rate", "unemp.rate"="unemp_rate", "laborforce.part.rate"="laborforce_part_rate", "education.growth"="education_growth", "premature.death"="ypll75", "premature.death.growth"="premature_death_growth", "poverty.rate"="poverty_rate", "poverty.growth"="poverty_growth", "net.migration.rate"="net_migration_rate")  %>%
   pivot_wider(names_from = rural,
-              values_from = c(bachelors, lfpr, poverty, premature.death, net.migration)) %>%
+              values_from = c(laborforce.part.rate, unemp.rate, highschool.attainment.rate, education.growth, premature.death, premature.death.growth, poverty.rate, poverty.growth, net.migration.rate)) %>%
   get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
@@ -433,12 +913,13 @@ data %>%
 
 ```{r}
 data %>%
-  mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
-  select(-eca_membership, -max_trade_share, -eca_cluster_category, -central_outlying, -RUCC) %>%
+  mutate(RUCC2 = str_c("R","",ruc_code), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
+  rename("population.growth"="population_growth", "employment.growth"="employment_growth", "gdp.growth"="gdp_growth", "establishments.growth"="establishments_growth", "job.growth"="job_growth", "payroll.growth"="payroll_growth", "income.growth"="income_growth", "entry.rate"="entry_rate", "exit.rate"="exit_rate", "wage.growth"="wage_growth", "income.rate"="income_rate") %>%
+  select(-eca_membership, -max_trade_share, -eca_cluster_category, -CENTRAL_OUTLYING, -rural) %>%
   pivot_wider(names_from = RUCC2,
-              values_from = c(population, employment, establishments, output, log.population, log.employment, log.establishments, log.output, population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)) %>%
+              values_from = c(population, employment, establishments, gdp, log.population, log.employment, log.establishments, log.gdp, population.growth, employment.growth, establishments.growth, jobs, job.growth, gdp.growth, entry.rate, exit.rate, payroll, payroll.growth, wage, wage.growth, income.rate, income.growth)) %>%
   get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
-  filter(variable != "bachelors" & variable != "rural" & variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share") %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
     rowname_col = "variable",
@@ -446,7 +927,7 @@ data %>%
   ) |>
   tab_header(
     title = md("**County Descriptives**"),
-    subtitle = md("**Dynamism Indicators**, *RUCC (1 = most metro)*")
+    subtitle = md("**Vitality Indicators**, *RUC Code*")
   ) |>
   tab_options(
     heading.title.font.size = "medium",
@@ -458,10 +939,11 @@ data %>%
   )
 
 data %>%
-  mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
-  select(place, RUCC2, bachelors, lfpr, poverty, premature.death, net.migration) %>%
+  mutate(RUCC2 = str_c("R","",ruc_code), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2))) %>%
+  select(place, laborforce_part_rate, unemp_rate, highschool_attainment_rate, education_growth, ypll75, premature_death_growth, poverty_rate, poverty_growth, net_migration_rate, RUCC2) %>%
+  rename("highschool.attainment.rate"="highschool_attainment_rate", "unemp.rate"="unemp_rate", "laborforce.part.rate"="laborforce_part_rate", "education.growth"="education_growth", "premature.death"="ypll75", "premature.death.growth"="premature_death_growth", "poverty.rate"="poverty_rate", "poverty.growth"="poverty_growth", "net.migration.rate"="net_migration_rate")  %>%
   pivot_wider(names_from = RUCC2,
-              values_from = c(bachelors, lfpr, poverty, premature.death, net.migration)) %>%
+              values_from = c(laborforce.part.rate, unemp.rate, highschool.attainment.rate, education.growth, premature.death, premature.death.growth, poverty.rate, poverty.growth, net.migration.rate)) %>%
   get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
@@ -470,7 +952,7 @@ data %>%
   ) |>
   tab_header(
     title = md("**County Descriptives**"),
-    subtitle = md("**Vitality Indicators**, *RUCC (1 = most metro)*")
+    subtitle = md("**Vitality Indicators**, *RUC Code*")
   ) |>
   tab_options(
     heading.title.font.size = "medium",
@@ -480,7 +962,6 @@ data %>%
     column_labels.font.weight = "bold",
     row_group.font.weight = "bold"
   )
-
 ```
 
 
@@ -488,36 +969,12 @@ data %>%
 
 ```{r}
 data %>%
-  select(-eca_membership, -max_trade_share, -central_outlying) %>%
-  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "sources", ifelse(eca_cluster_category == "Cluster Sink", "sinks", NA))) %>%
+  rename("population.growth"="population_growth", "employment.growth"="employment_growth", "gdp.growth"="gdp_growth", "establishments.growth"="establishments_growth", "job.growth"="job_growth", "payroll.growth"="payroll_growth", "income.growth"="income_growth", "entry.rate"="entry_rate", "exit.rate"="exit_rate", "wage.growth"="wage_growth", "income.rate"="income_rate") %>%
+  select(-eca_membership, -max_trade_share, -rural, -CENTRAL_OUTLYING) %>%
   pivot_wider(names_from = eca_cluster_category,
-              values_from = c(population, employment, establishments, output, log.population, log.employment, log.establishments, log.output, population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)) %>%
+              values_from = c(population, employment, establishments, gdp, log.population, log.employment, log.establishments, log.gdp, population.growth, employment.growth, establishments.growth, jobs, job.growth, gdp.growth, entry.rate, exit.rate, payroll, payroll.growth, wage, wage.growth, income.rate, income.growth)) %>%
   get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
-  filter(variable != "bachelors" & variable != "RUCC" & variable != "rural" & variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share") %>%
-  separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
-  gt::gt(
-    rowname_col = "variable",
-    groupname_col = "group",
-  ) |>
-  tab_header(
-    title = md("**County Descriptives**"),
-    subtitle = md("**Dynamism Indicators**, *ECAs*")
-  ) |>
-  tab_options(
-    heading.title.font.size = "medium",
-    heading.subtitle.font.size = "medium",
-    table.font.size = "small",
-    table.width = pct(65),
-    column_labels.font.weight = "bold",
-    row_group.font.weight = "bold"
-  )
-
-data %>%
-  select(place, eca_cluster_category, bachelors, lfpr, poverty, premature.death, net.migration) %>%
-  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "sources", ifelse(eca_cluster_category == "Cluster Sink", "sinks", NA))) %>%
-  pivot_wider(names_from = eca_cluster_category,
-              values_from = c(bachelors, lfpr, poverty, premature.death, net.migration)) %>%
-  get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
     rowname_col = "variable",
@@ -536,39 +993,11 @@ data %>%
     row_group.font.weight = "bold"
   )
 
-```
-
-### CBSA category
-
-```{r}
 data %>%
-  select(-eca_membership, -max_trade_share, -eca_cluster_category) %>%
-  pivot_wider(names_from = central_outlying,
-              values_from = c(population, employment, establishments, output, log.population, log.employment, log.establishments, log.output, population.grow.rate, employment.grow.rate, establishments.grow.rate, output.grow.rate)) %>%
-  get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
-  filter(variable != "bachelors" & variable != "RUCC" & variable != "rural" & variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share") %>%
-  separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
-  gt::gt(
-    rowname_col = "variable",
-    groupname_col = "group",
-  ) |>
-  tab_header(
-    title = md("**County Descriptives**"),
-    subtitle = md("**Dynamism Indicators**, *CBSAs*")
-  ) |>
-  tab_options(
-    heading.title.font.size = "medium",
-    heading.subtitle.font.size = "medium",
-    table.font.size = "small",
-    table.width = pct(65),
-    column_labels.font.weight = "bold",
-    row_group.font.weight = "bold"
-  )
-
-data %>%
-  select(place, central_outlying, bachelors, lfpr, poverty, premature.death, net.migration) %>%
-  pivot_wider(names_from = central_outlying,
-              values_from = c(bachelors, lfpr, poverty, premature.death, net.migration)) %>%
+  select(place, laborforce_part_rate, unemp_rate, highschool_attainment_rate, education_growth, ypll75, premature_death_growth, poverty_rate, poverty_growth, net_migration_rate, eca_cluster_category) %>%
+  rename("highschool.attainment.rate"="highschool_attainment_rate", "unemp.rate"="unemp_rate", "laborforce.part.rate"="laborforce_part_rate", "education.growth"="education_growth", "premature.death"="ypll75", "premature.death.growth"="premature_death_growth", "poverty.rate"="poverty_rate", "poverty.growth"="poverty_growth", "net.migration.rate"="net_migration_rate")  %>%
+  pivot_wider(names_from = eca_cluster_category,
+              values_from = c(laborforce.part.rate, unemp.rate, highschool.attainment.rate, education.growth, premature.death, premature.death.growth, poverty.rate, poverty.growth, net.migration.rate)) %>%
   get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
   gt::gt(
@@ -577,7 +1006,38 @@ data %>%
   ) |>
   tab_header(
     title = md("**County Descriptives**"),
-    subtitle = md("**Vitality Indicators**, *CBSAs*")
+    subtitle = md("**Vitality Indicators**, *ECAs*")
+  ) |>
+  tab_options(
+    heading.title.font.size = "medium",
+    heading.subtitle.font.size = "medium",
+    table.font.size = "small",
+    table.width = pct(65),
+    column_labels.font.weight = "bold",
+    row_group.font.weight = "bold"
+  )
+```
+
+### CBSA category
+
+```{r}
+
+data %>%
+  mutate(CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING), "non-CBSA", CENTRAL_OUTLYING)) %>%
+  rename("population.growth"="population_growth", "employment.growth"="employment_growth", "gdp.growth"="gdp_growth", "establishments.growth"="establishments_growth", "job.growth"="job_growth", "payroll.growth"="payroll_growth", "income.growth"="income_growth", "entry.rate"="entry_rate", "exit.rate"="exit_rate", "wage.growth"="wage_growth", "income.rate"="income_rate") %>%
+  select(-eca_membership, -max_trade_share, -eca_cluster_category, -rural) %>%
+  pivot_wider(names_from = CENTRAL_OUTLYING,
+              values_from = c(population, employment, establishments, gdp, log.population, log.employment, log.establishments, log.gdp, population.growth, employment.growth, establishments.growth, jobs, job.growth, gdp.growth, entry.rate, exit.rate, payroll, payroll.growth, wage, wage.growth, income.rate, income.growth)) %>%
+  get_summary_stats(, type = c("full"), show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
+  separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
+  gt::gt(
+    rowname_col = "variable",
+    groupname_col = "group",
+  ) |>
+  tab_header(
+    title = md("**County Descriptives**"),
+    subtitle = md("**Dynamism Indicators**, *Metro/Non-metro*")
   ) |>
   tab_options(
     heading.title.font.size = "medium",
@@ -588,13 +1048,39 @@ data %>%
     row_group.font.weight = "bold"
   )
 
+data %>%
+  mutate(CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING), "non-CBSA", CENTRAL_OUTLYING)) %>%
+  select(place, laborforce_part_rate, unemp_rate, highschool_attainment_rate, education_growth, ypll75, premature_death_growth, poverty_rate, poverty_growth, net_migration_rate, CENTRAL_OUTLYING) %>%
+  rename("highschool.attainment.rate"="highschool_attainment_rate", "unemp.rate"="unemp_rate", "laborforce.part.rate"="laborforce_part_rate", "education.growth"="education_growth", "premature.death"="ypll75", "premature.death.growth"="premature_death_growth", "poverty.rate"="poverty_rate", "poverty.growth"="poverty_growth", "net.migration.rate"="net_migration_rate")  %>%
+  pivot_wider(names_from = CENTRAL_OUTLYING,
+              values_from = c(laborforce.part.rate, unemp.rate, highschool.attainment.rate, education.growth, premature.death, premature.death.growth, poverty.rate, poverty.growth, net.migration.rate)) %>%
+  get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
+  separate_wider_delim(variable, delim = "_", names = c("variable", "group")) %>%
+  gt::gt(
+    rowname_col = "variable",
+    groupname_col = "group",
+  ) |>
+  tab_header(
+    title = md("**County Descriptives**"),
+    subtitle = md("**Vitality Indicators**, *Metro/Non-metro*")
+  ) |>
+  tab_options(
+    heading.title.font.size = "medium",
+    heading.subtitle.font.size = "medium",
+    table.font.size = "small",
+    table.width = pct(65),
+    column_labels.font.weight = "bold",
+    row_group.font.weight = "bold"
+  )
+
+
 ```
 
 ## ECAs
 ```{r}
 
 # ECA clusters by size
-df_eca |>
+data |>
   count(eca_membership, name = "n_counties") |>
   count(n_counties) |>
   gt(rownames_to_stub = TRUE) |>
@@ -618,17 +1104,17 @@ df_eca |>
 temp1 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE),  highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp1 %>%
   left_join(y=temp2, by="eca_membership") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
+  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable != "bachelors" & variable != "rural" &  variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share" & variable != "central_outlying") %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -646,8 +1132,7 @@ temp1 %>%
 temp1 %>%
   left_join(y=temp2, by="eca_membership") %>%
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable == "bachelors" | variable == "lfpr" | variable == "poverty" | 
-           variable == "premature.death" | variable == "net.migration") %>%
+  filter(variable == "place" |  variable == "laborforce_part_rate"|variable == "unemp_rate"|variable == "highschool_attainment_rate" | variable == "education_growth" | variable == "ypll75"|variable == "premature_death_growth" | variable == "poverty_rate" | variable == "poverty_growth" | variable == "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -670,8 +1155,8 @@ temp1 %>%
 ```{r}
 
 # ECA clusters by size
-df_cbsa_delin |>
-  count(cbsa_code, name = "n_counties") |>
+CBSA |>
+  count(CBSA_CODE, name = "n_counties") |>
   count(n_counties) |>
   gt(rownames_to_stub = TRUE,
 ) |>
@@ -693,18 +1178,18 @@ df_cbsa_delin |>
 
 temp1 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE),  highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp1 %>%
-  left_join(y=temp2, by="cbsa") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
+  left_join(y=temp2, by="CBSA_CODE") %>%
+  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable != "bachelors" & variable != "rural" &  variable != "lfpr" & variable != "poverty" & variable != "premature.death" & variable != "net.migration" & variable != "max_trade_share" & variable != "central_outlying") %>%
+  filter(variable != "max_trade_share" &  variable != "laborforce_part_rate" & variable != "unemp_rate" & variable != "highschool_attainment_rate" & variable != "education_growth" & variable != "ypll75" & variable != "premature_death_growth" & variable != "poverty_rate" & variable != "poverty_growth" & variable != "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -720,10 +1205,9 @@ temp1 %>%
   )
 
 temp1 %>%
-  left_join(y=temp2, by="cbsa") %>%
+  left_join(y=temp2, by="CBSA_CODE") %>%
   get_summary_stats(, type = "common", show = c("n", "mean", "sd", "median", "min", "max")) %>%
-  filter(variable == "bachelors" | variable == "lfpr" | variable == "poverty" | 
-           variable == "premature.death" | variable == "net.migration") %>%
+  filter(variable == "place" |  variable == "laborforce_part_rate"|variable == "unemp_rate"|variable == "highschool_attainment_rate" | variable == "education_growth" | variable == "ypll75"|variable == "premature_death_growth" | variable == "poverty_rate" | variable == "poverty_growth" | variable == "net_migration_rate") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
@@ -738,11 +1222,7 @@ temp1 %>%
     column_labels.font.weight = "bold"
   )
 
-
 ```
-
-
-
 
 
 # Histograms
@@ -752,7 +1232,7 @@ temp1 %>%
 ```{r}
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
   colnames()
 
 for (i in indicators) {
@@ -777,11 +1257,14 @@ for (i in indicators) {
 ```{r}
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
   colnames()
+data_temp = data %>%
+  mutate(rural = ifelse(rural == 1, "non-metro", "metro"))
+
 
 for (i in indicators) {
-  print((ggplot(data, aes(x = data[ , i], fill = rural)) +
+  print((ggplot(data_temp, aes(x = data_temp[ , i], fill = rural)) +
     geom_density(alpha = 0.4) + 
     theme_pander() + 
     scale_fill_pander() +
@@ -799,10 +1282,10 @@ for (i in indicators) {
 ```{r}
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
   colnames()
 
-temp = data %>% mutate(RUCC2 = str_c("R","",RUCC), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2)))
+temp = data %>% mutate(RUCC2 = str_c("R","",ruc_code), RUCC2 = ifelse(RUCC2 == "R1", "R1 (Largest Metros)", ifelse(RUCC2 == "R9", "R9 (Smallest Rural)", RUCC2)))
 
 
 for (i in indicators) {
@@ -828,11 +1311,10 @@ for (i in indicators) {
 ```{r}
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
   colnames()
 
-temp = data %>%
-  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "sources", ifelse(eca_cluster_category == "Cluster Sink", "sinks", NA)))
+temp = data
 
 for (i in indicators) {
   print((ggplot(temp, aes(x = temp[ , i], fill = eca_cluster_category)) +
@@ -852,11 +1334,15 @@ for (i in indicators) {
 ```{r}
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, ruc_code, rural, CBSA_CODE, CENTRAL_OUTLYING)) %>%
   colnames()
 
+temp = data %>%
+  mutate(CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING), "non-CBSA", CENTRAL_OUTLYING))
+  
+
 for (i in indicators) {
-  print((ggplot(data, aes(x = data[ , i], fill = central_outlying)) +
+  print((ggplot(temp, aes(x = temp[ , i], fill = CENTRAL_OUTLYING)) +
     geom_density(alpha = 0.4) + 
     theme_pander() + 
     scale_fill_pander() +
@@ -871,12 +1357,17 @@ for (i in indicators) {
 
 ```{r}
 
+
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, ruc_code, rural, CBSA_CODE, CENTRAL_OUTLYING)) %>%
   colnames()
 
+temp = data %>%
+  mutate(CENTRAL_OUTLYING = ifelse(is.na(CENTRAL_OUTLYING), "non-CBSA", CENTRAL_OUTLYING))
+  
+
 for (i in indicators) {
-  print(ggplot(data, aes(x = data[ , i], y = central_outlying, fill = ..x..)) +
+  print(ggplot(temp, aes(x = temp[ , i], y = CENTRAL_OUTLYING, fill = ..x..)) +
   geom_density_ridges_gradient(scale = 1.8, rel_min_height = 0.01) +
   scale_fill_viridis(option = "G") +
   labs(title = i) +
@@ -901,20 +1392,33 @@ for (i in indicators) {
 temp1 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp3 = temp1 %>%
   left_join(y=temp2, by="eca_membership") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
+  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
          )
 
 
@@ -943,26 +1447,39 @@ for (i in indicators) {
 
 temp1 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp3 = temp1 %>%
-  left_join(y=temp2, by="cbsa") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
+  left_join(y=temp2, by="CBSA_CODE") %>%
+  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
          )
 
 
 indicators = temp3 %>%
-  select(-c(cbsa)) %>%
+  select(-c(CBSA_CODE)) %>%
   colnames()
 
 for (i in indicators) {
@@ -979,43 +1496,105 @@ for (i in indicators) {
 
 ```
 
+# Static Maps
+## Counties
 
-# Scatterplots
+```{r}
+tmap_mode("plot")
+
+data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+
+state_map = data_map %>%
+  dplyr::group_by(STATE_CODE) %>% 
+  dplyr::summarise()
+
+indicators = data %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
+  colnames()
+
+for (i in indicators) {
+  mdn = median(data_map[[i]])
+  
+  print(data_map %>% 
+  tm_shape() + 
+  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
+              palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
+  tm_shape(state_map) +
+  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
+  tm_borders(lwd=1.5))
+  
+  }
+
+```
+
 ## ECAs
 
 ```{r}
- 
 
-scatter = eca_comp %>%
-  separate_wider_delim(eca_cluster_category, delim = " ", names = c("x", "eca_cluster_category")) %>%
-  select(-x)
+temp1 = data %>% 
+  drop_na(population) %>%
+  group_by(eca_membership) %>%
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
+temp2 = data %>% 
+  drop_na(population) %>%
+  group_by(eca_membership) %>%
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
-ggplot(scatter, aes(sink_population, source_population, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population") + xlab("population")
-ggplot(scatter, aes(sink_establishments, source_establishments, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments") + xlab("establishments")
-ggplot(scatter, aes(sink_employment, source_employment, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment") + xlab("employment")
-ggplot(scatter, aes(sink_output, source_output, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output") + xlab("output")
+temp3 = temp1 %>%
+  left_join(y=temp2, by="eca_membership") %>%
+mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
+         )
 
-ggplot(scatter, aes(sink_population.grow.rate, source_population.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population.grow.rate") + xlab("population.grow.rate")
-ggplot(scatter, aes(sink_establishments.grow.rate, source_establishments.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments.grow.rate") + xlab("establishments.grow.rate")
-ggplot(scatter, aes(sink_employment.grow.rate, source_employment.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment.grow.rate") + xlab("employment.grow.rate")
-ggplot(scatter, aes(sink_output.grow.rate, source_output.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output.grow.rate") + xlab("output.grow.rate")
+data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
 
-ggplot(scatter, aes(sink_log.population, source_log.population, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.population") + xlab("log.population")
-ggplot(scatter, aes(sink_log.establishments, source_log.establishments, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.establishments") + xlab("log.establishments")
-ggplot(scatter, aes(sink_log.employment, source_log.employment, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.employment") + xlab("log.employment")
-ggplot(scatter, aes(sink_log.output, source_log.output, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.output") + xlab("log.output")
+state_map = data_map %>%
+  dplyr::group_by(STATE_CODE) %>% 
+  dplyr::summarise()
 
-ggplot(scatter, aes(sink_bachelors, source_bachelors, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("bachelors") + xlab("bachelors")
+indicators = temp3 %>%
+  select(-c(eca_membership)) %>%
+  colnames()
 
-ggplot(scatter, aes(sink_lfpr, source_lfpr, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("lfpr") + xlab("lfpr")
+tmap_mode("plot")
 
-ggplot(scatter, aes(sink_poverty, source_poverty, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("poverty") + xlab("poverty")
+ECA_map = data_map %>%
+  dplyr::group_by(eca_membership) %>% 
+  dplyr::summarise()
 
-ggplot(scatter, aes(sink_premature.death, source_premature.death, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("premature.death") + xlab("premature.death")
-
-ggplot(scatter, aes(sink_net.migration, source_net.migration, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("net.migration") + xlab("net.migration")
+data_map <- left_join(ECA_map, temp3, by = "eca_membership")
 
 
+
+for (i in indicators) {
+  mdn = median(data_map[[i]])
+  
+  print(data_map %>% 
+  tm_shape() + 
+  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
+              palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
+  tm_shape(state_map) +
+  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
+  tm_borders(lwd=1.5))
+  
+  }
 
 
 ```
@@ -1024,37 +1603,73 @@ ggplot(scatter, aes(sink_net.migration, source_net.migration, colour =factor(eca
 
 ```{r}
 
-scatter_cbsa = cbsa_comp %>%
-  drop_na(central_outlying)
+temp1 = data %>% 
+  drop_na(population) %>%
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
+temp2 = data %>% 
+  drop_na(population) %>%
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
-ggplot(scatter_cbsa, aes(central_population, population, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population") + xlab("population")
-ggplot(scatter_cbsa, aes(central_establishments, establishments, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments") + xlab("establishments")
-ggplot(scatter_cbsa, aes(central_employment, employment, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment") + xlab("employment")
-ggplot(scatter_cbsa, aes(central_output, output, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output") + xlab("output")
+temp3 = temp1 %>%
+  left_join(y=temp2, by="CBSA_CODE") %>%
+ mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
+         )
 
-ggplot(scatter_cbsa, aes(central_population.grow.rate, population.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population.grow.rate") + xlab("population.grow.rate")
-ggplot(scatter_cbsa, aes(central_establishments.grow.rate, establishments.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments.grow.rate") + xlab("establishments.grow.rate")
-ggplot(scatter_cbsa, aes(central_employment.grow.rate, employment.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment.grow.rate") + xlab("employment.grow.rate")
-ggplot(scatter_cbsa, aes(central_output.grow.rate, output.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output.grow.rate") + xlab("output.grow.rate")
 
-ggplot(scatter_cbsa, aes(central_log.population, log.population, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.population") + xlab("log.population")
-ggplot(scatter_cbsa, aes(central_log.establishments, log.establishments, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.establishments") + xlab("log.establishments")
-ggplot(scatter_cbsa, aes(central_log.employment, log.employment, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.employment") + xlab("log.employment")
-ggplot(scatter_cbsa, aes(central_log.output, log.output, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.output") + xlab("log.output")
+indicators = temp3 %>%
+  select(-c(CBSA_CODE)) %>%
+  colnames()
 
-ggplot(scatter_cbsa, aes(central_bachelors, bachelors, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("bachelors") + xlab("bachelors")
+cbsa_map = df_county_shapes %>%
+  left_join(y=CBSA, by="place") %>%
+  mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), "RURAL", CBSA_CODE)) %>%
+  filter(STATE_CODE != "72" & STATE_CODE != "15" & STATE_CODE != "02") %>%
+  dplyr::group_by(CBSA_CODE) %>% 
+  dplyr::summarise()
 
-ggplot(scatter_cbsa, aes(central_lfpr, lfpr, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("lfpr") + xlab("lfpr")
+data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE")
 
-ggplot(scatter_cbsa, aes(central_poverty, poverty, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("poverty") + xlab("poverty")
 
-ggplot(scatter_cbsa, aes(central_premature.death, premature.death, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("premature.death") + xlab("premature.death")
+tmap_mode("plot")
 
-ggplot(scatter_cbsa, aes(central_net.migration, net.migration, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("net.migration") + xlab("net.migration")
 
+for (i in indicators) {
+  mdn = median(data_map[[i]])
+  
+  print(data_map %>% 
+  tm_shape() + 
+  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
+              palette = c("white","#97c08d","#0f130e"), median = mdn) +
+  tm_shape(state_map) +
+  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
+  tm_borders(lwd=1.5))
+  
+  }
 
 
 ```
+
+
 
 
 # Interactive Maps
@@ -1063,23 +1678,27 @@ ggplot(scatter_cbsa, aes(central_net.migration, net.migration, colour =factor(ce
 ```{r}
 tmap_mode("view")
 
-data_map <- left_join(df_county_shapes, data, by = "place")
+data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+
+state_map = data_map %>%
+  dplyr::group_by(STATE_CODE) %>% 
+  dplyr::summarise()
 
 indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
+  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, max_trade_place, CBSA_CODE, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, ruc_code, rural)) %>%
   colnames()
 
 for (i in indicators) {
-  
+
   mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
+
+  print(data_map %>%
+  tm_shape() +
   tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
               palette = c("white","#97c08d","#0f130e"), median = mdn) +
   tm_layout(legend.title.size = 2, legend.position = c("right","bottom")) +
   tm_borders(lwd=0.6))
-  
+
   }
 
 
@@ -1092,21 +1711,40 @@ for (i in indicators) {
 temp1 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
   group_by(eca_membership) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp3 = temp1 %>%
   left_join(y=temp2, by="eca_membership") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
+mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
          )
+
+data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(STATE_CODE != "02" & STATE_CODE != "15" & STATE_CODE != "72")
+
+state_map = data_map %>%
+  dplyr::group_by(STATE_CODE) %>% 
+  dplyr::summarise()
 
 indicators = temp3 %>%
   select(-c(eca_membership)) %>%
@@ -1123,14 +1761,14 @@ data_map <- left_join(ECA_map, temp3, by = "eca_membership")
 
 for (i in indicators) {
   mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
+
+  print(data_map %>%
+  tm_shape() +
   tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
               palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
   tm_layout(legend.title.size = 2, legend.position = c("right","bottom")) +
   tm_borders(lwd=0.6))
-  
+
   }
 
 
@@ -1142,203 +1780,148 @@ for (i in indicators) {
 
 temp1 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), payroll = sum(payroll, na.rm = TRUE), gdp = sum(gdp, na.rm = TRUE), jobs = sum(jobs, na.rm = TRUE)) 
 temp2 = data %>% 
   drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+  group_by(CBSA_CODE) %>%
+  dplyr::summarize(population_growth = weighted.mean(x=population_growth, w=population, na.rm = TRUE), employment_growth = weighted.mean(x=employment_growth, w=population, na.rm = TRUE), establishments_growth = weighted.mean(x=establishments_growth, w=population, na.rm = TRUE), gdp_growth = weighted.mean(x=gdp_growth, w=population, na.rm = TRUE), laborforce_part_rate = weighted.mean(x=laborforce_part_rate, w=population, na.rm = TRUE), unemp_rate = weighted.mean(x=unemp_rate, w=population, na.rm = TRUE), job_growth = weighted.mean(x=job_growth, w=population, na.rm = TRUE), entry_rate = weighted.mean(x=entry_rate, w=population, na.rm = TRUE), exit_rate = weighted.mean(x=exit_rate, w=population, na.rm = TRUE), wage = weighted.mean(x=wage, w=population, na.rm = TRUE), wage_growth = weighted.mean(x=wage_growth, w=population, na.rm = TRUE), income_rate = weighted.mean(x=income_rate, w=population, na.rm = TRUE), income_growth = weighted.mean(x=income_growth, w=population, na.rm = TRUE), highschool_attainment_rate = weighted.mean(x=highschool_attainment_rate, w=population, na.rm = TRUE), education_growth = weighted.mean(x=education_growth, w=population, na.rm = TRUE), ypll75 = weighted.mean(x=ypll75, w=population, na.rm = TRUE), premature_death_growth = weighted.mean(x=premature_death_growth, w=population, na.rm = TRUE), poverty_growth = weighted.mean(x=poverty_growth, w=population, na.rm = TRUE), net_migration_rate = weighted.mean(x=net_migration_rate, w=population, na.rm = TRUE)) 
 
 temp3 = temp1 %>%
-  left_join(y=temp2, by="cbsa") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
+  left_join(y=temp2, by="CBSA_CODE") %>%
+ mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.gdp = log(gdp)) %>%
+  mutate(employment_growth = ifelse(employment_growth == "NaN", NA, employment_growth),
+         establishments_growth = ifelse(establishments_growth == "NaN", NA, establishments_growth),
+         gdp_growth = ifelse(gdp_growth == "NaN", NA, gdp_growth),
+         net_migration_rate = ifelse(net_migration_rate == "NaN", NA, net_migration_rate),
+         laborforce_part_rate = ifelse(laborforce_part_rate == "NaN", NA, laborforce_part_rate),
+         unemp_rate = ifelse(unemp_rate == "NaN", NA, unemp_rate),
+         job_growth = ifelse(job_growth == "NaN", NA, job_growth),
+         entry_rate = ifelse(entry_rate == "NaN", NA, entry_rate),
+         exit_rate = ifelse(exit_rate == "NaN", NA, exit_rate),
+         wage = ifelse(wage == "NaN", NA, wage),
+         wage_growth = ifelse(wage_growth == "NaN", NA, wage_growth),
+         income_rate = ifelse(income_rate == "NaN", NA, income_rate),
+         income_growth = ifelse(income_growth == "NaN", NA, income_growth),
+         highschool_attainment_rate = ifelse(highschool_attainment_rate == "NaN", NA, highschool_attainment_rate),
+         education_growth = ifelse(education_growth == "NaN", NA, education_growth),
+         ypll75 = ifelse(ypll75 == "NaN", NA, ypll75),
+         premature_death_growth = ifelse(premature_death_growth == "NaN", NA, premature_death_growth),
+         poverty_growth = ifelse(poverty_growth == "NaN", NA, poverty_growth),
          )
 
+
 indicators = temp3 %>%
-  select(-c(cbsa)) %>%
+  select(-c(CBSA_CODE)) %>%
   colnames()
+
+cbsa_map = df_county_shapes %>%
+  left_join(y=CBSA, by="place") %>%
+  mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), "RURAL", CBSA_CODE)) %>%
+  filter(STATE_CODE != "72" & STATE_CODE != "15" & STATE_CODE != "02") %>%
+  dplyr::group_by(CBSA_CODE) %>% 
+  dplyr::summarise()
+
+data_map <- left_join(cbsa_map, temp3, by = "CBSA_CODE")
 
 tmap_mode("view")
 
-cbsa_map = df_county_shapes %>%
-  rename("fips"="place") %>%
-  left_join(y=df_cbsa_delin, by="fips") %>%
-  rename("cbsa"="cbsa_code") %>%
-  mutate(cbsa = ifelse(is.na(cbsa), "RURAL", cbsa)) %>%
-  dplyr::group_by(cbsa) %>% 
-  dplyr::summarise()
-
-data_map <- left_join(cbsa_map, temp3, by = "cbsa")
-
 
 for (i in indicators) {
   mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
+
+  print(data_map %>%
+  tm_shape() +
   tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
               palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
   tm_layout(legend.title.size = 2, legend.position = c("right","bottom")) +
   tm_borders(lwd=0.6))
-  
+
   }
 
 
 ```
 
 
-# Static Maps
-## Counties
 
-```{r}
-tmap_mode("plot")
 
-data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(state_code != "02" & state_code != "15" & state_code != "72")
+# Retired Code
 
-state_map = data_map %>%
-  dplyr::group_by(state_code) %>% 
-  dplyr::summarise()
+<!-- # Scatterplots -->
+<!-- ## ECAs -->
 
-indicators = data %>%
-  select(-c(place, eca_cluster_category, eca_membership, max_trade_share, st, RUCC, rural, cbsa, central_outlying)) %>%
-  colnames()
+<!-- <!-- ```{r} --> -->
 
-for (i in indicators) {
-  mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
-  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
-              palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
-  tm_shape(state_map) +
-  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
-  tm_borders(lwd=1.5))
-  
-  }
 
-```
+<!-- scatter = eca_comp %>% -->
+<!--   separate_wider_delim(eca_cluster_category, delim = " ", names = c("x", "eca_cluster_category")) %>% -->
+<!--   select(-x) -->
 
-## ECAs
+<!-- ggplot(scatter, aes(sink_population, source_population, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population") + xlab("population") -->
+<!-- ggplot(scatter, aes(sink_establishments, source_establishments, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments") + xlab("establishments") -->
+<!-- ggplot(scatter, aes(sink_employment, source_employment, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment") + xlab("employment") -->
+<!-- ggplot(scatter, aes(sink_output, source_output, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output") + xlab("output") -->
 
-```{r}
+<!-- ggplot(scatter, aes(sink_population.grow.rate, source_population.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population.grow.rate") + xlab("population.grow.rate") -->
+<!-- ggplot(scatter, aes(sink_establishments.grow.rate, source_establishments.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments.grow.rate") + xlab("establishments.grow.rate") -->
+<!-- ggplot(scatter, aes(sink_employment.grow.rate, source_employment.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment.grow.rate") + xlab("employment.grow.rate") -->
+<!-- ggplot(scatter, aes(sink_output.grow.rate, source_output.grow.rate, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output.grow.rate") + xlab("output.grow.rate") -->
 
-temp1 = data %>% 
-  drop_na(population) %>%
-  group_by(eca_membership) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
-temp2 = data %>% 
-  drop_na(population) %>%
-  group_by(eca_membership) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
+<!-- ggplot(scatter, aes(sink_log.population, source_log.population, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.population") + xlab("log.population") -->
+<!-- ggplot(scatter, aes(sink_log.establishments, source_log.establishments, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.establishments") + xlab("log.establishments") -->
+<!-- ggplot(scatter, aes(sink_log.employment, source_log.employment, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.employment") + xlab("log.employment") -->
+<!-- ggplot(scatter, aes(sink_log.output, source_log.output, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.output") + xlab("log.output") -->
 
-temp3 = temp1 %>%
-  left_join(y=temp2, by="eca_membership") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
-         )
+<!-- ggplot(scatter, aes(sink_bachelors, source_bachelors, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("bachelors") + xlab("bachelors") -->
 
-data_map <- left_join(df_county_shapes, data, by = "place") %>% filter(state_code != "02" & state_code != "15" & state_code != "72")
+<!-- ggplot(scatter, aes(sink_lfpr, source_lfpr, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("lfpr") + xlab("lfpr") -->
 
-state_map = data_map %>%
-  dplyr::group_by(state_code) %>% 
-  dplyr::summarise()
+<!-- ggplot(scatter, aes(sink_poverty, source_poverty, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("poverty") + xlab("poverty") -->
 
-indicators = temp3 %>%
-  select(-c(eca_membership)) %>%
-  colnames()
+<!-- ggplot(scatter, aes(sink_premature.death, source_premature.death, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("premature.death") + xlab("premature.death") -->
 
-tmap_mode("plot")
-
-ECA_map = data_map %>%
-  dplyr::group_by(eca_membership) %>% 
-  dplyr::summarise()
-
-data_map <- left_join(ECA_map, temp3, by = "eca_membership")
+<!-- ggplot(scatter, aes(sink_net.migration, source_net.migration, colour =factor(eca_cluster_category))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("net.migration") + xlab("net.migration") -->
 
 
 
-for (i in indicators) {
-  mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
-  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
-              palette = c("white","#97c08d","#0f130e"), midpoint = mdn) +
-  tm_shape(state_map) +
-  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
-  tm_borders(lwd=1.5))
-  
-  }
+
+<!-- ``` -->
+
+<!-- ## CBSAs -->
+
+<!-- ```{r} -->
+
+<!-- scatter_cbsa = cbsa_comp %>% -->
+<!--   drop_na(central_outlying) -->
+
+<!-- ggplot(scatter_cbsa, aes(central_population, population, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population") + xlab("population") -->
+<!-- ggplot(scatter_cbsa, aes(central_establishments, establishments, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments") + xlab("establishments") -->
+<!-- ggplot(scatter_cbsa, aes(central_employment, employment, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment") + xlab("employment") -->
+<!-- ggplot(scatter_cbsa, aes(central_output, output, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output") + xlab("output") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_population.grow.rate, population.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("population.grow.rate") + xlab("population.grow.rate") -->
+<!-- ggplot(scatter_cbsa, aes(central_establishments.grow.rate, establishments.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("establishments.grow.rate") + xlab("establishments.grow.rate") -->
+<!-- ggplot(scatter_cbsa, aes(central_employment.grow.rate, employment.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("employment.grow.rate") + xlab("employment.grow.rate") -->
+<!-- ggplot(scatter_cbsa, aes(central_output.grow.rate, output.grow.rate, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("output.grow.rate") + xlab("output.grow.rate") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_log.population, log.population, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.population") + xlab("log.population") -->
+<!-- ggplot(scatter_cbsa, aes(central_log.establishments, log.establishments, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.establishments") + xlab("log.establishments") -->
+<!-- ggplot(scatter_cbsa, aes(central_log.employment, log.employment, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.employment") + xlab("log.employment") -->
+<!-- ggplot(scatter_cbsa, aes(central_log.output, log.output, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("log.output") + xlab("log.output") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_bachelors, bachelors, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("bachelors") + xlab("bachelors") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_lfpr, lfpr, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("lfpr") + xlab("lfpr") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_poverty, poverty, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("poverty") + xlab("poverty") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_premature.death, premature.death, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("premature.death") + xlab("premature.death") -->
+
+<!-- ggplot(scatter_cbsa, aes(central_net.migration, net.migration, colour =factor(central_outlying))) + geom_point() + geom_smooth() + theme_pander() + scale_color_pander() + theme(legend.position = "top") + ggtitle("net.migration") + xlab("net.migration") -->
 
 
-```
-
-## CBSAs
-
-```{r}
-
-temp1 = data %>% 
-  drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population = sum(population, na.rm = TRUE), employment = sum(employment, na.rm = TRUE), establishments = sum(establishments, na.rm = TRUE), output = sum(output, na.rm = TRUE)) 
-temp2 = data %>% 
-  drop_na(population) %>%
-  group_by(cbsa) %>%
-  dplyr::summarize(population.grow.rate = weighted.mean(x=population.grow.rate, w=population, na.rm = TRUE), employment.grow.rate = weighted.mean(x=employment.grow.rate, w=population, na.rm = TRUE), establishments.grow.rate = weighted.mean(x=establishments.grow.rate, w=population, na.rm = TRUE), output.grow.rate = weighted.mean(x=output.grow.rate, w=population, na.rm = TRUE), bachelors = weighted.mean(x=bachelors, w=population, na.rm = TRUE), lfpr = weighted.mean(x=lfpr, w=population, na.rm = TRUE), poverty = weighted.mean(x=poverty, w=population, na.rm = TRUE), net.migration = weighted.mean(x=net.migration, w=population, na.rm = TRUE), premature.death = weighted.mean(x=premature.death, w=population, na.rm = TRUE)) 
-
-temp3 = temp1 %>%
-  left_join(y=temp2, by="cbsa") %>%
-  mutate(log.population = log(population), log.establishments = log(establishments), log.employment = log(employment), log.output = log(output)) %>%
-  mutate(employment.grow.rate = ifelse(employment.grow.rate == "NaN", NA, employment.grow.rate),
-         establishments.grow.rate = ifelse(establishments.grow.rate == "NaN", NA, establishments.grow.rate),
-         output.grow.rate = ifelse(output.grow.rate == "NaN", NA, output.grow.rate),
-         net.migration = ifelse(net.migration == "NaN", NA, net.migration),
-         premature.death = ifelse(premature.death == "NaN", NA, premature.death),
-         )
-
-indicators = temp3 %>%
-  select(-c(cbsa)) %>%
-  colnames()
-
-cbsa_map = df_county_shapes %>%
-  rename("fips"="place") %>%
-  left_join(y=df_cbsa_delin, by="fips") %>%
-  rename("cbsa"="cbsa_code") %>%
-  mutate(cbsa = ifelse(is.na(cbsa), "RURAL", cbsa)) %>%
-  filter(state_code.x != "72" & state_code.x != "15" & state_code.x != "02") %>%
-  dplyr::group_by(cbsa) %>% 
-  dplyr::summarise()
-
-data_map <- left_join(cbsa_map, temp3, by = "cbsa")
 
 
-tmap_mode("plot")
-
-
-for (i in indicators) {
-  mdn = median(data_map[[i]])
-  
-  print(data_map %>% 
-  tm_shape() + 
-  tm_polygons(col = i, border.alpha = 0.0, style = "cont", id = i,
-              palette = c("white","#97c08d","#0f130e"), median = mdn) +
-  tm_shape(state_map) +
-  tm_layout(legend.title.size = 1.5, legend.position = c("right","bottom")) +
-  tm_borders(lwd=1.5))
-  
-  }
-
-
-```
-
+<!-- ``` -->
 
 
