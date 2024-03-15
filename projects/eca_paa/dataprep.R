@@ -55,6 +55,8 @@ opath <- list(
 
 # Utility functions ----
 
+meters2miles <- util$meters2miles
+
 #' (x1 - x0) / (0.5 * (x1 + x0))
 growth_rate <- dataprep_misc$growth_rate
 

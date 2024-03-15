@@ -10,7 +10,7 @@ format:
     latex_engine: pdflatex
 params:
   year: 2012
-  year_range: !expr c(2010:2020) # or c(2012, 2015, 2017)
+  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
   show_temporal_density: TRUE
   show_descriptive_density: TRUE
   show_descriptive_density_rural: TRUE
@@ -20,8 +20,8 @@ params:
   show_test_regression: FALSE
   show_lm_regression: TRUE
   show_lm_cluster_regression: TRUE
-  reg_factors: !expr c("gross_output", "population", "employment", "jobs", "laborforce_part_rate", "unemp_rate", "payroll", "wage", "income_rate", "establishments", "entry_rate", "exit_rate", "poverty_rate", "ypll75", "highschool_attainment_rate", "net_migration_rate")
-  reg_factor_funs: !expr c("call_gross_output","call_population", "call_employment","call_unemp_rate", "call_laborforce_rate", "call_jobs", "call_establishments", "call_payroll", "call_wage", "call_exit_rate", "call_entry_rate", "call_income_rate", "call_poverty_rate", "call_ypll75", "call_highschool_attainment_rate", "call_net_migration")
+  reg_factors: !expr c("entry_rate", "exit_rate", "establishments_gr", "wage", "wage_gr", "jobs_gr", "payroll_gr", "unemp_rate", "laborforce_part_rate", "employment_gr", "poverty_rate", "income_rate", "poverty_rate_gr", "income_rate_gr", "population_gr",  "ypll75", "highschool_attainment_rate", "net_migration_rate") 
+  reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
   example_coef_index:  2
 ---
 
@@ -71,8 +71,8 @@ params
 ```{r zip pack, include = FALSE}
 
 # uncomment and pack/unpack as necessary
-# util$zip_pack("tmp/eca_paa_data_v240305.zip", dp$opath)
-# util$zip_unpack("tmp/eca_paa_data_v240305.zip", overwrite = TRUE)
+# util$zip_pack("tmp/eca_paa_data_v240315.zip", dp$opath)
+# util$zip_unpack("tmp/eca_paa_data_v240315.zip", overwrite = TRUE)
 
 ```
 
@@ -89,8 +89,27 @@ params
 
 ```{r dataframe }
 
-df <- dp$call_proj_df(params$year)
+df <- dp$call_proj_df(params$year) %>% 
+    mutate(eca_center_distance = dp$meters2miles(eca_center_distance))
 
+```
+
+```{r dataframe with growth}
+
+x <- dp$temporal_permutations(params$year_range)
+tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
+for (y in 1:nrow(x)){
+  paste(x[y,1], x[y,2]) %>% print()
+  for (i in params$reg_factor_funs){
+     tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+       mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>% 
+       rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+       left_join(tmp, ., by = "place")
+  }
+}
+
+
+df <- left_join(df, tmp, by = "place")
 ```
 
 ::: panel-tabset 
@@ -122,15 +141,28 @@ if (params$show_temporal_density) {
 
 # test <- dp$growth_rate(start_year = 2010, end_year = 2015, function_name = dp$call_county_population,  bus_data = "census")
 
+if (FALSE){
 x <- dp$temporal_permutations(params$year_range)
+tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
 for (y in 1:nrow(x)){
   paste(x[y,1], x[y,2]) %>% print()
-  for (i in params$reg_factors){
-    dp$growth_rate(x[y,1], x[y,2], dp$call_employment) %>% head() %>% print()
+  for (i in params$reg_factor_funs){
+    # dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
+     tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+       mutate(grow_rate = replace(grow_rate, which(abs(tmp$grow_rate) == 200), NA)) %>% 
+       rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+     left_join(tmp, ., by = "place")
   }
 }
 
 
+# for (i in  c("establishment_gr", "wage_gr", "employment_gr", "payroll_gr")){
+#   tmp <- tmp %>% 
+#     mutate(tmp[[i]] = ifelse(tmp[[i]] == 200, NA, ifelse(tmp[[i]] == -200, NA, tmp[[i]]))) 
+# }
+}
+# eval(paste0(substring(i, 6), "_grow_rate")) 
+# params$reg_factor_funs
 ```
 
 :::
@@ -480,7 +512,17 @@ if (FALSE) {
 
 ### output
   
-```{r maps output}
+```{r}
+
+if (params$show_descriptive_maps) { 
+  df %>% 
+    mutate(eca_center_distance = replace(eca_center_distance, which(eca_center_distance == 0), NA)) %>% 
+  dp$viz$nominal_choro_map(., "eca_center_distance", interactive = params$interactive_map)
+}
+
+```
+
+```{r}
 
 if (params$show_descriptive_maps) { 
   dp$viz$nominal_choro_map(df, "entry_rate", interactive = params$interactive_map)
@@ -490,7 +532,7 @@ if (params$show_descriptive_maps) {
 
 ### migration
   
-```{r maps output}
+```{r}
 ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
 if (params$show_descriptive_maps) { 
   dp$viz$diverge_choro_map(df, "net_migration_rate", interactive = params$interactive_map)
@@ -1198,9 +1240,91 @@ if (FALSE){
   }
 }
 }
+```
 
+```{r}
+if (params$show_lm_cluster_regression) {
+  contrasts(factor(df$cbsa_rural_category))
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[["sink_value_jobs_gr"]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- "sink_value_job_gr"
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+```
+
+```{r}
+if (params$show_lm_cluster_regression) {
+  contrasts(factor(df$cbsa_rural_category))
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[["sink_value_jobs_gr"]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    specif[[i]]$term[3] <- "sink_value_job_gr"
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
 
 ```
+
+```{r}
+
+# source = b0 + b1_sink + b2_trade_max + b3_sink*trade_max + e
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["max_trade_share"]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    specif[[i]]$term[3] <- "max_trade_share"
+    specif[[i]]$term[4] <- paste0("sink_", i, " X ", "max_trade_share")
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+
+```
+```{r}
+
+# source = b0 + b1_sink + b2_eca_distance + b3_sink*eca_distance + e
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  for (i in params$reg_factors){
+     specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+       {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["eca_center_distance"]], cluster = .[["eca_membership"]])} %>% 
+      dp$round_stats()
+    specif[[i]]$outcome <- paste0("source_", i)
+    specif[[i]]$term[2] <- paste0("sink_", i)
+    specif[[i]]$term[3] <- "eca_distance"
+    specif[[i]]$term[4] <- paste0("sink_", i, " X ", "eca_distance")
+    cat('####', i, ' \n')
+    paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    cat('  \n')
+  }
+}
+
+```
+
 :::
 
 ### lm clustered errors pop weighted
