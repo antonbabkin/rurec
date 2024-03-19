@@ -139,30 +139,24 @@ if (params$show_temporal_density) {
 ## growth
 ```{r growth rates}
 
-# test <- dp$growth_rate(start_year = 2010, end_year = 2015, function_name = dp$call_county_population,  bus_data = "census")
+# dp$growth_rate(start_year = 2010, end_year = 2015, function_name = dp$call_county_population,  bus_data = "census")
+# dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
 
 if (FALSE){
-x <- dp$temporal_permutations(params$year_range)
-tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
-for (y in 1:nrow(x)){
-  paste(x[y,1], x[y,2]) %>% print()
-  for (i in params$reg_factor_funs){
-    # dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
-     tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
-       mutate(grow_rate = replace(grow_rate, which(abs(tmp$grow_rate) == 200), NA)) %>% 
-       rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
-     left_join(tmp, ., by = "place")
+  x <- dp$temporal_permutations(params$year_range)
+  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
+  for (y in 1:nrow(x)){
+    paste(x[y,1], x[y,2]) %>% print()
+    for (i in params$reg_factor_funs){
+      # dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
+       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+         mutate(grow_rate = replace(grow_rate, which(abs(tmp$grow_rate) == 200), NA)) %>% 
+         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+       left_join(tmp, ., by = "place")
+    }
   }
 }
 
-
-# for (i in  c("establishment_gr", "wage_gr", "employment_gr", "payroll_gr")){
-#   tmp <- tmp %>% 
-#     mutate(tmp[[i]] = ifelse(tmp[[i]] == 200, NA, ifelse(tmp[[i]] == -200, NA, tmp[[i]]))) 
-# }
-}
-# eval(paste0(substring(i, 6), "_grow_rate")) 
-# params$reg_factor_funs
 ```
 
 :::
@@ -1198,6 +1192,52 @@ if (params$show_lm_cluster_regression) {
 ::: panel-tabset 
 
 ### lm clustered errors
+
+```{r}
+if(FALSE){
+  tmp <- df %>% 
+  mutate(eca_membership = ifelse(cbsa_rural_category == "rural", eca_membership, "NA")) %>% 
+  arrange(eca_membership)
+dp$viz$cat_choro_map(tmp, "eca_membership", interactive = T)
+
+
+tmp <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] 
+tmp %>%   
+  st_drop_geometry() %>% 
+  # select(params$reg_factors) %>% 
+      select(where(is.numeric)) %>% 
+  summary() 
+
+for(i in c(params$reg_factors)){
+      dp$viz$density_dist_plot(tmp, i) %>% 
+        print(.) %>% suppressWarnings()
+}
+ dp$viz$density_dist_plot(tmp, "max_trade_share") %>% suppressWarnings()
+ dp$viz$density_dist_plot(tmp, "eca_center_distance") %>% suppressWarnings()
+ 
+test <- dp$call_dist_mat(params$year) %>% 
+  drop_units() %>% 
+  as.data.frame.table() %>% 
+  `colnames<-`(c("rows", "cols", "distance")) %>% 
+  mutate(sample = c("population")) %>% 
+  {.[.$rows %in% df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$place, ]} %>% 
+  {.[.$distance != 0, ]} %>% 
+  mutate(distance = dp$meters2miles(distance))
+test2 <- tmp %>% 
+  st_drop_geometry() %>% 
+  {.[c("place", "eca_membership", "eca_center_distance")]} %>%
+  `colnames<-`(c("rows", "cols", "distance")) %>%  
+  mutate(sample = c("model")) %>% 
+  rbind(.,test)
+
+dp$viz$density_dist_plot(tmp, "eca_center_distance") %>% suppressWarnings()
+dp$viz$density_dist_plot(test2, "distance") 
+dp$viz$density_dist_plot(test2, "distance", "sample")
+}
+
+
+```
+
 ::: panel-tabset 
 ```{r specification test 5}
 #| warning: false
@@ -1241,6 +1281,10 @@ if (FALSE){
 }
 }
 ```
+
+
+
+
 
 ```{r}
 if (params$show_lm_cluster_regression) {
@@ -1287,7 +1331,7 @@ if (params$show_lm_cluster_regression) {
 if (params$show_lm_cluster_regression) {
   specif <- list()
   for (i in params$reg_factors){
-     specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
        {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["max_trade_share"]], cluster = .[["eca_membership"]])} %>% 
       dp$round_stats()
     specif[[i]]$outcome <- paste0("source_", i)
@@ -1309,7 +1353,7 @@ if (params$show_lm_cluster_regression) {
 if (params$show_lm_cluster_regression) {
   specif <- list()
   for (i in params$reg_factors){
-     specif[[i]] <- df[df$eca_cluster_category != "Cluster Sink", ] %>% 
+     specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
        {lm_robust(.[[i]] ~  .[[paste0("sink_value_", i)]]*.[["eca_center_distance"]], cluster = .[["eca_membership"]])} %>% 
       dp$round_stats()
     specif[[i]]$outcome <- paste0("source_", i)
