@@ -1474,6 +1474,45 @@ for (i in params$reg_factors){
 :::
 
 
+### randomized placebo
+::: x 
+```{x}
+
+# In this robustness check, we randomize assignment of ECAs
+
+# import ECAs
+
+df_eca_random = df %>%
+  filter(eca_cluster_category == "Cluster Source")
+temp_eca_membership = df_eca_random$eca_membership
+
+# every time this is run, it will re-randomize the numbers, so I crudely commented the following line after running initial randomization:
+random_eca = sample(temp_eca_membership) 
+
+df_eca_random = cbind(df_eca_random, random_eca)
+
+
+```
+::: 
+### randomized placebo
+
+```{r dataframe }
+
+
+# In this robustness check, we randomize assignment of ECAs
+
+df_eca_random = df %>%
+  filter(eca_cluster_category == "Cluster Source")
+
+temp_eca_membership = df_eca_random$eca_membership
+
+# every time this is run, it will re-randomize the assignment, so I crudely commented the following line after running initial randomization:
+random_eca = sample(temp_eca_membership) 
+
+df_eca_random = cbind(df_eca_random, random_eca)
+
+```
+
 
 
 :::
