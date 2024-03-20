@@ -90,7 +90,11 @@ params
 ```{r dataframe }
 
 df <- dp$call_proj_df(params$year) %>% 
-    mutate(eca_center_distance = dp$meters2miles(eca_center_distance))
+  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+  mutate(wage = wage/1000) %>% 
+  mutate(income_rate = income_rate/1000) %>% 
+  mutate(ypll75 = ypll75/100000)
+
 
 ```
 
@@ -128,7 +132,7 @@ df <- left_join(df, tmp, by = "place")
 ```{r spatio-temporal dataframe }
 if (params$show_temporal_density) {
   tmp <- dp$call_temporal_range_df(params$year_range)
-  for (i in params$reg_factors){
+  for (i in str_remove_all(params$reg_factors, '(_gr)$')){
     p <- dp$viz$absorption_density_plot(tmp, i, "id_year", trans = "log", colorbreaks = NULL) %>%
     print(p)
   }
@@ -148,11 +152,7 @@ if (FALSE){
   for (y in 1:nrow(x)){
     paste(x[y,1], x[y,2]) %>% print()
     for (i in params$reg_factor_funs){
-      # dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
-       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
-         mutate(grow_rate = replace(grow_rate, which(abs(tmp$grow_rate) == 200), NA)) %>% 
-         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
-       left_join(tmp, ., by = "place")
+      dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% head() %>% print()
     }
   }
 }
