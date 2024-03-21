@@ -862,8 +862,8 @@ place_trade_map <- function(place_trade_table,
   df <- boil_tile(tile_list = tl, 
                   fill_variable = fv, 
                   caption = caption, 
-                  scale_fill_viridis(direction = -1, limits = c(censor_scale_lowerbound, mx)),
-                  geom_sf_interactive(data = ptt[ptt$place == central_place, ], fill = "#8b0000", color = NA)) %>%
+                  # geom_sf_interactive(data = tl[tl$place == central_place, ], fill = "#8b0000", color = NA),
+                  scale_fill_viridis(direction = -1, limits = c(censor_scale_lowerbound, mx))) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
   return(df)
@@ -885,8 +885,9 @@ place_cluster_map <- function(eca_table,
                               interactive = TRUE){
   eca <- eca_table
   fv <- fill_variable
+  cp <- central_place
   tl <- usa_tile_list(eca)
-  caption <- paste0("FIPS: ", central_place,"\n Place: ", geog$fips2name(central_place, long = T)) %>%
+  caption <- paste0("FIPS: ", cp,"\n Place: ", geog$fips2name(cp, long = T)) %>%
     paste(collapse = "\n")
   df <- list()
   for (l in 1:length(tl)){
@@ -895,13 +896,13 @@ place_cluster_map <- function(eca_table,
       guides(fill = "none") +
       scale_fill_gradientn(colours = "grey80", guide = "none") +
       new_scale_fill() +
-      geom_sf_interactive(data = subset(tl[[l]]$data, eca_membership == tl[[l]]$data$eca_membership[tl[[l]]$data$place == central_place]), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
+      geom_sf_interactive(data = subset(tl[[l]]$data, eca_membership == tl[[l]]$data$eca_membership[tl[[l]]$data$place == cp]), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
       scale_fill_manual(values = "#feb24c", guide = guide_legend(order = 2), labels = "Economic Catchment Alpha", name = NULL) +
       new_scale_fill() +
-      geom_sf_interactive(data = subset(tl[[l]]$data, place == tl[[l]]$data$eca_membership[tl[[l]]$data$place == central_place]), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
+      geom_sf_interactive(data = subset(tl[[l]]$data, place == tl[[l]]$data$eca_membership[tl[[l]]$data$place == cp]), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
       scale_fill_manual(values = "#f03b20", guide = guide_legend(order = 3), labels = "Economic Catchment Beta", name = NULL) +
       new_scale_fill() +
-      geom_sf_interactive(data = subset(tl[[l]]$data, place == central_place), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
+      geom_sf_interactive(data = subset(tl[[l]]$data, place == cp), aes(fill = eca_membership), color = alpha("grey", 0.2)) +
       scale_fill_manual(values = "#56B1F7", guide = guide_legend(order = 1), labels = "Place of Interest", name = NULL) +
       coord_sf(crs = switch(l, "+init=EPSG:4326", "+init=EPSG:26934", "+init=EPSG:6629", "+init=EPSG:4437")) +
       {if (l != 1){theme(legend.position = "none")}} +
@@ -912,6 +913,8 @@ place_cluster_map <- function(eca_table,
                   interactive = interactive)}
   return(df)
 }
+
+
 
 
 # map of eca memberships
