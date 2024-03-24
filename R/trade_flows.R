@@ -547,6 +547,7 @@ LP_diagnostic <- function(){
   df$dem <- as.numeric(df$dem)
   df$tf <- as.numeric(df$tf)
   df$diff <- (df$tf - df$dem)
+  df$abs_diff <- (abs(df$tf - df$dem) / df$tf)
   return(df)
 } 
 

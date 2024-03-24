@@ -55,6 +55,9 @@ opath <- list(
 
 # Utility functions ----
 
+zip_pack <- util$zip_pack
+zip_unpack <- util$zip_unpack
+
 meters2miles <- util$meters2miles
 
 #' (x1 - x0) / (0.5 * (x1 + x0))
