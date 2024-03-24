@@ -55,6 +55,9 @@ opath <- list(
 
 # Utility functions ----
 
+zip_pack <- util$zip_pack
+zip_unpack <- util$zip_unpack
+
 meters2miles <- util$meters2miles
 
 #' (x1 - x0) / (0.5 * (x1 + x0))
@@ -151,7 +154,6 @@ viz$cat_choro_map <- visualization$cat_choro_map
 viz$nominal_choro_map <- visualization$nominal_choro_map
 viz$normal_choro_map <- visualization$normal_choro_map
 viz$absorption_density_plot <- visualization$absorption_density_plot
-
 
 # Geog ----
 
@@ -844,13 +846,6 @@ call_eca_space_df <- function(year){
     `colnames<-`(c("eca_membership", "cbsa_of_eca")) %>% 
     {left_join(df, . , by = "eca_membership")} %>% 
     relocate(cbsa_of_eca, .after = eca_membership)
-  # TODO: can speed up with use of saved distance matrix(s)
-  # df <- df %>% mutate(eca_sink_id = apply(df, 1, function(x) {which(x$eca_membership == df$place) }), .after = eca_membership)
-  # df <- df %>% mutate(eca_center = df[df$eca_sink_id, ]$center, .after = eca_membership)
-  # df[ , "eca_center_distance"] <- NA
-  # for (i in 1:nrow(df)){
-  #   df$eca_center_distance[[i]] = as.numeric(drop_units(st_distance(df$eca_center[i], df$center[i])))
-  # }
   dist_mat <- call_dist_mat(year)
   df <- df %>% 
     mutate(eca_center_distance = apply(df, 1, function(x){drop_units(dist_mat[x$place, x$eca_membership])}))

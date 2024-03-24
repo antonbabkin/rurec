@@ -358,7 +358,7 @@ eca_table_central <- function(central_place,
                               year = 2012,
                               impedance_matrix = NULL,
                               cbsa = FALSE,
-                              trim = "^(02|15|60|66|69|72|78)|(999)$"){
+                              trim = "^(60|66|69|72|78)|(999)$"){
   abmat <- absorption_matrix
   if(!is.null(trim)){
     abmat <- trim %>% 

@@ -249,14 +249,14 @@ call_trade_flows <- function(ind_code) {
 }
 
 
-# TODO: reconsile with the other version of this functin above
-# call_industry_codes <- function(file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
-#   df <- file_directory %>%
-#     dirname() %>%
-#     list.files() %>%
-#     tools::file_path_sans_ext()
-#   return(df)
-# }
+# TODO: replace call_industry_codes above 
+call_industry_codes_custom <- function(file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
+  df <- file_directory %>%
+    dirname() %>%
+    list.files() %>%
+    tools::file_path_sans_ext()
+  return(df)
+}
 
 
 # industry_code: single code or all, or comma-separated list of codes, or regex
@@ -290,8 +290,7 @@ filter_industry_codes <- function(cluster_subset, industry_code_vector){
 
 call_trade_flows_custom <- function(cluster_subset,
                                     file_directory = glue(opath$flows_, .envir = append(params_econ, list(ind_code = ""))) ){
-  stop("this needs to be aligned with call_industry_codes()")
-  lp <- call_industry_codes(file_directory = file_directory) %>%
+  lp <- call_industry_codes_custom(file_directory = file_directory) %>%
     {filter_industry_codes(cluster_subset, .)}
   df <- 0
     for (i in lp) {
@@ -533,4 +532,29 @@ test_ras <- function() {
   tmap_mode("view")
   tm_shape(df) + tm_fill("imports")
 }
+
+
+LP_diagnostic <- function(){
+  icode <- call_industry_codes_custom() %>% {.[-which(. == "all_industries")]}
+  df <- data.frame()
+  for (i in icode){
+    df <- i %>% 
+      {c(., sum(prep_lp_solver_inputs(.)$sup), sum(prep_lp_solver_inputs(.)$dem), sum(call_trade_flows(.)))} %>% 
+      {rbind(df, .)}
+  }
+  colnames(df) <- c("ind", "sup", "dem", "tf")
+  df$sup <- as.numeric(df$sup)
+  df$dem <- as.numeric(df$dem)
+  df$tf <- as.numeric(df$tf)
+  df$diff <- (df$tf - df$dem)
+  df$abs_diff <- (abs(df$tf - df$dem) / df$tf)
+  return(df)
+} 
+
+
+
+
+
+
+
 

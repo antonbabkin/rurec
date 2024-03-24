@@ -49,6 +49,7 @@ library(PerformanceAnalytics)
 library(correlation)
 
 library(estimatr)
+library(margins)
 
 
 # scripts
@@ -71,8 +72,8 @@ params
 ```{r zip pack, include = FALSE}
 
 # uncomment and pack/unpack as necessary
-# util$zip_pack("tmp/eca_paa_data_v240315.zip", dp$opath)
-# util$zip_unpack("tmp/eca_paa_data_v240315.zip", overwrite = TRUE)
+# util$zip_pack("tmp/eca_paa_data_v240324.zip", dp$opath)
+# util$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
 
 ```
 
@@ -605,6 +606,8 @@ if (params$show_descriptive_maps) {
 
 
 ```
+
+
 
 :::
 
@@ -1199,40 +1202,50 @@ if(FALSE){
   mutate(eca_membership = ifelse(cbsa_rural_category == "rural", eca_membership, "NA")) %>% 
   arrange(eca_membership)
 dp$viz$cat_choro_map(tmp, "eca_membership", interactive = T)
-
-
-tmp <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] 
-tmp %>%   
-  st_drop_geometry() %>% 
-  # select(params$reg_factors) %>% 
-      select(where(is.numeric)) %>% 
-  summary() 
-
-for(i in c(params$reg_factors)){
-      dp$viz$density_dist_plot(tmp, i) %>% 
-        print(.) %>% suppressWarnings()
 }
- dp$viz$density_dist_plot(tmp, "max_trade_share") %>% suppressWarnings()
- dp$viz$density_dist_plot(tmp, "eca_center_distance") %>% suppressWarnings()
- 
-test <- dp$call_dist_mat(params$year) %>% 
+
+if(FALSE){
+d_unrest <- dp$call_dist_mat(params$year) %>% 
   drop_units() %>% 
   as.data.frame.table() %>% 
   `colnames<-`(c("rows", "cols", "distance")) %>% 
-  mutate(sample = c("population")) %>% 
-  {.[.$rows %in% df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$place, ]} %>% 
+  mutate(sample = c("unrestricted")) %>% 
+  {.[.$rows %in% df[df$cbsa_rural_category == "rural", ]$place, ]} %>% 
   {.[.$distance != 0, ]} %>% 
-  mutate(distance = dp$meters2miles(distance))
-test2 <- tmp %>% 
+  mutate(distance = dp$meters2miles(distance)/100)
+
+
+d_unrest <- dp$call_dist_mat(params$year) %>% 
+  drop_units() %>% 
+  as.data.frame.table() %>% 
+  `colnames<-`(c("rows", "cols", "distance")) %>% 
+  mutate(sample = c("unrestricted")) %>% 
+  {.[.$rows %in% df[df$cbsa_rural_category == "rural", ]$place, ]} %>% 
+  {.[.$distance != 0, ]} %>% 
+  mutate(distance = dp$meters2miles(distance)/100)
+
+d_rest <- dp$call_dist_mat(params$year) %>% 
+  drop_units() %>% 
+  as.data.frame.table() %>% 
+  `colnames<-`(c("rows", "cols", "distance")) %>% 
+  mutate(sample = c("restricted")) %>% 
+  {.[.$rows %in% df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$place, ]} %>% 
+  {.[.$cols %in% df[df$eca_cluster_category == "Cluster Sink", ]$place, ]} %>% 
+  {.[.$distance != 0, ]} %>% 
+  mutate(distance = dp$meters2miles(distance)/100)
+
+d_model <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
   st_drop_geometry() %>% 
   {.[c("place", "eca_membership", "eca_center_distance")]} %>%
   `colnames<-`(c("rows", "cols", "distance")) %>%  
-  mutate(sample = c("model")) %>% 
-  rbind(.,test)
+  mutate(sample = c("model"))
 
-dp$viz$density_dist_plot(tmp, "eca_center_distance") %>% suppressWarnings()
-dp$viz$density_dist_plot(test2, "distance") 
-dp$viz$density_dist_plot(test2, "distance", "sample")
+
+dp <- rbind(test, d_rest, d_model)
+
+dp$viz$density_dist_plot(dp, "distance", "sample")
+dp$viz$density_dist_plot(dp, "distance", "sample") + scale_x_log10()
+
 }
 
 
