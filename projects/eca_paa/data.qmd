@@ -299,7 +299,9 @@ df1_source = df1 %>%
 df1_sink = df1 %>%
   setNames(paste0('destination_', names(.))) %>%
   rename("eca_membership"="destination_place")
-eca_comp = ECA %>%
+eca_comp = data %>%
+  select(place, eca_membership) %>%
+  st_drop_geometry() %>% 
   left_join(y = df1_source, by = "place") %>%
   left_join(y = df1_sink, by = "eca_membership") %>%
   filter()
@@ -307,12 +309,17 @@ eca_comp = ECA %>%
 
 # creating table that shows each CBSA's central counties
 
+CBSA = data %>%
+  st_drop_geometry() %>%
+  select(place, CBSA_CODE, CENTRAL_OUTLYING)
+
 cbsa_central = CBSA %>%
+  st_drop_geometry() %>% 
   mutate(st = substr(place,1,2)) %>%
   filter(CENTRAL_OUTLYING == "central" & st != 72) %>%
   select("central_place" = place, CBSA_CODE)
 
-cbsa = full_join(x = CBSA, y = cbsa_central, by = "CBSA_CODE") %>%
+cbsa = full_join(x = data, y = cbsa_central, by = "CBSA_CODE") %>%
   mutate(st = substr(place,1,2)) %>%
   filter(st != 72) %>%
   select(central_place, place)
@@ -358,29 +365,162 @@ if (params$show_descriptive_maps) {
 <!-- An outlying CBSA county connected to a ECA core that is not part of the CBSA. -->
 
 
+<!-- ```{r} -->
+
+<!-- # 22089 -->
+
+<!-- data_map <- data -->
+
+<!-- comp_map = data_map %>%  -->
+<!--   filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>% -->
+<!--   filter(STATE_CODE == "22") %>% -->
+<!--   mutate(comp = ifelse((eca_membership == place & CENTRAL_OUTLYING == "central"), "ECA dest, own CBSA center", ifelse((eca_cluster_category == "Cluster Source" & CENTRAL_OUTLYING == "central"), "ECA source, own CBSA center", ifelse((eca_cluster_category == "Cluster Source" & CENTRAL_OUTLYING == "rural"), "ECA source, non-CBSA", NA)))) %>% -->
+<!--   mutate(comp = ifelse(eca_membership == "22071", comp, "NaN")) -->
+
+<!-- MyPalette <- c("#97c08d", "#3d85c6", "gold", "white") -->
+
+<!-- tmap_mode("plot") -->
+
+<!-- print(comp_map %>% -->
+<!--   tm_shape() +  -->
+<!--   tm_polygons(col = "comp", title = "CBSA Statuses -->
+<!-- Sheboygan County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) + -->
+<!--   tm_layout(legend.title.size = 1.0, legend.position = c(-0.1, 0), -->
+<!--             title = "", frame = FALSE) -->
+<!-- ) -->
+
+
+<!-- ## add grey layer that is CBSA but not in ECA -->
+<!-- ## add higher layer that is connected to ECA and CBSA outlying both -->
+
+<!-- ``` -->
+
+
+
 ```{r}
+
+# 22071 - Orleans Co. LA
+# 27053 - Hennepin Co. MN
+# 31055 - Douglas Co. NE
+
+ECA_n = "22071"
+cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
+cbsa_n = cbsa_n$CBSA_CODE
+st_n = substr(ECA_n,1,2)
 
 data_map <- data
 
 comp_map = data_map %>% 
-#  filter(eca_membership == "55117") %>% 
-  filter(STATE_CODE == "55") %>%
-  mutate(CENTRAL_OUTLYING = replace_na(CENTRAL_OUTLYING, "non-CBSA"), comp = ifelse((eca_membership == place & CENTRAL_OUTLYING == "central"), "ECA dest, own CBSA center", ifelse((eca_cluster_category == "Source" & CENTRAL_OUTLYING == "central"), "ECA source, own CBSA center", ifelse((eca_cluster_category == "Source" & CENTRAL_OUTLYING == "non-CBSA"), "ECA source, non-CBSA", NA)))) %>%
-  mutate(comp = ifelse(eca_membership == "55117", comp, "NaN"))
+  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
+  filter(STATE_CODE == st_n) %>%
+#  filter(STATE_CODE == "19" | STATE_CODE == "31" | STATE_CODE == "55") %>%
+  mutate(comp = ifelse((place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center", ifelse((CENTRAL_OUTLYING == "central" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", ifelse((eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA", ifelse((eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", ifelse((eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA", "outside"))))))
 
-MyPalette <- c("#97c08d", "#3d85c6", "gold", "white")
+
+MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
 
 tmap_mode("plot")
 
 print(comp_map %>%
   tm_shape() + 
   tm_polygons(col = "comp", title = "CBSA Statuses
-Sheboygan County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
-  tm_layout(legend.title.size = 1.0, legend.position = c(-0.1, 0),
+Orleans County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("RIGHT","TOP"),
+            title = "", frame = FALSE)
+)
+
+ECA_n = "27053"
+cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
+cbsa_n = cbsa_n$CBSA_CODE
+st_n = substr(ECA_n,1,2)
+
+data_map <- data
+
+comp_map = data_map %>% 
+  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
+#  filter(STATE_CODE == st_n) %>%
+  filter(STATE_CODE == "27" | STATE_CODE == "55") %>%
+  mutate(comp = ifelse((place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center", ifelse((CENTRAL_OUTLYING == "central" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", ifelse((eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA", ifelse((eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", ifelse((eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA", "outside"))))))
+
+
+MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "CBSA Statuses
+Hennepin County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("RIGHT","TOP"),
+            title = "", frame = FALSE)
+)
+
+ECA_n = "31055"
+cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
+cbsa_n = cbsa_n$CBSA_CODE
+st_n = substr(ECA_n,1,2)
+
+data_map <- data
+
+comp_map = data_map %>% 
+  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
+#  filter(STATE_CODE == st_n) %>%
+  filter(STATE_CODE == "19" | STATE_CODE == "31") %>%
+  mutate(comp = ifelse((place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center", ifelse((CENTRAL_OUTLYING == "central" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", ifelse((eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA", ifelse((eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", ifelse((eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA", "outside"))))))
+
+
+MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "CBSA Statuses
+Douglas County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("RIGHT","BOTTOM"),
             title = "", frame = FALSE)
 )
 
 ```
+
+
+```{r}
+
+# 22071
+
+ECA_n = "22071"
+cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
+cbsa_n = cbsa_n$CBSA_CODE
+st_n = substr(ECA_n,1,2)
+
+data_map <- data
+
+comp_map = data_map %>% 
+  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
+  filter(STATE_CODE == st_n) %>%
+#  filter(STATE_CODE == "17" | STATE_CODE == "55") %>%
+  mutate(comp = ifelse((place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center", ifelse((CENTRAL_OUTLYING == "central" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", ifelse((eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA", ifelse((eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", ifelse((eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA", "outside"))))))
+
+
+MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "CBSA Statuses
+Orleans County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("left","top"),
+            title = "", frame = FALSE)
+)
+
+
+## add grey layer that is CBSA but not in ECA
+## add higher layer that is connected to ECA and CBSA outlying both
+
+```
+
+
 
 ## 5 Requested Tables (3/23/24)
 ### Table 1
