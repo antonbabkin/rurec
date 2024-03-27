@@ -348,7 +348,7 @@ comp_map = data_map %>% mutate(comp = ifelse(is.na(metro_micro_sink), "neither",
 
 if (params$show_descriptive_maps) {
   tmp <- scale_fill_discrete
-  scale_fill_discrete <- function(...) scale_fill_manual(values = c("#38761d", "#b2df8a", "gold", "#1f78b4", "#a6cee3","grey90"))
+  scale_fill_discrete <- function(...) scale_fill_manual(name = "ECA-CBSA Comparison", values = c("Destination and Metro"="#38761d", "Destination and Micro"="#b2df8a", "Destination only"="gold", "Metro only"="#1f78b4", "Micro only"="#a6cee3","neither"="grey90"))
   p <- dp$viz$cat_choro_map(comp_map, "comp", interactive = params$interactive_maps, legend = T)
     print(p)
   scale_fill_discrete <- tmp
