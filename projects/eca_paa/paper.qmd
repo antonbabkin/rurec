@@ -1,0 +1,382 @@
+---
+title: "Paper outputs"
+format: html
+---
+
+This notebook generates outputs directly used in the paper.
+
+# CBSA 2020 counts
+
+In the introduction of the paper.
+
+```{r}
+source("R/geography.R", local = (geo <- new.env()))
+
+d1 <- geo$pubdata$get_county_df(2020, FALSE, "20m") |>
+  rename_with(str_to_lower) |>
+  rename(stcty = code) |>
+  select(stcty)
+
+d2 <- geo$pubdata$get_cbsa_delin_df(2020)  |>
+  rename_with(str_to_lower) |>
+  mutate(stcty = paste0(state_code, county_code)) |>
+  select(stcty, cbsa_code, metro_micro, central_outlying)
+
+stopifnot(all(d2$stcty %in% d1$stcty))
+d3 <- full_join(d1, d2, "stcty")
+
+d4 <- d3 |>
+  group_by(metro_micro, cbsa_code) |>
+  summarize(size = n(), .groups = "drop")
+
+# number of counties
+d3 |>
+  count(metro_micro) |>
+  mutate(pct = round(100 * n / sum(.data[["n"]]), 1))
+
+# number of CBSAs
+d4 |> count(metro_micro)
+
+# number of single-county micros
+d4 |>
+  filter(metro_micro == "micro") |>
+  count(size)
+
+```
+
+## 2013
+
+```{r}
+geo$pubdata$get_cbsa_delin_df(2013)  |>
+  rename_with(str_to_lower) |>
+  distinct(cbsa_code) |>
+  nrow()
+```
+
+
+# dairy and cheese table
+
+```{r}
+source("R/place_output.R", local = (place_output <- new.env()))
+
+d1 <- place_output$call_output(2012, "commodity", "det", "infogroup")
+d2 <- place_output$call_intermediate(2012, "supply", "domestic", "commodity", "det", "infogroup")
+d3 <- place_output$call_intermediate(2012, "demand", "domestic", "commodity", "det", "infogroup")
+d4 <- inner_join(d1, d2, join_by(indcode, place)) |>
+  inner_join(d3, join_by(indcode, place))
+
+# two counties, two industries
+d4 |>
+  filter(place %in% c("55117", "55081"), indcode %in% c("112120", "311513")) |>
+  mutate(across(where(is.double), \(x) round(x / 1000, 1)))
+
+x <- dp$call_space_df(2012)
+x |> filter(place == "55117")
+```
+
+# Hennepin
+
+```{r}
+ECA_n = "27053"
+cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
+cbsa_n = cbsa_n$CBSA_CODE
+st_n = substr(ECA_n,1,2)
+
+data_map <- data
+
+comp_map = data_map %>% 
+  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
+#  filter(STATE_CODE == st_n) %>%
+  filter(STATE_CODE == "27" | STATE_CODE == "55") %>%
+  mutate(
+    comp = ifelse(
+      (place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center",
+      ifelse(
+        (CENTRAL_OUTLYING != "rural" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", 
+        ifelse(
+          (eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA",
+          ifelse(
+            (eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", 
+            ifelse(
+              (eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA",
+              if_else(eca_membership == ECA_n, "here", "outside")))))))
+
+# comp_map |> filter(eca_membership == ECA_n) |> View()
+MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
+
+tmap_mode("plot")
+
+print(comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", title = "CBSA Statuses
+Hennepin County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
+  tm_layout(legend.title.size = 1.0, legend.position = c("RIGHT","TOP"),
+            title = "", frame = FALSE)
+)
+```
+
+
+```{r}
+dest_fips <- "27053"
+
+# distance
+d1 <- dp$call_dist_mat(2012)[, dest_fips] |>
+  set_units(mi) |>
+  as_tibble(rownames = "place") |>
+  mutate(distance = drop_units(value), .keep = "unused")
+
+d2 <- dp$call_eca_df() |>
+  filter(eca_membership == dest_fips) |>
+  rename(place = fips) |>
+  left_join(dp$call_population(2012), "place") |>
+  left_join(d1, "place") |>
+  left_join(dp$call_cbsa(2013), "place")
+
+
+
+d2 |>
+  group_by(eca_cluster_category) |>
+  summarize(
+    n = n(),
+    pop_sum = sum(population),
+    pop_avg = mean(population),
+    dist_avg = mean(distance),
+    trade_avg = mean(max_trade_share) * 100
+  )
+
+
+d2 |> count(eca_cluster_category, CENTRAL_OUTLYING)
+  
+```
+
+
+## max trade share distribution
+
+```{r}
+d <- dp$call_eca_df()
+
+ggplot(d, aes(max_trade_share)) +
+  geom_histogram(binwidth = 0.025)
+```
+
+You can add options to executable code like this 
+
+```{r}
+
+
+data |>
+  rename_with(str_to_lower) |>
+  mutate(cbsa = if_else(
+    metro_micro == "metro" & central_outlying == "central", 
+    "metro central", if_else(
+      metro_micro == "metro" & central_outlying == "outlying",
+      "metro outlying", "other")
+    ))
+
+data |>
+  rename_with(str_to_lower) |>
+  mutate(metro_micro = replace_na(metro_micro, "non-core"),
+         central_outlying = replace_na(central_outlying, "non-core")) |>
+  count(metro_micro, central_outlying, eca_cluster_category) |>
+  pivot_wider(id_cols = c(metro_micro, central_outlying), values_from = "n", names_from = "eca_cluster_category") |>
+  View()
+
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+
+
+```{r}
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+
+src_cty <- "23021"
+
+dp$call_eca_df() |> filter(fips == src_cty)
+
+tf <- trade_flows$call_trade_flows("all_industries")
+tf_norm <- sweep(tf, 1, rowSums(tf), "/")
+tf_norm[is.na(tf_norm)] <- 0
+
+tf_norm[src_cty, , drop = FALSE] |> t() |> as.data.frame() |>
+  View()
+
+```
+
+Trade flows check: supply and total flows should be roughly equal.
+
+```{r}
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+trade_flows$prep_lp_solver_inputs("23") %>% {.$sup} %>% sum()
+trade_flows$call_trade_flows("23") %>% sum()
+```
+
+```{r}
+y <- dp$call_geog(2012)
+x <- dp$place_output$call_intermediate(2012, "demand", "domestic", "commodity", bus_data = "infogroup")
+x
+x <- dp$call_net_supply(2012, "infogroup") |>
+  left_join(y, "place")
+x |>
+  filter(str_sub(place, 1, 2) == "55") |> View()
+
+y
+```
+```{r}
+place_output <- dp$place_output
+
+key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^112120", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+
+  
+df |>
+  filter(str_sub(place, 1, 2) == "55") |> View()
+
+```
+
+
+
+# dairy and cheese supply demand
+
+
+```{r}
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+
+industry_code <- "^112120"
+
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = industry_code, # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  
+key = list(
+    spatial_dataframe = df,
+    fill_variable = "extract", # column from spatial_dataframe
+    year = 2012,
+    cluster_subset = industry_code, # NULL
+    cluster_level = "det", # c("sec", "sum", "det")
+    scale_style = "inverse_hyperbolic_sine", # c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")
+    interactive = TRUE)
+  
+  visual$flow_potential_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    year = key$year,
+    cluster_subset = key$cluster_subset,
+    cluster_level = key$cluster_level,
+    scale_style = key$scale_style,
+    interactive = key$interactive)
+```
+
+
+# trade flows
+
+
+```{r}
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+
+focus_county <- params$map_tradeflow_county
+focus_county <- "55081"
+industry_code <- params$map_tradeflow_ind
+industry_code <- "112120"
+# industry_code <- "1111A0,1111B0"
+# industry_code <- "^112.*$"
+
+if (industry_code == "all_industries" || grepl("^[[:alnum:]]+$", industry_code)) { # single code or all
+  x <- trade_flows$call_trade_flows(industry_code)
+} else if (grepl(",", industry_code)) { # comma-separated list of codes
+  x <- 0
+  for (ind_code in str_split_1(industry_code, ",")) {
+    x <- x + trade_flows$call_trade_flows(ind_code)
+  }
+} else { # regex
+  all_codes <- trade_flows$call_industry_codes()
+  x <- 0
+  for (ind_code in grep(industry_code, all_codes, value = TRUE)) {
+    x <- x + trade_flows$call_trade_flows(ind_code)
+  }
+}
+d <- data.frame(
+  place = rownames(x),
+  exports = x[focus_county, ],
+  imports = x[, focus_county]
+) |>
+  mutate(exports = na_if(exports, 0), imports = na_if(imports, 0))
+df <- call_geo() %>%
+  left_join(d, "place") %>%
+  mutate(tooltip = glue("{name} {place} | imp {imports} | exp {exports}")) |>
+  mutate(exports = if_else(exports < 1000, NA, exports))
+
+p1 <- tm_shape(filter(df, contiguous)) + tm_fill("imports", id = "tooltip") +
+  tm_shape(filter(df, place == focus_county)) + tm_fill("blue", id = "tooltip") +
+  tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
+  tm_layout(main.title = glue("Imports of \"{industry_code}\" to {focus_county}"))
+print(p1)
+
+p2 <- tm_shape(filter(df, contiguous)) + tm_fill("exports", id = "tooltip") +
+  tm_shape(filter(df, place == focus_county)) + tm_fill("blue", id = "tooltip") +
+  tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
+  tm_layout(main.title = glue("Exports of \"{industry_code}\" from {focus_county}"))
+
+tmap_mode("view")
+print(p2)
+```
+
+```{r}
+x <- trade_flows$call_trade_flows("112120")
+fips_wi <- str_starts(rownames(x), "55")
+x1 <- x[fips_wi, ]
+x[fips_wi & (rowSums(x1 > 1000) > 1), (colSums(x1) > 10000)] |> View()
+
+
+```
+
