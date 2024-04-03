@@ -1,0 +1,47 @@
+county:
+  description: County characteristics.
+  variables:
+    - county_fips: County FIPS code.
+    - county_name: County name with state abbreviation.
+    - eca_code: ECA code, same as FIPS code of the ECA destination county.
+    - eca_category: Type of county within ECA cluster, 'source' or 'destination'.
+    - max_trade_share: Share of the ECA destination in total export of the source county. NA for destinations.
+    - output: County output (production), 2012 dollars.
+    - population: County population.
+
+eca:
+  description: Aggregate ECA characteristics.
+  variables:
+    - eca_code: ECA code, same as FIPS code of the ECA destination county.
+    - size: Total number of counties within ECA cluster.
+    - output: Total output (production) of all counties within ECA cluster, 2012 dollars.
+    - population: Total population of all counties within ECA cluster.
+
+county_industry:
+  description: County economic activity by industry (sector).
+  variables:
+    - county_fips: County FIPS code.
+    - name: industry_code
+      description: Industry (sector) code.
+      values:
+        - [code, description]
+        - ["11", "Agriculture, forestry, fishing, and hunting"]
+        - ["21", "Mining"]
+        - ["22", "Utilities"]
+        - ["23", "Construction"]
+        - ["31G", "Manufacturing"]
+        - ["42", "Wholesale trade"]
+        - ["44RT", "Retail trade"]
+        - ["48TW", "Transportation and warehousing"]
+        - ["51", "Information"]
+        - ["FIRE", "Finance, insurance, real estate, rental, and leasing"]
+        - ["PROF", "Professional and business services"]
+        - ["6", "Educational services, health care, and social assistance"]
+        - ["7", "Arts, entertainment, recreation, accommodation, and food services"]
+        - ["81", "Other services, except government"]
+        - ["G", "Government"]
+        - ["Used", "Scrap, used and secondhand goods"]
+        - ["Other", "Noncomparable imports and rest-of-the-world adjustment"]
+    - output: County output (production) of an industry, 2012 dollars.
+    - supply: County supply of domestic intermediates of an industry, 2012 dollars.
+    - demand: County demand for domestic intermediates of an industry, 2012 dollars.
