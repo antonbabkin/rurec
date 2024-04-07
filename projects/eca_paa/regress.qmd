@@ -94,8 +94,18 @@ df <- dp$call_proj_df(params$year) %>%
   mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
   mutate(wage = wage/1000) %>% 
   mutate(income_rate = income_rate/1000) %>% 
-  mutate(ypll75 = ypll75/100000)
+  mutate(ypll75 = ypll75/100000) %>% 
+  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
+  
+df$metro_micro_destination <- df$metro_micro_sink
+  df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
+    df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
+      df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
 
+#   df$metro_micro_sink[df$metro_micro_sink == "Sink and Metro "] <-  "Destination and Metro"
+#     df$metro_micro_sink[df$metro_micro_sink == "Sink and Micro"] <-  "Destination and Micro"
+#       df$metro_micro_sink[df$metro_micro_sink == "Sink only"] <-  "Destination Only"
+# names(df)[names(df)=="metro_micro_sink"] <- "metro_micro_destination"
 
 ```
 
@@ -598,8 +608,13 @@ if (params$show_descriptive_maps) {
 
 if (params$show_descriptive_maps) {
   tmp <- scale_fill_discrete
-  scale_fill_discrete <- function(...) scale_fill_manual(values = c("#1f78b4", "#a6cee3", "#33a02c", "#b2df8a", "#ff7f00"), na.value ="#E0DEDD")
-  p <- dp$viz$cat_choro_map(df, "metro_micro_sink", interactive = params$interactive_maps, legend = T)
+  # scale_fill_discrete <- function(...) scale_fill_manual(values = c("#1f78b4", "#a6cee3", "#33a02c", "#b2df8a", "#ff7f00"), na.value ="#E0DEDD")
+    scale_fill_discrete <- function(...) scale_fill_manual(values = c("Metro only" = "#1f78b4", 
+                                                                      "Micro only" = "#a6cee3", 
+                                                                      "Destination and Metro" = "#33a02c", 
+                                                                      "Destination and Micro" = "#b2df8a", 
+                                                                      "Destination Only" = "#ff7f00"), na.value ="#E0DEDD")
+  p <- dp$viz$cat_choro_map(df2, "metro_micro_destination", interactive = params$interactive_maps, legend = T)
     print(p)
   scale_fill_discrete <- tmp
 }
@@ -1205,21 +1220,12 @@ dp$viz$cat_choro_map(tmp, "eca_membership", interactive = T)
 }
 
 if(FALSE){
-d_unrest <- dp$call_dist_mat(params$year) %>% 
-  drop_units() %>% 
-  as.data.frame.table() %>% 
-  `colnames<-`(c("rows", "cols", "distance")) %>% 
-  mutate(sample = c("unrestricted")) %>% 
-  {.[.$rows %in% df[df$cbsa_rural_category == "rural", ]$place, ]} %>% 
-  {.[.$distance != 0, ]} %>% 
-  mutate(distance = dp$meters2miles(distance)/100)
-
 
 d_unrest <- dp$call_dist_mat(params$year) %>% 
   drop_units() %>% 
   as.data.frame.table() %>% 
   `colnames<-`(c("rows", "cols", "distance")) %>% 
-  mutate(sample = c("unrestricted")) %>% 
+  mutate(sample = c("All county pairs")) %>% 
   {.[.$rows %in% df[df$cbsa_rural_category == "rural", ]$place, ]} %>% 
   {.[.$distance != 0, ]} %>% 
   mutate(distance = dp$meters2miles(distance)/100)
@@ -1238,13 +1244,14 @@ d_model <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cl
   st_drop_geometry() %>% 
   {.[c("place", "eca_membership", "eca_center_distance")]} %>%
   `colnames<-`(c("rows", "cols", "distance")) %>%  
-  mutate(sample = c("model"))
+  mutate(sample = c("ECA source-destination"))
 
 
-dp <- rbind(test, d_rest, d_model)
+dft <- rbind(test, d_rest, d_model)
+dft <- rbind(d_unrest, d_model)
 
-dp$viz$density_dist_plot(dp, "distance", "sample")
-dp$viz$density_dist_plot(dp, "distance", "sample") + scale_x_log10()
+dp$viz$density_dist_plot(dft, "distance", "sample")
+dft[dft$distance > 0, ] %>% dp$viz$density_dist_plot(., "distance", "sample") + scale_x_log10()
 
 }
 
@@ -1359,6 +1366,7 @@ if (params$show_lm_cluster_regression) {
 }
 
 ```
+
 ```{r}
 
 # source = b0 + b1_sink + b2_eca_distance + b3_sink*eca_distance + e
@@ -1414,6 +1422,49 @@ if (params$show_lm_cluster_regression) {
 
 ### lm clustered errors distance control
 ::: panel-tabset 
+```{r}
+#| warning: false
+
+# variation over rural places only distance controlled
+# source = b0 + b1_sink + b2_dist2sink + e
+
+ library(miceadds)
+
+df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$eca_center_distance %>% summary()
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  for (i in params$reg_factors){
+      y <- i
+  x1 <- paste0("sink_value_", i)
+  x2 <- "eca_center_distance"
+  data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]
+  
+  fm <- as.formula(paste(i, "~", x1, "*", x2))
+     # 
+     # specif[[i]] <- lm.cluster(fm,
+     #          data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ],
+     #          cluster = "eca_membership")
+         
+         specif[[i]] <- lm(fm,
+              data = data)
+    
+    
+     # specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+     #   {lm.cluster(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[["eca_center_distance"]], cluster = .[["eca_membership"]])} %>% 
+     #  dp$round_stats()
+    # specif[[i]]$outcome <- paste0("source_", i)
+    # specif[[i]]$term[2] <- paste0("sink_", i)
+    # specif[[i]]$term[3] <- "distance"
+    # cat('####', i, ' \n')
+    # paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
+    # specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
+    # cat('  \n')
+  }
+}
+
+```
+
 ```{r specification test 5 distance}
 #| warning: false
 
@@ -1485,6 +1536,125 @@ for (i in params$reg_factors){
 ::: 
 
 :::
+
+
+```{r share distance}
+#| warning: false
+
+
+# g(i) = b0 + b1*r(i) + b(2)*d(i) + e(i)
+
+tf <- dp$call_trade_flows("all_industries")
+M <- sweep(tf, 1, rowSums(tf), "/")
+M[is.na(M)] <- 0
+
+D_inv <- dp$call_dist_mat(year = params$year) %>%
+  drop_units() %>%
+  {1/(.)}
+  diag(D_inv) <- 0
+  D_inv <- sweep(D_inv, 1, rowSums(D_inv), "/")
+    diag(D_inv) <- 0
+    
+D_sqr <- dp$call_dist_mat(year = params$year) %>%
+  drop_units() %>%
+  {1/(.^2)}
+  diag(D_sqr) <- 0
+  D_sqr <- sweep(D, 1, rowSums(D_sqr), "/")
+    diag(D_sqr) <- 0
+
+D_qnn <- dp$call_bprox_mat(year = params$year)
+diag(D_qnn) <- 0 
+D_qnn <- sweep(D_qnn, 1, rowSums(D_qnn), "/")
+    diag(D_qnn) <- 0 
+
+  
+  # X <-  intersect(m_names, d_names) %>% {M[., .]-D[., .]}
+
+m_names <- row.names(M)
+d_names <- row.names(D_inv)
+
+g <- df[match(intersect(m_names, d_names), df$place), ,drop=F] %>% 
+  {.$payroll_gr} %>% 
+  as.matrix() %>% 
+  `colnames<-`(c("growth_rate"))  %>% 
+  `rownames<-`(df$place) %>% 
+  na.omit()
+
+r <- intersect(m_names, d_names) %>% intersect(., rownames(g)) %>% {M[., .] %*% g}
+d_inv <- intersect(m_names, d_names) %>% intersect(., rownames(g)) %>% {D_inv[., .] %*% g}
+d_sqr <- intersect(m_names, d_names) %>% intersect(., rownames(g)) %>% {D_sqr[., .] %*% g}
+d_qnn <- intersect(m_names, d_names) %>% intersect(., rownames(g)) %>% {D_qnn[., .] %*% g}
+
+# x <- intersect(m_names, d_names) %>% intersect(., rownames(g)) %>% {X[., .] %*% g}
+# df_grd <- data.frame(g,  r,  d, x) %>% 
+#    `colnames<-`(c("growth_rate", "trade_weighted_growth", "neighbor_growth_rate", "weights_rates"))
+
+df_grd <- data.frame(g,  r,  d_inv, d_sqr, d_qnn) %>% 
+   `colnames<-`(c("growth_rate", "trade_weighted_growth", "inv_neighbor_growth_rate", "sqr_neighbor_growth_rate", "qnn_neighbor_growth_rate"))
+
+# df_grd <- df_grd %>% mutate_all(~(scale(.) %>% as.vector))
+
+reg1 <- lm_robust(growth_rate ~ trade_weighted_growth + inv_neighbor_growth_rate, data = df_grd) 
+reg2 <- lm_robust(growth_rate ~ trade_weighted_growth + sqr_neighbor_growth_rate, data = df_grd) 
+reg3 <- lm_robust(growth_rate ~ trade_weighted_growth + qnn_neighbor_growth_rate, data = df_grd) 
+
+lm(growth_rate ~ trade_weighted_growth + inv_neighbor_growth_rate, data = na.omit(df_grd))  %>% AIC()
+lm(growth_rate ~ trade_weighted_growth + sqr_neighbor_growth_rate, data = na.omit(df_grd))  %>% AIC()
+lm(growth_rate ~ trade_weighted_growth + qnn_neighbor_growth_rate, data = na.omit(df_grd))  %>% AIC()
+
+lm(growth_rate ~ trade_weighted_growth + inv_neighbor_growth_rate, data = na.omit(df_grd))  %>% BIC()
+lm(growth_rate ~ trade_weighted_growth + sqr_neighbor_growth_rate, data = na.omit(df_grd))  %>% BIC()
+lm(growth_rate ~ trade_weighted_growth + qnn_neighbor_growth_rate, data = na.omit(df_grd))  %>% BIC()
+
+lm(growth_rate ~ trade_weighted_growth + inv_neighbor_growth_rate, data = na.omit(df_grd)) %>% summary()
+lm(growth_rate ~ trade_weighted_growth + sqr_neighbor_growth_rate, data = na.omit(df_grd)) %>% summary()
+lm(growth_rate ~ trade_weighted_growth + qnn_neighbor_growth_rate, data = na.omit(df_grd)) %>% summary()
+
+
+# reg <- lm_robust(growth_rate ~ trade_weighted_growth + neighbor_growth_rate, data = df_grd)  
+# reg <- lm_robust(growth_rate ~ weights_rates, data = df_grd)  
+
+summary(df_grd)
+df_grd %>% na.omit() %>% cor()
+summary(reg)
+vcov(reg)
+margins(reg) %>% summary()
+
+cplot(reg, "trade_weighted_growth")
+# ggplot(cplot(reg, "trade_weighted_growth", draw = FALSE), aes(x = xvals)) + 
+#   geom_line(aes(y = yvals)) +
+#   geom_line(aes(y = upper), linetype = 2) +
+#   geom_line(aes(y = lower), linetype = 2) +
+#   geom_hline(yintercept = 0) +
+#   xlab("trade_weighted_growth") + ylab("Predicted Value")
+
+cplot(reg, "neighbor_growth_rate")
+# ggplot(cplot(reg, "neighbor_growth_rate", draw = FALSE), aes(x = xvals)) + 
+#   geom_line(aes(y = yvals)) +
+#   geom_line(aes(y = upper), linetype = 2) +
+#   geom_line(aes(y = lower), linetype = 2) +
+#   geom_hline(yintercept = 0) +
+#   xlab("neighbor_growth_rate") + ylab("Predicted Value")
+
+plot(lm(growth_rate  ~  neighbor_growth_rate, data = df_grd))
+
+ggplot(data = df_grd, aes(x = trade_weighted_growth, y = growth_rate)) +
+  geom_point() +
+  stat_smooth(method = "lm") 
+
+ggplot(data = df_grd, aes(x = neighbor_growth_rate, y = growth_rate)) +
+  geom_point() +
+  stat_smooth(method = "lm") 
+
+
+
+
+
+# grep("_gr$", params$reg_factors, value = T)
+
+
+```
+
 
 
 ### randomized placebo

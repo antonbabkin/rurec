@@ -155,6 +155,11 @@ viz$nominal_choro_map <- visualization$nominal_choro_map
 viz$normal_choro_map <- visualization$normal_choro_map
 viz$absorption_density_plot <- visualization$absorption_density_plot
 
+# Trade Flows ----
+
+call_trade_flows <- trade_flows$call_trade_flows
+
+
 # Geog ----
 
 call_geog <- function(year) {
@@ -169,6 +174,8 @@ call_geog <- function(year) {
   }    
   return(df)
 }
+
+call_bprox_mat <- geography$call_bprox_mat
 
 # Distance matrix ----
 

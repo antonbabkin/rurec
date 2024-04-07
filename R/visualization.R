@@ -464,6 +464,46 @@ industry_histogram <- function(output_table,
   return(g)
 }
 
+# call a table of industry activity  
+call_sector_hist_table <- function(year,
+                                  ilevel = c("det", "sum", "sec"),
+                                  class_system = c("industry", "commodity"),
+                                  paradigm = c("factor", "domestic", "capital"),
+                                  bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                  cbsa = FALSE,
+                                  verbose = FALSE,
+                                  central_place = NULL,
+                                  trim = "^(60|66|69|72|78)|(999)$",
+                                  cluster_subset = NULL,
+                                  color = c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow"),
+                                  cluster_level = c("sec", "sum", "det")){
+  ilevel <- match.arg(ilevel)
+  cluster_level <- match.arg(cluster_level)
+  bea_io$cluster_logic(ilevel, cluster_level)
+  ilc <- bea_io$call_intra_level_concordance(year = year, 
+                                             cluster_level = cluster_level)
+  bdc <- bea_io$call_bea_description_concordance(year = year)
+  iol <- place_output$call_factor_list(year = year,
+                                       class_system = class_system,
+                                       paradigm = paradigm,
+                                       ilevel = ilevel,
+                                       bus_data = bus_data,
+                                       cbsa = cbsa,
+                                       verbose = verbose)
+  df <- histogram_output_table(intra_level_concordance = ilc,
+                                bea_description_concordance = bdc,
+                                io_factor_list = iol,
+                                color = color,
+                                cluster_level = cluster_level,
+                                cbsa = cbsa,
+                                central_place = central_place,
+                                trim = trim,
+                                cluster_subset = cluster_subset)
+  return(df)
+}
+  
+  
+  
 # generate a histogram of industry/commodity output/supply/demand (for a place/places)
 call_sector_histogram <- function(year,
                                   ilevel = c("det", "sum", "sec"),
@@ -749,7 +789,8 @@ diverge_choro_map <- function(spatial_dataframe, #table of trade flow potential 
                               colors = rev(brewer.pal(7, "RdBu")), # see display.brewer.all()
                               label_min = "Net Negative",
                               label_max = "Net Positive",
-                              interactive = TRUE){
+                              interactive = TRUE,
+                              legend = TRUE){
   sdf <- spatial_dataframe
   fv <- fill_variable
   tl <- usa_tile_list(sdf)
@@ -759,6 +800,7 @@ diverge_choro_map <- function(spatial_dataframe, #table of trade flow potential 
   df <- boil_tile(tile_list = tl, 
                   fill_variable = fv, 
                   caption = caption, 
+                  legend = legend,
                   divergent_scales(min_value = mn,  max_value = mx, scale_style = scale_style, colors = colors, label_min = label_min, label_max = label_max) ) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
@@ -784,7 +826,8 @@ flow_potential_map <- function(spatial_dataframe, #table of trade flow potential
                                scale_style = c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum"),
                                label_min = "Net Supplier",
                                label_max = "Net Demander",
-                               interactive = TRUE){
+                               interactive = TRUE, 
+                               legend = FALSE){
   cluster_level <- match.arg(cluster_level)
   caption <- bea_io$call_intra_level_concordance(year = year, cluster_level = cluster_level) %>%
     {.[grepl(cluster_subset, .[[1]]), short2long(cluster_level)]} %>%
@@ -798,7 +841,8 @@ flow_potential_map <- function(spatial_dataframe, #table of trade flow potential
                           scale_style = scale_style,
                           label_min = label_min, 
                           label_max = label_max,
-                          interactive = interactive )
+                          interactive = interactive,
+                          legend = legend)
   return(df)
 }
 
@@ -863,11 +907,13 @@ place_trade_map <- function(place_trade_table,
                   fill_variable = fv, 
                   caption = caption, 
                   # geom_sf_interactive(data = tl[tl$place == central_place, ], fill = "#8b0000", color = NA),
-                  scale_fill_viridis(direction = -1, limits = c(censor_scale_lowerbound, mx))) %>%
+                  scale_fill_viridis(direction = -1, limits = c(censor_scale_lowerbound, mx))
+                  ) %>%
     {usa_tile_map(tile_plot_list = .,
                   interactive = interactive)}
   return(df)
 }
+
 
 # Clusters ----
 

@@ -353,6 +353,122 @@ if (params$map_tradeflow_show) {
 }
 ```
 
+
+```{r}
+if (params$map_tradeflow_show) {
+  
+  industry_code <- params$map_tradeflow_ind
+  industry_code <- "311513"
+   industry_code <- "112120"
+  
+  # industry_code <- "1111A0"
+  # industry_code <- "1111A0,1111B0"
+  # industry_code <- "^112.*$"
+  # industry_code <- "^311.*$"
+source("R/visualization.R", local = (visual <- new.env()))
+ 
+  industry_code <- "112120"
+  focus_county <- "55117"
+  fname <- paste0(industry_code, ": Import Flows")
+ dft <- trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")}
+names(dft)[names(dft) == "import_absorption"] <- fname
+
+ dft %>%  {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = fname, 
+                            censor_scale_lowerbound = 10000,
+                            interactive = F)}
+ 
+ 
+   industry_code <- "311513"
+     focus_county <- "55117"
+  fname <- paste0(industry_code, ": Export Flows")
+ dft <- trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")}
+names(dft)[names(dft) == "export_absorption"] <- fname
+
+ dft %>%  {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = fname, 
+                            censor_scale_lowerbound = 10000,
+                            interactive = F)}
+ 
+ 
+ 
+   industry_code <- "all_industries"
+  focus_county <- "55117"
+  fname <- paste0(industry_code, ": Import Flows")
+ dft <- trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")}
+names(dft)[names(dft) == "import_absorption"] <- fname
+
+ dft %>%  {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = fname, 
+                            censor_scale_lowerbound = 10000,
+                            interactive = F )}
+ 
+ 
+   industry_code <- "all_industries"
+     focus_county <- "55117"
+  fname <- paste0(industry_code, ": Export Flows")
+ dft <- trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")}
+names(dft)[names(dft) == "export_absorption"] <- fname
+
+ dft %>%  {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = fname, 
+                            censor_scale_lowerbound = 10000,
+                            interactive = F )}
+ 
+ 
+}
+```
+
+
+```{r}
+if (params$map_tradeflow_show) {
+
+  focus_county <- params$map_tradeflow_county
+  focus_county <- "55025"
+  # focus_county <- "55117"
+  
+  industry_code <- params$map_tradeflow_ind
+  #industry_code <- "311513"
+  # industry_code <- "1111A0"
+  # industry_code <- "1111A0,1111B0"
+  # industry_code <- "^112.*$"
+  
+  
+  
+  trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")} %>% 
+    {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = "export_absorption", 
+                            censor_scale_lowerbound = min(.[["export_absorption"]][.[["export_absorption"]] > 0], na.rm = T) )}
+
+  trade_flows$call_trade_flows_custom(industry_code) %>%
+    {connect$eca_table_central(focus_county, .)} %>% 
+    {left_join(geo$call_geog(), ., by = "place")} %>% 
+    {visual$place_trade_map(place_trade_table = ., 
+                            central_place = focus_county, 
+                            fill_variable = "import_absorption", 
+                            censor_scale_lowerbound = min(.[["import_absorption"]][.[["import_absorption"]] > 0], na.rm = T) )}
+ 
+}
+```
+
+
+
+
 ```{r}
 if (params$map_tradeflow_show) {
 
@@ -687,6 +803,9 @@ if (params$absorption_density_plot) {
 
 ## sector_hist_plot
 
+
+
+
 ```{r}
 #| warning: false
 # TODO: add relevant data to ipath
@@ -720,11 +839,52 @@ if (params$sector_hist_plot) {
     central_place = key$central_place,
     trim = key$trim,
     cluster_subset = key$cluster_subset,
+    indicator = key$indicator,
     color = key$color,
     cluster_level = key$cluster_level,
     interactive = key$interactive)
 }
 ```
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$sector_hist_plot) {
+  # explore sector output distributions
+  
+  
+
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    central_place = 55117, # "01001"
+    trim = "^(60|66|69|72|78)|(999)$",
+    cluster_subset = "^(112120|311513|311410)", # "^11"
+    color = "turbo", # c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow")
+    cluster_level = "det", # c("sec", "sum", "det")
+    verbose = FALSE)
+  
+   tmp <-  visual$call_sector_hist_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    verbose = key$verbose,
+    central_place = key$central_place,
+    trim = key$trim,
+    cluster_subset = key$cluster_subset,
+    color = key$color,
+    cluster_level = key$cluster_level)
+  tmp
+}
+```
+
 
 ```{r}
 #| warning: false
@@ -740,7 +900,50 @@ if (params$sector_hist_plot) {
     bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
     cbsa = FALSE,
     verbose = FALSE,
-    central_place = "23021", # "01001"
+    central_place = "55117", # "01001"
+    trim = "^(60|66|69|72|78)|(999)$",
+    cluster_subset = "^(112120|311513|311410)", # "^11"
+    indicator = "net_demand", # c("gross_output", "intermediate_supply", "intermediate_demand", "net_supply", "net_demand")
+    color = "turbo", # c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow")
+    cluster_level = "det", # c("sec", "sum", "det")
+    interactive = F)
+  
+  hist <- visual$call_sector_histogram(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    cbsa = key$cbsa,
+    verbose = key$verbose,
+    central_place = key$central_place,
+    trim = key$trim,
+    cluster_subset = key$cluster_subset,
+    indicator = key$indicator,
+    color = key$color,
+    cluster_level = key$cluster_level,
+    interactive = key$interactive)
+  
+  hist
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$sector_hist_plot) {
+  # explore sector output distributions
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    cbsa = FALSE,
+    verbose = FALSE,
+    central_place = "55117", # "01001"
     trim = "^(60|66|69|72|78)|(999)$",
     cluster_subset = NULL, # "^11"
     indicator = "net_supply", # c("gross_output", "intermediate_supply", "intermediate_demand", "net_supply", "net_demand")
@@ -759,6 +962,7 @@ if (params$sector_hist_plot) {
     central_place = key$central_place,
     trim = key$trim,
     cluster_subset = key$cluster_subset,
+    indicator = key$indicator,
     color = key$color,
     cluster_level = key$cluster_level,
     interactive = key$interactive)
@@ -798,6 +1002,7 @@ if (params$sector_hist_plot) {
     central_place = key$central_place,
     trim = key$trim,
     cluster_subset = key$cluster_subset,
+    indicator = key$indicator,
     color = key$color,
     cluster_level = key$cluster_level,
     interactive = key$interactive)
@@ -817,10 +1022,10 @@ if (params$sector_hist_plot_multi) {
     ilevel = "det", # c("det", "sum", "sec")
     class_system = "commodity", # c("industry", "commodity")
     paradigm = "domestic", # c("factor", "domestic", "capital")
-    bus_data = "cbp_imp", # c("cbp_imp", "cbp_raw", "infogroup")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
     cbsa = FALSE,
     verbose = FALSE,
-    central_place = NULL, # "01001"
+    central_place = "55117", # "01001"
     trim = "^(60|66|69|72|78)|(999)$",
     cluster_subset = NULL, # "^11"
     color = "turbo", # c("turbo", "viridis", "magma", "inferno", "plasma", "cividis", "rocket", "mako", "rainbow")
@@ -847,6 +1052,173 @@ if (params$sector_hist_plot_multi) {
 ```
 
 ## supply_demand_map
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$supply_demand_map) {
+  # explore net supply and demand maps
+  
+  ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^112120", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  
+  df <- df[df$STATE_CODE == "55",]
+  
+  
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "extract", # column from spatial_dataframe
+    year = 2012,
+    cluster_subset = "^112120", # NULL
+    cluster_level = "det", # c("sec", "sum", "det")
+    scale_style = "inverse_hyperbolic_sine", # c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")
+    interactive = TRUE)
+  
+  visual$flow_potential_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    year = key$year,
+    cluster_subset = key$cluster_subset,
+    cluster_level = key$cluster_level,
+    scale_style = key$scale_style,
+    interactive = key$interactive,
+    legend = F) 
+  
+    
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^311513", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  
+  df <- df[df$STATE_CODE == "55",]
+  
+
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "extract", # column from spatial_dataframe
+    year = 2012,
+    cluster_subset = "^311513", # NULL
+    cluster_level = "det", # c("sec", "sum", "det")
+    scale_style = "inverse_hyperbolic_sine", # c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")
+    interactive = TRUE)
+  
+  visual$flow_potential_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    year = key$year,
+    cluster_subset = key$cluster_subset,
+    cluster_level = key$cluster_level,
+    scale_style = key$scale_style,
+    interactive = key$interactive,
+    legend = F) 
+  
+}
+```
+
+
+```{r}
+#| warning: false
+# TODO: add relevant data to ipath
+if (params$supply_demand_map) {
+  # explore net supply and demand maps
+  
+  ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+  
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^311513", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  key = list(
+    spatial_dataframe = df,
+    fill_variable = "extract", # column from spatial_dataframe
+    year = 2012,
+    cluster_subset = "^311513", # NULL
+    cluster_level = "det", # c("sec", "sum", "det")
+    scale_style = "inverse_hyperbolic_sine", # c("inverse_hyperbolic_sine", "full_spectrum_midpoint", "constant_spread_midpoint", "constant_spread_spectrum")
+    interactive = TRUE)
+  
+  visual$flow_potential_map(
+    spatial_dataframe = key$spatial_dataframe,
+    fill_variable = key$fill_variable,
+    year = key$year,
+    cluster_subset = key$cluster_subset,
+    cluster_level = key$cluster_level,
+    scale_style = key$scale_style,
+    interactive = key$interactive)
+  
+}
+```
+
 
 ```{r}
 #| warning: false
