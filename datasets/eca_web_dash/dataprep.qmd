@@ -1,0 +1,103 @@
+---
+title: "APL website dashboard"
+format: html
+---
+
+Prepare data for the web dashboard.
+
+```{r}
+library(tidyverse)
+
+source("R/geography.R", local = (geography <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/connectedness.R", local = (connectedness <- new.env()))
+source("R/dataprep.R", local = (dp_misc <- new.env()))
+source("R/place_output.R", local = (place_output <- new.env()))
+
+```
+
+
+
+# county industry
+
+```{r}
+x1 <- place_output$call_output(2012, "commodity", "sec", "infogroup")
+x2 <- place_output$call_intermediate(2012, "supply", "domestic", "commodity", "sec", "infogroup")
+x3 <- place_output$call_intermediate(2012, "demand", "domestic", "commodity", "sec", "infogroup")
+df <- inner_join(x1, x2, join_by(place, indcode)) %>%
+  inner_join(x3, join_by(place, indcode)) %>%
+  mutate(across(where(is.numeric), \(x) round(x * 1000))) %>%
+  rename(county_fips = place, industry_code = indcode) %>%
+  relocate(county_fips, industry_code)
+(df_county_industry <- df)
+```
+
+# county
+
+```{r}
+# county FIPS and name with state abbreviation
+x1 <- geography$pubdata$get_state_df(geometry = FALSE) |>
+  rename_with(str_to_lower) |>
+  select(code, abbr) |>
+  rename_with(\(x) paste0("state_", x))
+df <- geography$pubdata$get_county_df(year = 2013, geometry = FALSE, scale = "20m") |>
+  rename_with(str_to_lower) |>
+  rename(county_fips = code) |>
+  left_join(x1, "state_code") |>
+  mutate(county_name = paste(name, state_abbr, sep = ", ")) |>
+  select(county_fips, county_name)
+
+# ECA code and trade share 
+x1 <- trade_flows$call_trade_flows("all_industries") %>%
+  sweep(., 1, rowSums(.), "/")
+x1[is.na(x1)] <- 0
+x2 <- connectedness$apply_absorption_metrics(x1)
+x3 <- connectedness$apply_absorption_algorithm(x2, threshold = 0) |>
+  select(place, eca_membership, cluster_category, max_alpha) |>
+  rename(county_fips = place, eca_code = eca_membership, eca_category = cluster_category, max_trade_share = max_alpha) |>
+  mutate(eca_category = case_match(eca_category, "Cluster Source" ~ "source", "Cluster Sink" ~ "destination")) %>%
+  mutate(max_trade_share = if_else(eca_category == "source", max_trade_share, NA))
+df <- inner_join(df, x3, "county_fips")
+
+# output
+x1 <- df_county_industry %>%
+  group_by(county_fips) %>%
+  summarize(output = sum(output))
+df <- inner_join(df, x1, "county_fips")
+
+# population
+x1 <- dp_misc$call_census_county_population(2012) %>%
+  rename(county_fips = place)
+df <- inner_join(df, x1, "county_fips")
+
+(df_county <- df)
+```
+
+# eca
+
+```{r}
+df_eca <- df_county %>%
+  group_by(eca_code) %>%
+  summarize(size = n(), output = sum(output), population = sum(population))
+df_eca
+```
+
+
+# save data files
+
+```{r}
+opath <- c(
+  county_industry = "datasets/eca_web_dash/county_industry.csv",
+  county = "datasets/eca_web_dash/county.csv",
+  eca = "datasets/eca_web_dash/eca.csv"
+)
+write_csv(df_county_industry, opath["county_industry"])
+write_csv(df_county, opath["county"])
+write_csv(df_eca, opath["eca"])
+
+zip("tmp/eca_web_dash_v240403.zip", c(opath, "datasets/eca_web_dash/meta.yaml"), flags = "-r9Xj")
+
+```
+
+
+

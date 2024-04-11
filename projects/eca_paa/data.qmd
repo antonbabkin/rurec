@@ -56,6 +56,7 @@ library(ggridges)
 library(viridis)
 library(tmap)
 library(gt)
+library(webshot2)
 
 # scripts
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
@@ -78,7 +79,7 @@ params
 
 # uncomment and pack/unpack as necessary
 # util$zip_pack("tmp/eca_paa_data_v240324.zip", dp$opath)
- dp$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
+# dp$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
 
 ```
 
@@ -97,9 +98,9 @@ params
 
 df <- dp$call_proj_df(params$year) %>% 
   mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-  mutate(wage = wage/1000) %>% 
-  mutate(income_rate = income_rate/1000) %>% 
-  mutate(ypll75 = ypll75/100000)
+  mutate(income_rate = income_rate/1000) %>%
+  mutate(payroll = payroll*1000) %>%
+  mutate(gdp = gdp*1000)
 
 
 ```
@@ -175,9 +176,6 @@ if (FALSE){
 
 data <- df %>% 
   mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-  mutate(wage = wage/1000) %>% 
-  mutate(income_rate = income_rate/1000) %>% 
-  mutate(ypll75 = ypll75/100000) %>%
   select(place, NAME, STATE_CODE, COUNTY_CODE, COUNTY, STATE_NAME, STATE, CBSA_CODE, cbsa_members_count, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, cbsa_rural_category, ruc_code, geometry, center, eca_cluster_category, eca_central_out_xtab, eca_cbsa_xtab, sink_filter, cbsa_by_eca, metro_micro_sink, eca_membership, cbsa_of_eca, population, employment, jobs, laborforce_part_rate, unemp_rate, payroll, wage, income_rate, establishments, entry_rate, exit_rate, gdp, poverty_rate, highschool_attainment_rate, ypll75, net_migration_rate, establishments_gr, wage_gr, jobs_gr, payroll_gr, employment_gr, poverty_rate_gr, income_rate_gr, population_gr, gdp_gr)
 
 
@@ -350,7 +348,7 @@ comp_map = data_map %>% mutate(comp = ifelse(is.na(metro_micro_sink), "neither",
 
 if (params$show_descriptive_maps) {
   tmp <- scale_fill_discrete
-  scale_fill_discrete <- function(...) scale_fill_manual(values = c("#38761d", "#b2df8a", "gold", "#1f78b4", "#a6cee3","grey90"))
+  scale_fill_discrete <- function(...) scale_fill_manual(name = "ECA-CBSA Comparison", values = c("Destination and Metro"="#38761d", "Destination and Micro"="#b2df8a", "Destination only"="gold", "Metro only"="#1f78b4", "Micro only"="#a6cee3","neither"="grey90"))
   p <- dp$viz$cat_choro_map(comp_map, "comp", interactive = params$interactive_maps, legend = T)
     print(p)
   scale_fill_discrete <- tmp
@@ -484,42 +482,6 @@ Douglas County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
 ```
 
 
-```{r}
-
-# 22071
-
-ECA_n = "22071"
-cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
-cbsa_n = cbsa_n$CBSA_CODE
-st_n = substr(ECA_n,1,2)
-
-data_map <- data
-
-comp_map = data_map %>% 
-  filter(STATE_CODE != "02" & STATE_CODE != "72" & STATE_CODE != "15" )  %>%
-  filter(STATE_CODE == st_n) %>%
-#  filter(STATE_CODE == "17" | STATE_CODE == "55") %>%
-  mutate(comp = ifelse((place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center", ifelse((CENTRAL_OUTLYING == "central" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", ifelse((eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA", ifelse((eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", ifelse((eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA", "outside"))))))
-
-
-MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
-
-tmap_mode("plot")
-
-print(comp_map %>%
-  tm_shape() + 
-  tm_polygons(col = "comp", title = "CBSA Statuses
-Orleans County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
-  tm_layout(legend.title.size = 1.0, legend.position = c("left","top"),
-            title = "", frame = FALSE)
-)
-
-
-## add grey layer that is CBSA but not in ECA
-## add higher layer that is connected to ECA and CBSA outlying both
-
-```
-
 
 
 ## 5 Requested Tables (3/23/24)
@@ -527,13 +489,15 @@ Orleans County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
 
 ```{r}
 
-df1 %>% 
+t1 = df1 %>% 
+  select(-gdp_gr) %>%
+  relocate(place, population, population_gr, employment, employment_gr, laborforce_part_rate, unemp_rate, jobs, jobs_gr, establishments, establishments_gr, payroll, payroll_gr, wage, wage_gr, income_rate, income_rate_gr, entry_rate, exit_rate, gdp, poverty_rate, poverty_rate_gr, ypll75, highschool_attainment_rate, net_migration_rate) %>%
   get_summary_stats(, type = "full", show = c("n", "mean", "sd", "min", "q1", "median", "q3", "max")) %>%
   filter(variable != "max_trade_share" & variable != "rural") %>%
   column_to_rownames(var = "variable") |>
   gt::gt(table1, rownames_to_stub = TRUE) |>
   tab_header(
-    title = md("**Table 1. Summary statistics of outcome variables**"),
+    title = md("**Table 1.** Summary statistics of outcome variables"),
     subtitle = md("")
   ) |>
   tab_options(
@@ -543,9 +507,12 @@ df1 %>%
     table.width = pct(50),
     column_labels.font.weight = "bold"
   ) %>%
-  fmt_number(decimals = 1, sep_mark = ",")
+  fmt_number(sep_mark = ",", drop_trailing_zeros = TRUE) %>%
+  fmt_number(rows = c("payroll", "gdp"), sep_mark = ",", suffixing = c(NA, "M", NA, NA), drop_trailing_zeros = TRUE) 
 
-
+print(t1)
+t1 %>%
+  gtsave(filename = "projects/eca_paa/tables/t1.html", inline_css = TRUE)
 
 ```
 
@@ -658,13 +625,20 @@ temp_pct = temp_all %>%
          ) %>%
   select(-all, -measure)
   
+x <- c("counties, count", "counties, pct", 
+           "population, count", "population, mean", "population, pct",
+           "employment, count", "employment, mean", "employment, pct",
+           "establishments, count", "establishments, mean", "establishments, pct",
+           "jobs, count", "jobs, mean", "jobs, pct",
+           "payroll, count", "payroll, mean", "payroll, pct",
+           "gdp, count", "gdp, mean", "gdp, pct")
 
-rbind(temp_final, temp_pct) %>%
-  arrange(var) %>%
+t2 = rbind(temp_final, temp_pct) %>%
+  slice(match(x, var)) %>%
   gt(data, rowname_col = "var") %>%
   tab_spanner_delim(delim = "_") %>%
   tab_header(
-    title = md("**Table 2. Aggregate and average size of outcome variables by CBSA type**"),
+    title = md("**Table 2.** Aggregate and average size of outcome variables by CBSA type"),
     subtitle = md("")
   ) |>
   tab_options(
@@ -674,8 +648,12 @@ rbind(temp_final, temp_pct) %>%
     table.width = pct(50),
     column_labels.font.weight = "bold"
   ) %>%
-  fmt_number(decimals = 1, sep_mark = ",")
+  fmt_number(decimals = 1, sep_mark = ",", drop_trailing_zeros = TRUE) %>%
+  fmt_number(rows = c("gdp, count", "gdp, mean", "payroll, count", "payroll, mean"), decimals = 1, sep_mark = ",", drop_trailing_zeros = TRUE, suffixing = c(NA, "M", NA, NA))
 
+print(t2)
+t2 %>%
+  gtsave(filename = "projects/eca_paa/tables/t2.html", inline_css = TRUE)
 
 ```
 
@@ -812,14 +790,21 @@ temp_pct = temp_all %>%
          ) %>%
   select(-all, -measure)
   
+x <- c("counties, count", "counties, pct", 
+           "population, count", "population, mean", "population, pct",
+           "employment, count", "employment, mean", "employment, pct",
+           "establishments, count", "establishments, mean", "establishments, pct",
+           "jobs, count", "jobs, mean", "jobs, pct",
+           "payroll, count", "payroll, mean", "payroll, pct",
+           "gdp, count", "gdp, mean", "gdp, pct")
 
-rbind(temp_final, temp_pct) %>%
+t2a = rbind(temp_final, temp_pct) %>%
+  slice(match(x, var)) %>%
   select(-all_destination, -all_source) %>%
-  arrange(var) %>%
   gt(data, rowname_col = "var") %>%
   tab_spanner_delim(delim = "_") %>%
   tab_header(
-    title = md("**Table 2A. Aggregate and average size of outcome variables by CBSA county centrality**"),
+    title = md("**Table 2A.** Aggregate and average size of outcome variables by CBSA county centrality"),
     subtitle = md("")
   ) |>
   tab_options(
@@ -829,7 +814,13 @@ rbind(temp_final, temp_pct) %>%
     table.width = pct(50),
     column_labels.font.weight = "bold"
   ) %>%
-  fmt_number(decimals = 1, sep_mark = ",")
+  fmt_number(decimals = 1, sep_mark = ",", drop_trailing_zeros = TRUE) %>%
+  fmt_number(rows = c("gdp, count", "gdp, mean", "payroll, count", "payroll, mean"), decimals = 1, sep_mark = ",", drop_trailing_zeros = TRUE, suffixing = c(NA, "M", NA, NA))
+
+
+print(t2a)
+t2a %>%
+  gtsave(filename = "projects/eca_paa/tables/t2a.html", inline_css = TRUE)
 
 ```
 
@@ -844,7 +835,7 @@ temp = data %>%
 
 temp_all = temp %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -857,7 +848,7 @@ temp_all = temp %>%
 temp_metro = temp %>%
   filter(METRO_MICRO == "metro") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -869,7 +860,7 @@ temp_metro = temp %>%
 temp_micro = temp %>%
   filter(METRO_MICRO == "micro") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -881,7 +872,7 @@ temp_micro = temp %>%
 temp_rural = temp %>%
   filter(METRO_MICRO == "rural") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -890,16 +881,19 @@ temp_rural = temp %>%
   rename("rural_source"="source", "rural_destination"="destination") %>%
   drop_na()
 
-temp_all %>%
+x <- c("population.gr", "employment.gr", "laborforce.part.rate", "unemp.rate", "jobs.gr", "establishments.gr", "entry.rate", "exit.rate", "payroll.gr", "wage", "wage.gr", "income.rate", "income.rate.gr", "poverty.rate", "poverty.rate.gr", "ypll75", "highschool.attainment.rate", "net.migration.rate")
+
+
+t3 = temp_all %>%
   left_join(y = temp_metro, by = c("var", "measure")) %>%
   left_join(y = temp_micro, by = c("var", "measure")) %>%
   left_join(y = temp_rural, by = c("var", "measure")) %>% 
   select(-measure) %>%
-  arrange(var) %>%
+  slice(match(x, var)) %>%
   gt(data, rowname_col = "var") %>%
   tab_spanner_delim(delim = "_") %>%
   tab_header(
-    title = md("**Table 3. Mean measures of county growth by CBSA type**"),
+    title = md("**Table 3.** Mean measures of county growth by CBSA type"),
     subtitle = md("")
   ) |>
   tab_options(
@@ -912,6 +906,9 @@ temp_all %>%
   fmt_number(decimals = 1, sep_mark = ",")
 
 
+print(t3)
+t3 %>%
+  gtsave(filename = "projects/eca_paa/tables/t3.html", inline_css = TRUE)
 
 ```
 
@@ -926,7 +923,7 @@ temp = data %>%
 
 temp_all = temp %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -939,7 +936,7 @@ temp_all = temp %>%
 temp_metro.central = temp %>%
   filter(METRO_MICRO == "metro" & CENTRAL_OUTLYING == "central") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -951,7 +948,7 @@ temp_metro.central = temp %>%
 temp_metro.outlying = temp %>%
   filter(METRO_MICRO == "metro" & CENTRAL_OUTLYING == "outlying") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -964,7 +961,7 @@ temp_metro.outlying = temp %>%
 temp_micro.central = temp %>%
   filter(METRO_MICRO == "micro" & CENTRAL_OUTLYING == "central") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -976,7 +973,7 @@ temp_micro.central = temp %>%
 temp_micro.outlying = temp %>%
   filter(METRO_MICRO == "micro" & CENTRAL_OUTLYING == "outlying") %>%
   group_by(eca_cluster_category) %>%
-  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rt_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), poverty.rate.gr = mean(poverty_rate_gr, na.rm = TRUE)) %>%
+  summarize(population.gr_mean = mean(population_gr, na.rm = TRUE), employment.gr_mean = mean(employment_gr, na.rm = TRUE), jobs.gr_mean = mean(jobs_gr, na.rm = TRUE), establishments.gr_mean = mean(establishments_gr, na.rm = TRUE), payroll.gr_mean = mean(payroll_gr, na.rm = TRUE), laborforce.part.rate_mean = mean(laborforce_part_rate, na.rm = TRUE), unemp.rate_mean = mean(unemp_rate, na.rm = TRUE), entry.rate_mean = mean(entry_rate, na.rm = TRUE), exit.rate_mean = mean(exit_rate, na.rm = TRUE), wage_mean = mean(wage, na.rm = TRUE), wage.gr_mean = mean(wage_gr, na.rm = TRUE), income.rate.gr_mean = mean(income_rate_gr, na.rm = TRUE), poverty.rate_mean = mean(poverty_rate, na.rm = TRUE), income.rate_mean = mean(income_rate, na.rm = TRUE), ypll75_mean = mean(ypll75, na.rm = TRUE), highschool.attainment.rate_mean = mean(highschool_attainment_rate, na.rm = TRUE), net.migration.rate_mean = mean(net_migration_rate, na.rm = TRUE), poverty.rate.gr_mean = mean(poverty_rate_gr, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Sink", "destination", "source")) %>%
   pivot_longer(cols = !eca_cluster_category,
@@ -985,14 +982,17 @@ temp_micro.outlying = temp %>%
   rename("micro.outlying_source"="source", "micro.outlying_destination"="destination") %>%
   drop_na()
 
-temp_all %>%
+x <- c("population.gr", "employment.gr", "laborforce.part.rate", "unemp.rate", "jobs.gr", "establishments.gr", "entry.rate", "exit.rate", "payroll.gr", "wage", "wage.gr", "income.rate", "income.rate.gr", "poverty.rate", "poverty.rate.gr", "ypll75", "highschool.attainment.rate", "net.migration.rate")
+
+
+t3a = temp_all %>%
   left_join(y = temp_metro.central, by = c("var", "measure")) %>%
   left_join(y = temp_metro.outlying, by = c("var", "measure")) %>%
   left_join(y = temp_micro.central, by = c("var", "measure")) %>%
   left_join(y = temp_micro.outlying, by = c("var", "measure")) %>%
   select(-measure) %>%
   select(-all_destination, -all_source) %>%
-  arrange(var) %>%
+  slice(match(x, var)) %>%
   gt(data, rowname_col = "var") %>%
   tab_spanner_delim(delim = "_") %>%
   tab_header(
@@ -1008,6 +1008,9 @@ temp_all %>%
   ) %>%
   fmt_number(decimals = 1, sep_mark = ",")
 
+print(t3a)
+t3a %>%
+  gtsave(filename = "projects/eca_paa/tables/t3a.html", inline_css = TRUE)
 
 ```
 

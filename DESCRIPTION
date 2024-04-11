@@ -29,4 +29,5 @@ Imports:
   rstatix,
   ggthemes,
   gt,
-  ggridges
+  ggridges,
+  webshot2
