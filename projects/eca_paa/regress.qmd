@@ -1428,42 +1428,324 @@ if (params$show_lm_cluster_regression) {
 # variation over rural places only distance controlled
 # source = b0 + b1_sink + b2_dist2sink + e
 
- library(miceadds)
+library(sandwich)
 
-df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]$eca_center_distance %>% summary()
+library(sjPlot)
+# library(sjmisc)
+
+library(modelsummary)
 
 if (params$show_lm_cluster_regression) {
   specif <- list()
+  df_mod <- list()
+  tbm <- list()
+  mvc <- list()
   for (i in params$reg_factors){
-      y <- i
-  x1 <- paste0("sink_value_", i)
-  x2 <- "eca_center_distance"
-  data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ]
+    y <- i
+    x1 <- paste0("sink_value_", i)
+    x2 <- "eca_center_distance"
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+        
+    df_mod[[i]] <- df_reg %>% 
+      select(y, x1, x2, clust) %>% 
+      na.omit() 
+    
+    fm <- as.formula(paste(i, "~", x1, "*", x2))
+    
+    specif[[i]] <- lm(fm, data = df_reg)
+    
+    # tbm[[i]] <- tab_model(specif[[i]], show.se = TRUE, vcov.fun = "CL", vcov.args = list(type = "HC2", cluster = df_mod[[clust]]))
+    
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+
+  }
+}
+msummary(specif)
+msummary(specif[[1]], vcov = vcovCL(x = specif[[1]], type = "HC2", cluster = df_tmp$eca_membership), stars = TRUE)
+msummary(specif, vcov = mvc, stars = TRUE)
+specif[1:7] %>% 
+  `names<-`(c("Entry Rate", "Exit Rate", "Establishment Growth", "Wage", "Wage Growth", "Job Growth", "Payroll Growth")) %>%  
+  {msummary(., 
+            vcov = mvc[1:7], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+tab_model(specif[[1]], vcov.fun = "HC3", show.se = TRUE)
+
+
+
+# df_tmp <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% st_drop_geometry() %>% select(entry_rate, sink_value_entry_rate, eca_center_distance, eca_membership) %>% 
+# na.omit()
+# 
+# df_tmp <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% st_drop_geometry() 
+# reg <- lm(jobs_gr ~ sink_value_jobs_gr * eca_center_distance, data = df_tmp)
+# cplot(reg, "eca_center_distance")
+# 
+# plot_model(reg, type = "pred", terms = c("eca_center_distance", "sink_value_jobs_gr"))
+# plot_model(reg, type = "int")
+# plot_model(reg, type = "pred", terms = c("sink_value_jobs_gr", "eca_center_distance [1, 5]"))
+
+
+
+plot_model(specif[[1]], type = "pred", terms = c("eca_center_distance"))
+plot_model(specif[[1]], type = "pred", terms = c("eca_center_distance"), vcov.fun = "CL", vcov.args = list(type = "HC2", cluster = df_mod[[1]]$eca_membership))
+
+plot_model(model = specif[[1]], 
+           type = "pred", 
+           terms = c("sink_value_entry_rate", "eca_center_distance [1, 5]"), 
+           vcov.fun = "CL", 
+           vcov.args = list(type = "HC2", 
+                            cluster = df_mod[[1]]$eca_membership))
+
+  for (i in params$reg_factors){
+    plot_model(model = specif[[i]], 
+               type = "pred", 
+               terms = c(paste0("sink_value_", i), "eca_center_distance [1, 5]"), 
+               vcov.fun = "CL", 
+               vcov.args = list(type = "HC2", 
+                                cluster = df_mod[[i]]$eca_membership)) %>% print()
+  }
   
-  fm <- as.formula(paste(i, "~", x1, "*", x2))
-     # 
-     # specif[[i]] <- lm.cluster(fm,
-     #          data = df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ],
-     #          cluster = "eca_membership")
-         
-         specif[[i]] <- lm(fm,
-              data = data)
+  
+tab_model(specif[[1]], vcov.fun = "CL", vcov.args = list(type = "HC2", cluster = df_mod[[1]]$eca_membership), show.se = TRUE)
+
+plot_model(reg, type = "int",  mdrt.values = "minmax") + 
+  theme_minimal() + 
+  labs(x = underscores2title(test$labels$x), 
+       y = underscores2title(test$labels$y), 
+       colour = underscores2title(test$labels$colour), 
+       title = "Predicted Values")
+
+```
+
+
+
+
+```{r}
+#| warning: false
+
+library(sandwich)
+library(sjPlot)
+library(modelsummary)
+library(patchwork)
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    y <- i
+    x1 <- paste0("sink_value_", i)
+    x2 <- "eca_center_distance"
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+        
+    df_mod[[i]] <- df_reg %>% 
+      select(y, x1, x2, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) %>%
+      rename(eca_distance = x2)
+
+    fm <- as.formula(paste(i, "~", "destination_value", "*", "eca_distance"))
     
-    
-     # specif[[i]] <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
-     #   {lm.cluster(.[[i]] ~  .[[paste0("sink_value_", i)]] + .[["eca_center_distance"]], cluster = .[["eca_membership"]])} %>% 
-     #  dp$round_stats()
-    # specif[[i]]$outcome <- paste0("source_", i)
-    # specif[[i]]$term[2] <- paste0("sink_", i)
-    # specif[[i]]$term[3] <- "distance"
-    # cat('####', i, ' \n')
-    # paste(i, "F df =", specif[[i]]$fstatistic[3]) %>% print()
-    # specif[[i]] %>% tidy(conf.int = T) %>% knitr::kable() %>% print()
-    # cat('  \n')
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+
   }
 }
 
+
+coef_names <- c(
+  "Entry Rate",
+  "Exit Rate", 
+  "Establishment Growth",
+  "Wage", 
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Unemployment Rate", 
+  "Laborforce Rate", 
+  "Employment Growth", 
+  "Poverty Rate", 
+  "Income Rate", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth", 
+  "YPLL75", 
+  "Highschool Graduation Rate", 
+  "Net Migration Rate")
+
+ssf <- 1:7
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+ssf <- 8:14
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+ssf <- 15:18
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("destination_value", "eca_distance [1, 5]"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Destination Value", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      scale_colour_discrete(labels = c("100", "500")) + 
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+  
+}
+
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("eca_distance"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Distance (100's of miles)", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      scale_colour_discrete(labels = c("100", "500")) + 
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+}
+
+margins(specif[[i]])
+margins(specif[[i]], at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)))
+cplot(specif[[i]], "eca_distance", what = "effect")
+  
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("eca_distance", "destination_value"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Distance (100's of miles)", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+}
+
+
 ```
+
+
+
 
 ```{r specification test 5 distance}
 #| warning: false
@@ -1490,6 +1772,9 @@ if (params$show_lm_cluster_regression) {
 }
 
 ```
+
+
+
 :::
 
 ### lm plot
@@ -1559,7 +1844,7 @@ D_sqr <- dp$call_dist_mat(year = params$year) %>%
   drop_units() %>%
   {1/(.^2)}
   diag(D_sqr) <- 0
-  D_sqr <- sweep(D, 1, rowSums(D_sqr), "/")
+  D_sqr <- sweep(D_sqr, 1, rowSums(D_sqr), "/")
     diag(D_sqr) <- 0
 
 D_qnn <- dp$call_bprox_mat(year = params$year)
@@ -1574,7 +1859,7 @@ m_names <- row.names(M)
 d_names <- row.names(D_inv)
 
 g <- df[match(intersect(m_names, d_names), df$place), ,drop=F] %>% 
-  {.$payroll_gr} %>% 
+  {.[[params$reg_factors[7]]]} %>% 
   as.matrix() %>% 
   `colnames<-`(c("growth_rate"))  %>% 
   `rownames<-`(df$place) %>% 
