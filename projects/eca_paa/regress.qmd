@@ -1699,9 +1699,7 @@ for(i in 1:length(coef_names)){
   # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
 }
 
-margins(specif[[i]])
-margins(specif[[i]], at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)))
-cplot(specif[[i]], "eca_distance", what = "effect")
+
   
 for(i in 1:length(coef_names)){
   pm <- plot_model(model = specif[[i]], 
@@ -1740,6 +1738,46 @@ for(i in 1:length(coef_names)){
   print(dp)
   # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
 }
+
+
+
+# margins(specif[[i]])
+# margins(specif[[i]], at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)))
+# cplot(specif[[i]], "eca_distance", what = "effect")
+
+
+for(i in 1:length(coef_names)){
+
+  me <- margins_summary(model = specif[[i]], 
+                        variables = "destination_value", 
+                        at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)), 
+                        vcov = mvc[[i]])
+  p <- ggplot(me, aes(x = eca_distance, y = AME, ymin = lower, ymax = upper)) +
+    geom_ribbon(fill = "#332288", alpha = .2) +
+    geom_line(color = "#332288") +
+    geom_hline(yintercept = 0) +
+    theme_minimal() +
+    labs(x = "Distance (miles)",
+         y = glue(coef_names[i], ": Average Marginal Effect")) +
+    scale_x_continuous(labels = label_comma(scale = 100)) +
+    scale_y_continuous(limits = c(-3.2, 2))
+    
+    denx <- ggplot(df_mod[[i]], aes(eca_distance)) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+
+  dp <- denx + plot_spacer() + p + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+  
+  print(dp)
+  ggsave(glue("/Users/austinsandler/Downloads/AME_{names(specif)[[i]]}.png"), bg = "white")
+}
+
 
 
 ```
