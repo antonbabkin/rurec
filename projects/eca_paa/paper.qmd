@@ -1,6 +1,11 @@
 ---
 title: "Paper outputs"
 format: html
+params:
+  year: 2012
+  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
+  reg_factors: !expr c("entry_rate", "exit_rate", "establishments_gr", "wage", "wage_gr", "jobs_gr", "payroll_gr", "unemp_rate", "laborforce_part_rate", "employment_gr", "poverty_rate", "income_rate", "poverty_rate_gr", "income_rate_gr", "population_gr",  "ypll75", "highschool_attainment_rate", "net_migration_rate") 
+  reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
 ---
 
 This notebook generates outputs directly used in the paper.
@@ -223,6 +228,7 @@ x |>
 
 y
 ```
+
 ```{r}
 place_output <- dp$place_output
 
@@ -377,6 +383,194 @@ fips_wi <- str_starts(rownames(x), "55")
 x1 <- x[fips_wi, ]
 x[fips_wi & (rowSums(x1 > 1000) > 1), (colSums(x1) > 10000)] |> View()
 
+
+```
+
+# regress
+
+```{r}
+
+if(FALSE){
+    
+  library(logger)
+  library(tidyverse)
+  library(sandwich)
+  library(modelsummary)
+  
+  
+  source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+  
+  params
+  
+  df <- dp$call_proj_df(params$year) %>% 
+    mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+    mutate(wage = wage/1000) %>% 
+    mutate(income_rate = income_rate/1000) %>% 
+    mutate(ypll75 = ypll75/100000) %>% 
+    mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
+    
+  df$metro_micro_destination <- df$metro_micro_sink
+    df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
+      df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
+        df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
+        
+  x <- dp$temporal_permutations(params$year_range)
+  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
+  for (y in 1:nrow(x)){
+    paste(x[y,1], x[y,2]) %>% print()
+    for (i in params$reg_factor_funs){
+       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+         mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>% 
+         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+         left_join(tmp, ., by = "place")
+    }
+  }
+  df <- left_join(df, tmp, by = "place")
+  
+  
+  for (i in params$reg_factors ){
+    if (!paste0("sink_value_", i) %in% names(df)){
+      df <- df[df$place == df$eca_membership , c("place", i)] %>% 
+        st_drop_geometry() %>% 
+        `colnames<-`(c("eca_membership", paste0("sink_value_", i))) %>% 
+        {left_join(df, ., by = "eca_membership")}
+    }
+  }
+   
+  
+  coef_names <- c(
+    "Entry Rate",
+    "Exit Rate", 
+    "Establishment Growth",
+    "Wage", 
+    "Wage Growth", 
+    "Job Growth", 
+    "Payroll Growth", 
+    "Unemployment Rate", 
+    "Laborforce Rate", 
+    "Employment Growth", 
+    "Poverty Rate", 
+    "Income Rate", 
+    "Poverty Growth", 
+    "Income Growth", 
+    "Population Growth", 
+    "YPLL75", 
+    "Highschool Graduation Rate", 
+    "Net Migration Rate")
+
+
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    x1 <- paste0("sink_value_", i)
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+    df_mod[[i]] <- df_reg %>% 
+      select(i, x1, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) 
+    fm <- as.formula(paste(i, "~", "destination_value"))
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+  }
+
+  ssf <- 1:7
+  specif[ssf] %>% 
+    `names<-`(coef_names[ssf]) %>%  
+    {msummary(., 
+              vcov = mvc[ssf], 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "destination_value" = "Destination Value") )}
+  ssf <- 8:14
+  specif[ssf] %>% 
+    `names<-`(coef_names[ssf]) %>%  
+    {msummary(., 
+              vcov = mvc[ssf], 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "destination_value" = "Destination Value") )}
+  
+  ssf <- 15:18
+  specif[ssf] %>% 
+    `names<-`(coef_names[ssf]) %>%  
+    {msummary(., 
+              vcov = mvc[ssf], 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "destination_value" = "Destination Value") )}
+  
+  
+  
+  
+  
+
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    x1 <- paste0("sink_value_", i)
+    x2 <- "eca_center_distance"
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+    df_mod[[i]] <- df_reg %>% 
+      select(i, x1, x2, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) %>%
+      rename(eca_distance = x2)
+    fm <- as.formula(paste(i, "~", "destination_value", "*", "eca_distance"))
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+  }
+
+  
+ssf <- 1:7
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+ssf <- 8:14
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+ssf <- 15:18
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+
+
+
+}
 
 ```
 

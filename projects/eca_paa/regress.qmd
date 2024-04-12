@@ -1247,13 +1247,16 @@ d_model <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cl
   mutate(sample = c("ECA source-destination"))
 
 
-dft <- rbind(test, d_rest, d_model)
+# dft <- rbind(test, d_rest, d_model)
 dft <- rbind(d_unrest, d_model)
 
 dp$viz$density_dist_plot(dft, "distance", "sample")
 dft[dft$distance > 0, ] %>% dp$viz$density_dist_plot(., "distance", "sample") + scale_x_log10()
 
 }
+
+dft[dft$distance > 0 & dft$sample == "ECA source-destination", ] %>% dp$viz$density_dist_plot(., "distance", adaptive_scaling = F) +scale_x_continuous(labels = label_comma(scale = 100))
+
 
 
 ```
@@ -1303,6 +1306,89 @@ if (FALSE){
 ```
 
 
+```{r}
+#| warning: false
+
+library(sandwich)
+library(modelsummary)
+
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    y <- i
+    x1 <- paste0("sink_value_", i)
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+        
+    df_mod[[i]] <- df_reg %>% 
+      select(y, x1, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) 
+
+    fm <- as.formula(paste(i, "~", "destination_value"))
+    
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+
+  }
+}
+
+coef_names <- c(
+  "Entry Rate",
+  "Exit Rate", 
+  "Establishment Growth",
+  "Wage", 
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Unemployment Rate", 
+  "Laborforce Rate", 
+  "Employment Growth", 
+  "Poverty Rate", 
+  "Income Rate", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth", 
+  "YPLL75", 
+  "Highschool Graduation Rate", 
+  "Net Migration Rate")
+
+ssf <- 1:7
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+ssf <- 8:14
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+
+ssf <- 15:18
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+
+
+```
 
 
 
