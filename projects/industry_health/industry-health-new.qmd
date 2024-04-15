@@ -1,0 +1,355 @@
+---
+title: "Industry-Health_new"
+format: html
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+install.packages('tinytex')
+tinytex::install_tinytex()
+tinytex:::install_prebuilt()
+
+require(kableExtra)
+library(tinytex)
+library(knitr)
+```
+
+## Industry and the Rural Mortality Penalty: A spatial regime analysis of economic structure and early life mortality in the rural US
+
+### Abstract:
+
+The last half century in the rural United States has seen stagnant life expectancy, an increasing mortality penalty, and industrial restructuring as a result of increasing globalization and automation. The relationships between mortality, industry, and rurality are well established. Prior literature has not fully investigated the relationship between early life mortality and rurality, including whether industrial restructuring contributes to the rural mortality penalty. Additionally, while prior studies have emphasized the importance of place in understanding the mortality penalty, the attributes of place including spatial location are not well-understood. We empirically investigate the influence of early life mortality on life expectancy and the spatial patterning of these relationships according to economic structure. Leveraging novel data, we use spatial regime analysis to assess the spatial patterning of relationships between premature death and measures of dominant industry and trade of intermediate commodities for all US counties. This study offers new insights on place attributes and the spatial dimensions of the rural mortality penalty. 
+
+## Economic Dynamism
+
+### Conceptual definition
+
+#### Trade
+
+#### Industrial Structure
+
+#### Value Added + Supply Chain 
+
+Total industry output (basic prices) = Total Intermediate + **Value Added (basic prices)**
+
+**Value Added (basic prices)** = Compensation of employees + Other taxes on production - Other subsidies on production + Gross operating surplus
+
+## Health
+
+### Conceptual definition
+
+## **Analytical plan**
+
+### **List of Data and measures**
+
+Outcome: 
+
+1.  premature death rate (period average of (3-year ave) for 2012-17 from CHRR
+
+Key independent variables: 
+
+Trade
+
+1.  autonomy (2012) from Rurec circularity 
+2.  retention (2012) from Rurec
+
+Supply chain
+
+1.  Proportion value-added (all industries)
+2.  Proportion AFM value-added?
+
+Industrial structure (pick one to present but explore all for sensitivity analysis)
+
+1.  industry-specific employment rate from ACS/BLS
+    -   Ag, mining, mftg, FIRE, eds/meds, recreation
+    -   ?? regression on premature death = share of every sector
+    -   Which loads?
+2.  industry-specific output from Rurec
+3.  county typologies from USDA ERS (dependency)
+
+Covariates
+
+1.  labor force participation (xxx at period start) from ACS
+2.  population size (logged population at period start) from ACS
+3.  population change ((period end - period start)/period start) from ACS
+4.  age structure (median age) from ACS
+5.  Education distribution
+6.  Access to health care
+
+### Regressions
+
+```{r setup, include=FALSE}
+
+install.packages(vtable)
+install.packages(dplyr)
+install.packages(tidyverse)
+install.packages(ggplot2)
+install.packages(stringr)
+install.packages(spdep)
+install.packages(tidycensus)
+install.packages(tigris)
+install.packages(viridis)
+install.packages(cowplot)
+# install.packages("estimatr")
+# install.packages("huxtable")
+# install.packages("margins")
+#install.packages(c("lmtest", "sandwich"))
+#install.packages("spatialreg")
+
+
+
+#library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+library(cowplot)
+library(lmtest)
+library(sandwich)
+library(estimatr)
+library(huxtable)
+library(margins)
+library("spatialreg")
+
+my_color_palette <- viridis(9, option = "D")
+
+palette(my_color_palette)
+
+
+## Data
+#Load Data from Working Directory
+ruccdata <- eca_dp$call_RUCC()
+netmigration <- eca_dp$call_netmigration()
+conn_growth_analysis <- circ$get_circularity()
+CHRR_2017 <- read.csv ("ANA_2017_CHRR_data.csv")
+CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
+
+##Load Data Sets 
+
+#Health Data 
+#Circularity Measures and industrial output 
+##Population data 
+#ACS
+#ERS typologies
+#RUCC Codes 
+
+
+
+
+
+
+
+
+```
+
+### Premature Death
+
+```{r}
+
+#Pull and construct premature death variables 
+
+
+```
+
+#### Premature Death Change over time (2012-2017)
+
+```{r}
+
+##Construct typology of premature death change over time between 2012-2017 
+
+#Calculate change over time
+
+# Construct typology E.g. 4 types:
+    
+# High premature death in t0 & stable/reduction in premature death from t-1 to t0
+    #   E.g. maybe southeast?
+# High premature death in t0 & material increase in premature death from t-1 to t0
+    # E.g. maybe Appalachia?
+# Low premature death in t0 & stable in premature death from t-1 to t0
+# Low premature death in t0 & material increase in premature death from t-1 to t0
+
+```
+
+### Trade
+
+```{r}
+# Construct autonomy
+
+
+
+#Construct retention 
+
+
+
+
+
+
+
+```
+
+### Supply Chain
+
+```{r}
+
+#Construct proportion value added (all industries)
+
+
+#Construct Proportion AFM value-added
+
+
+
+```
+
+### Industrial Structure
+
+```{r}
+
+#ndustry-specific employment rate from ACS/BLS
+
+
+
+#industry-specific output from Rurec (based on largest industry share of total output)
+
+
+
+#county typologies from USDA ERS (dependency)
+
+
+
+
+
+```
+
+### Covariates
+
+```{r}
+
+# labor force participation (xxx at period start) from ACS
+
+
+# population size (logged population at period start) from ACS
+
+
+# population change ((period end - period start)/period start) from ACS
+
+
+# age structure (median age) from ACS
+
+# Education distribution
+
+
+# Access to health care
+
+```
+
+### Master Data Set
+
+```{r}
+
+#Join key data and measures 
+
+
+#Transform for spatial analysis 
+
+```
+
+## Summary Statistics
+
+### Descriptive Statistics
+
+### Density Plots
+
+### ESDA
+
+### Maps
+
+## Analysis - Multinomial Logit Model
+
+For Statistics
+
+### Model 1-
+
+## Analysis- Exploratory Regressions
+
+Factors
+
+Trade
+
+Autonomy
+
+etention
+
+Supply chain value added
+
+\% AFM % value added
+
+\% worker share of value added
+
+\% worker share of output
+
+Industrial structure
+
+ERS dependency typologies
+
+\% composition (output)
+
+\% composition (employment)
+
+Prosperity
+
+Poverty,
+
+education,
+
+income,
+
+etc.
+
+Covariates
+
+Access to healthcare,
+
+workforce,
+
+population,
+
+age
+
+## Analysis- Premature Death
+
+Death = trade Death = trade + covariates
+
+Death = trade + industrial + covariates
+
+Death = trade + supply chain + covariates
+
+Death = trade + industry + supply chain + covariates
+
+Death = prosperity + covariates
+
+Death = prosperity + industrial + covariates
+
+Death = trade + prosperity + covariates
+
+Death = trade + prosperity + industrial + covariates
+
+Death = trade + prosperity + industrial + supply chain + covariates
+
+Specifications
+
+Error
+
+Error + interactions
+
+Error + regimes
+
+Pat
+
+## Analysis- Spatial Regime
+
+### 
