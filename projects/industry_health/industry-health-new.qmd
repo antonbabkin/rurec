@@ -36,6 +36,7 @@ tinytex:::install_prebuilt()
 require(kableExtra)
 library(tinytex)
 library(knitr)
+library(tidycensus)
 ```
 
 ## Industry and the Rural Mortality Penalty: A spatial regime analysis of economic structure and early life mortality in the rural US
@@ -169,13 +170,38 @@ params
 
 
 ##Median Age of County 2012
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_030E"
+                   ),
+                   year = params$year) %>%
+  select("place"=GEOID, "age"=estimate)
+
+
+
 ##ERS County Typologies 
 
+ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypologyCodes.csv?v=8831.8") %>%
+  mutate(place = sprintf("%05d", FIPStxt)) %>%
+  select(place, "ers_ag"=Farming_2015_Update, "ers_mine"=Mining_2015.Update, "ers_mfg"=Manufacturing_2015_Update, "ers_gov"=Government_2015_Update, "ers_rec"=Recreation_2015_Update, "ers_nonsp"=Nonspecialized_2015_Update)
 
 
 
+##Industry Structure
 
-
+industry = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
+                                        ,"DP03_0035E","DP03_0036E","DP03_0037E"
+                                        ,"DP03_0038E","DP03_0039E","DP03_0040E"
+                                        ,"DP03_0041E","DP03_0042E","DP03_0043E"
+                                        ,"DP03_0044E","DP03_0045E"
+                   ),
+                   year = params$year) %>%
+  select("place"=GEOID, variable, estimate) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
+  select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
 
 
 ```
