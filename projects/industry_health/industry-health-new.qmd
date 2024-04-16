@@ -1,7 +1,29 @@
 ---
 title: "Industry-Health_new"
-format: html
 editor: visual
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  year: 2012
+  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
+  show_temporal_density: TRUE
+  show_descriptive_density: TRUE
+  show_descriptive_density_rural: TRUE
+  show_descriptive_maps: TRUE
+  interactive_maps: FALSE
+  show_corr: FALSE
+  show_test_regression: FALSE
+  show_lm_regression: TRUE
+  show_lm_cluster_regression: TRUE
+  reg_factors: !expr c("entry_rate", "exit_rate", "establishments_gr", "wage", "wage_gr", "jobs_gr", "payroll_gr", "unemp_rate", "laborforce_part_rate", "employment_gr", "poverty_rate", "income_rate", "poverty_rate_gr", "income_rate_gr", "population_gr",  "ypll75", "highschool_attainment_rate", "net_migration_rate") 
+  reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
+  example_coef_index:  2
 ---
 
 ```{r setup, include=FALSE}
@@ -30,7 +52,7 @@ The last half century in the rural United States has seen stagnant life expectan
 
 #### Industrial Structure
 
-#### Value Added + Supply Chain 
+#### Value Added + Supply Chain
 
 Total industry output (basic prices) = Total Intermediate + **Value Added (basic prices)**
 
@@ -120,23 +142,34 @@ my_color_palette <- viridis(9, option = "D")
 
 palette(my_color_palette)
 
+# scripts
+source("projects/industry_health/dataprep.R", local = (ih_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circ <- new.env()))
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+# initialize parameters
+params
+
+
 
 ## Data
 #Load Data from Working Directory
-ruccdata <- eca_dp$call_RUCC()
-netmigration <- eca_dp$call_netmigration()
-conn_growth_analysis <- circ$get_circularity()
-CHRR_2017 <- read.csv ("ANA_2017_CHRR_data.csv")
-CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
+
 
 ##Load Data Sets 
+#TODO: For CLAYTON
 
-#Health Data 
-#Circularity Measures and industrial output 
-##Population data 
-#ACS
-#ERS typologies
-#RUCC Codes 
+
+##Median Age of County 2012
+##ERS County Typologies 
 
 
 
@@ -147,16 +180,26 @@ CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
 
 ```
 
-### Premature Death
+```{r zip pack, include = FALSE}
 
-```{r}
-
-#Pull and construct premature death variables 
-
+# uncomment and pack/unpack as necessary
+# dp$zip_pack("tmp/eca_paa_data_v240324.zip", dp$opath)
+# dp$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
 
 ```
 
-#### Premature Death Change over time (2012-2017)
+::: panel-tabset
+
+# data
+
+```{r data cashe, include = FALSE}
+
+# uncomment as necessary
+# dp$create_complete_cache()
+
+```
+
+### Premature Death Change over time (2012-2017)
 
 ```{r}
 
@@ -175,96 +218,32 @@ CHRR_2019 <- read.csv ("ANA_2019_CHRR_data.csv")
 
 ```
 
-### Trade
+### Access to Healthcare
 
 ```{r}
-# Construct autonomy
+# Access to health care----------
 
-
-
-#Construct retention 
-
-
-
-
-
-
+# Normalize the data
+# data$Uninsured_Ratio <- data$Uninsured_Percentage / 100
+# data$Primary_Care_Ratio <- data$Population / data$Primary_Care_Physicians
+# data$Dentists_Ratio <- data$Population / data$Dentists
+# data$Mental_Health_Ratio <- data$Population / data$Mental_Health_Providers
+# 
+# # Create a composite score for each county
+# data$Healthcare_Access_Score <- (1 - data$Uninsured_Ratio) * (1 - data$Primary_Care_Ratio / max(data$Primary_Care_Ratio)) *
+#   (1 - data$Dentists_Ratio / max(data$Dentists_Ratio)) * (1 - data$Mental_Health_Ratio / max(data$Mental_Health_Ratio))
 
 ```
 
-### Supply Chain
-
-```{r}
-
-#Construct proportion value added (all industries)
-
-
-#Construct Proportion AFM value-added
-
-
-
-```
-
-### Industrial Structure
-
-```{r}
-
-#ndustry-specific employment rate from ACS/BLS
-
-
-
-#industry-specific output from Rurec (based on largest industry share of total output)
-
-
-
-#county typologies from USDA ERS (dependency)
-
-
-
-
-
-```
-
-### Covariates
-
-```{r}
-
-# labor force participation (xxx at period start) from ACS
-
-
-# population size (logged population at period start) from ACS
-
-
-# population change ((period end - period start)/period start) from ACS
-
-
-# age structure (median age) from ACS
-
-# Education distribution
-
-
-# Access to health care
-
-```
-
-### Master Data Set
-
-```{r}
-
-#Join key data and measures 
-
-
-#Transform for spatial analysis 
-
-```
+\`\`\`
 
 ## Summary Statistics
 
 ### Descriptive Statistics
 
-### Density Plots
-
 ### ESDA
+
+### Density Plots
 
 ### Maps
 
