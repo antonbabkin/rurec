@@ -50,14 +50,14 @@ dp$call_geog(2013) |> head()
 ```
 
 
-### REMOVE CBSA
+### CBSA
 
 ```{r}
 dp$call_cbsa(2013) |> head()
 ```
 
 
-### REMOVE ECA
+### ECA
 
 ```{r}
 dp$call_eca_df() |> head()

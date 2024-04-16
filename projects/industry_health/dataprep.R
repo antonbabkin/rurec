@@ -24,30 +24,31 @@ ipath <- list(
 )
 
 opath <- list(
-  geog_ = "data/projects/eca_paa/geog/{year}.rds",
-  ruc_ = "data/projects/eca_paa/ers_ruc/{year}.rds",
-  cbsa_conc_ = "data/projects/eca_paa/cbsa_conc/{year}.rds",
-  cbsa_delin_ = "data/projects/eca_paa/cbsa_delin/{year}.rds",
-  cbsa_ = "data/projects/eca_paa/cbsa/{year}.rds",
-  eca_df = "data/projects/eca_paa/eca.rds",
-  production_ = "data/projects/eca_paa/production/{bus_data}/{ilevel}/{class_system}/{year}.rds",
-  population_ = "data/projects/eca_paa/population/{bus_data}/{year}.rds",
-  laborforce_ = "data/projects/eca_paa/laborforce/{bus_data}/{year}.rds",
-  employment_ = "data/projects/eca_paa/employment/{bus_data}/{year}.rds",
-  income_ = "data/projects/eca_paa/income/{bus_data}/{year}.rds",
-  income_rate_ = "data/projects/eca_paa/income_rate/{bus_data}/{year}.rds",
-  gdp_ = "data/projects/eca_paa/gdp/{bus_data}/{price_level}/{year}.rds",
-  laborforce_rate_ = "data/projects/eca_paa/laborforce_rate/{bus_data}/{year}.rds",
-  highschool_attainment_rate_ = "data/projects/eca_paa/highschool_attainment_rate/{bus_data}/{year}.rds",
-  poverty_ = "data/projects/eca_paa/poverty/{bus_data}/{year}.rds",
-  poverty_rate_ = "data/projects/eca_paa/poverty_rate/{bus_data}/{year}.rds",
-  ypll75_ = "data/projects/eca_paa/ypll75/{bus_data}/{year}.rds",
-  establishments_ = "data/projects/eca_paa/establishments/{bus_data}/{year}.rds",
-  payroll_ = "data/projects/eca_paa/payroll/{bus_data}/{year}.rds",
-  entry_ = "data/projects/eca_paa/entry/{bus_data}/{year}.rds",
-  exit_ = "data/projects/eca_paa/exit/{bus_data}/{year}.rds",
-  entry_rate_ = "data/projects/eca_paa/entry_rate/{bus_data}/{year}.rds",
-  exit_rate_ = "data/projects/eca_paa/exit_rate/{bus_data}/{year}.rds"
+  geog_ = "data/projects/industry_health/geog/{year}.rds",
+  ruc_ = "data/projects/industry_health/ers_ruc/{year}.rds",
+  cbsa_conc_ = "data/projects/industry_health/cbsa_conc/{year}.rds",
+  cbsa_delin_ = "data/projects/industry_health/cbsa_delin/{year}.rds",
+  cbsa_ = "data/projects/industry_health/cbsa/{year}.rds",
+  eca_df = "data/projects/industry_health/eca.rds",
+  production_ = "data/projects/industry_health/production/{bus_data}/{ilevel}/{class_system}/{year}.rds",
+  population_ = "data/projects/industry_health/population/{bus_data}/{year}.rds",
+  laborforce_ = "data/projects/industry_health/laborforce/{bus_data}/{year}.rds",
+  employment_ = "data/projects/industry_health/employment/{bus_data}/{year}.rds",
+  income_ = "data/projects/industry_health/income/{bus_data}/{year}.rds",
+  income_rate_ = "data/projects/industry_health/income_rate/{bus_data}/{year}.rds",
+  gdp_ = "data/projects/industry_health/gdp/{bus_data}/{price_level}/{year}.rds",
+  laborforce_rate_ = "data/projects/industry_health/laborforce_rate/{bus_data}/{year}.rds",
+  highschool_attainment_rate_ = "data/projects/industry_health/highschool_attainment_rate/{bus_data}/{year}.rds",
+  poverty_ = "data/projects/industry_healthpoverty/{bus_data}/{year}.rds",
+  poverty_rate_ = "data/projects/industry_health/poverty_rate/{bus_data}/{year}.rds",
+  ypll75_ = "data/projects/industry_health/ypll75/{bus_data}/{year}.rds",
+  PAAM_ = "data/projects/industry_health/PAAM/{bus_data}/{year}.rds",
+  establishments_ = "data/projects/industry_health/establishments/{bus_data}/{year}.rds",
+  payroll_ = "data/projects/industry_health/payroll/{bus_data}/{year}.rds",
+  entry_ = "data/projects/industry_health/entry/{bus_data}/{year}.rds",
+  exit_ = "data/projects/industry_health/exit/{bus_data}/{year}.rds",
+  entry_rate_ = "data/projects/industry_health/entry_rate/{bus_data}/{year}.rds",
+  exit_rate_ = "data/projects/industry_health/exit_rate/{bus_data}/{year}.rds"
 )
 
 
@@ -143,7 +144,7 @@ call_geog <- function(year) {
   return(df)
 }
 
-# REMOVE CBSA concordance ----
+# CBSA concordance ----
 
 call_cbsa_conc <- function(year) {
   stop("Use call_cbsa()")
@@ -159,7 +160,7 @@ call_cbsa_conc <- function(year) {
   return(df)
 }
 
-# REMOVE CBSA delineation ----
+# CBSA delineation ----
 
 call_cbsa_delin_df <- function(year) {
   stop("Use call_cbsa()")
@@ -179,7 +180,7 @@ call_cbsa_delin_df <- function(year) {
 }
 
 
-# REMOVE CBSA  ----
+# CBSA  ----
 
 call_cbsa <- function(year) {
   year = util$year2cbsa(year)
@@ -199,7 +200,7 @@ call_cbsa <- function(year) {
 }
 
 
-# REMOVE ECA ----
+# ECA ----
 
 #' County classification by ECA
 call_eca_df <- function() {
@@ -240,7 +241,7 @@ call_ruc <- function(year) {
 }
 
 
-# REMOVE Production ----
+# Production ----
 
 call_production <- function(year, 
                             bus_data = "cbp_imp",
@@ -573,6 +574,25 @@ call_ypll75 <- function(year,
   return(df)
 }
 
+# Premature Age-Adjusted mortality rate -----
+
+call_PAAM <- function(year,
+                        bus_data = "chr") {
+  cache_path = glue(opath$ypll75_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+    df <- dataprep_misc$call_county_ypll75(
+      year = year, 
+      bus_data = bus_data)
+    
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
+
 # Establishments ----
 
 call_establishments <- function(year,
@@ -793,7 +813,7 @@ call_prosperity_outcomes <- function(year){
   return(df)
 }
 
-## REMOVE Spatial ECA  ----
+## Spatial ECA  ----
 
 call_eca_space_df <- function(year){
   df_space <- call_space_df(year)
