@@ -91,13 +91,15 @@ Industrial structure (pick one to present but explore all for sensitivity analys
 2.  industry-specific output from Rurec
 3.  county typologies from USDA ERS (dependency)
 
-Covariates
+Prosperity Covariates
 
-1.  labor force participation (xxx at period start) from ACS
+1.  labor force participation from 2012 ACS
 2.  population size (logged population at period start) from ACS
 3.  population change ((period end - period start)/period start) from ACS
 4.  age structure (median age) from ACS
 5.  Education distribution
+
+Health Covariates 
 6.  Access to health care
 
 ### Regressions
@@ -138,6 +140,17 @@ library(huxtable)
 library(margins)
 library("spatialreg")
 
+# additional library list
+library(logger)
+library(tidyverse)
+
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+
+library(estimatr)
+library(margins)
+
 my_color_palette <- viridis(9, option = "D")
 
 palette(my_color_palette)
@@ -159,12 +172,7 @@ log_threshold(DEBUG)
 params
 
 
-
-## Data
-#Load Data from Working Directory
-
-
-##Load Data Sets 
+##Load Hard Coded Data Sets 
 #TODO: For CLAYTON
 
 
