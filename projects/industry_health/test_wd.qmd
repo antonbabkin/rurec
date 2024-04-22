@@ -1,0 +1,340 @@
+---
+title: "Industry-Health"
+editor: source
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+params:
+  geography_year: 2013
+  focus_county: "55025"
+  map_imped_show: false
+  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
+  map_imped_param: 500 # scale parameter of the impedance function
+  econ_dynam_data: TRUE
+  basic_geog_feature: TRUE
+---
+
+```{r}
+
+
+
+source("projects/industry_health/dataprep.R", local = (ih_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/basic_utilities.R", local = (util <- new.env()))
+
+# install.packages("vtable")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("ggplot2")
+# install.packages("stringr")
+# install.packages("spdep")
+# install.packages("tidycensus")
+# install.packages("tigris")
+# install.packages("viridis")
+# install.packages("cowplot")
+# install.packages("estimatr")
+# install.packages("huxtable")
+# #install.packages("margins")
+# install.packages(c("lmtest", "sandwich"))
+# install.packages("spatialreg")
+# install.packages("gridExtra")
+
+
+
+library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+library(cowplot)
+library(lmtest)
+library(sandwich)
+library(estimatr)
+library(huxtable)
+#library(margins)
+library(spatialreg)
+library(logger)
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+library(estimatr)
+library(Hmisc)
+library(rstatix)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+library(gridExtra)
+
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+
+
+##Load Hard Coded Data Sets 
+
+##Median Age of County 2012
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_030E"
+                   ),
+                   year = 2012) %>%
+  select("place"=GEOID, "age"=estimate)
+
+
+
+##ERS County Typologies 
+
+ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypologyCodes.csv?v=8831.8") %>%
+  mutate(place = sprintf("%05d", FIPStxt)) %>%
+  select(place, "ers_ag"=Farming_2015_Update, "ers_mine"=Mining_2015.Update, "ers_mfg"=Manufacturing_2015_Update, "ers_gov"=Government_2015_Update, "ers_rec"=Recreation_2015_Update, "ers_nonsp"=Nonspecialized_2015_Update)
+
+
+
+##Industry Structure
+
+industry = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
+                                        ,"DP03_0035E","DP03_0036E","DP03_0037E"
+                                        ,"DP03_0038E","DP03_0039E","DP03_0040E"
+                                        ,"DP03_0041E","DP03_0042E","DP03_0043E"
+                                        ,"DP03_0044E","DP03_0045E"
+                   ),
+                   year = 2012) %>%
+  select("place"=GEOID, variable, estimate) %>%
+  pivot_wider(names_from = variable, values_from = estimate) %>%
+  mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
+  select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
+
+
+```
+
+# data
+
+```{r}
+chr<-ih_dp$call_chr(2017) 
+
+pop<-ih_dp$call_population(2012) 
+
+data<- left_join (chr, pop, by = "place")
+
+lfpr<-ih_dp$call_laborforce_rate(2012)
+
+data<- left_join (data, lfpr, by = "place")
+
+unempr<-ih_dp$call_unemp_rate(2012) 
+
+data<- left_join (data, unempr, by = "place")
+
+incr<-ih_dp$call_income_rate(2012)
+
+data<- left_join (data, incr, by = "place")
+
+povr<-ih_dp$call_poverty_rate(2012) 
+
+data<- left_join (data, povr, by = "place")
+
+edur<-ih_dp$call_highschool_attainment_rate(2012) 
+
+data<- left_join (data, edur, by = "place")
+
+rucc<- ih_dp$call_ruc (2013) %>% 
+  rename(place = fips)  
+
+
+data<- left_join (data, rucc, by = "place")
+
+data = data %>% 
+mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"))
+
+ind_struct<- ih_dp$call_industry_structure(2012)
+
+data<- left_join (data, ind_struct, by = "place")
+
+data<- left_join (data, age, by = "place")
+
+data<- left_join (data, ers, by = "place")
+
+data<- left_join (data, industry, by = "place")
+
+circularity <- circularity$get_circularity()
+head(df)
+
+YR = 2012
+circu = circularity %>%  
+  filter(year == YR) %>%
+  select(county_fips, retention, autonomy) %>% 
+  rename (place = county_fips)
+  
+
+data<- left_join (data, circu, by = "place")
+
+print(data)
+
+
+```
+
+##create access to healthcare index
+
+```{r}
+# Access to health care----------
+
+# Identify columns of interest for imputation
+columns_of_interest <- c("uninsured", "pcp", "dentists", "mhp")
+
+# Impute missing values with mean for numeric/logical columns in the specified columns
+for (col in columns_of_interest) {
+  if (is.numeric(data[[col]]) || is.logical(data[[col]])) {
+    data[is.na(data[[col]]), col] <- mean(data[[col]], na.rm = TRUE)
+  }
+}
+
+# Z-score normalization (standardization) with NA handling
+standardize <- function(x) {
+  na_rm_x <- x[!is.na(x)]  # Remove NAs from x
+  (x - mean(na_rm_x)) / sd(na_rm_x)
+}
+
+data$pcp_norm <- standardize(data$pcp)
+data$dentists_norm <- standardize(data$dentists)
+data$mhp_norm <- standardize(data$mhp)
+data$uninsured_norm <- standardize(data$uninsured)
+
+# Calculate the composite score using standardized values
+data$HCaccess_score <- (data$uninsured_norm + data$pcp_norm + data$dentists_norm + data$mhp_norm) / 4
+
+
+print(data)
+```
+
+#summary statistics
+
+```{r}
+
+##summary statistics
+summary_stats = data %>% 
+  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+summary_stats
+
+```
+
+#histograms
+
+```{r}
+data %>% select(paam, ypll75, retention, autonomy, emp_to_va, emp_to_output, va_to_output) %>% hist.data.frame()
+
+
+#density plots
+variables_to_plot <- c("paam", "ypll75", "retention", "autonomy", "emp_to_va", "emp_to_output", "va_to_output")
+data_subset <- data[, variables_to_plot, drop = FALSE]
+
+# Function to plot density plots for each variable
+plot_density <- function(data) {
+  plots <- lapply(names(data), function(var) {
+    ggplot(data, aes_string(x = var)) +
+      geom_density() +
+      labs(title = paste("Density Plot of", var))
+  })
+  return(plots)
+}
+
+# Create a list of density plots for each variable
+density_plots <- plot_density(data_subset)
+
+# Plot the density plots
+grid.arrange(grobs = density_plots, ncol = 3)  
+
+
+```
+
+#maps
+
+```{r}
+
+# creating function to streamline creation of maps
+
+ipath <- list(
+  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
+  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}")
+)
+
+ipath
+call_geo <- function() {
+  df <- geo$call_geog(params$geography_year) |>
+    rename_with(str_to_lower)
+  d <- geo$pubdata$get_state_df(FALSE) |>
+    rename_with(str_to_lower) |>
+    select(code, contiguous, bea_region_name) |>
+    rename(state_code = code)
+  df <- left_join(df, d, "state_code")
+  df
+}
+df_map = data 
+df = call_geo()
+df_map <- left_join(df, df_map, by = "place")
+
+map = function(val, title, rev_scale){
+  lab <- glue(
+        "{county}",
+        "Premature Age Adjusted Mortality: {paam}", 
+        "Years of Potential Life Lost before 75: {ypll75}", 
+        "Retention: {retention}", 
+        "Autonomy: {autonomy}", 
+        .sep = "<br>",
+        .envir = df_map)
+  
+  pal = colorNumeric("magma", val, reverse = rev_scale)
+  
+  leaflet() |>
+    addTiles() |>
+    addPolygons(
+      data = df_map,
+      stroke = FALSE,
+      fillColor = ~pal(val),
+      fillOpacity = 0.6,
+      label = lab,
+      popup = val
+    ) |>
+    addLegend(pal = colorNumeric("magma", val, reverse = rev_scale), 
+              values = val, 
+              title = title)
+}
+
+
+
+```
+
+```{r}
+
+# creating maps
+map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = FALSE)
+map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
+map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+
+
+```
+
+
+#nonspatial regressions
+
+

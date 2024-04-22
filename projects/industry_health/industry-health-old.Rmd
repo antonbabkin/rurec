@@ -15,9 +15,9 @@ knitr::opts_chunk$set(echo = TRUE)
 # tinytex::install_tinytex()
 # tinytex:::install_prebuilt()
 
-require(kableExtra)
-library(tinytex)
-library(knitr)
+# require(kableExtra)
+# library(tinytex)
+# library(knitr)
 ```
 
 ## Fall 2023 Analysis
