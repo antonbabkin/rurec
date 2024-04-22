@@ -199,13 +199,13 @@ print(data)
 
 # Identify columns of interest for imputation
 columns_of_interest <- c("uninsured", "pcp", "dentists", "mhp")
-
-# Impute missing values with mean for numeric/logical columns in the specified columns
-for (col in columns_of_interest) {
-  if (is.numeric(data[[col]]) || is.logical(data[[col]])) {
-    data[is.na(data[[col]]), col] <- mean(data[[col]], na.rm = TRUE)
-  }
-}
+# 
+# # Impute missing values with mean for numeric/logical columns in the specified columns
+# for (col in columns_of_interest) {
+#   if (is.numeric(data[[col]]) || is.logical(data[[col]])) {
+#     data[is.na(data[[col]]), col] <- mean(data[[col]], na.rm = TRUE)
+#   }
+# }
 
 # Z-score normalization (standardization) with NA handling
 standardize <- function(x) {
@@ -219,8 +219,8 @@ data$mhp_norm <- standardize(data$mhp)
 data$uninsured_norm <- standardize(data$uninsured)
 
 # Calculate the composite score using standardized values
-data$HCaccess_score <- (data$uninsured_norm + data$pcp_norm + data$dentists_norm + data$mhp_norm) / 4
-
+# data$HCaccess_score_ss <- (data$uninsured_norm + data$pcp_norm + data$dentists_norm + data$mhp_norm) / 4
+data = data %>% mutate(HCaccess_score = rowMeans(pick(ends_with("_norm")), na.rm = TRUE))
 
 print(data)
 ```
@@ -329,13 +329,13 @@ map = function(val, title, rev_scale){
 ```{r}
 
 # creating maps
-map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = FALSE)
-map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
-map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
-map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
-map(val = df_map$emp_to_va, title = "Employee Share of Value Added", rev_scale = FALSE)
-map(val = df_map$emp_to_output, title = "Employee Share of Output", rev_scale = FALSE)
-map(val = df_map$va_to_output, title = "Value Added Share of Output", rev_scale = FALSE)
+ map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = FALSE)
+# map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
+# map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+# map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+# map(val = df_map$emp_to_va, title = "Employee Share of Value Added", rev_scale = FALSE)
+# map(val = df_map$emp_to_output, title = "Employee Share of Output", rev_scale = FALSE)
+# map(val = df_map$va_to_output, title = "Value Added Share of Output", rev_scale = FALSE)
 
 
 
@@ -454,5 +454,54 @@ ggplot(nonmetro_data, aes(autonomy, ypll75)) +
 
 
 ```
+
+```{r}
+
+# SARA -- made a loop with an updated map. I also recreated austin's off-the-shelf map below, but, I didn't like the colors so I remade. Feel free to use either (and update colors). You'll have to ask Austin how to tuck Alaska and Hawaii under; I've excluded for  now.
+
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
+
+ 
+vars = list("paam", "ypll75", "retention", "autonomy")
+for (v in vars) {
+
+mdn = median(df_map[[v]], na.rm = TRUE)
+  
+tmap_mode("plot")
+output = df_map %>%
+  tm_shape() + 
+  tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
+              palette = c("#351c75","white","#306151")) +
+  tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
+
+print(output)
+
+}
+
+```
+
+
+```{r}
+
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place")
+
+
+p <- ih_dp$viz$nominal_choro_map(df_map, "paam", interactive = FALSE)
+print(p)
+
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
