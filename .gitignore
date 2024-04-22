@@ -12,6 +12,7 @@ data/*
 *.parquet
 *.xls
 *.xlsx
+*.zip
 
 
 # Vim

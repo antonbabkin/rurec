@@ -109,14 +109,14 @@ create_complete_cache <- function() {
   }
 }
 
-#' clean up a df for better time with visualizations
-strip_dataframe <- function(df){
-  df <- df %>% 
-    st_drop_geometry() %>% 
-    select(where(is.numeric)) %>% 
-    na.omit()
-  return(df)
-}
+#' #' clean up a df for better time with visualizations
+#' strip_dataframe <- function(df){
+#'   df <- df %>% 
+#'     st_drop_geometry() %>% 
+#'     select(where(is.numeric)) %>% 
+#'     na.omit()
+#'   return(df)
+#' }
 
 
 # Data Viz functions ----
@@ -144,83 +144,8 @@ call_geog <- function(year) {
   return(df)
 }
 
-# CBSA concordance ----
-
-call_cbsa_conc <- function(year) {
-  stop("Use call_cbsa()")
-  cache_path = glue(opath$cbsa_conc_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- geography$call_cbsa_concord(year) 
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# CBSA delineation ----
-
-call_cbsa_delin_df <- function(year) {
-  stop("Use call_cbsa()")
-  year = util$year2cbsa(year)
-  cache_path = glue(opath$cbsa_delin_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- geography$pubdata$get_cbsa_delin_df(year) %>% 
-      mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
-      {.[c("place", "METRO_MICRO", "CENTRAL_OUTLYING")]} 
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
 
 
-# CBSA  ----
-
-call_cbsa <- function(year) {
-  year = util$year2cbsa(year)
-  cache_path = glue(opath$cbsa_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- geography$pubdata$get_cbsa_delin_df(year) %>% 
-      mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
-      mutate(CBSA_TITLE = {paste(str_split_i(.$CBSA_TITLE, ",", 1), "CBSA")}) %>% 
-      {.[c("place", "CBSA_CODE", "CBSA_TITLE", "METRO_MICRO", "CENTRAL_OUTLYING")]} 
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-
-# ECA ----
-
-#' County classification by ECA
-call_eca_df <- function() {
-  cache_path = opath$eca_df
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    tf <- trade_flows$call_trade_flows("all_industries")
-    tf_norm <- sweep(tf, 1, rowSums(tf), "/")
-    tf_norm[is.na(tf_norm)] <- 0
-    conn_metrics <- connectedness$apply_absorption_metrics(tf_norm)
-    df <- connectedness$apply_absorption_algorithm(conn_metrics, threshold = 0) |>
-      select(place, cluster_category, eca_membership, max_alpha, match) |>
-      rename(fips = place, eca_cluster_category = cluster_category, max_trade_share = max_alpha, max_trade_place = match)
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }
-  df
-}
 
 
 
@@ -241,111 +166,7 @@ call_ruc <- function(year) {
 }
 
 
-# Production ----
 
-call_production <- function(year, 
-                            bus_data = "cbp_imp",
-                            class_system = "commodity",
-                            ilevel = "det") {
-  cache_path = glue(opath$production_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- place_output$call_extraction_table(
-      year = year,
-      bus_data = bus_data,
-      class_system = class_system,
-      ilevel = ilevel,
-      spatial = F) %>% 
-      select(-extract)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# Gross Output ----
-
-call_gross_output <- function(
-    year, 
-    bus_data = "cbp_imp",
-    class_system = "commodity",
-    ilevel = "det") {
-    df <- call_production(
-      year = year, 
-      bus_data = bus_data,
-      class_system = class_system,
-      ilevel = ilevel) %>% 
-      select(place, gross_output)
-  return(df)
-}
-
-# Intermediate Supply ----
-
-call_intermediate_supply <- function(
-    year, 
-    bus_data = "cbp_imp",
-    class_system = "commodity",
-    ilevel = "det") {
-  df <- call_production(
-    year = year, 
-    bus_data = bus_data,
-    class_system = class_system,
-    ilevel = ilevel) %>% 
-    select(place, intermediate_supply)
-  return(df)
-}
-
-
-# Intermediate Demand ----
-
-call_intermediate_demand <- function(
-    year, 
-    bus_data = "cbp_imp",
-    class_system = "commodity",
-    ilevel = "det") {
-  df <- call_production(
-    year = year, 
-    bus_data = bus_data,
-    class_system = class_system,
-    ilevel = ilevel) %>% 
-    select(place, intermediate_demand)
-  return(df)
-}
-
-# Net Supply ----
-
-call_net_supply <- function(
-    year, 
-    bus_data = "cbp_imp",
-    class_system = "commodity",
-    ilevel = "det") {
-  df <- call_production(
-    year = year, 
-    bus_data = bus_data,
-    class_system = class_system,
-    ilevel = ilevel) %>% 
-    select(place, net_supply)
-  return(df)
-}
-
-# Net Demand ----
-
-call_net_demand <- function(
-    year, 
-    bus_data = "cbp_imp",
-    class_system = "commodity",
-    ilevel = "det") {
-  df <- call_production(
-    year = year, 
-    bus_data = bus_data,
-    class_system = class_system,
-    ilevel = ilevel) %>% 
-    select(place, net_demand)
-  return(df)
-}
 
 # Population ----
 
@@ -385,35 +206,6 @@ call_laborforce <- function(year,
   return(df)
 }
 
-# Employment ----
-
-call_employment <- function(year, 
-                            bus_data = "ers") {
-  cache_path = glue(opath$employment_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_employment(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# Jobs ----
-
-call_jobs <- function(year,
-                      bus_data = "cbp_imp") {
-    df <- call_employment(
-      year = year, 
-      bus_data = bus_data) %>% 
-      rename(jobs = employment)
-  return(df)
-}
 
 
 # Income----
@@ -455,27 +247,7 @@ call_income_rate <- function(year,
   return(df)
 }
 
-# GDP ----
 
-call_gdp <- function(
-    year,
-    bus_data = "bea_rea",
-    price_level = "real") {
-  cache_path = glue(opath$gdp_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_gdp(
-      year = year, 
-      bus_data = bus_data,
-      price_level = price_level)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
 
 # Labor Force rate ----
 
@@ -555,160 +327,39 @@ call_poverty_rate <- function(year,
   return(df)
 }
 
-# Years of Potential Life Lost (YPLL75) ----
 
-call_ypll75 <- function(year,
-                        bus_data = "chr") {
-  cache_path = glue(opath$ypll75_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_ypll75(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
+
+# County Health Rankings ----
+
+call_chr <- function(year) {
+  
+  df <- dataprep_misc$call_chr_raw(year = year) %>%
+    `colnames<-`({.[1,]}) %>%
+    .[-1, ] %>%
+    rename(place = fipscode) %>%
+    {.[!grepl('(0)$', .$place), ]} %>%
+    select(place,
+           paam = v127_rawvalue,
+           ypll75 = v001_rawvalue,
+           pcp = v004_other_data_1,
+           uninsured = v085_rawvalue,
+           dentists = v088_other_data_1,
+           mhp = v062_other_data_1) %>%
+    mutate(across(!place, as.numeric))
+  
   return(df)
 }
 
-# Premature Age-Adjusted mortality rate -----
+# Employment ----
 
-call_PAAM <- function(year,
-                        bus_data = "chr") {
-  cache_path = glue(opath$ypll75_)
+call_employment <- function(year, 
+                            bus_data = "ers") {
+  cache_path = glue(opath$employment_)
   if (file.exists(cache_path)) {
     df <- readRDS(cache_path)
     log_debug("read from cache {cache_path}")
   } else {
-    df <- dataprep_misc$call_county_ypll75(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# Establishments ----
-
-call_establishments <- function(year,
-                                bus_data = "cbp_imp") {
-  cache_path = glue(opath$establishments_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_establishments(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# Payroll ----
-
-call_payroll <- function(year,
-                         bus_data = "cbp_raw") {
-  cache_path = glue(opath$payroll_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_payroll(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-# Wage ----
-
-call_wage <- function(year, bus_data = "cbp_raw") {
-  pay <- call_payroll(year = year, bus_data = bus_data)
-  emp <- call_employment(year = year, bus_data = bus_data)
-  df <- inner_join(pay, emp, "place") |>
-    mutate(wage = 1000 * payroll / employment) |>
-    select(place, wage) |>
-    filter(is.finite(wage))
-  df
-}
-
-
-
-# Establishment entry & exit ----
-
-call_entry <- function(year,
-                       bus_data = "infogroup") {
-  cache_path = glue(opath$entry_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_entry(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-call_exit <- function(year,
-                      bus_data = "infogroup") {
-  cache_path = glue(opath$exit_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_exit(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-
-call_entry_rate <- function(year,
-                            bus_data = c("bds", "infogroup")) {
-  bus_data <- match.arg(bus_data)
-  cache_path = glue(opath$entry_rate_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_entry_rate(
-      year = year, 
-      bus_data = bus_data)
-    
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  return(df)
-}
-
-call_exit_rate <- function(year,
-                           bus_data = c("bds", "infogroup")) {
-  bus_data <- match.arg(bus_data)
-  cache_path = glue(opath$exit_rate_)
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- dataprep_misc$call_county_exit_rate(
+    df <- dataprep_misc$call_county_employment(
       year = year, 
       bus_data = bus_data)
     
@@ -733,33 +384,6 @@ call_unemp_rate <- function(year, bus_data = "ers") {
 }  
 
 
-# Net migration ----
-
-call_netmigration <- function() {
-  cache_path <- opath$netmigration
-  if (file.exists(cache_path)) {
-    df <- readRDS(cache_path)
-    log_debug("read from cache {cache_path}")
-  } else {
-    df <- prosperity$call_netmigration_df()
-    saveRDS(df, util$mkdir(cache_path))
-    log_debug("save to cache {cache_path}")
-  }    
-  df
-}
-
-# TODO: Add Log population (size) 
-
-# TODO: ADD Age structure (median age)
-
-# TODO: ADD ACCESS to healthcare - can pull from CHR data, scale of access to primary care physicians, dentists, mental health providers, other primary care providers (?)
-
-# TODO: Add ERS Typologies 
-
-
-# TODO: Industry specific imports/exports
-
-# TODO: Industry Specific Employment Rate
 
 # Data merge  ----
 
@@ -768,43 +392,22 @@ call_netmigration <- function() {
 
 call_space_df <- function(year){
   df_geo <- call_geog(year)
-  df_cbsa <- call_cbsa(year)
   df_ruc <- call_ruc(year)
-  df <- left_join(df_geo, df_cbsa, by = "place") %>% 
-    replace_na(list(CBSA_CODE = "rural", 
-                    CBSA_TITLE = "rural", 
-                    CENTRAL_OUTLYING = "rural", 
-                    METRO_MICRO = "rural")) %>% 
-    mutate(cbsa_rural_category = factor(CBSA_CODE == "rural", labels = c("nonrural", "rural")) ) %>% 
-    {left_join(., df_ruc, by = join_by(place == fips))} %>% 
-    group_by(CBSA_CODE) %>% mutate(cbsa_members_count = n(), .after = CBSA_CODE) %>% ungroup() 
+  df <- left_join(df_geo, df_ruc, by = join_by(place == fips)) %>% 
   return(df)
 }
 
-## Prosperity  ----
+## Covariates  ----
 
-call_prosperity_outcomes <- function(year){
+call_covariates <- function(year){
   dl <- list(
     call_population(year = year, bus_data = "tidy_acs"),
-    call_employment(year = year, bus_data = "ers"),
-    call_jobs(year = year, bus_data = "cbp_imp"),
     call_laborforce_rate(year = year, bus_data = "tidy_acs"),
     call_unemp_rate(year = year, bus_data = "ers"),
-    call_payroll(year = year, bus_data = "cbp_raw"),
-    call_wage(year = year, bus_data = "cbp_raw"),
     call_income_rate(year = year, bus_data = "bea_profile"),
-    call_establishments(year = year, bus_data = "cbp_raw"),
-    call_entry_rate(year = year, bus_data = "bds"),
-    call_exit_rate(year = year, bus_data = "bds"),
-    call_gdp(year = year, bus_data = "bea_rea"),
-    call_gross_output(year = year, bus_data = "cbp_imp"),
-    call_intermediate_supply(year = year, bus_data = "cbp_imp"),
-    call_intermediate_demand(year = year, bus_data = "cbp_imp"),
-    call_net_supply(year = year, bus_data = "cbp_imp"),
-    call_net_demand(year = year, bus_data = "cbp_imp"),
     call_poverty_rate(year = year, bus_data = "saipe"),
     call_highschool_attainment_rate(year = year, bus_data = "tidy_acs"),
-    call_ypll75(year = year, bus_data = "chr")
+    call_chr(year = year, bus_data = "chr")
   )
   df = dl[[1]]
   for(i in 2:length(dl)){
@@ -813,45 +416,14 @@ call_prosperity_outcomes <- function(year){
   return(df)
 }
 
-## Spatial ECA  ----
 
-call_eca_space_df <- function(year){
-  df_space <- call_space_df(year)
-  df_eca <- call_eca_df() %>% 
-    rename(place = fips)
-  df <- left_join(df_space, df_eca,  by = "place")  %>%
-    na.omit() %>% 
-    group_by(eca_membership) %>% 
-    mutate(cluster_members_count = n(), .after = eca_membership) %>% 
-    ungroup() 
-  df <- df %>% 
-    {.[which(.$place  == .$eca_membership), ]} %>% 
-    select(place, CBSA_CODE) %>% 
-    st_drop_geometry() %>% 
-    `colnames<-`(c("eca_membership", "cbsa_of_eca")) %>% 
-    {left_join(df, . , by = "eca_membership")} %>% 
-    relocate(cbsa_of_eca, .after = eca_membership)
-  return(df)
-}
 
 ## ALL  ----
 
 #' For analytical consistency a single place to call a dataframe for a given year 
 call_proj_df <- function(year){
-  df <- left_join(call_eca_space_df(year), call_prosperity_outcomes(year),  by = "place")  %>% 
-    mutate(eca_cbsa_xtab = str_to_title(paste(cbsa_rural_category, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
-    mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category)
+  df <- left_join(call_space_df(year), call_covariates(year),  by = "place")  %>% 
 return(df)
-}
-
-# TODO: optional spatial toggle 
-#' For analytical consistency a single place to call a dataframe for a set of years
-call_temporal_range_df <- function(
-    set_of_years, # 2002:2023 or c(2012, 2015, 2017)
-    bind = TRUE){
-  df <- util$temp_fun_recur_list(set_of_years, call_proj_df)
-  if(bind){df <- bind_rows(df, .id = "id_year")}
-  return(df)
 }
 
 
