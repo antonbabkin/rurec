@@ -87,7 +87,20 @@ dp$growth_rate(2012, 2017, dp$call_ypll75) |> head()
 ### Autonomy 
 
 
-### Retention 
+### Retention
+
+
+### Industry structure
+
+`emp_to_va`: Weighted average compensation of employees as share of value added.
+`emp_to_output`: Weighted average compensation of employees as share of total output.
+`va_to_output`: Weighted average value added as share of total output.
+`output_share_ind_X`: Share of industry X in total output.
+
+```{r}
+dp$call_industry_structure(2012) |> head()
+```
+
 
 ## COVARIATES
 

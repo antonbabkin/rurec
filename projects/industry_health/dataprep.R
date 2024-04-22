@@ -16,6 +16,7 @@ source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connectedness <- new.env()))
 source("R/dataprep.R", local = (dataprep_misc <- new.env()))
 source("R/visualization.R", local = (visualization <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 
 # paths ----
 
@@ -48,7 +49,8 @@ opath <- list(
   entry_ = "data/projects/industry_health/entry/{bus_data}/{year}.rds",
   exit_ = "data/projects/industry_health/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/industry_health/entry_rate/{bus_data}/{year}.rds",
-  exit_rate_ = "data/projects/industry_health/exit_rate/{bus_data}/{year}.rds"
+  exit_rate_ = "data/projects/industry_health/exit_rate/{bus_data}/{year}.rds",
+  industry_structure_ = "data/projects/industry_health/industry_structure/{year}.rds"
 )
 
 
@@ -383,6 +385,49 @@ call_unemp_rate <- function(year, bus_data = "ers") {
   df
 }  
 
+
+# Industry structure ----
+
+call_industry_structure <- function(year) {
+  if (year != 2012) stop("calculation not verified for years other than 2012")
+
+  cache_path = glue(opath$industry_structure_)
+  if (file.exists(cache_path)) {
+    df <- readRDS(cache_path)
+    log_debug("read from cache {cache_path}")
+  } else {
+      
+    
+    x1 <- place_output$call_output(year, class_system = "industry", ilevel = "sec", bus_data = "infogroup")
+    x2 <- bea_io$call_bea_use_table(year, ilevel = "sec")[c("V001", "VABAS", "T018"), ] %>%
+      t() %>%
+      as_tibble(rownames = "indcode") %>%
+      rename(emp_comp = V001, value_added = VABAS, total_output = T018) %>%
+      mutate(emp_to_va = emp_comp / value_added,
+             emp_to_output = emp_comp / total_output,
+             va_to_output = value_added / total_output,
+             .keep = "unused")
+    x3 <- left_join(x1, x2, "indcode")
+    
+    x4 <- x3 %>%
+      mutate(va = va_to_output * output) %>%
+      group_by(place) %>%
+      summarize(emp_to_va = sum(emp_to_va * va) / sum(va),
+                emp_to_output = sum(emp_to_output * output) / sum(output),
+                va_to_output = sum(va) / sum(output))
+    
+    x5 <- x3 %>%
+      select(place, indcode, output) %>%
+      left_join(summarize(x3, tot_output = sum(output), .by = place), "place") %>%
+      mutate(value = output / tot_output, indcode = str_to_lower(indcode)) %>%
+      pivot_wider(id_cols = place, names_from = indcode, names_prefix = "output_share_ind_")
+    
+    df <- inner_join(x4, x5, "place")
+    saveRDS(df, util$mkdir(cache_path))
+    log_debug("save to cache {cache_path}")
+  }    
+  return(df)
+}
 
 
 # Data merge  ----
