@@ -298,7 +298,10 @@ map = function(val, title, rev_scale){
         "Premature Age Adjusted Mortality: {paam}", 
         "Years of Potential Life Lost before 75: {ypll75}", 
         "Retention: {retention}", 
-        "Autonomy: {autonomy}", 
+        "Autonomy: {autonomy}",
+        "Employee share of Value Added: {emp_to_va}",
+        "Employee share of Output: {emp_to_output}", 
+        "Value added share of Output: {va_to_output}",
         .sep = "<br>",
         .envir = df_map)
   
@@ -330,11 +333,126 @@ map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = F
 map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
 map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
 map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+map(val = df_map$emp_to_va, title = "Employee Share of Value Added", rev_scale = FALSE)
+map(val = df_map$emp_to_output, title = "Employee Share of Output", rev_scale = FALSE)
+map(val = df_map$va_to_output, title = "Value Added Share of Output", rev_scale = FALSE)
+
+
 
 
 ```
 
 
 #nonspatial regressions
+
+```{r}
+
+# Full data regressions
+ns_model1 <- lm(paam ~ retention,
+        data = data,
+        na.action = na.exclude)
+
+ns_model2<- lm(paam ~ autonomy, 
+               data = data, 
+               na.action = na.exclude) 
+
+ns_model3<- lm(ypll75 ~ retention, 
+               data = data, 
+               na.action = na.exclude)
+
+ns_model4<- lm(ypll75 ~ autonomy, 
+               data = data, 
+               na.action = na.exclude)
+
+
+summary(ns_model1)
+summary(ns_model2)
+summary(ns_model3)
+summary(ns_model4)
+
+ggplot(data, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(data, aes(autonomy, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(data, aes(retention, ypll75)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Years of Life lost",
+        x = "Retention",
+        y = "Years of Life Lost")
+
+ggplot(data, aes(autonomy, ypll75)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Years of Life Lost",
+        x = "Retention",
+        y = "Years of Life Lost")
+
+
+# Filter the data to include only "nonmetro" cases
+nonmetro_data <- subset(data, metro_nonmetro == "nonmetro")
+
+# Nonmetro regressions
+ns_model1_nm <- lm(paam ~ retention,
+                   data = nonmetro_data, 
+                   na.action = na.exclude)
+
+ns_model2_nm<- lm(paam ~ autonomy, 
+               data = nonmetro_data, 
+               na.action = na.exclude) 
+
+ns_model3_nm<- lm(ypll75 ~ retention, 
+               data = nonmetro_data,
+               na.action = na.exclude)
+
+ns_model4_nm<- lm(ypll75 ~ autonomy, 
+               data = nonmetro_data,
+               na.action = na.exclude)
+
+summary(ns_model1_nm)
+summary(ns_model2_nm)
+summary(ns_model3_nm)
+summary(ns_model4_nm)
+
+ggplot(nonmetro_data, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(nonmetro_data, aes(autonomy, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(nonmetro_data, aes(retention, ypll75)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Years of Life Lost for Non-Metro",
+        x = "Retention",
+        y = "Years of Life Lost")
+
+ggplot(nonmetro_data, aes(autonomy, ypll75)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy and \n Years of Life Lost for Non-Metro",
+        x = "Retention",
+        y = "Years of Life Lost")
+
+
+```
 
 
