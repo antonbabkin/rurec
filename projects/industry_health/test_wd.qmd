@@ -176,12 +176,12 @@ data<- left_join (data, ers, by = "place")
 data<- left_join (data, industry, by = "place")
 
 circularity <- circularity$get_circularity()
-head(df)
+
 
 YR = 2012
 circu = circularity %>%  
   filter(year == YR) %>%
-  select(county_fips, retention, autonomy) %>% 
+  select(county_fips, retention, autonomy, excess_supply, intermediate_supply, excess_demand, intermediate_demand) %>% 
   rename (place = county_fips)
   
 
@@ -191,6 +191,19 @@ print(data)
 
 
 ```
+##construct alternate retention and autonomy
+
+```{r}
+
+data <- data %>%
+  mutate(retention_calc = 1 - (excess__supply / intermediate_supply),
+         autonomy_calc = 1 - (excess_demand / intermediate_demand))
+
+print(data)
+
+```
+
+
 
 ##create access to healthcare index
 
@@ -235,16 +248,25 @@ summary_stats = data %>%
 summary_stats = as.data.frame(summary_stats)
 summary_stats
 
+
+# 
+# 
+# retention_ones <- mean(data$retention == 1, na.rm = TRUE) * 100
+# autonomy_ones <- mean(data$autonomy == 1, na.rm = TRUE) * 100
+# 
+# print(retention_ones)
+# print(autonomy_ones)
+
 ```
 
 #histograms
 
 ```{r}
-data %>% select(paam, ypll75, retention, autonomy, emp_to_va, emp_to_output, va_to_output) %>% hist.data.frame()
+data %>% select(paam, ypll75, retention_calc, autonomy_calc, emp_to_va, emp_to_output, va_to_output) %>% hist.data.frame()
 
 
 #density plots
-variables_to_plot <- c("paam", "ypll75", "retention", "autonomy", "emp_to_va", "emp_to_output", "va_to_output")
+variables_to_plot <- c("paam", "ypll75", "retention_calc", "autonomy_calc", "emp_to_va", "emp_to_output", "va_to_output")
 data_subset <- data[, variables_to_plot, drop = FALSE]
 
 # Function to plot density plots for each variable
@@ -297,8 +319,8 @@ map = function(val, title, rev_scale){
         "{county}",
         "Premature Age Adjusted Mortality: {paam}", 
         "Years of Potential Life Lost before 75: {ypll75}", 
-        "Retention: {retention}", 
-        "Autonomy: {autonomy}",
+        "Retention: {retention_calc}", 
+        "Autonomy: {autonomy_calc}",
         "Employee share of Value Added: {emp_to_va}",
         "Employee share of Output: {emp_to_output}", 
         "Value added share of Output: {va_to_output}",
@@ -370,32 +392,32 @@ summary(ns_model2)
 summary(ns_model3)
 summary(ns_model4)
 
-ggplot(data, aes(retention, paam)) +
+ggplot(data, aes(retention_calc, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
-   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality",
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
         x = "Retention",
         y = "Premature Age Adjusted Mortality")
 
-ggplot(data, aes(autonomy, paam)) +
+ggplot(data, aes(autonomy_calc, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
-   labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality",
-        x = "Retention",
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Autonomy",
         y = "Premature Age Adjusted Mortality")
 
-ggplot(data, aes(retention, ypll75)) +
+ggplot(data, aes(retention_calc, ypll75)) +
   geom_point() +
    geom_smooth(method = "lm") +
-   labs(title = "Scatter Plot of Retention and \n Years of Life lost",
+   labs(title = "Scatter Plot of Retention (2012) and \n Years of Life lost (2012-2014)",
         x = "Retention",
         y = "Years of Life Lost")
 
-ggplot(data, aes(autonomy, ypll75)) +
+ggplot(data, aes(autonomy_calc, ypll75)) +
   geom_point() +
    geom_smooth(method = "lm") +
-   labs(title = "Scatter Plot of Retention and \n Years of Life Lost",
-        x = "Retention",
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Years of Life Lost (2012-2014)",
+        x = "Autonomy",
         y = "Years of Life Lost")
 
 
@@ -424,32 +446,32 @@ summary(ns_model2_nm)
 summary(ns_model3_nm)
 summary(ns_model4_nm)
 
-ggplot(nonmetro_data, aes(retention, paam)) +
+ggplot(nonmetro_data, aes(retention_calc, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Non-Metro",
         x = "Retention",
         y = "Premature Age Adjusted Mortality")
 
-ggplot(nonmetro_data, aes(autonomy, paam)) +
+ggplot(nonmetro_data, aes(autonomy_calc, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality for Non-Metro",
-        x = "Retention",
+        x = "Autonomy",
         y = "Premature Age Adjusted Mortality")
 
-ggplot(nonmetro_data, aes(retention, ypll75)) +
+ggplot(nonmetro_data, aes(retention_calc, ypll75)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Retention and \n Years of Life Lost for Non-Metro",
         x = "Retention",
         y = "Years of Life Lost")
 
-ggplot(nonmetro_data, aes(autonomy, ypll75)) +
+ggplot(nonmetro_data, aes(autonomy_calc, ypll75)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Autonomy and \n Years of Life Lost for Non-Metro",
-        x = "Retention",
+        x = "Autonomy",
         y = "Years of Life Lost")
 
 
@@ -462,22 +484,64 @@ ggplot(nonmetro_data, aes(autonomy, ypll75)) +
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
 
+#install.packages("RColorBrewer")
+library(RColorBrewer)
  
-vars = list("paam", "ypll75", "retention", "autonomy")
+# vars = list("paam", "ypll75", "retention", "autonomy")
+# for (v in vars) {
+# 
+# mdn = median(df_map[[v]], na.rm = TRUE)
+#   
+# tmap_mode("plot")
+# output = df_map %>%
+#   tm_shape() + 
+#   tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
+#               palette = c("#351c75", "#306151")) +
+#   tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
+# 
+# print(output)
+# 
+# }
+# Define a color-blind friendly palette from ColorBrewer
+color_palette <- brewer.pal(4, "Set2")  # Change 4 to the number of quartile bins
+
 for (v in vars) {
-
-mdn = median(df_map[[v]], na.rm = TRUE)
+  # Remove missing values from the variable 'v'
+  df_map_clean <- df_map[!is.na(df_map[[v]]), ]
   
-tmap_mode("plot")
-output = df_map %>%
-  tm_shape() + 
-  tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
-              palette = c("#351c75","white","#306151")) +
-  tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
-
-print(output)
-
+  if (nrow(df_map_clean) > 0) {
+    # Calculate median for each variable
+    mdn <- median(df_map_clean[[v]], na.rm = TRUE)
+    
+    # Create quartile bins for the variable 'v'
+    df_map_clean$bins <- cut(df_map_clean[[v]], 
+                              breaks = quantile(df_map_clean[[v]], 
+                                                probs = seq(0, 1, by = 0.25), 
+                                                na.rm = TRUE, 
+                                                dig.lab = 5),  # Increase digits for breaks
+                              include.lowest = TRUE)
+    
+    # Set up the tmap visualization with color-blind friendly palette
+    output <- df_map_clean %>%
+      tm_shape() + 
+      tm_polygons(col = "bins", 
+                  border.alpha = 0.1, 
+                  style = "cat", 
+                  palette = color_palette,
+                  legend.hist = FALSE,  # Remove the histogram
+                  legend.format = list(format = list(fun = function(x) { paste0(format(x, scientific = FALSE, trim = TRUE, digits = 2), " - ", format(x + 1, scientific = FALSE, trim = TRUE, digits = 2)) })),  # Format legend bins as "Value - Value"
+                  legend.title = paste("Quartiles of", v)) +  # Add title to the bins
+      tm_layout(legend.title.size = 1.5, 
+                fontface = 2, 
+                legend.position = c("right","bottom"), 
+                frame = FALSE)
+    
+    print(output)
+  } else {
+    warning(paste("No data available for variable", v))
+  }
 }
+
 
 ```
 
