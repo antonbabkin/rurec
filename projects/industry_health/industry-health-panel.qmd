@@ -1,0 +1,962 @@
+---
+title: "Industry-Health Panel Analysis"
+author: "Sara Peters"
+format: 
+  html: 
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+editor: visual
+params:
+  year: 2012
+  year_range: !expr  c(2013:2019)
+
+---
+
+
+```{r include = FALSE}
+
+
+
+source("projects/industry_health/dataprep.R", local = (ih_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/basic_utilities.R", local = (util <- new.env()))
+
+# install.packages("vtable")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("ggplot2")
+# install.packages("stringr")
+# install.packages("spdep")
+# install.packages("tidycensus")
+# install.packages("tigris")
+# install.packages("viridis")
+# install.packages("cowplot")
+# install.packages("estimatr")
+# install.packages("huxtable")
+# #install.packages("margins")
+# install.packages(c("lmtest", "sandwich"))
+# install.packages("spatialreg")
+# install.packages("gridExtra")
+# install.packages("rgeoda") 
+# install.packages("spgwr")
+# install.packages("plm")
+
+
+library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+library(cowplot)
+library(lmtest)
+library(sandwich)
+library(estimatr)
+library(huxtable)
+#library(margins)
+library(spatialreg)
+library(logger)
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+library(estimatr)
+library(Hmisc)
+library(rstatix)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+library(gridExtra)
+library(tidycensus) 
+library(rgeoda) 
+library(spgwr)
+library(plm)
+
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+```
+
+
+##data
+```{r include = FALSE}
+
+
+
+chr_list<- list()
+
+for (year in params$year_range) {
+  chr_year <- ih_dp$call_chr(year)
+  chr_year$year <- year
+  chr_list[[as.character(year)]]<-chr_year
+}
+
+chr <- bind_rows(chr_list)
+
+#-----
+
+pop_list<- list()
+
+for (year in params$year_range) {
+  pop_year <- ih_dp$call_population(year)
+  pop_year$year <- year
+  pop_list[[as.character(year)]]<-pop_year
+}
+
+pop <- bind_rows(pop_list)
+
+data<- left_join (chr, pop, by = c("place", "year"))
+
+#----
+
+lfpr_list<- list()
+
+for (year in params$year_range) {
+  lfpr_year <- ih_dp$call_laborforce_rate(year)
+  lfpr_year$year <- year
+  lfpr_list[[as.character(year)]]<-lfpr_year
+}
+
+lfpr <- bind_rows(lfpr_list)
+
+data<- left_join (data, lfpr, by = c("place", "year"))
+
+#----
+
+
+unempr_list<- list()
+
+for (year in params$year_range) {
+  unempr_year <- ih_dp$call_unemp_rate(year)
+  unempr_year$year <- year
+  unempr_list[[as.character(year)]]<-unempr_year
+}
+
+unempr <- bind_rows(unempr_list)
+
+data<- left_join (data, unempr, by = c("place", "year"))
+
+#----
+
+
+incr_list<- list()
+
+for (year in params$year_range) {
+  incr_year <- ih_dp$call_income_rate(year)
+  incr_year$year <- year
+  incr_list[[as.character(year)]]<-incr_year
+}
+
+incr <- bind_rows(incr_list)
+
+data<- left_join (data, incr, by = c("place", "year"))
+
+#----
+
+
+
+povr_list<- list()
+
+for (year in params$year_range) {
+  povr_year <- ih_dp$call_poverty_rate(year)
+  povr_year$year <- year
+  povr_list[[as.character(year)]]<-povr_year
+}
+
+povr <- bind_rows(povr_list)
+
+data<- left_join (data, povr, by = c("place", "year"))
+
+#----
+
+
+edur_list<- list()
+
+for (year in params$year_range) {
+  edur_year <- ih_dp$call_highschool_attainment_rate(year)
+  edur_year$year <- year
+  edur_list[[as.character(year)]]<-edur_year
+}
+
+edur <- bind_rows(edur_list)
+
+data<- left_join (data, edur, by = c("place", "year"))
+
+#----
+
+rucc<- ih_dp$call_ruc (2013) %>% 
+  rename(place = fips)  
+
+
+data<- left_join (data, rucc, by = "place")
+
+
+#----
+
+data = data %>% 
+mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"))
+
+#----
+
+circularity <- circularity$get_circularity()
+
+
+YR = 2012
+circu = circularity %>%  
+  filter(year == YR) %>%
+  select(county_fips,excess_supply, intermediate_supply, excess_demand, intermediate_demand) %>% 
+  rename (place = county_fips)
+
+
+data<- left_join (data, circu, by = "place")
+
+print(data)
+
+
+```
+
+##data mutations
+```{r}
+
+##retention and autonomy 
+data <- data %>%
+  mutate(retention = 1 - (excess_supply / intermediate_supply),
+         autonomy = 1 - (excess_demand / intermediate_demand))
+
+
+##extraction and dependence 
+
+data <- data %>%
+  mutate(extraction = (excess_supply / intermediate_supply),
+         dependence = (excess_demand / intermediate_demand))
+
+
+#log population 
+# Log-transform the 'population' variable
+data$log_population <- log(data$population)
+
+# Check the summary statistics of the log-transformed variable
+summary(data$log_population)
+
+
+# Create a dummy variable 'nonmetro_dummy'
+data$nonmetro_dummy <- ifelse(data$metro_nonmetro == "nonmetro", 1, 0)
+
+```
+
+##summary
+
+```{r}
+
+#print(names(data))
+
+data %>% select(paam,ypll75, pcp,uninsured, dentists,mhp, population,          laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy) %>% summary.data.frame()
+
+variables_to_sum<- c("paam","ypll75", "pcp","uninsured", "dentists","mhp", "population",          "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate",          "excess_supply", "intermediate_supply", "excess_demand", "intermediate_demand", "retention")
+
+data_subset <- data[, c("year", variables_to_sum), drop = FALSE] %>% 
+  mutate(across(all_of(variables_to_sum), as.numeric))
+
+# Group by year and calculate summary statistics using get_summary_stats
+summary_stats <- data_subset %>%
+  group_by(year) %>%
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+
+print(summary_stats)
+
+
+# Get unique variables from summary_stats
+variables <- unique(summary_stats$variable)
+
+# Create an empty list to store the plots
+plots_list <- list()
+
+# Loop through each variable
+for (var in variables) {
+  # Subset data for the current variable
+  df <- summary_stats %>% filter(variable == var)
+  
+  # Create the plot for mean and median layered on the same graph
+  plot_combined <- ggplot(df, aes(x = year)) +
+    geom_line(aes(y = mean, color = "Mean"), size = 1.2) +
+    geom_line(aes(y = median, color = "Median"), linetype = "dashed", size = 1) +
+    geom_point(aes(y = mean, color = "Mean"), size = 3) +
+    geom_point(aes(y = median, color = "Median"), shape = 21, fill = "white", size = 2) +
+    labs(title = paste("Mean and Median Over Time for", var),
+         x = "Year",
+         y = "Value",
+         color = "Statistic",
+         linetype = "Statistic",
+         shape = "Statistic") +
+    scale_color_manual(values = c("Mean" = "#1b9e77", "Median" = "#d95f02"),
+                       labels = c("Mean", "Median"),
+                       breaks = c("Mean", "Median")) +
+    theme_minimal()
+  
+  # Add the plot to the list
+  plots_list[[var]] <- plot_combined
+}
+
+# Print or view the plots in the list
+plots_list
+
+```
+##density and histogram
+```{r}
+data %>% select(paam,ypll75, pcp, uninsured, dentists, mhp, population, laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate) %>% hist.data.frame()
+
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 7  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+ggplot(data, aes(paam, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Premature Age Adjusted Mortality Rate",
+       x = "Premature Age Adjusted Mortality",
+       y = "Density")
+
+
+ggplot(data, aes(ypll75, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density of Years of Life Lost",
+       x = "Years of Life Lost",
+       y = "Density")
+
+ggplot(data, aes(pcp, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Primary Care Physicians per 1000",
+       x = "Primary Care Physicians",
+       y = "Density")
+
+ggplot(data, aes(mhp, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Mental Health Providers per 1000",
+       x = "Mental Health Providers",
+       y = "Density")
+
+ggplot(data, aes(dentists, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Dentists per 1000",
+       x = "Dentists",
+       y = "Density")
+
+ggplot(data, aes(uninsured, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Uninsured Population",
+       x = "Uninsured",
+       y = "Density")
+
+ggplot(data, aes(population, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Population",
+       x = "Population",
+       y = "Density")
+
+ggplot(data, aes(laborforce_part_rate, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Labor Force Participation Rate",
+       x = "Labor Force Participation Rate",
+       y = "Density")
+
+ggplot(data, aes(unemp_rate, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Unemployment Rate",
+       x = "Unemployment",
+       y = "Density")
+
+ggplot(data, aes(income_rate, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Income Rate",
+       x = "Income",
+       y = "Density")
+
+ggplot(data, aes(poverty_rate, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Poverty Rate",
+       x = "Poverty Rate",
+       y = "Density")
+
+ggplot(data, aes(highschool_attainment_rate, group = year, color = as.factor(year))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of High School Attainment Rate",
+       x = "High School Attainment Rate",
+       y = "Density")
+
+variables_economic <- c("retention", "autonomy")
+economic_subset <- data[, variables_economic, drop = FALSE]
+
+# Function to plot density plots for each variable
+plot_density <- function(data) {
+  plots <- lapply(names(data), function(var) {
+    ggplot(data, aes_string(x = var)) +
+      geom_density() +
+      labs(title = paste("Density Plot of", var))
+  })
+  return(plots)
+}
+
+# Create a list of density plots for each variable
+density_plots <- plot_density(economic_subset)
+
+# Plot the density plots
+grid.arrange(grobs = density_plots, ncol = 2) 
+
+```
+
+
+##paam trends 2013-2019
+
+
+
+```{r}
+
+# Calculate the average premature death rate for each year
+avg_paam <- data %>%
+  group_by(year) %>%
+  summarise(avg_paam = mean(paam, na.rm = TRUE))
+
+
+# Filter data for nonmetro observations and the years 2013 to 2019
+nonmetro_data <- data %>%
+  filter(metro_nonmetro == "nonmetro")
+
+# Calculate the average nonmetro premature death rate for each year
+avg_paam_nonmetro <-nonmetro_data %>%
+  group_by(year) %>%
+  summarise(avg_paam_nonmetro = mean(paam, na.rm = TRUE))
+
+# Filter data for metro observations and the years 2013 to 2019
+metro_data <- data %>%
+  filter(metro_nonmetro == "metro")
+
+# Calculate the average metro premature death rate for each year
+avg_paam_metro <-metro_data %>%
+  group_by(year) %>%
+  summarise(avg_paam_metro = mean(paam, na.rm = TRUE))
+
+
+avg_paam_total<- left_join(avg_paam, avg_paam_nonmetro, by = "year")
+avg_paam_total<- left_join(avg_paam_total, avg_paam_metro, by = "year")
+
+avg_paam_total<-avg_paam_total %>% 
+  rename(All_Counties = avg_paam, NonMetro_Counties = avg_paam_nonmetro, Metro_Counties = avg_paam_metro) %>% 
+   pivot_longer(cols = c(All_Counties, NonMetro_Counties, Metro_Counties),
+               names_to = "type",
+               values_to = "avg_paam")
+
+
+# Create the plot with layers, colors, points, labels, and legend
+ggplot(avg_paam_total, aes(x = year, y = avg_paam, color = type, group = type)) +
+  geom_line() +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("All_Counties" = "#1b9e77", "NonMetro_Counties" = "#d95f02", "Metro_Counties" = "#7570b3")) +
+  labs(title = "Change in Average Premature Age Adjusted Mortality Rate\nUS Counties (2013-2019)",
+       x = "Year",
+       y = "Average Premature Age Adjusted Mortality Rate \n (per 100,000)",
+       color = "County Type") +
+  scale_y_continuous(limits = c(325, 450)) +
+  theme_minimal() +
+  theme(legend.position = "bottom", 
+         plot.title = element_text(hjust = 0.5), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks = seq(2013, 2019, 1), labels = seq(2013, 2019, 1))
+
+
+
+
+```
+
+##maps
+
+```{r}
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
+
+#install.packages("RColorBrewer")
+# library(RColorBrewer)
+ 
+ vars = list("paam", "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate", "retention", "autononmy")
+ 
+ 
+ for (v in vars) {
+ 
+ mdn = median(df_map[[v]], na.rm = TRUE)
+   
+ tmap_mode("plot")
+ output = df_map %>%
+   tm_shape() + 
+  tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
+               palette = c("#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+   tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
+
+print(output)
+
+ }
+
+
+
+```
+
+##complete cases and scaled variables
+
+```{r}
+
+
+
+
+complete_cases_by_year <- data %>%
+  group_by(year) %>%
+  summarise(complete_cases_count = sum(complete.cases(.)))
+
+# Display the result
+print(complete_cases_by_year)
+
+# Filter the dataset to keep only complete cases
+data_comp <- data %>%
+  filter(complete.cases(.)) %>%
+  group_by(year) %>%
+  filter(n() >= 2000)  # Adjust 'desired_count_per_year' as needed
+
+# Display the filtered dataset
+print(data_comp)
+
+
+##scale variables
+
+data_scaled <- data_comp %>%
+  mutate(scaled_paam = scale(paam),
+         scaled_retention = scale(retention), 
+         scaled_autonomy = scale(autonomy), 
+         scaled_unemp = scale(unemp_rate), 
+         scaled_inc = scale(income_rate), 
+         scaled_poverty = scale(poverty_rate), 
+         scaled_lfp = scale(laborforce_part_rate), 
+         scaled_edu = scale(highschool_attainment_rate), 
+         scaled_uninsured = scale(uninsured), 
+         scaled_pcp = scale(pcp))
+
+
+# Transform to panel data frame
+data_panel <- pdata.frame(data_scaled, index = c("place", "year"))
+
+data_panel <- data_panel %>%
+  group_by(year) %>%
+  filter(n() >= 2000) %>%
+  ungroup()
+
+observations_by_year <- data_panel %>%
+  group_by(year) %>%
+  summarise(observations_count = n())
+
+# Display the result
+print(observations_by_year)
+
+```
+##OLS model 
+
+```{r}
+
+ols_1<- lm(paam ~ scaled_retention+ scaled_autonomy+ scaled_unemp + scaled_inc + scaled_poverty+ scaled_lfp+ scaled_edu+ scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, data = data_panel)
+
+summary(ols_1)
+
+```
+
+
+
+##prosperty random effects models 
+
+```{r}
+
+##variable names: paam ~ scaled_retention + scaled_autonomy + scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured +  scaled_pcp + log_population + nonmetro_dummy
+
+
+#Premature mortality and prosperity 
+#paam ~ unemployment + income + poverty+  laborforce+ edu + population + metro + e
+
+
+re1 <- plm(paam ~ scaled_unemp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+             random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re1)
+
+
+
+
+re2 <- plm(paam ~ scaled_unemp + scaled_inc + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re2)
+
+re3 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re3)
+
+
+re4 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re4)
+
+
+re5 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re5)
+
+huxreg(re1, re2, re3, re4, re5)
+
+
+
+
+
+
+
+```
+
+##health provision random effects models 
+
+```{r}
+
+
+##variable names: paam ~ scaled_retention + scaled_autonomy + scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured +  scaled_pcp + log_population + nonmetro_dummy
+
+#premature mortality and health provision 
+#paam ~ uninsured + pcp + dentist + mhp + population + metro + e 
+
+
+re6 <- plm(paam ~ scaled_uninsured + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re6)
+
+
+re7 <- plm(paam ~ scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re7)
+
+
+
+
+huxreg (re6, re7)
+
+
+
+```
+
+
+##prosperity and health models 
+
+```{r}
+
+
+##variable names: paam ~ scaled_retention + scaled_autonomy + scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured +  scaled_pcp + log_population + nonmetro_dummy
+
+#premature mortality, prosperity, and health provision 
+#paam ~ unemployment + income + edu + laborforce+ uninsured + pcp + dentist + mhp +  population + metro + e
+
+
+re8 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+              random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re8)
+
+
+huxreg (re5, re7, re8)
+
+```
+
+
+##economy models 
+
+```{r}
+
+##variable names: paam,ypll75, pcp,uninsured, dentists,mhp, population,          laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy
+
+#premature mortality, retention and autonomy 
+#paam ~ retention+  population + metro + e
+
+re9 <- plm(paam ~ scaled_retention+ log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re9)
+
+
+#paam~ autonomy + population + metro + e 
+
+re10 <- plm(paam ~ scaled_autonomy+ log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re10)
+
+
+#paam~ retention + autonomy + population + metro + e 
+
+re11 <- plm(paam ~ scaled_retention+ scaled_autonomy+ log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re11)
+
+huxreg(re9, re10, re11)
+
+
+huxreg(re5, re7, re8, re11)
+
+# ##extraction and dependence models (for checking)
+# 
+# re_ex <- plm(paam ~ extraction + log_population + nonmetro_dummy, 
+#             data = data_panel, 
+#             model = "random",
+#             random.method = "ht",
+#             effect = "individual",
+#             index = c("place", "year"))
+# 
+# # Summarize the random effects model
+# summary(re_ex)
+# 
+# re_dp <- plm(paam ~ dependence+ log_population + nonmetro_dummy, 
+#             data = data_panel, 
+#             model = "random",
+#             random.method = "ht",
+#             effect = "individual",
+#             index = c("place", "year"))
+# 
+# # Summarize the random effects model
+# summary(re_dp)
+# 
+# 
+# re_ed <- plm(paam ~ extraction + dependence + log_population + nonmetro_dummy, 
+#             data = data_panel, 
+#             model = "random",
+#             random.method = "ht",
+#             effect = "individual",
+#             index = c("place", "year"))
+# 
+# # Summarize the random effects model
+# summary(re_ed)
+# 
+# huxreg(re11, re12, re13, re_ex, re_dp, re_ed)
+
+```
+
+#economy and prosperity models 
+
+```{r}
+
+##variable names: paam,ypll75, pcp,uninsured, dentists,mhp, population, laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy
+
+
+#premature mortality, economy, and prosperity 
+
+
+#paam~ retention + autonomy + + paam ~ unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ population + metro + e 
+
+re12 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy+ log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re12)
+
+
+huxreg (re5, re7, re8, re11, re12)
+
+
+```
+
+
+# economy, prosperity, and health models 
+
+```{r}
+
+
+#paam~ retention + autonomy + + paam ~ unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ uninsured + pcp + dentist + mhp+ population + metro + e 
+
+re13 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re15)
+
+
+huxreg (re5, re7, re8, re11, re12, re13)
+
+
+
+```
+
+
+
+##scatter plots 
+
+```{r}
+ 
+##variable names: paam,ypll75, pcp,uninsured, dentists,mhp, population,          laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy
+
+
+##poverty rate, 
+
+
+ggplot(data_panel, aes(poverty_rate, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of poverty rate and \n premature age adjusted mortality Rate",
+        x = "poverty",
+        y = "Premature Mortality Rate")
+
+#unemployment rate, 
+ggplot(data_panel, aes(unemp_rate, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of unemployment rate and \n premature age adjusted mortality Rate",
+        x = "unemployment",
+        y = "Premature Mortality Rate")
+
+#laborforce, 
+ggplot(data_panel, aes(laborforce_part_rate, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of laborforce participation rate and \n premature age adjusted mortality Rate",
+        x = "laborforce participation rate",
+        y = "Premature Mortality Rate")
+
+#highschool, 
+ggplot(data_panel, aes(highschool_attainment_rate, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of highschool attainment rate and \n premature age adjusted mortality Rate",
+        x = "highschool attainment rate",
+        y = "Premature Mortality Rate")
+
+#uninsured, 
+ggplot(data_panel, aes(uninsured, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of %uninsured and \n premature age adjusted mortality Rate",
+        x = "% uninsured",
+        y = "Premature Mortality Rate")
+
+
+
+#retention, 
+ggplot(data_panel, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of retention rate and \n premature age adjusted mortality Rate",
+        x = "retention rate",
+        y = "Premature Mortality Rate")
+
+#autonomy
+
+ggplot(data_panel, aes(autonomy, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   scale_color_manual(values = my_colors) +
+   labs(title = "Scatter Plot of autonomy rate and \n premature age adjusted mortality Rate",
+        x = "autonomy rate",
+        y = "Premature Mortality Rate")
+```
+

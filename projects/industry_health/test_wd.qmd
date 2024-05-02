@@ -18,7 +18,7 @@ params:
   basic_geog_feature: TRUE
 ---
 
-```{r}
+```{r include = FALSE}
 
 
 
@@ -134,7 +134,7 @@ industry = get_acs(geography = "county",
 
 # data
 
-```{r}
+```{r include = FALSE}
 chr<-ih_dp$call_chr(2017) 
 
 pop<-ih_dp$call_population(2012) 
