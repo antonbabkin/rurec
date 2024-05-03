@@ -863,6 +863,17 @@ huxreg (re5, re7, re8, re11, re12)
 ```{r}
 
 
+##unscaled model 
+
+re_us<- plm(paam~ retention + autonomy + unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ uninsured + pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+summary(re_us)
+
 #paam~ retention + autonomy + + paam ~ unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ uninsured + pcp + dentist + mhp+ population + metro + e 
 
 re13 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
@@ -874,6 +885,8 @@ re13 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + sca
 
 # Summarize the random effects model
 summary(re15)
+
+huxreg (re_us, re13)
 
 
 huxreg (re5, re7, re8, re11, re12, re13)
