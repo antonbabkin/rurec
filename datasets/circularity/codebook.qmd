@@ -39,8 +39,12 @@ This chunk can be used to pack all files into or unpack from a single Zip for sh
 
 ```{r}
 # uncomment as needed
-# util$zip_pack("tmp/dataset_circularity_v240223.zip", circularity$opath)
-#util$zip_unpack("tmp/dataset_circularity_v240223.zip", overwrite = TRUE)
+# clear cache
+# util$clear_paths(circularity$opath)
+# create zip file with cache
+# util$zip_pack("tmp/dataset_circularity_v240424.zip", circularity$opath)
+# unpack cache from zip file
+# util$zip_unpack("tmp/dataset_circularity_v240424.zip", overwrite = TRUE)
 ```
 
 ```{r}

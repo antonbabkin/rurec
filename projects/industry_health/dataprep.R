@@ -347,7 +347,8 @@ call_chr <- function(year) {
            uninsured = v085_rawvalue,
            dentists = v088_other_data_1,
            mhp = v062_other_data_1) %>%
-    mutate(across(!place, as.numeric))
+    mutate(across(!place, as.numeric)) %>% 
+    mutate(year = year)
   
   return(df)
 }
