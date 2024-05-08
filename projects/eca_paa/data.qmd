@@ -357,6 +357,36 @@ if (params$show_descriptive_maps) {
 
 ```
 
+### presentation map
+
+```{r}
+
+comp_map = data_map %>%
+  mutate(comp = case_match(
+    metro_micro_sink,
+    "Sink and Metro " ~ "CBSA destination",
+    "Sink and Micro" ~ "CBSA destination",
+    "Metro only" ~ "CBSA source",
+    "Micro only" ~ "CBSA source",
+    "Sink only" ~ "Rural destination",
+    NA ~ "Rural source"
+  ))
+
+tmp <- scale_fill_discrete
+scale_fill_discrete <- function(...) scale_fill_manual(
+  name = "ECA-CBSA Comparison", 
+  values = c(
+    "CBSA destination"="#1f78b4", 
+    "CBSA source"="#a6cee3",
+    "Rural destination"="#33a02c", 
+    "Rural source"="#b2df8a"))
+dp$viz$cat_choro_map(comp_map, "comp", interactive = F, legend = T)
+scale_fill_discrete <- tmp
+
+
+```
+
+
 ## Map, ECA/CBSA comparison
 <!-- Find examples (Wisconsin and around Midwest) comparing a single CBSA and ECA. ECA should not be too big (max 7-8 counties) and not too spread out spatially. Make a map similar to Cedar Rapids example from the abstract. -->
 <!-- CBSA and ECA that have the same core county. -->
