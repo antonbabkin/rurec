@@ -1,0 +1,945 @@
+---
+title: "paa spatial regress"
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  year: 2012
+  panel_data: FALSE
+  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
+  show_temporal_density: TRUE
+  show_descriptive_density: TRUE
+  show_descriptive_density_rural: TRUE
+  show_descriptive_maps: TRUE
+  interactive_maps: FALSE
+  show_corr: FALSE
+  show_test_regression: FALSE
+  show_lm_regression: TRUE
+  show_lm_cluster_regression: TRUE
+  reg_factors: !expr c("entry_rate", "exit_rate", "establishments_gr", "wage", "wage_gr", "jobs_gr", "payroll_gr", "unemp_rate", "laborforce_part_rate", "employment_gr", "poverty_rate", "income_rate", "poverty_rate_gr", "income_rate_gr", "population_gr",  "ypll75", "highschool_attainment_rate", "net_migration_rate") 
+  reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
+  example_coef_index:  2
+---
+
+
+
+
+```{r preamble, include = FALSE}
+
+# additional library list
+library(logger)
+library(tidyverse)
+
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+
+library(estimatr)
+library(margins)
+
+library(modelsummary)
+
+library(spatialreg)
+
+
+# scripts
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+# initialize parameters
+params
+
+```
+
+```{r zip pack, include = FALSE}
+
+# uncomment and pack/unpack as necessary
+# dp$zip_pack("tmp/eca_paa_data_v240324.zip", dp$opath)
+# dp$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
+
+```
+
+
+
+# data
+
+
+```{r dataframe }
+
+if (params$panel_data){
+  # df <- data.frame()
+  # for (y in params$year_range){
+  #     df <- dp$call_proj_df(y) %>% 
+  #       mutate(id_year = y, .before = 1) %>% 
+  #       {rbind(df, .)}
+  # }
+  df <- dp$call_temporal_range_df(params$year_range)
+} else{
+  df <- dp$call_proj_df(params$year)
+}
+
+# scale variables for better summary and coeffecient interpretation
+  df <- df %>% 
+  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+  mutate(wage = wage/1000) %>% 
+  mutate(income_rate = income_rate/1000) %>% 
+  mutate(ypll75 = ypll75/100000) %>% 
+  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
+  
+# adjust names to "source" and "destination" vocabulary
+df$metro_micro_destination <- df$metro_micro_sink
+  df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
+    df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
+      df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
+
+```
+
+
+
+```{r dataframe with growth}
+if (!params$panel_data){
+  x <- dp$temporal_permutations(params$year_range)
+  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place"))
+  for (y in 1:nrow(x)){
+    paste(x[y,1], x[y,2]) %>% print()
+    for (i in params$reg_factor_funs){
+       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>%
+         mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>%
+         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>%
+         # rename_at('grow_rate', ~paste0(substring(i, 6), "_gr_", x[y,1], "_", x[y,2])) %>%
+         left_join(tmp, ., by = "place")
+    }
+  }
+
+  df <- left_join(df, tmp, by = "place")
+}
+```
+
+
+## variables
+
+```{r variables}
+
+  df %>% 
+    st_drop_geometry() %>% 
+    select(where(is.numeric)) %>% 
+    names() 
+
+```
+
+
+
+
+## trade flow matrix
+
+```{r}
+
+# matrix of potential excess trade flows between all places
+tm <- dp$call_trade_flows("all_industries")
+
+# names of economic indicator growth variables 
+rf <- grep("_gr", names(df), value = T)
+
+# all place names common between trade flow data and economic indicator growth data
+pn <- tm %>% 
+  {intersect(colnames(.), df$place)}
+
+# (optional) subset of places with complete data across all growth variables 
+# ensures constant N across all regressions
+# allows for efficient construction of sptaialreg listw attribute
+pn <- df[, c("place", rf)] %>% na.omit() %>% {intersect(pn, .$place)}
+
+# (optional) sub subset of places with spatial neighbors
+pn <- c("02016","02198","15001","15003","15007","25019","36085","51093","51183","53055") %>% setdiff(pn, .)
+
+
+# display names of growth variables 
+coef_names <- c(
+  "Establishment Growth",
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Employment Growth", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth")
+
+```
+
+# regression
+
+```{r}
+
+# does growth in trade partner export destination(s) correspond with own growth?
+
+# y_growth = b0 + b1_r + e
+# s.t. r = M * y_growth
+# trade_weighted_growth scaled down by 1 million to interpret coefficients
+
+  specif <- list()
+  df_mod <- list()
+  for (i in rf){
+    y <- df[match(pn, df$place), ,drop=F] %>% 
+      {.[[i]]} %>% 
+      as.matrix() %>% 
+      `colnames<-`(c(i)) %>% 
+      # `rownames<-`(df$place) %>% 
+      `rownames<-`(pn) %>% 
+      na.omit()
+    
+    r <- intersect(pn, rownames(y)) %>% 
+      {tm[., .] %*% y[.,]} %>% 
+      `colnames<-`(c("trade_weighted_growth"))  %>% 
+      {./1000000}
+    
+    df_reg <- cbind(y,r) %>% 
+      as.data.frame() 
+      
+    df_mod[[i]] <- df_reg %>% 
+      na.omit()
+    
+    fm <- as.formula(paste(i, "~", "trade_weighted_growth"))
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+  }
+
+  specif %>% 
+  `names<-`(coef_names) %>%  
+  {msummary(., 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "trade_weighted_growth" = "Trade Weighted Growth") )}
+
+```
+
+
+```{r}
+
+# does growth in trade partner export destination(s) correspond with own growth?
+
+# y_growth = b0 + b1_r + e
+# s.t. r = M * y_growth
+
+
+# Row normalized trade value
+tm <- dp$call_trade_flows("all_industries") %>% 
+  {sweep(., 1, rowSums(.), "/")}
+tm[is.na(tm)] <- 0
+
+
+  specif <- list()
+  df_mod <- list()
+  for (i in rf){
+    y <- df[match(pn, df$place), ,drop=F] %>% 
+      {.[[i]]} %>% 
+      as.matrix() %>% 
+      `colnames<-`(c(i)) %>% 
+      # `rownames<-`(df$place) %>% 
+      `rownames<-`(pn) %>% 
+      na.omit()
+    
+    r <- intersect(pn, rownames(y)) %>% 
+      {tm[., .] %*% y[.,]} %>% 
+      `colnames<-`(c("trade_weighted_growth")) 
+    
+    df_reg <- cbind(y,r) %>% 
+      as.data.frame() 
+      
+    df_mod[[i]] <- df_reg %>% 
+      na.omit()
+    
+    fm <- as.formula(paste(i, "~", "trade_weighted_growth"))
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+  }
+
+  specif %>% 
+  `names<-`(coef_names) %>%  
+  {msummary(., 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "trade_weighted_growth" = "Trade Weighted Growth") )}
+
+```
+
+## W matrix
+
+```{r}
+
+## Does the model need to be extended with spatial interaction effects? 
+## Is there considerable spatial dependence in these data such that a standard OLS regression that assumes independent observations will be misleading?
+
+
+# TODO: W may not be square or may have all zero rows
+
+
+dmat <- dp$call_dist_mat(year = params$year)
+
+D_inv <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$power_impedance_mat(., decay_power = 1)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_sqr <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$power_impedance_mat(., decay_power = 2)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_exp <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$expo_impedance_mat(., decay_constant = 100000)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_gau <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$gaus_impedance_mat(., rms_width = 500)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_qnn <- dp$call_bprox_mat(year = params$year, queen = TRUE)[pn, pn] %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_knn <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$knn_mat(., neighbors = 10)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_prx <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$prox_impedance_mat(., radius = 500)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+D_bis <- pn %>% 
+  {dmat[., .]} %>% 
+  {dp$bisquare_impedance_mat(., decay_zero = 500)} %>% 
+  `diag<-`(0) %>% 
+  {sweep(., 1, rowSums(.), "/")} 
+
+
+
+W_list <- list(
+  D_inv,
+  D_sqr,
+  D_exp,
+  D_gau,
+  D_qnn,
+  D_knn,
+  D_prx,
+  D_bis)
+
+rm(D_inv,
+  D_sqr,
+  D_exp,
+  D_gau,
+  D_qnn,
+  D_knn,
+  D_prx,
+  D_bis)
+
+
+```
+
+```{r}
+
+# does growth in trade partner export destination(s) correspond with own growth?
+# and what is the role of mere spatial diffusion?
+
+
+# y_growth = b0 + b1_r + b2_d + e
+# s.t. r = M * y_growth and  d = W * y_growth
+
+for (j in 1:length(W_list)){
+  W <- W_list[[j]]
+    specif <- list()
+    df_mod <- list()
+    for (i in rf){
+      y <- df[match(pn, df$place), ,drop=F] %>% 
+        {.[[i]]} %>% 
+        as.matrix() %>% 
+        `colnames<-`(c(i)) %>% 
+      # `rownames<-`(df$place) %>% 
+      `rownames<-`(pn) %>% 
+        na.omit()
+      
+      r <- intersect(pn, rownames(y)) %>% 
+        {tm[., .] %*% y[.,]} %>% 
+        `colnames<-`(c("trade_weighted_growth")) 
+      
+      
+      w <- intersect(rownames(W), rownames(y)) %>% 
+        {W[., .] %*% y[.,]} %>% 
+        `colnames<-`(c("spatially_weighted_growth")) 
+        
+      
+      df_reg <- cbind(y,r,w) %>% 
+        as.data.frame() 
+        
+      df_mod[[i]] <- df_reg %>% 
+        na.omit()
+      
+      fm <- as.formula(paste(i, "~", "trade_weighted_growth", "+", "spatially_weighted_growth"))
+      specif[[i]] <- lm(fm, data = df_mod[[i]])
+    }
+    
+    specif %>% 
+    `names<-`(coef_names) %>%  
+    {msummary(., 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "trade_weighted_growth" = "Trade Weighted Growth", 
+                           "spatially_weighted_growth" = "Space Weighted Growth") )} %>% print()
+}
+
+```
+
+
+```{r}
+
+
+
+
+cache_path = "data/projects/eca_paa/tmp/W_list_alt.rds"
+  if (file.exists(cache_path)) {
+    W_list_alt <- readRDS(cache_path)
+  } else {
+    W_list_alt <- list()
+    for (j in 1:length(W_list)){
+      W_list_alt[[j]] <- intersect(rownames(W_list[[j]]), pn) %>% 
+        {W_list[[j]][., .]} %>% 
+        mat2listw(style="M", zero.policy=TRUE) 
+    }
+    saveRDS(W_list_alt, dp$util$mkdir(cache_path))
+  }
+
+
+
+```
+
+
+```{r}
+
+
+  #   wl <- intersect(rownames(W), pn) %>% {W[., .]} %>% mat2listw() 
+  # #lagsarlm(i ~ trade_weighted_growth, data=df_reg, listw = wl, method="eigen", quiet=FALSE)
+  # lagsarlm(population_gr ~ trade_weighted_growth, data=df_reg, listw = W_list_alt[[j]], method="eigen", quiet=FALSE, zero.policy=TRUE)
+  #  moran.test(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
+  #  moran.plot(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
+  # 
+  # moran.test(x = df_reg$population_gr, listw = wl) 
+  #  moran.plot(x = df_reg$population_gr, listw = wl)
+
+for (j in 1:length(W_list_alt)){
+      for (i in rf){
+        moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% print()
+      }
+}
+
+mspec <- list()
+      for (i in rf){
+        mspec[[i]] <- moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% tidy()
+        print(mspec[[i]])
+      }
+
+#Moran’s I has theoretical limits from -1 for perfect dispersion or repulsion, to +1 for perfect clustering, with 0 indicting a perfectly random pattern.
+
+```
+
+
+
+```{r}
+
+# does growth in trade partner export destination(s) correspond with own growth?
+# and is there a global diffusion of both observed and unobserved shocks? 
+
+
+# Spatial Lag Model or Spatial Autoregressive Model
+# y_growth = (I - lambda_W)^-1(b0 + b1_r + e)
+# s.t. r = M * y_growth 
+
+for (j in 1:length(W_list_alt)){
+  W <- W_list_alt[[j]]
+    specif <- list()
+    df_mod <- list()
+    for (i in rf){
+      y <- df[match(pn, df$place), ,drop=F] %>% 
+        {.[[i]]} %>% 
+        as.matrix() %>% 
+        `colnames<-`(c(i)) %>% 
+        # `rownames<-`(df$place) %>% 
+        `rownames<-`(pn) %>% 
+        na.omit()
+      
+      r <- intersect(pn, rownames(y)) %>% 
+        {tm[., .] %*% y[.,]} %>% 
+        `colnames<-`(c("trade_weighted_growth")) 
+      
+      df_reg <- cbind(y,r) %>% 
+        as.data.frame() 
+        
+      df_mod[[i]] <- df_reg %>% 
+        na.omit()
+      
+      fm <- as.formula(paste(i, "~", "trade_weighted_growth"))
+      specif[[i]] <- lagsarlm(fm, data = df_mod[[i]], listw = W, method="eigen", zero.policy=TRUE)
+    }
+    
+    specif %>% 
+    `names<-`(coef_names) %>%  
+    {msummary(., 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "trade_weighted_growth" = "Trade Weighted Growth",
+                           "rho" = "rho") )} %>% print()
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+# does growth in trade partner export destination(s) correspond with own growth?
+# and is there a global diffusion of both observed and unobserved shocks? 
+
+
+#Thus, in a spatial error model specification, the observations are related only due to unmeasured factors that, for some unknown reason, are correlated across the distances among the observations
+
+# Spatial Error Model 
+# y_growth = (I - rho_W)^-1(b0 + b1_r) + (I - rho_W)^-1e
+# s.t. r = M * y_growth 
+
+for (j in 1:length(W_list_alt)){
+  W <- W_list_alt[[j]]
+    specif <- list()
+    df_mod <- list()
+    for (i in rf){
+      y <- df[match(pn, df$place), ,drop=F] %>% 
+        {.[[i]]} %>% 
+        as.matrix() %>% 
+        `colnames<-`(c(i)) %>% 
+        # `rownames<-`(df$place) %>% 
+        `rownames<-`(pn) %>% 
+        na.omit()
+      
+      r <- intersect(pn, rownames(y)) %>% 
+        {tm[., .] %*% y[.,]} %>% 
+        `colnames<-`(c("trade_weighted_growth")) 
+      
+      df_reg <- cbind(y,r) %>% 
+        as.data.frame() 
+        
+      df_mod[[i]] <- df_reg %>% 
+        na.omit()
+      
+      fm <- as.formula(paste(i, "~", "trade_weighted_growth"))
+      specif[[i]] <- errorsarlm(fm, data = df_mod[[i]], listw = W, method="eigen", zero.policy=TRUE)
+    }
+    
+    specif %>% 
+    `names<-`(coef_names) %>%  
+    {msummary(., 
+              statistic = c("conf.int", "{std.error}", "{p.value}"), 
+              estimate = "{estimate}{stars}", 
+              coef_map = c("(Intercept)" = "(Intercept)",
+                           "trade_weighted_growth" = "Trade Weighted Growth",
+                           "lambda" = "lambda") )} %>% print()
+}
+
+```
+
+
+
+
+
+# In progress
+
+
+
+
+
+
+
+
+
+
+```{r}
+#| warning: false
+
+library(sandwich)
+library(modelsummary)
+
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    y <- i
+    x1 <- paste0("sink_value_", i)
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+        
+    df_mod[[i]] <- df_reg %>% 
+      select(y, x1, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) 
+
+    fm <- as.formula(paste(i, "~", "destination_value"))
+    
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+
+  }
+}
+
+coef_names <- c(
+  "Entry Rate",
+  "Exit Rate", 
+  "Establishment Growth",
+  "Wage", 
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Unemployment Rate", 
+  "Laborforce Rate", 
+  "Employment Growth", 
+  "Poverty Rate", 
+  "Income Rate", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth", 
+  "YPLL75", 
+  "Highschool Graduation Rate", 
+  "Net Migration Rate")
+
+ssf <- 1:7
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+ssf <- 8:14
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+
+ssf <- 15:18
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value") )}
+
+
+```
+
+
+
+
+
+```{r}
+#| warning: false
+
+library(sandwich)
+library(sjPlot)
+library(modelsummary)
+library(patchwork)
+
+if (params$show_lm_cluster_regression) {
+  specif <- list()
+  df_mod <- list()
+  mvc <- list()
+  for (i in params$reg_factors){
+    y <- i
+    x1 <- paste0("sink_value_", i)
+    x2 <- "eca_center_distance"
+    clust <- "eca_membership"
+    df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+      st_drop_geometry()
+        
+    df_mod[[i]] <- df_reg %>% 
+      select(y, x1, x2, clust) %>% 
+      na.omit() %>% 
+      rename(destination_value = x1) %>%
+      rename(eca_distance = x2)
+
+    fm <- as.formula(paste(i, "~", "destination_value", "*", "eca_distance"))
+    
+    specif[[i]] <- lm(fm, data = df_mod[[i]])
+
+    mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+
+  }
+}
+
+
+coef_names <- c(
+  "Entry Rate",
+  "Exit Rate", 
+  "Establishment Growth",
+  "Wage", 
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Unemployment Rate", 
+  "Laborforce Rate", 
+  "Employment Growth", 
+  "Poverty Rate", 
+  "Income Rate", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth", 
+  "YPLL75", 
+  "Highschool Graduation Rate", 
+  "Net Migration Rate")
+
+ssf <- 1:7
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+ssf <- 8:14
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+ssf <- 15:18
+specif[ssf] %>% 
+  `names<-`(coef_names[ssf]) %>%  
+  {msummary(., 
+            vcov = mvc[ssf], 
+            statistic = c("conf.int", "{std.error}", "{p.value}"), 
+            estimate = "{estimate}{stars}", 
+            coef_map = c("(Intercept)" = "(Intercept)",
+                         "destination_value" = "Destination Value",
+                         "eca_distance" = "Distance", 
+                         "destination_value:eca_distance" = "Destination x Distance") )}
+
+
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("destination_value", "eca_distance [1, 5]"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Destination Value", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      scale_colour_discrete(labels = c("100", "500")) + 
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+  
+}
+
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("eca_distance"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Distance (100's of miles)", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      scale_colour_discrete(labels = c("100", "500")) + 
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+}
+
+
+  
+for(i in 1:length(coef_names)){
+  pm <- plot_model(model = specif[[i]], 
+                    type = "pred", 
+                    terms = c("eca_distance", "destination_value"), 
+                    vcov.fun = "CL", 
+                    vcov.args = list(type = "HC2", 
+                                    cluster = df_mod[[i]]$eca_membership)) 
+    p <- pm + 
+      theme_minimal() +
+      theme(legend.justification = c(1,0), 
+            legend.position = c(1,0), 
+            legend.background = element_rect(fill = "white", linewidth = 0.1)) +
+      labs(x = "Distance (100's of miles)", 
+           y = coef_names[i], 
+           colour = "Distance (miles)", 
+           title = element_blank()) +
+      guides(color = guide_legend(override.aes = list(fill = NA)))
+    
+    denx <- ggplot(df_mod[[i]], aes(get(pm$labels$x))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+    deny <- ggplot(df_mod[[i]], aes(get(pm$labels$y))) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void() + 
+      coord_flip()
+
+  dp <- denx + plot_spacer() + p + deny + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+
+  print(dp)
+  # ggsave(glue("/Users/austinsandler/Downloads/{names(specif)[[i]]}.png"), bg = "white")
+}
+
+
+
+# margins(specif[[i]])
+# margins(specif[[i]], at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)))
+# cplot(specif[[i]], "eca_distance", what = "effect")
+
+
+for(i in 1:length(coef_names)){
+
+  me <- margins_summary(model = specif[[i]], 
+                        variables = "destination_value", 
+                        at = list(eca_distance = fivenum(df_mod[[i]]$eca_distance)), 
+                        vcov = mvc[[i]])
+  p <- ggplot(me, aes(x = eca_distance, y = AME, ymin = lower, ymax = upper)) +
+    geom_ribbon(fill = "#332288", alpha = .2) +
+    geom_line(color = "#332288") +
+    geom_hline(yintercept = 0) +
+    theme_minimal() +
+    labs(x = "Distance (miles)",
+         y = glue(coef_names[i], ": Average Marginal Effect")) +
+    scale_x_continuous(labels = label_comma(scale = 100)) +
+    scale_y_continuous(limits = c(-3.2, 2))
+    
+    denx <- ggplot(df_mod[[i]], aes(eca_distance)) + 
+      geom_histogram(color = "grey", fill = "white", bins = 50) + 
+      theme_void()
+    
+
+  dp <- denx + plot_spacer() + p + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(1, 4) ) 
+  
+  print(dp)
+  ggsave(glue("/Users/austinsandler/Downloads/AME_{names(specif)[[i]]}.png"), bg = "white")
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
