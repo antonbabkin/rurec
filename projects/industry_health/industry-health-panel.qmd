@@ -211,6 +211,14 @@ data<- left_join (data, rucc, by = "place")
 data = data %>% 
 mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"))
 
+
+#----
+
+ind_struct<- ih_dp$call_industry_structure(2012) %>% 
+  select(place, emp_to_va, emp_to_output, va_to_output)
+
+data<- left_join (data, ind_struct, by = "place")
+
 #----
 
 circularity <- circularity$get_circularity()
@@ -265,57 +273,57 @@ data$nonmetro_dummy <- ifelse(data$metro_nonmetro == "nonmetro", 1, 0)
 
 #print(names(data))
 
-data %>% select(paam,ypll75, pcp,uninsured, dentists,mhp, population,          laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy) %>% summary.data.frame()
+data %>% select(paam,ypll75, pcp,uninsured, dentists,mhp, population,  laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate, excess_supply, intermediate_supply, excess_demand, intermediate_demand, retention, autonomy) %>% summary.data.frame()
 
-variables_to_sum<- c("paam","ypll75", "pcp","uninsured", "dentists","mhp", "population",          "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate",          "excess_supply", "intermediate_supply", "excess_demand", "intermediate_demand", "retention")
+variables_to_sum<- c("paam","ypll75", "pcp","uninsured", "dentists","mhp", "population",          "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate", "excess_supply", "intermediate_supply", "excess_demand", "intermediate_demand", "retention", "autonomy", "emp_to_va", "emp_to_output", "va_to_output")
 
 data_subset <- data[, c("year", variables_to_sum), drop = FALSE] %>% 
   mutate(across(all_of(variables_to_sum), as.numeric))
 
 # Group by year and calculate summary statistics using get_summary_stats
 summary_stats <- data_subset %>%
-  group_by(year) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
 
 print(summary_stats)
 
+#write.csv(summary_stats, file = "IH_Summary_Stats.csv")
 
-# Get unique variables from summary_stats
-variables <- unique(summary_stats$variable)
-
-# Create an empty list to store the plots
-plots_list <- list()
-
-# Loop through each variable
-for (var in variables) {
-  # Subset data for the current variable
-  df <- summary_stats %>% filter(variable == var)
-  
-  # Create the plot for mean and median layered on the same graph
-  plot_combined <- ggplot(df, aes(x = year)) +
-    geom_line(aes(y = mean, color = "Mean"), size = 1.2) +
-    geom_line(aes(y = median, color = "Median"), linetype = "dashed", size = 1) +
-    geom_point(aes(y = mean, color = "Mean"), size = 3) +
-    geom_point(aes(y = median, color = "Median"), shape = 21, fill = "white", size = 2) +
-    labs(title = paste("Mean and Median Over Time for", var),
-         x = "Year",
-         y = "Value",
-         color = "Statistic",
-         linetype = "Statistic",
-         shape = "Statistic") +
-    scale_color_manual(values = c("Mean" = "#1b9e77", "Median" = "#d95f02"),
-                       labels = c("Mean", "Median"),
-                       breaks = c("Mean", "Median")) +
-    theme_minimal()
-  
-  # Add the plot to the list
-  plots_list[[var]] <- plot_combined
-}
-
-# Print or view the plots in the list
-plots_list
+# # Get unique variables from summary_stats
+# variables <- unique(summary_stats$variable)
+# 
+# # Create an empty list to store the plots
+# plots_list <- list()
+# 
+# # Loop through each variable
+# for (var in variables) {
+#   # Subset data for the current variable
+#   df <- summary_stats %>% filter(variable == var)
+#   
+#   # Create the plot for mean and median layered on the same graph
+#   plot_combined <- ggplot(df, aes(x = year)) +
+#     geom_line(aes(y = mean, color = "Mean"), size = 1.2) +
+#     geom_line(aes(y = median, color = "Median"), linetype = "dashed", size = 1) +
+#     geom_point(aes(y = mean, color = "Mean"), size = 3) +
+#     geom_point(aes(y = median, color = "Median"), shape = 21, fill = "white", size = 2) +
+#     labs(title = paste("Mean and Median Over Time for", var),
+#          x = "Year",
+#          y = "Value",
+#          color = "Statistic",
+#          linetype = "Statistic",
+#          shape = "Statistic") +
+#     scale_color_manual(values = c("Mean" = "#1b9e77", "Median" = "#d95f02"),
+#                        labels = c("Mean", "Median"),
+#                        breaks = c("Mean", "Median")) +
+#     theme_minimal()
+#   
+#   # Add the plot to the list
+#   plots_list[[var]] <- plot_combined
+# }
+# 
+# # Print or view the plots in the list
+# plots_list
 
 ```
 ##density and histogram
@@ -334,7 +342,8 @@ ggplot(data, aes(paam, group = year, color = as.factor(year))) +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Premature Age Adjusted Mortality Rate",
        x = "Premature Age Adjusted Mortality",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 
 ggplot(data, aes(ypll75, group = year, color = as.factor(year))) +
@@ -342,79 +351,90 @@ ggplot(data, aes(ypll75, group = year, color = as.factor(year))) +
   scale_color_manual(values = my_colors) +
   labs(title = "Density of Years of Life Lost",
        x = "Years of Life Lost",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(pcp, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Primary Care Physicians per 1000",
        x = "Primary Care Physicians",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(mhp, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Mental Health Providers per 1000",
        x = "Mental Health Providers",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(dentists, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Dentists per 1000",
        x = "Dentists",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(uninsured, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Uninsured Population",
        x = "Uninsured",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(population, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Population",
        x = "Population",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(laborforce_part_rate, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Labor Force Participation Rate",
        x = "Labor Force Participation Rate",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(unemp_rate, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Unemployment Rate",
        x = "Unemployment",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(income_rate, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Income Rate",
        x = "Income",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(poverty_rate, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of Poverty Rate",
        x = "Poverty Rate",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
 ggplot(data, aes(highschool_attainment_rate, group = year, color = as.factor(year))) +
   geom_density() +
   scale_color_manual(values = my_colors) +
   labs(title = "Density Plot of High School Attainment Rate",
        x = "High School Attainment Rate",
-       y = "Density")
+       y = "Density", 
+       color = "Year")
 
-variables_economic <- c("retention", "autonomy")
+variables_economic <- c("retention", "autonomy", "emp_to_va", "emp_to_output", "va_to_output")
 economic_subset <- data[, variables_economic, drop = FALSE]
 
 # Function to plot density plots for each variable
@@ -431,7 +451,166 @@ plot_density <- function(data) {
 density_plots <- plot_density(economic_subset)
 
 # Plot the density plots
-grid.arrange(grobs = density_plots, ncol = 2) 
+grid.arrange(grobs = density_plots, ncol = 3) 
+
+
+ggplot(data, aes(autonomy)) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Autonomy Rate",
+       x = "Autonomy Rate",
+       y = "Density")
+
+ggplot(data, aes(retention)) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Retention Rate",
+       x = "Retention Rate",
+       y = "Density")
+
+ggplot(data, aes(emp_to_output)) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Employee Compensation Share of Output",
+       x = "Employee Compensation Share",
+       y = "Density")
+
+
+##drop na values for density plots: 
+# Drop NA values from the dataset
+na_data <- na.omit(data)
+
+##metro and non metro density plots
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+
+ggplot(na_data, aes(paam, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Premature Age Adjusted Mortality Rate",
+       x = "Premature Age Adjusted Mortality",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+
+ggplot(na_data, aes(ypll75, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density of Years of Life Lost",
+       x = "Years of Life Lost",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(pcp, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Primary Care Physicians per 1000",
+       x = "Primary Care Physicians",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(mhp, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Mental Health Providers per 1000",
+       x = "Mental Health Providers",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(dentists, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Dentists per 1000",
+       x = "Dentists",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(uninsured, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Uninsured Population",
+       x = "Uninsured",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(population, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Population",
+       x = "Population",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(laborforce_part_rate, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Labor Force Participation Rate",
+       x = "Labor Force Participation Rate",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(unemp_rate, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Unemployment Rate",
+       x = "Unemployment",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(income_rate, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Income Rate",
+       x = "Income",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(poverty_rate, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Poverty Rate",
+       x = "Poverty Rate",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(highschool_attainment_rate, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of High School Attainment Rate",
+       x = "High School Attainment Rate",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(retention, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Retention Rate",
+       x = "Retention Rate",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(autonomy, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Autonomy Rate",
+       x = "Autonomy Rate",
+       y = "Density",
+       color = "Metro/NonMetro")
+
+ggplot(na_data, aes(emp_to_output, group = metro_nonmetro, color = as.factor(metro_nonmetro))) +
+  geom_density() +
+  scale_color_manual(values = my_colors) +
+  labs(title = "Density Plot of Employee Compensation Share of Output",
+       x = "Share of Employee Compensation",
+       y = "Density", 
+       color = "Metro/NonMetro")
+
+
 
 ```
 
@@ -498,33 +677,73 @@ ggplot(avg_paam_total, aes(x = year, y = avg_paam, color = type, group = type)) 
 
 
 ```
+##jackson county wv
+
+```{r}
+
+# Filter and select relevant data
+jc_data <- data %>%
+  filter(place == 54035) %>% 
+  select(place, year, paam, pcp, uninsured, log_population, laborforce_part_rate, income_rate, poverty_rate, highschool_attainment_rate)
+
+# Get the list of variables (column names) from the dataframe
+variables <- names(jc_data)
+
+# Create an empty list to store the plots
+plots_list <- list()
+
+# Loop through each variable
+for (var in variables) {
+  # Subset data for the current variable
+  df <- jc_data %>%
+    select(year, {{ var }}) %>%
+    filter(year >= 2013 & year <= 2019)
+  
+  # Create the plot for values over time for the current variable
+  plot_values <- ggplot(df, aes(x = year, y = .data[[var]])) +
+    geom_line(color = "#1b9e77", size = 1.2) +  # Line plot for values
+    geom_point(shape = 21, fill = "white", size = 3) +  # Point plot for values
+    labs(title = paste("Values Over Time for", var),
+         x = "Year",
+         y = "Value") +
+    theme_minimal()
+  
+  # Add the plot to the list
+  plots_list[[var]] <- plot_values
+}
+
+# Print each plot
+plots_list
+```
+
+
 
 ##maps
 
 ```{r}
-map = ih_dp$call_geog(2012)
-df_map <- left_join(map, data, by = "place") %>% filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
-
-#install.packages("RColorBrewer")
-# library(RColorBrewer)
- 
- vars = list("paam", "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate", "retention", "autononmy")
- 
- 
- for (v in vars) {
- 
- mdn = median(df_map[[v]], na.rm = TRUE)
-   
- tmap_mode("plot")
- output = df_map %>%
-   tm_shape() + 
-  tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
-               palette = c("#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-   tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
-
-print(output)
-
- }
+# map = ih_dp$call_geog(2012)
+# df_map <- left_join(map, data, by = "place") %>% filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
+# 
+# #install.packages("RColorBrewer")
+# # library(RColorBrewer)
+#  
+#  vars = list("paam", "laborforce_part_rate", "unemp_rate", "income_rate", "poverty_rate", "highschool_attainment_rate", "retention", "autononmy")
+#  
+#  
+#  for (v in vars) {
+#  
+#  mdn = median(df_map[[v]], na.rm = TRUE)
+#    
+#  tmap_mode("plot")
+#  output = df_map %>%
+#    tm_shape() + 
+#   tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
+#                palette = c("#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+#    tm_layout(legend.title.size = 1.5, fontface = 2, legend.position = c("right","bottom"), frame = FALSE)
+# 
+# print(output)
+# 
+#  }
 
 
 
@@ -533,8 +752,6 @@ print(output)
 ##complete cases and scaled variables
 
 ```{r}
-
-
 
 
 complete_cases_by_year <- data %>%
@@ -546,9 +763,7 @@ print(complete_cases_by_year)
 
 # Filter the dataset to keep only complete cases
 data_comp <- data %>%
-  filter(complete.cases(.)) %>%
-  group_by(year) %>%
-  filter(n() >= 2000)  # Adjust 'desired_count_per_year' as needed
+  filter(complete.cases(.))  # 
 
 # Display the filtered dataset
 print(data_comp)
@@ -557,6 +772,7 @@ print(data_comp)
 ##scale variables
 
 data_scaled <- data_comp %>%
+  ungroup() %>%
   mutate(scaled_paam = scale(paam),
          scaled_retention = scale(retention), 
          scaled_autonomy = scale(autonomy), 
@@ -566,7 +782,10 @@ data_scaled <- data_comp %>%
          scaled_lfp = scale(laborforce_part_rate), 
          scaled_edu = scale(highschool_attainment_rate), 
          scaled_uninsured = scale(uninsured), 
-         scaled_pcp = scale(pcp))
+         scaled_pcp = scale(pcp), 
+         scaled_eva = scale(emp_to_va), 
+         scaled_eout = scale(emp_to_output), 
+         scaled_vaout = scale(va_to_output))
 
 
 # Transform to panel data frame
@@ -589,7 +808,7 @@ print(observations_by_year)
 
 ```{r}
 
-ols_1<- lm(paam ~ scaled_retention+ scaled_autonomy+ scaled_unemp + scaled_inc + scaled_poverty+ scaled_lfp+ scaled_edu+ scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, data = data_panel)
+ols_1<- lm(paam ~ scaled_retention+ scaled_autonomy+ scaled_eva + scaled_eout + scaled_vaout + scaled_unemp + scaled_inc + scaled_poverty+ scaled_lfp+ scaled_edu+ scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, data = data_panel)
 
 summary(ols_1)
 
@@ -666,14 +885,75 @@ summary(re5)
 huxreg(re1, re2, re3, re4, re5)
 
 
+##models without unemployment
 
 
+re1_u <- plm(paam ~ log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+             random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re1_u)
+
+
+
+
+re2_u <- plm(paam ~ scaled_inc + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re2_u)
+
+re3_u <- plm(paam ~ scaled_inc + scaled_poverty + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re3_u)
+
+
+re4_u <- plm(paam ~ scaled_inc + scaled_poverty + scaled_lfp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re4_u)
+
+
+re5_u <- plm(paam ~ scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re5_u)
+
+huxreg(re1_u, re2_u, re3_u, re4_u, re5_u)
+
+huxreg (re5, re5_u)
 
 
 
 ```
 
-##health provision random effects models 
+
+
+ ##health provision random effects models 
 
 ```{r}
 
@@ -714,6 +994,10 @@ huxreg (re6, re7)
 
 ```
 
+
+***Idiosyncratic effects*** refer to variation within groups (e.g., counties over time) that is not explained by observed variables.
+
+***Individual effects*** refer to differences between groups (e.g., differences between counties) that persist over time and are not explained by observed variables.
 
 ##prosperity and health models 
 
@@ -787,10 +1071,75 @@ re11 <- plm(paam ~ scaled_retention+ scaled_autonomy+ log_population + nonmetro_
 # Summarize the random effects model
 summary(re11)
 
-huxreg(re9, re10, re11)
+#paam ~ employee share of value added
+re12 <- plm(paam ~ scaled_eva + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re12)
+
+#paam ~ employee share of output 
+re13 <- plm(paam ~ scaled_eout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re13)
+
+#paam~ value added share of output 
+
+re14 <- plm(paam ~ scaled_vaout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re14)
+
+#paam ~ all value added and output variables
+
+re15 <- plm(paam ~ scaled_eva + scaled_eout + scaled_vaout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re15)
+
+#paam ~ all economic variables 
+
+re16 <- plm(paam ~ scaled_retention+ scaled_autonomy+ scaled_eva + scaled_eout + scaled_vaout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re16)
 
 
-huxreg(re5, re7, re8, re11)
+huxreg(re9, re10, re11) 
+
+huxreg(re12, re13, re14, re15)
+
+huxreg(re11, re15, re16)
+
+
+huxreg(re5, re7, re8, re11, re15, re16)
+
+##collinearity between value added variables, employee share of output is a product of employee share of value added and value added share of output- use this variable only. 
 
 # ##extraction and dependence models (for checking)
 # 
@@ -838,10 +1187,12 @@ huxreg(re5, re7, re8, re11)
 
 #premature mortality, economy, and prosperity 
 
+##unemploymet might not add much to the model on top of labor force participation so double check this. 
+
 
 #paam~ retention + autonomy + + paam ~ unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ population + metro + e 
 
-re12 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy+ log_population + nonmetro_dummy, 
+re17 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy+ log_population + nonmetro_dummy, 
             data = data_panel, 
             model = "random",
             random.method = "ht",
@@ -849,10 +1200,23 @@ re12 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + sca
             index = c("place", "year"))
 
 # Summarize the random effects model
-summary(re12)
+summary(re17)
+
+#paam~ retention + autonomy + +emp_to_output + unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ population + metro + e 
 
 
-huxreg (re5, re7, re8, re11, re12)
+re18 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy+ scaled_eout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(re18)
+
+
+huxreg (re5, re7, re8, re11, re13, re17, re18)
 
 
 ```
@@ -876,7 +1240,9 @@ summary(re_us)
 
 #paam~ retention + autonomy + + paam ~ unemp_rate + income_rate + poverty_rate+ laborforce_part_rate+ highschool_attainment_rate+ uninsured + pcp + dentist + mhp+ population + metro + e 
 
-re13 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+##scaled model 
+
+re19 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu+scaled_retention+ scaled_autonomy + scaled_eout + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
             data = data_panel, 
             model = "random",
             random.method = "ht",
@@ -886,12 +1252,127 @@ re13 <- plm(paam ~ scaled_unemp + scaled_inc + scaled_poverty + scaled_lfp + sca
 # Summarize the random effects model
 summary(re15)
 
-huxreg (re_us, re13)
+huxreg (re_us, re19)
 
 
-huxreg (re5, re7, re8, re11, re12, re13)
+huxreg (re5, re7, re8, re11, re12, re15, re18, re19)
 
 
+
+```
+
+
+***Idiosyncratic effects*** refer to variation within groups (e.g., counties over time) that is not explained by observed variables.
+
+***Individual effects*** refer to differences between groups (e.g., differences between counties) that persist over time and are not explained by observed variables.
+
+```{r}
+##----------
+
+#non-hausman transformation models 
+
+#trade and premature death 
+
+rep_1 <- plm(paam ~ scaled_retention+ scaled_autonomy + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_1)
+
+#trade, employees, premature death
+
+rep_2 <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_2)
+
+#trade, employees, prosperity and premature death 
+
+rep_3 <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_3)
+
+
+#trade, employees, prosperity, health, and premature death 
+
+rep_4 <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_4)
+
+##---------
+
+#hausman transformation models 
+
+
+rep_1h <- plm(paam ~ scaled_retention+ scaled_autonomy + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_1h)
+
+#trade, employees, premature death
+
+rep_2h <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_2h)
+
+#trade, employees, prosperity and premature death 
+
+rep_3h <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_3h)
+
+
+#trade, employees, prosperity, health, and premature death 
+
+rep_4h <- plm(paam ~ scaled_retention+ scaled_autonomy + scaled_eout + scaled_inc + scaled_poverty + scaled_lfp + scaled_edu + scaled_uninsured + scaled_pcp + log_population + nonmetro_dummy, 
+            data = data_panel, 
+            model = "random",
+            random.method = "ht",
+            effect = "individual",
+            index = c("place", "year"))
+
+# Summarize the random effects model
+summary(rep_4h)
+
+huxreg(rep_1, rep_2, rep_3, rep_4)
+
+huxreg(rep_1h, rep_2h, rep_3h, rep_4h)
+
+huxreg(rep_1, rep_1h, rep_2, rep_2h, rep_3, rep_3h, rep_4, rep_4h)
 
 ```
 
