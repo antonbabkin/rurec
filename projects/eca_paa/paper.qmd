@@ -10,6 +10,31 @@ params:
 
 This notebook generates outputs directly used in the paper.
 
+```{r}
+library(logger)
+library(tidyverse)
+library(sandwich)
+library(modelsummary)
+library(tmap)
+
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+
+call_geo <- function() {
+  df <- geo$call_geog(2013) |>
+    rename_with(str_to_lower)
+  d <- geo$pubdata$get_state_df(FALSE) |>
+    rename_with(str_to_lower) |>
+    select(code, contiguous, bea_region_name) |>
+    rename(state_code = code)
+  df <- left_join(df, d, "state_code")
+  df
+}
+
+```
+
+
 # CBSA 2020 counts
 
 In the introduction of the paper.
@@ -81,7 +106,38 @@ x |> filter(place == "55117")
 
 # Hennepin
 
+## ECA vs CBSA
+
 ```{r}
+
+
+df <- dp$call_proj_df(params$year) %>% 
+  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+  mutate(income_rate = income_rate/1000) %>%
+  mutate(payroll = payroll*1000) %>%
+  mutate(gdp = gdp*1000)
+
+
+x <- dp$temporal_permutations(params$year_range)
+tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
+for (y in 1:nrow(x)){
+  paste(x[y,1], x[y,2]) %>% print()
+  for (i in params$reg_factor_funs){
+     tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+       mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>% 
+       rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+       left_join(tmp, ., by = "place")
+  }
+}
+
+df <- left_join(df, tmp, by = "place")
+
+data <- df %>% 
+  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+  select(place, NAME, STATE_CODE, COUNTY_CODE, COUNTY, STATE_NAME, STATE, CBSA_CODE, cbsa_members_count, CBSA_TITLE, METRO_MICRO, CENTRAL_OUTLYING, cbsa_rural_category, ruc_code, geometry, center, eca_cluster_category, eca_central_out_xtab, eca_cbsa_xtab, sink_filter, cbsa_by_eca, metro_micro_sink, eca_membership, cbsa_of_eca, population, employment, jobs, laborforce_part_rate, unemp_rate, payroll, wage, income_rate, establishments, entry_rate, exit_rate, gdp, poverty_rate, highschool_attainment_rate, ypll75, net_migration_rate, establishments_gr, wage_gr, jobs_gr, payroll_gr, employment_gr, poverty_rate_gr, income_rate_gr, population_gr)
+
+
+
 ECA_n = "27053"
 cbsa_n = data %>% filter(eca_membership == ECA_n & eca_cluster_category == "Cluster Sink") %>% select(CBSA_CODE)
 cbsa_n = cbsa_n$CBSA_CODE
@@ -104,22 +160,111 @@ comp_map = data_map %>%
             (eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", 
             ifelse(
               (eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA",
-              if_else(eca_membership == ECA_n, "here", "outside")))))))
+              if_else(eca_membership == ECA_n, "here", "other ECA"))))))) %>%
+  mutate(comp = ordered(comp, c(
+    "ECA dest, own CBSA center", 
+    "ECA source, non-CBSA", 
+    "ECA source, same CBSA", 
+    "ECA source, other CBSA", 
+    "other ECA, same CBSA", 
+    "other ECA")))
+
+
 
 # comp_map |> filter(eca_membership == ECA_n) |> View()
 MyPalette <- c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
 
 tmap_mode("plot")
 
-print(comp_map %>%
+comp_map %>%
   tm_shape() + 
   tm_polygons(col = "comp", title = "CBSA Statuses
 Hennepin County ECA", border.alpha = 0.4, style = "cat", palette = MyPalette) +
   tm_layout(legend.title.size = 1.0, legend.position = c("RIGHT","TOP"),
             title = "", frame = FALSE)
-)
+
 ```
 
+
+## step 1
+
+exports from rural source county
+
+```{r}
+
+
+focus_county <- "55005"
+industry_code <- "all_industries"
+
+if (industry_code == "all_industries" || grepl("^[[:alnum:]]+$", industry_code)) { # single code or all
+  x <- trade_flows$call_trade_flows(industry_code)
+} else if (grepl(",", industry_code)) { # comma-separated list of codes
+  x <- 0
+  for (ind_code in str_split_1(industry_code, ",")) {
+    x <- x + trade_flows$call_trade_flows(ind_code)
+  }
+} else { # regex
+  all_codes <- trade_flows$call_industry_codes()
+  x <- 0
+  for (ind_code in grep(industry_code, all_codes, value = TRUE)) {
+    x <- x + trade_flows$call_trade_flows(ind_code)
+  }
+}
+d <- data.frame(
+  place = rownames(x),
+  exports = x[focus_county, ],
+  imports = x[, focus_county]
+) |>
+  mutate(exports = na_if(exports, 0), imports = na_if(imports, 0))
+df <- call_geo() %>%
+  left_join(d, "place") %>%
+  mutate(tooltip = glue("{name} {place} | imp {imports} | exp {exports}")) |>
+  mutate(exports = if_else(exports < 1000, NA, exports))
+
+tmap_mode("plot")
+tm_shape(filter(df, contiguous, state %in% c("WI", "MN"))) +
+  tm_polygons("exports", border.alpha = 0.4, colorNA = "white", palette = c("white", "#97c08d")) +
+  tm_shape(filter(df, place == focus_county)) +
+  tm_fill("#3d85c6") +
+  tm_layout(title = "", frame = FALSE)
+
+
+```
+
+
+## step 2
+
+source and destination
+
+```{r}
+d <- comp_map %>%
+  mutate(comp1 = if_else(place %in% c("55005", "27053"), comp, NA))
+
+d %>%
+  tm_shape() + 
+  tm_polygons(col = "comp1", border.alpha = 0.4, style = "cat", palette = MyPalette, colorNA = "white") +
+  tm_layout(legend.show = FALSE, title = "", frame = FALSE)
+```
+
+
+## step 3
+
+all sources
+
+```{r}
+pal <- MyPalette # c("#97c08d", "#3d85c6", "#f5cba3", "#f5f2a3", "grey89", "white")
+pal[3:4] <- pal[2]
+pal[5] <- "white"
+
+comp_map %>%
+  tm_shape() + 
+  tm_polygons(col = "comp", border.alpha = 0.4, style = "cat", palette = pal, colorNA = "white") +
+  tm_layout(legend.show = FALSE, title = "", frame = FALSE)
+```
+
+
+
+# ??
 
 ```{r}
 dest_fips <- "27053"
@@ -377,65 +522,61 @@ tmap_mode("view")
 print(p2)
 ```
 
+
+
+# regressions
+
+
+## dataframe
+
 ```{r}
-x <- trade_flows$call_trade_flows("112120")
-fips_wi <- str_starts(rownames(x), "55")
-x1 <- x[fips_wi, ]
-x[fips_wi & (rowSums(x1 > 1000) > 1), (colSums(x1) > 10000)] |> View()
+
+params
+
+df <- dp$call_proj_df(params$year) %>% 
+  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+  mutate(wage = wage/1000) %>% 
+  mutate(income_rate = income_rate/1000) %>% 
+  mutate(ypll75 = ypll75/100000) %>% 
+  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
+  
+df$metro_micro_destination <- df$metro_micro_sink
+  df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
+    df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
+      df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
+      
+x <- dp$temporal_permutations(params$year_range)
+tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
+for (y in 1:nrow(x)){
+  paste(x[y,1], x[y,2]) %>% print()
+  for (i in params$reg_factor_funs){
+     tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
+       mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>% 
+       rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
+       left_join(tmp, ., by = "place")
+  }
+}
+df <- left_join(df, tmp, by = "place")
 
 
+for (i in params$reg_factors ){
+  if (!paste0("sink_value_", i) %in% names(df)){
+    df <- df[df$place == df$eca_membership , c("place", i)] %>% 
+      st_drop_geometry() %>% 
+      `colnames<-`(c("eca_membership", paste0("sink_value_", i))) %>% 
+      {left_join(df, ., by = "eca_membership")}
+  }
+}
 ```
 
-# regress
+## tables
+
 
 ```{r}
 
-if(FALSE){
+if(TRUE){
     
-  library(logger)
-  library(tidyverse)
-  library(sandwich)
-  library(modelsummary)
-  
-  
-  source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
-  
-  params
-  
-  df <- dp$call_proj_df(params$year) %>% 
-    mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-    mutate(wage = wage/1000) %>% 
-    mutate(income_rate = income_rate/1000) %>% 
-    mutate(ypll75 = ypll75/100000) %>% 
-    mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
-    
-  df$metro_micro_destination <- df$metro_micro_sink
-    df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
-      df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
-        df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
-        
-  x <- dp$temporal_permutations(params$year_range)
-  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place")) 
-  for (y in 1:nrow(x)){
-    paste(x[y,1], x[y,2]) %>% print()
-    for (i in params$reg_factor_funs){
-       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>% 
-         mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>% 
-         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>% 
-         left_join(tmp, ., by = "place")
-    }
-  }
-  df <- left_join(df, tmp, by = "place")
-  
-  
-  for (i in params$reg_factors ){
-    if (!paste0("sink_value_", i) %in% names(df)){
-      df <- df[df$place == df$eca_membership , c("place", i)] %>% 
-        st_drop_geometry() %>% 
-        `colnames<-`(c("eca_membership", paste0("sink_value_", i))) %>% 
-        {left_join(df, ., by = "eca_membership")}
-    }
-  }
+
    
   
   coef_names <- c(
@@ -504,10 +645,7 @@ if(FALSE){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "destination_value" = "Destination Value") )}
-  
-  
-  
-  
+
   
 
   specif <- list()
@@ -567,10 +705,146 @@ specif[ssf] %>%
                          "destination_value:eca_distance" = "Destination x Distance") )}
 
 
-
-
-
 }
 
 ```
 
+
+
+
+
+## coef plot
+
+
+```{r}
+
+coef_names <- c(
+  "Establishment Entry",
+  "Establishment Exit", 
+  "Establishment Growth",
+  "Wage", 
+  "Wage Growth", 
+  "Job Growth", 
+  "Payroll Growth", 
+  "Unemployment Rate", 
+  "Laborforce Rate", 
+  "Employment Growth", 
+  "Poverty Rate", 
+  "Income Rate", 
+  "Poverty Growth", 
+  "Income Growth", 
+  "Population Growth", 
+  "Premature Death Rate", 
+  "Highschool Graduation Rate", 
+  "Net Migration Rate")
+
+specif <- list()
+df_mod <- list()
+mvc <- list()
+for (i in params$reg_factors){
+  x1 <- paste0("sink_value_", i)
+  clust <- "eca_membership"
+  df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+    st_drop_geometry()
+  df_mod[[i]] <- df_reg %>% 
+    select(i, x1, clust) %>% 
+    na.omit() %>% 
+    rename(destination_value = x1) 
+  fm <- as.formula(paste(i, "~", "destination_value"))
+  specif[[i]] <- lm(fm, data = df_mod[[i]])
+  mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+}
+
+
+df_coef <- specif %>%
+  map(\(x) broom::tidy(x, conf.int = TRUE)) %>%
+  list_rbind(names_to = "outcome") %>%
+  left_join(data.frame(outcome = params$reg_factors, outlab = coef_names), "outcome") %>%
+  mutate(outlab = ordered(outlab, levels = coef_names))
+
+df_coef
+
+df_coef %>%
+  filter(term == "destination_value") %>%
+  ggplot() +
+  geom_point(aes(outlab, estimate)) +
+  geom_errorbar(aes(outlab, ymin = conf.low, ymax = conf.high), width = 0.2) +
+  ylim(-0.1, 0.8) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
+```
+
+
+
+
+## marginal eff with dist
+
+
+```{r}
+
+library(margins)
+library(patchwork)
+
+specif <- list()
+df_mod <- list()
+mvc <- list()
+for (i in params$reg_factors){
+  x1 <- paste0("sink_value_", i)
+  x2 <- "eca_center_distance"
+  clust <- "eca_membership"
+  df_reg <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+    st_drop_geometry()
+  df_mod[[i]] <- df_reg %>% 
+    select(i, x1, x2, clust) %>% 
+    na.omit() %>% 
+    rename(destination_value = x1) %>%
+    rename(eca_distance = x2)
+  fm <- as.formula(paste(i, "~", "destination_value", "*", "eca_distance"))
+  specif[[i]] <- lm(fm, data = df_mod[[i]])
+  mvc[[i]] <- vcovCL(x = specif[[i]], type = "HC2", cluster = df_mod[[i]][["eca_membership"]])
+}
+
+display_names <- list(
+  `Wage Growth` = "Wage growth",
+  `YPLL75` = "Years of potential life lost",
+  `Highschool Graduation Rate` = "High school graduation rate"
+)
+
+for (co in c("Wage Growth", "Highschool Graduation Rate")) {
+
+  i <- match(co, coef_names)
+
+me <- margins_summary(model = specif[[i]], 
+                        variables = "destination_value", 
+                        at = list(eca_distance = 0:15), 
+                        vcov = mvc[[i]])
+  p <- ggplot(me, aes(x = eca_distance, y = AME, ymin = lower, ymax = upper)) +
+    geom_ribbon(fill = "#332288", alpha = .2) +
+    geom_line(color = "#332288") +
+    geom_hline(yintercept = 0) +
+    theme_minimal() +
+    labs(title = display_names[[coef_names[i]]],
+         x = "Distance (miles)",
+         y = "Marginal effect") +
+    scale_x_continuous(labels = label_comma(scale = 100)) +
+    scale_y_continuous(limits = c(-0.5, 1))
+    
+  denx <- ggplot(df_mod[[i]], aes(eca_distance)) + 
+    geom_histogram(color = "grey", fill = "white", bins = 50) +
+    scale_x_continuous(limits = c(0, 15)) +
+    theme_void()
+    
+  
+  stack_plots <- p + plot_spacer() + denx + 
+      plot_layout(
+        ncol = 2, 
+        nrow = 2, 
+        widths = c(4, 1),
+        heights = c(4, 1) ) 
+
+  suppressWarnings(print(stack_plots))
+}
+
+
+```

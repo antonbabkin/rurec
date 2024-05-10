@@ -281,6 +281,20 @@ bprox_mat <- function(spatial_dataframe,
   return(df)
 }
 
+
+# generate KNN matrix
+knn_mat <- function(distance_matrix, 
+                    neighbors = 10) {
+  dm <- distance_matrix %>% drop_units()
+  stopifnot("number of neighbors out of bounds" = neighbors>0 & neighbors<ncol(dm))
+  x <- dm %>% 
+    {matrix(0, ncol = ncol(.), nrow = nrow(.), dimnames = list(rownames(.), colnames(.)))}
+  for(i in 1:nrow(x)){
+    x[i, order(dm[i,])[2:(neighbors+1)]] <- 1
+  }
+  return(x)
+}
+
 ## distance matrices----
 
 #' Produce Distance Matrix
@@ -321,7 +335,6 @@ call_bprox_mat <- function(year = 2013,
   saveRDS(df, util$mkdir(cache_path))  
   return(df)
 }
-
 
 # TODO: fix with functional form and update more efficient/flexible algorithm 
 ############ Generate neighbors of neighbors hierarchical vector for a place ad nauseam
@@ -570,6 +583,16 @@ call_bisquare_impedance_mat <- function(decay_zero = 1000, from = c("center", "b
     {bisquare_impedance_mat(distance_matrix = ., decay_zero = decay_zero)}
   return(df)
 }
+
+#' Produce KNN matrix
+#' @param neighbors number of neighbors to include 
+call_knn_mat <- function(neighbors = 10, from = c("center", "border"), year = 2013, cbsa = FALSE) {
+  df <- call_dist_mat(year = year, from = from, cbsa = cbsa) %>% 
+    {knn_mat(distance_matrix = ., neighbors = neighbors)}
+  return(df)
+}
+
+
 
 # call family of impedance matrices from single function 
 call_impedance_mat <- function(year = 2013,

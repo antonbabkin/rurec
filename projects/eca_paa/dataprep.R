@@ -175,7 +175,21 @@ call_geog <- function(year) {
   return(df)
 }
 
+call_power_impedance_mat <- geography$call_power_impedance_mat
+call_expo_impedance_mat <- geography$call_expo_impedance_mat
+call_gaus_impedance_mat <- geography$call_gaus_impedance_mat
 call_bprox_mat <- geography$call_bprox_mat
+call_knn_mat <- geography$call_knn_mat
+call_prox_impedance_mat <- geography$call_prox_impedance_mat
+call_bisquare_impedance_mat <- geography$call_bisquare_impedance_mat
+
+power_impedance_mat <- geography$power_impedance_mat
+expo_impedance_mat <- geography$expo_impedance_mat
+gaus_impedance_mat <- geography$gaus_impedance_mat
+knn_mat <- geography$knn_mat
+prox_impedance_mat <- geography$prox_impedance_mat
+bisquare_impedance_mat <- geography$bisquare_impedance_mat
+
 
 # Distance matrix ----
 
