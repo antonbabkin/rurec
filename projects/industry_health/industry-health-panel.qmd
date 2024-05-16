@@ -12,9 +12,7 @@ editor: visual
 params:
   year: 2012
   year_range: !expr  c(2013:2019)
-
 ---
-
 
 ```{r include = FALSE}
 
@@ -92,8 +90,8 @@ log_threshold(DEBUG)
 
 ```
 
-
 ##data
+
 ```{r include = FALSE}
 
 
@@ -239,6 +237,7 @@ print(data)
 ```
 
 ##data mutations
+
 ```{r}
 
 ##retention and autonomy 
@@ -326,7 +325,9 @@ print(summary_stats)
 # plots_list
 
 ```
+
 ##density and histogram
+
 ```{r}
 data %>% select(paam,ypll75, pcp, uninsured, dentists, mhp, population, laborforce_part_rate, unemp_rate, income_rate, poverty_rate, highschool_attainment_rate) %>% hist.data.frame()
 
@@ -614,10 +615,7 @@ ggplot(na_data, aes(emp_to_output, group = metro_nonmetro, color = as.factor(met
 
 ```
 
-
 ##paam trends 2013-2019
-
-
 
 ```{r}
 
@@ -677,6 +675,7 @@ ggplot(avg_paam_total, aes(x = year, y = avg_paam, color = type, group = type)) 
 
 
 ```
+
 ##jackson county wv
 
 ```{r}
@@ -715,8 +714,6 @@ for (var in variables) {
 # Print each plot
 plots_list
 ```
-
-
 
 ##maps
 
@@ -804,7 +801,8 @@ observations_by_year <- data_panel %>%
 print(observations_by_year)
 
 ```
-##OLS model 
+
+##OLS model
 
 ```{r}
 
@@ -814,9 +812,7 @@ summary(ols_1)
 
 ```
 
-
-
-##prosperty random effects models 
+##prosperty random effects models
 
 ```{r}
 
@@ -951,9 +947,7 @@ huxreg (re5, re5_u)
 
 ```
 
-
-
- ##health provision random effects models 
+##health provision random effects models
 
 ```{r}
 
@@ -994,12 +988,11 @@ huxreg (re6, re7)
 
 ```
 
-
 ***Idiosyncratic effects*** refer to variation within groups (e.g., counties over time) that is not explained by observed variables.
 
 ***Individual effects*** refer to differences between groups (e.g., differences between counties) that persist over time and are not explained by observed variables.
 
-##prosperity and health models 
+##prosperity and health models
 
 ```{r}
 
@@ -1025,8 +1018,7 @@ huxreg (re5, re7, re8)
 
 ```
 
-
-##economy models 
+##economy models
 
 ```{r}
 
@@ -1178,7 +1170,7 @@ huxreg(re5, re7, re8, re11, re15, re16)
 
 ```
 
-#economy and prosperity models 
+#economy and prosperity models
 
 ```{r}
 
@@ -1221,8 +1213,7 @@ huxreg (re5, re7, re8, re11, re13, re17, re18)
 
 ```
 
-
-# economy, prosperity, and health models 
+# economy, prosperity, and health models
 
 ```{r}
 
@@ -1260,7 +1251,6 @@ huxreg (re5, re7, re8, re11, re12, re15, re18, re19)
 
 
 ```
-
 
 ***Idiosyncratic effects*** refer to variation within groups (e.g., counties over time) that is not explained by observed variables.
 
@@ -1376,9 +1366,7 @@ huxreg(rep_1, rep_1h, rep_2, rep_2h, rep_3, rep_3h, rep_4, rep_4h)
 
 ```
 
-
-
-##scatter plots 
+##scatter plots
 
 ```{r}
  
@@ -1453,4 +1441,3 @@ ggplot(data_panel, aes(autonomy, paam)) +
         x = "autonomy rate",
         y = "Premature Mortality Rate")
 ```
-

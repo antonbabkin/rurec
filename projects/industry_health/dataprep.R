@@ -172,6 +172,8 @@ call_ruc <- function(year) {
 
 # Population ----
 
+##unlogged
+
 call_population <- function(year, 
                             bus_data = "tidy_acs") {
   cache_path = glue(opath$population_)
@@ -190,6 +192,8 @@ call_population <- function(year,
 }
 
 # Labor force ----
+
+#size
 
 call_laborforce <- function(year, 
                             bus_data = "ers") {
@@ -211,6 +215,8 @@ call_laborforce <- function(year,
 
 
 # Income----
+
+#average
 
 call_income <- function(
     year,
