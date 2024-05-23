@@ -132,6 +132,56 @@ industry = get_acs(geography = "county",
 
 ```
 
+```{r}
+
+# # not working
+# abc = ih_dp$call_agcensus12()
+
+agc_clean = read.delim2("data/projects/industry_health/agcensus/qs.census2012.txt") #import ag census
+jobs_clean <- read_delim("data/projects/industry_health/jobs/cbp12co.txt") #import cbp
+
+agwork = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "LABOR, HIRED, GE 150 DAYS - NUMBER OF WORKERS" & DOMAIN_DESC == "TOTAL") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agwork = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agwork)
+
+
+agops = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "OPERATORS, (ALL) - NUMBER OF OPERATORS") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agops = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agops)
+
+agc = agwork %>%
+  left_join(y=agops, by="place") %>%
+  mutate(agwork = ifelse(is.na(agwork), 0, agwork), agops = ifelse(is.na(agops), 0, agwork), ag_emp = agwork + agops) %>%
+  select(place, ag_emp)
+
+
+
+jobs = jobs_clean %>%
+  filter(naics != "------") %>%
+  mutate(naicsfilt = substr(naics,3,3), place = str_c(fipstate,"",fipscty)) %>%
+  filter(naicsfilt == "-") %>%
+  mutate(naics = str_c("n","",substr(naics,1,2))) %>%
+  select(place, naics, emp) %>%
+  pivot_wider(names_from = naics, values_from = emp)
+
+jobs_temp = jobs_clean %>%
+  filter(naics == "------") %>%
+  mutate(place = str_c(fipstate,"",fipscty)) %>%
+  select(place, "cbp.tot"=emp)
+
+jobs = jobs %>%
+  left_join(y=jobs_temp, by="place") %>%
+  replace(is.na(.), 0) %>%
+  mutate(cbp.no.ag = cbp.tot - n11, n_fire = n52 + n53, n_edmed = n61 + n62, n_prof = n54 + n55) %>%
+  select(place, cbp.no.ag, "n_mine"=n22, "n_mfg"=n31, n_fire, n_edmed, n_prof) %>%
+  left_join(y=agc, by="place") %>%
+  mutate(totemp = cbp.no.ag + ag_emp, pct_ag = ag_emp/totemp, pct_mine = n_mine/totemp, pct_mfg = n_mfg/totemp, pct_fire = n_fire/totemp, pct_edmed = n_edmed/totemp, pct_prof = n_prof/totemp) %>%
+  select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed)
+
+```
+
 # data
 
 ```{r include = FALSE}
@@ -168,7 +218,8 @@ rucc<- ih_dp$call_ruc (2013) %>%
 data<- left_join (data, rucc, by = "place")
 
 data = data %>% 
-mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"))
+mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
+       logpop = log(population))
 
 ind_struct<- ih_dp$call_industry_structure(2012)
 
@@ -178,7 +229,7 @@ data<- left_join (data, age, by = "place")
 
 data<- left_join (data, ers, by = "place")
 
-data<- left_join (data, industry, by = "place")
+data<- left_join (data, jobs, by = "place")
 
 circularity <- circularity$get_circularity()
 
@@ -196,6 +247,7 @@ print(data)
 
 
 ```
+
 ##construct alternate retention and autonomy
 
 ```{r}
@@ -755,4 +807,51 @@ legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-H
 legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
+
+
+# clay - regressions
+
+```{r}
+
+hist(data$paam)
+
+
+```
+
+## ols
+```{r}
+
+ols1 = lm(data = data, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + retention_calc*pct_prof + pct_ag + pct_mine + pct_mfg + pct_fire + pct_prof + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+
+summary(ols1)
+
+
+```
+
+## sp autocorrelation
+```{r}
+
+```
+
+
+## sp error
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
