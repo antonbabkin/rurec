@@ -318,6 +318,37 @@ call_dist_mat <- function(year = 2013,
 }
 
 
+# Island county adjacency correction
+adjacency_correction <- function(adjacency_matrix){
+  nl <- list(
+    c("25019", "25007"),
+    c("36085", "34017", "34023", "34025", "34039", "36047", "36081"),
+    c("53055", "53009", "53029", "53031", "53057", "53073"),
+    c("02016", "02013"),
+    c("72049", "72037"),
+    c("72147", "72037")
+  )
+  w <- c(
+    "Nantucket, MA",
+    "Richmond, NY (Staten Island)",
+    "San Juan, WA",
+    "Aleutians West Census Area, AK",
+    "Culebra Municipio, PR",
+    "Vieques Municipio, PR"
+  )
+  for(k in 1:length(nl)){
+    n <- nl[[k]]
+    if(all(n %in% rownames(adjacency_matrix))){
+      for(i in n){
+        for(j in n){
+          adjacency_matrix[i, j] <- 1
+        }
+      }
+    } else {warning(w[k], "missing neighbors, unable to correct") }
+  }
+  return(adjacency_matrix)
+}
+
 # Produce Shared Border Matrix
 call_bprox_mat <- function(year = 2013, 
                            cbsa = FALSE, 
@@ -329,8 +360,9 @@ call_bprox_mat <- function(year = 2013,
   }
   
   df <- call_geog(year = year, cbsa = cbsa) %>% 
-    {bprox_mat(spatial_dataframe = ., queen = queen)}
-  
+    {bprox_mat(spatial_dataframe = ., queen = queen)} %>% 
+    adjacency_correction()
+    
   log_debug(paste("save to cache", cache_path))
   saveRDS(df, util$mkdir(cache_path))  
   return(df)
@@ -508,11 +540,11 @@ impedance_mat <- function(spatial_dataframe,
     caption <- paste0("Proximity Radius: ", scalar_constant," mile limit")
   }
   if(functional_form == "queen"){
-    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = TRUE)
+    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = TRUE) %>% adjacency_correction()
     caption <- paste0("Queen Adjacent Borders")
   }
   if(functional_form == "rook"){
-    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = FALSE)
+    df <- bprox_mat(spatial_dataframe = spatial_dataframe, queen = FALSE) %>% adjacency_correction()
     caption <- paste0("Rook Adjacent Borders")
   }
   if(functional_form == "neighbor"){
