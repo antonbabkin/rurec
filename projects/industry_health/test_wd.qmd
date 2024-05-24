@@ -113,21 +113,21 @@ ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypol
 
 
 
-##Industry Structure
-
-industry = get_acs(geography = "county",
-                   survey = "acs5",
-                   variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
-                                        ,"DP03_0035E","DP03_0036E","DP03_0037E"
-                                        ,"DP03_0038E","DP03_0039E","DP03_0040E"
-                                        ,"DP03_0041E","DP03_0042E","DP03_0043E"
-                                        ,"DP03_0044E","DP03_0045E"
-                   ),
-                   year = 2012) %>%
-  select("place"=GEOID, variable, estimate) %>%
-  pivot_wider(names_from = variable, values_from = estimate) %>%
-  mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
-  select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
+# ##Industry Structure
+# 
+# industry = get_acs(geography = "county",
+#                    survey = "acs5",
+#                    variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
+#                                         ,"DP03_0035E","DP03_0036E","DP03_0037E"
+#                                         ,"DP03_0038E","DP03_0039E","DP03_0040E"
+#                                         ,"DP03_0041E","DP03_0042E","DP03_0043E"
+#                                         ,"DP03_0044E","DP03_0045E"
+#                    ),
+#                    year = 2012) %>%
+#   select("place"=GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
+#   select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
 
 
 ```
@@ -821,15 +821,48 @@ hist(data$paam)
 ## ols
 ```{r}
 
-ols1 = lm(data = data, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + retention_calc*pct_prof + pct_ag + pct_mine + pct_mfg + pct_fire + pct_prof + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+ols1 = lm(data = df_map, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+
+ols2 = lm(data = df_map, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+
 
 summary(ols1)
+summary(ols2)
+
+
+```
+```{r}
+
+temp =  ols1$resid
 
 
 ```
 
+
+
 ## sp autocorrelation
 ```{r}
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
+mi1$r = ols1$resid
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1$r,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi1['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi1 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
 
 ```
 
@@ -837,9 +870,65 @@ summary(ols1)
 ## sp error
 ```{r}
 
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+err1 = errorsarlm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score,
+                  lw, zero.policy = TRUE)
+
+err2 = errorsarlm(data = mi1, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score,
+                  lw, zero.policy = TRUE)
+
+
+summary(err1)
+summary(err2)
+
+
+
+
+```
+
+## la grange / robust la grange
+```{r}
+
+ols1 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+lm.LMtests(ols1, lw, test = c("LMerr","LMlag","RLMerr","RLMlag"), zero.policy = TRUE)
+
 ```
 
 
+## sp autocorrelation
+
+```{r}
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
+mi1$r2 = err2$resid
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1$r2,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi1['r2'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi1 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
+
+```
 
 
 
