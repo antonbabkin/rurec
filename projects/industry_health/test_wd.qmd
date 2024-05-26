@@ -45,6 +45,8 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 # install.packages("gridExtra")
 # install.packages("rgeoda") 
 # install.packages("spgwr")
+# install.packages("lavaan")
+# install.packages("lavaanPlot")
 
 
 
@@ -80,6 +82,8 @@ library(gridExtra)
 library(tidycensus) 
 library(rgeoda) 
 library(spgwr)
+library(lavaan)
+library(lavaanPlot)
 
 
 # chunk behavior 
@@ -102,6 +106,16 @@ age = get_acs(geography = "county",
                    ),
                    year = 2012) %>%
   select("place"=GEOID, "age"=estimate)
+
+##pct over 65
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_028E"
+                   ),
+                   year = 2012) %>%
+  mutate(age = estimate/100) %>%
+  select("place"=GEOID, age)
+
 
 
 
@@ -178,7 +192,8 @@ jobs = jobs %>%
   select(place, cbp.no.ag, "n_mine"=n22, "n_mfg"=n31, n_fire, n_edmed, n_prof) %>%
   left_join(y=agc, by="place") %>%
   mutate(totemp = cbp.no.ag + ag_emp, pct_ag = ag_emp/totemp, pct_mine = n_mine/totemp, pct_mfg = n_mfg/totemp, pct_fire = n_fire/totemp, pct_edmed = n_edmed/totemp, pct_prof = n_prof/totemp) %>%
-  select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed)
+  select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed) %>%
+  mutate(pct_edmed = ifelse(pct_edmed == "Inf", NA, pct_edmed), pct_fire = ifelse(pct_fire == "Inf", NA, pct_fire))
 
 ```
 
@@ -843,6 +858,7 @@ temp =  ols1$resid
 ## sp autocorrelation
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
+w <- queen_weights(mi1)
 mi1$r = ols1$resid
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
@@ -892,6 +908,7 @@ summary(err2)
 ```{r}
 
 ols1 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+ols3 = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
 
 
 nb <- poly2nb(mi1, queen=TRUE)
@@ -899,6 +916,7 @@ lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
 lm.LMtests(ols1, lw, test = c("LMerr","LMlag","RLMerr","RLMlag"), zero.policy = TRUE)
+lm.LMtests(ols3, lw, test = c("LMerr","LMlag","RLMerr","RLMlag"), zero.policy = TRUE)
 
 ```
 
@@ -908,6 +926,7 @@ lm.LMtests(ols1, lw, test = c("LMerr","LMlag","RLMerr","RLMlag"), zero.policy = 
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
 mi1$r2 = err2$resid
+w <- queen_weights(mi1)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
@@ -931,16 +950,166 @@ legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 ```
 
 
+## structural eq models (SEM)
+
+```{r}
+temp = df_map %>%
+  select(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score) %>%
+  st_drop_geometry() %>%
+  drop_na()
+
+cov(temp)
+
+```
+### simplified (no latent)
+
+```{r}
+# fully exogenous: pct_mfg as stand-in for industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of prosperity but not mortality
+# poverty as stand-in for prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# no interactions
+
+
+model1 <- '
+  retention_calc ~ pct_mfg
+  poverty_rate ~ pct_mfg + retention_calc + logpop
+  paam ~ logpop + HCaccess_score + poverty_rate + pct_mfg'
+
+model1.fit <- sem(model1, data = df_map) 
+summary(model1.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+
+```
+```{r}
+lavaanPlot(name = "model1", model1.fit, coefs = TRUE)
+
+```
+
+
+### simplified 2 (no latent)
+
+```{r}
+# fully exogenous: all industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
+# poverty as stand-in for prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# no interactions
+
+
+model2 <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
+  poverty_rate ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop
+  paam ~ logpop + HCaccess_score + poverty_rate + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc'
+
+model2.fit <- sem(model2, data = df_map) 
+summary(model2.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model2, data=df_map)
 
 
 
+```
+
+```{r}
+lavaanPlot(name = "model2", model2.fit, coefs = TRUE)
+
+```
 
 
+### latent (no interactions)
+
+```{r}
+# fully exogenous: all industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
+# all vars (except income_rate) in prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# no interactions
 
 
+model3 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate + age
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
+  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop
+  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc
+'
+
+model3.fit <- sem(model3, data = df_map) 
+summary(model3.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model3, data=df_map)
+
+```
+
+```{r}
+lavaanPlot(name = "model3", model3.fit, coefs = TRUE)
+
+```
+
+### latent (w/ interactions)
+
+```{r}
+# fully exogenous: all industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
+# all vars (except income_rate) in prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# no interactions
 
 
+model4 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate + age
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
+  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc
+'
+
+model4.fit <- sem(model4, data = df_map) 
+summary(model4.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model4, data=df_map)
+
+```
+
+```{r}
+lavaanPlot(name = "model4", model4.fit, coefs = TRUE)
+
+```
+
+### latent (age as covariate)
 
 
+```{r}
+# fully exogenous: all industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
+# all vars (except income_rate) in prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# no interactions
 
+
+model5 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
+  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=df_map)
+
+```
+
+```{r}
+lavaanPlot(name = "model5", model5.fit, coefs = TRUE)
+
+```
 
