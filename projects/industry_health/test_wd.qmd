@@ -195,6 +195,7 @@ data<- left_join (data, circu, by = "place")
 print(data)
 
 
+
 ```
 ##construct alternate retention and autonomy
 
@@ -205,6 +206,8 @@ data <- data %>%
          autonomy_calc = 1 - (excess_demand / intermediate_demand))
 
 print(data)
+
+#write.csv(data, file = "IH_data.csv")
 
 ```
 
@@ -318,6 +321,8 @@ call_geo <- function() {
 df_map = data 
 df = call_geo()
 df_map <- left_join(df, df_map, by = "place")
+
+write.csv(df_map, file = "IH_spatial.csv")
 
 map = function(val, title, rev_scale){
   lab <- glue(
@@ -568,7 +573,7 @@ print(p)
 
 
 
-##exploratory spatial data analysis
+#exploratory spatial data analysis
 
 ```{r}
 map = ih_dp$call_geog(2012)
@@ -583,7 +588,8 @@ lw$weights[5]
 
 ```
 
-#moran global paam 
+#PAAM
+##moran global paam 
 
 ```{r}
 moran.test(df_map$paam,lw, zero.policy=TRUE)
@@ -591,7 +597,7 @@ moran.test(df_map$paam,lw, zero.policy=TRUE)
 ```
 
 
-#lisa paam
+##lisa paam
 ```{r}
 df_lisa<- df_map %>% 
   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii" & STATE_NAME != "Puerto Rico")
@@ -612,7 +618,9 @@ legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-H
 legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
-#moran global retention 
+
+#Retention
+##moran global retention 
 
 ```{r}
 moran.test(df_map$retention_calc,lw, zero.policy=TRUE)
@@ -620,7 +628,7 @@ moran.test(df_map$retention_calc,lw, zero.policy=TRUE)
 ```
 
 
-#lisa retention
+##lisa retention
 ```{r}
 
 
@@ -640,8 +648,8 @@ legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
 
-
-#moran global autonomy 
+#Autonomy
+##moran global autonomy 
 
 ```{r}
 moran.test(df_map$autonomy_calc,lw, zero.policy=TRUE)
@@ -649,7 +657,7 @@ moran.test(df_map$autonomy_calc,lw, zero.policy=TRUE)
 ```
 
 
-#lisa autonomy
+##lisa autonomy
 ```{r}
 
 
@@ -668,8 +676,8 @@ legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-H
 legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
-
-#moran global % value added of output
+#Value Added- Output
+##moran global % value added of output
 
 ```{r}
 moran.test(df_map$va_to_output,lw, zero.policy=TRUE)
@@ -677,7 +685,7 @@ moran.test(df_map$va_to_output,lw, zero.policy=TRUE)
 ```
 
 
-#lisa % value added of output
+##lisa % value added of output
 ```{r}
 
 
@@ -697,8 +705,8 @@ legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
 
-
-#moran global % worker share of value added
+#% Worker Share- Value Added
+##moran global % worker share of value added
 
 ```{r}
 moran.test(df_map$emp_to_va,lw, zero.policy=TRUE)
@@ -706,7 +714,7 @@ moran.test(df_map$emp_to_va,lw, zero.policy=TRUE)
 ```
 
 
-#lisa % worker share of value added
+##lisa % worker share of value added
 ```{r}
 
 
@@ -727,8 +735,8 @@ legend("bottomleft", border = "#eeeeee")
 ```
 
 
-
-#moran global % worker share of output 
+# % Worker Share- Output
+##moran global % worker share of output 
 
 ```{r}
 moran.test(df_map$emp_to_output,lw, zero.policy=TRUE)
@@ -736,7 +744,7 @@ moran.test(df_map$emp_to_output,lw, zero.policy=TRUE)
 ```
 
 
-#lisa % worker share of output
+##lisa % worker share of output
 ```{r}
 
 
