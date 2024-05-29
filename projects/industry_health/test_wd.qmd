@@ -1205,8 +1205,35 @@ fit <- cfa(model6, data=mi3)
 
 ```
 
+#### mediator analysis
 ```{r}
+# spatial error on paam model (brute force)
+# fully exogenous: all industrial structure vars
+# kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
+# all vars (except income_rate) in prosperity latent (endogenous)
+# PAAM as endogenous outcome
+# logpop and HCaccess_score as exogenous covariates
+# w/ interactions
 
+
+model6b <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
+  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + a*retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + HCaccess_score + b*prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + c*retention_calc + age + splagerr
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6b.fit <- sem(model6b, data = mi3) 
+summary(model6b.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6b, data=mi3)
 
 
 
