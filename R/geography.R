@@ -320,6 +320,7 @@ call_dist_mat <- function(year = 2013,
 
 # Island county adjacency correction
 adjacency_correction <- function(adjacency_matrix){
+  #For source info see https://www2.census.gov/geo/docs/reference/county_adjacency.txt
   nl <- list(
     c("25019", "25007"),
     c("36085", "34017", "34023", "34025", "34039", "36047", "36081"),

@@ -16,6 +16,7 @@ source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connectedness <- new.env()))
 source("R/dataprep.R", local = (dataprep_misc <- new.env()))
 source("R/visualization.R", local = (visualization <- new.env()))
+source("R/circularity.R", local = (circularity <- new.env()))
 
 # paths ----
 
@@ -155,9 +156,17 @@ viz$nominal_choro_map <- visualization$nominal_choro_map
 viz$normal_choro_map <- visualization$normal_choro_map
 viz$absorption_density_plot <- visualization$absorption_density_plot
 
+girafe_plot <- visualization$girafe_plot
+
+
 # Trade Flows ----
 
 call_trade_flows <- trade_flows$call_trade_flows
+
+# Circularity ----
+
+call_circularity_metrics <- circularity$call_circularity_metrics
+
 
 
 # Geog ----
@@ -189,6 +198,73 @@ gaus_impedance_mat <- geography$gaus_impedance_mat
 knn_mat <- geography$knn_mat
 prox_impedance_mat <- geography$prox_impedance_mat
 bisquare_impedance_mat <- geography$bisquare_impedance_mat
+
+# normalize function
+row_normalize <- function(imatrix){
+  x <- imatrix %>%   
+    `diag<-`(0) %>% 
+    {sweep(., 1, rowSums(.), "/")} 
+  return(x)
+}
+
+imped_list <- function(
+    pn_dim,
+    dmat){
+  
+  D_inv <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 1)} %>% 
+    row_normalize()
+  
+  D_sqr <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 2)} %>% 
+    row_normalize()
+  
+  D_exp <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {expo_impedance_mat(., decay_constant = 100000)} %>% 
+    row_normalize()
+  
+  D_gau <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {gaus_impedance_mat(., rms_width = 500)} %>% 
+    row_normalize()
+  
+  D_qnn <- pn_dim %>% 
+    {call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
+    row_normalize()
+  D_qnn[is.na(D_qnn)] = 0
+  
+  D_knn <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {knn_mat(., neighbors = 10)} %>% 
+    row_normalize()
+  
+  D_prx <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {prox_impedance_mat(., radius = 500)} %>% 
+    row_normalize()
+  D_prx[is.na(D_prx)] = 0
+  
+  D_bis <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {bisquare_impedance_mat(., decay_zero = 500)} %>% 
+    row_normalize()
+  D_bis[is.na(D_bis)] = 0
+  
+  W_list <- list(
+    D_inv,
+    D_sqr,
+    D_exp,
+    D_gau,
+    D_qnn,
+    D_knn,
+    D_prx,
+    D_bis)
+  
+  return(W_list)
+}  
 
 
 # Distance matrix ----
