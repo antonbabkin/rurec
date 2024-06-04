@@ -50,7 +50,8 @@ opath <- list(
   exit_ = "data/projects/industry_health/exit/{bus_data}/{year}.rds",
   entry_rate_ = "data/projects/industry_health/entry_rate/{bus_data}/{year}.rds",
   exit_rate_ = "data/projects/industry_health/exit_rate/{bus_data}/{year}.rds",
-  industry_structure_ = "data/projects/industry_health/industry_structure/{year}.rds"
+  industry_structure_ = "data/projects/industry_health/industry_structure/{year}.rds",
+  agcensus12 = "data/projects/industry_health/agcensus/qs.census2012.txt"
 )
 
 
@@ -172,6 +173,8 @@ call_ruc <- function(year) {
 
 # Population ----
 
+##unlogged
+
 call_population <- function(year, 
                             bus_data = "tidy_acs") {
   cache_path = glue(opath$population_)
@@ -190,6 +193,8 @@ call_population <- function(year,
 }
 
 # Labor force ----
+
+#size
 
 call_laborforce <- function(year, 
                             bus_data = "ers") {
@@ -211,6 +216,8 @@ call_laborforce <- function(year,
 
 
 # Income----
+
+#average
 
 call_income <- function(
     year,
@@ -429,6 +436,34 @@ call_industry_structure <- function(year) {
   }    
   return(df)
 }
+
+
+# Ag Census
+
+call_agcensus12 <- function() {
+  raw_path <- opath$agcensus12
+  # download raw data if needed
+  if (file.exists(raw_path)) {
+    log_debug("raw data found at {raw_path}")
+    return(read.delim(raw_path))
+  } else {
+    # create parent directories
+    parent_path <- util$mkdir(file.path(dirname(raw_path), basename(ipath$agcensus12_raw)))
+    download_status <- download.file(url = ipath$agcensus12_raw, 
+                                     destfile = parent_path, 
+                                     mode = "wb")
+    stopifnot(download_status == 0)
+    log_debug("zip data dowloaded to {parent_path}")
+    df <- unzip(parent_path,
+                files = basename(raw_path),
+                exdir = dirname(raw_path))
+  }
+  df <- read.delim(raw_path)
+  return(df)
+}
+
+
+
 
 
 # Data merge  ----
