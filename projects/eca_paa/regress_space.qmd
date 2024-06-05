@@ -2,6 +2,8 @@
 title: "paa spatial regress"
 format:
   html:
+    toc: true
+    toc-depth: 1
     self-contained: true
     page-layout: full
     code-fold: true
@@ -18,7 +20,6 @@ params:
   reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
   spec_names: !expr c("ols", "ols_weight", "ols_naive", "slm_ml", "slm_iv", "sem_ml", "sem_weight", "sarar", "slm_di", "sem_di", "regime_ols", "regime_slm", "regime_sem", "rural_ols", "rural_ols_naive", "rural_slm", "rural_sem", "nonrural_ols", "nonrural_ols_naive", "nonrural_slm", "nonrural_sem")
   w_names: !expr c("inverse", "square", "exponential", "gaussian", "qnn", "knn", "proximity", "bi-square" )
-  example_coef_index:  2
 ---
 
 
@@ -41,6 +42,8 @@ library(spatialreg)
 
 library(hspm)
 library(sphet)
+
+library(kableExtra)
 
 
 # scripts
@@ -114,17 +117,51 @@ point_plot_factor <- function(df){
   return(df)
 }
 
+
+# c("none"="black", 
+#   "inverse"="#a6cee3", 
+#   "square"="#1f78b4",
+#   "exponential"="#b2df8a", 
+#   "gaussian"="#33a02c", 
+#   "qnn"="#fb9a99", 
+#   "knn"-"#e31a1c", 
+#   "proximity"="#fdbf6f", 
+#   "bi-square"="#ff7f00")
+
 point_plot <- function(df, error = TRUE){
   g <- df %>% 
-  ggplot(aes(x=indicator, y=estimate, colour=wmatrix, shape=model)) +
+  ggplot(aes(x=indicator, y=estimate, colour=wmatrix, shape=model,
+             tooltip = wmatrix,
+             data_id = wmatrix,
+             `data-id` = wmatrix)) +
     geom_point_interactive(position = position_dodge(width=.3)) +
-    scale_color_manual(values=c("black", "#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00")) +
+    scale_color_manual_interactive(values=c(
+      "none"="black", 
+      "inverse"="#a6cee3", 
+      "square"="#1f78b4",
+      "exponential"="#b2df8a", 
+      "gaussian"="#33a02c", 
+      "qnn"="#fb9a99", 
+      "knn"="#e31a1c", 
+      "proximity"="#fdbf6f", 
+      "bi-square"="#ff7f00"),
+                                            extra_interactive_params = "data-id",
+                                            `data-id` = function(x) x, 
+                                            data_id = function(x) x) +
     labs(x = "Growth Indicator", y = "Coeffecient Estimate", color = "W Matrix", shape = "Model") + 
     geom_hline(yintercept = 0) +
     theme_minimal() +
       theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
             axis.text.y = element_text(size = rel(.75)), legend.margin = margin(r=10, l=5, t=1, b=1) )
-  if (error){g <- g + geom_errorbar(aes(x=indicator, y=estimate, ymin=lower, ymax=upper), width=.2, position = position_dodge(width=.3), data = df)}
+  if (error){g <- g + geom_errorbar_interactive(aes(x=indicator, y=estimate, ymin=lower, ymax=upper), width=.2, position = position_dodge(width=.3), data = df)}
+  return(g)
+}
+
+coef_point_plot <- function(df, error = TRUE){
+  g <- point_plot_factor(df) %>% 
+    point_plot(error = error) %>% 
+    dp$girafe_plot()
+  g[["x"]][["settings"]][["hover"]][["css"]] <- ".hover_data_SVGID_ { stroke:orange;r:4pt; }\ntext.hover_data_SVGID_ { stroke:none;fill:black;fill-opacity:1; }"
   return(g)
 }
 
@@ -325,7 +362,7 @@ cache_path = glue(proj_path, "W_list_alt.rds")
 
 ## OLS - normalized trade
 
-```{r}
+```{r results='asis'}
 
 # Does growth in trade partner export destination(s) correspond with own growth?
 
@@ -346,34 +383,31 @@ if (file.exists(cache_path)) {
   }
   saveRDS(specif, dp$util$mkdir(cache_path))
 }
+
   specif %>%
   `names<-`(coef_names) %>%  
   {msummary(., 
             statistic = c("conf.int", "{std.error}", "{p.value}"), 
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
-                         "trade_weighted_growth" = "Trade Weighted Growth") )}
-
-  
+                         "trade_weighted_growth" = "Trade Weighted Growth") )}  %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
   
 ```
-
-
 ```{r}
 
 glue(proj_path, "ols.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "ols", wm = "none") %>% 
-  point_plot_factor() %>% 
-  point_plot() %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
 
+
 ## OLS - normalized trade and capacity weighted
 
-```{r}
+```{r results='asis'}
 
 cache_path = glue(proj_path, "ols_tradecap_weight.rds")
 if (file.exists(cache_path)) {
@@ -394,7 +428,8 @@ if (file.exists(cache_path)) {
             statistic = c("conf.int", "{std.error}", "{p.value}"), 
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
-                         "trade_weighted_growth" = "Trade Weighted Growth") )}
+                         "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
 
   
 ```
@@ -405,9 +440,7 @@ if (file.exists(cache_path)) {
 glue(proj_path, "ols_tradecap_weight.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "ols_weight", wm = "none") %>% 
-  point_plot_factor() %>% 
-  point_plot() %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
@@ -416,8 +449,8 @@ glue(proj_path, "ols_tradecap_weight.rds") %>%
 
 
 ## OLS - naive spatial lag
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Does growth in trade partner export destination(s) correspond with own growth?
 # And what is the role of mere spatial diffusion?
@@ -445,7 +478,8 @@ if (file.exists(cache_path)) {
   saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
    specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {msummary(., 
@@ -453,11 +487,14 @@ for (j in 1:length(W_list)){
                 estimate = "{estimate}{stars}", 
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth", 
-                             "spatially_weighted_growth" = "Space Weighted Growth") )} %>% print()
+                             "spatially_weighted_growth" = "Space Weighted Growth"))} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+   cat('\n')
 }
 
 
 ```
+::: 
 
 
 ```{r}
@@ -465,16 +502,14 @@ for (j in 1:length(W_list)){
 glue(proj_path, "ols_naive.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "ols_naive") %>% 
-  point_plot_factor() %>% 
-  point_plot(error = TRUE) %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
 
 ## Spatial Lag Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Does growth in trade partner export destination(s) correspond with own growth?
 # And is there a global diffusion of both observed and unobserved shocks? 
@@ -502,7 +537,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -510,26 +546,27 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "rho" = "lambda") )} %>% print()
+                           "rho" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+:::
 
 ```{r}
 
 glue(proj_path, "slm_ml.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "slm_ml") %>% 
-  point_plot_factor() %>% 
-  point_plot(error = TRUE) %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
 
 ## *Spatial Lag Model (GM/IV)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 if(FALSE){
   cache_path = glue(proj_path, "slm_iv.rds")
@@ -568,7 +605,8 @@ if(FALSE){
     return(mod)
   }
   
-  for (j in 1:length(W_list)){
+  for (j in 1:length(params$w_names)){
+    cat('####', params$w_names[j], ' \n')
     specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {lapply(., sum_mod)} %>% 
@@ -577,12 +615,14 @@ if(FALSE){
                 estimate = "{estimate}{stars}", 
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth",
-                             "lambda" = "lambda") )} %>% print()
+                             "lambda" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    cat('\n')
   }
 }
 
 ```
-
+::: 
 
 ## *Spatial Lag Model (2sls)
 
@@ -639,8 +679,8 @@ if(FALSE){
 
 
 ## Spatial Error Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Does growth in trade partner export destination(s) correspond with own growth?
 # And is there a global diffusion of both observed and unobserved shocks? 
@@ -669,7 +709,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -677,26 +718,28 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "lambda" = "rho") )} %>% print()
+                           "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
+
 
 ```{r}
 
 glue(proj_path, "sem_ml.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "sem_ml") %>% 
-  point_plot_factor() %>% 
-  point_plot(error = TRUE) %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
 
 ## Spatial Error Model (max likelihood) and capacity weighted
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 cache_path = glue(proj_path, "sem_tradecap_weight.rds")
 if (file.exists(cache_path)) {
@@ -716,7 +759,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -724,25 +768,26 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "lambda" = "rho") )} %>% print()
+                           "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 ```{r}
 
 glue(proj_path, "sem_tradecap_weight.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "sem_tradecap_weight") %>% 
-  point_plot_factor() %>% 
-  point_plot(error = T) %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
 ## SARAR(1,1)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 cache_path = glue(proj_path, "sarar.rds")
 if (file.exists(cache_path)) {
@@ -762,7 +807,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -771,19 +817,21 @@ for (j in 1:length(W_list)){
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
                            "lambda" = "lambda",
-                           "rho" = "rho") )} %>% print()
+                           "rho" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
+
 
 ```{r}
 
 glue(proj_path, "sarar.rds") %>% 
   readRDS() %>% 
   spec_df(spec_list = ., mn = "sarar") %>% 
-  point_plot_factor() %>% 
-  point_plot(error = TRUE) %>% 
-  dp$girafe_plot()
+  coef_point_plot()
 
 ```
 
@@ -797,8 +845,8 @@ contrasts(factor(df$cbsa_rural_category))
 
 
 ## *Spatial Lag Model - rural dummy
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # rural dummy
 
@@ -825,7 +873,8 @@ if(FALSE){
       saveRDS(specif, dp$util$mkdir(cache_path))
   }
   
-  for (j in 1:length(W_list)){
+  for (j in 1:length(params$w_names)){
+    cat('####', params$w_names[j], ' \n')
     specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {msummary(., 
@@ -834,16 +883,19 @@ if(FALSE){
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth",
                              "cbsa_rural_categoryrural" = "Rural Dummy",
-                             "rho" = "lambda") )} %>% print()
+                             "rho" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    cat('\n')
   }
 }
 
 ```
+:::
 
 
 ## *Spatial Error Model - rural dummy
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # rural dummy
 
@@ -871,7 +923,8 @@ if(FALSE){
   }
   
   
-  for (j in 1:length(W_list)){
+  for (j in 1:length(params$w_names)){
+    cat('####', params$w_names[j], ' \n')
     specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {msummary(., 
@@ -880,16 +933,19 @@ if(FALSE){
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth",
                              "cbsa_rural_categoryrural" = "Rural Dummy",
-                             "lambda" = "rho") )} %>% print()
+                             "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    cat('\n')
   }
 }
 
 ```
+::: 
 
 
 ## Spatial Lag Model - rural dummy interact
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # does growth in trade partner export destination(s) correspond with own growth?
 # and is there a global diffusion of both observed and unobserved shocks? 
@@ -920,7 +976,8 @@ if (file.exists(cache_path)) {
 }
 
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -930,17 +987,18 @@ for (j in 1:length(W_list)){
                            "trade_weighted_growth" = "Trade Weighted Growth",
                            "cbsa_rural_categoryrural" = "Rural Dummy",
                            "trade_weighted_growth:cbsa_rural_categoryrural" = "Growth x Dummy",
-                           "rho" = "lambda") )} %>% print()
+                           "rho" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
-
-
+::: 
 
 
 ## Spatial Error Model - rural dummy interact
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # does growth in trade partner export destination(s) correspond with own growth?
 # and is there a global diffusion of both observed and unobserved shocks? 
@@ -971,7 +1029,8 @@ if (file.exists(cache_path)) {
 }
 
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -981,14 +1040,16 @@ for (j in 1:length(W_list)){
                            "trade_weighted_growth" = "Trade Weighted Growth",
                            "cbsa_rural_categoryrural" = "Rural Dummy",
                            "trade_weighted_growth:cbsa_rural_categoryrural" = "Growth x Dummy",
-                           "lambda" = "rho") )} %>% print()
+                           "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 # regression - spatial regimes
-
 
 ```{r}
 
@@ -1063,9 +1124,8 @@ if(FALSE){
 
 
 ## OLS
-
-```{r}
-
+::: panel-tabset 
+```{r results='asis'}
 
 cache_path = glue(proj_path, "regime_ols.rds")
 if (file.exists(cache_path)) {
@@ -1104,7 +1164,8 @@ sum_mod <- function(x){
   return(mod)
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {lapply(., sum_mod)} %>% 
@@ -1114,16 +1175,18 @@ for (j in 1:length(W_list)){
               coef_map = c("(Intercept)_1" = "(Intercept): non-rural",
                            "(Intercept)_2" = "(Intercept): rural",
                            "trade_weighted_growth_1" = "Trade Weighted Growth: non-rural",
-                           "trade_weighted_growth_2" = "Trade Weighted Growth: rural") )} %>% print()
+                           "trade_weighted_growth_2" = "Trade Weighted Growth: rural") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 ## SLM
-
-```{r}
-
+::: panel-tabset 
+```{r results='asis'}
 
 cache_path = glue(proj_path, "regime_slm.rds")
 if (file.exists(cache_path)) {
@@ -1162,7 +1225,8 @@ sum_mod <- function(x){
   return(mod)
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {lapply(., sum_mod)} %>% 
@@ -1173,16 +1237,18 @@ for (j in 1:length(W_list)){
                           "trade_weighted_growth_1" = "Trade Weighted Growth: non-rural",
                           "trade_weighted_growth_2" = "Trade Weighted Growth: rural",
                           "lambda1" = "lambda: non-rural",
-                          "lambda2" = "lambda rural") )} %>% print()
+                          "lambda2" = "lambda rural") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 ## SEM
-
-```{r}
-
+::: panel-tabset 
+```{r results='asis'}
 
 cache_path = glue(proj_path, "regime_sem.rds")
 if (file.exists(cache_path)) {
@@ -1221,7 +1287,8 @@ sum_mod <- function(x){
   return(mod)
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {lapply(., sum_mod)} %>% 
@@ -1233,10 +1300,13 @@ for (j in 1:length(W_list)){
                            "trade_weighted_growth_1" = "Trade Weighted Growth: non-rural",
                            "trade_weighted_growth_2" = "Trade Weighted Growth: rural",
                            "We_1" = "rho: non-rural",
-                           "We_2" = "rho: rural") )} %>% print()
+                           "We_2" = "rho: rural") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 # regression - rural only
@@ -1265,7 +1335,7 @@ cache_path = glue(proj_path, "W_list_alt_rural.rds")
 
 ## OLS - normalized trade
 
-```{r}
+```{r results='asis'}
 
 # y_growth = b0 + b1_r + e
 # s.t. r = M * y_growth
@@ -1291,15 +1361,16 @@ if (file.exists(cache_path)) {
             statistic = c("conf.int", "{std.error}", "{p.value}"), 
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
-                         "trade_weighted_growth" = "Trade Weighted Growth") )}
+                         "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
 
   
 ```
 
 
 ## OLS - naive spatial lag
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # y_growth = b0 + b1_r + b2_d + e
 # s.t. r = M * y_growth and  d = W * y_growth
@@ -1324,7 +1395,8 @@ if (file.exists(cache_path)) {
   saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
    specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {msummary(., 
@@ -1332,16 +1404,18 @@ for (j in 1:length(W_list)){
                 estimate = "{estimate}{stars}", 
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth", 
-                             "spatially_weighted_growth" = "Space Weighted Growth") )} %>% print()
+                             "spatially_weighted_growth" = "Space Weighted Growth") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
-
 ```
+::: 
 
 
 ## Spatial Lag Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Spatial Lag Model or Spatial Autoregressive Model
 # y_growth = (I - lambda_W)^-1(b0 + b1_r + e)
@@ -1365,7 +1439,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -1373,17 +1448,18 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "rho" = "lambda") )} %>% print()
+                           "rho" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
-
-
+::: 
 
 
 ## Spatial Error Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Spatial Error Model 
 # y_growth = (I - rho_W)^-1(b0 + b1_r) + (I - rho_W)^-1e
@@ -1407,7 +1483,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -1415,10 +1492,13 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "lambda" = "rho") )} %>% print()
+                           "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 # regression - nonrural only
@@ -1447,7 +1527,7 @@ cache_path = glue(proj_path, "W_list_alt_nonrural.rds")
 
 ## OLS - normalized trade
 
-```{r}
+```{r results='asis'}
 
 # y_growth = b0 + b1_r + e
 # s.t. r = M * y_growth
@@ -1473,15 +1553,17 @@ if (file.exists(cache_path)) {
             statistic = c("conf.int", "{std.error}", "{p.value}"), 
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
-                         "trade_weighted_growth" = "Trade Weighted Growth") )}
+                         "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
 
   
 ```
 
 
-## OLS - naive spatial lag
 
-```{r}
+## OLS - naive spatial lag
+::: panel-tabset 
+```{r results='asis'}
 
 # y_growth = b0 + b1_r + b2_d + e
 # s.t. r = M * y_growth and  d = W * y_growth
@@ -1506,7 +1588,8 @@ if (file.exists(cache_path)) {
   saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
    specif[[j]] %>% 
       `names<-`(coef_names) %>%  
       {msummary(., 
@@ -1514,16 +1597,19 @@ for (j in 1:length(W_list)){
                 estimate = "{estimate}{stars}", 
                 coef_map = c("(Intercept)" = "(Intercept)",
                              "trade_weighted_growth" = "Trade Weighted Growth", 
-                             "spatially_weighted_growth" = "Space Weighted Growth") )} %>% print()
+                             "spatially_weighted_growth" = "Space Weighted Growth") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 
 ```
+::: 
 
 
 ## Spatial Lag Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Spatial Lag Model or Spatial Autoregressive Model
 # y_growth = (I - lambda_W)^-1(b0 + b1_r + e)
@@ -1547,7 +1633,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -1555,15 +1642,18 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "rho" = "lambda") )} %>% print()
+                           "rho" = "lambda") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
+::: 
 
 
 ## Spatial Error Model (max likelihood)
-
-```{r}
+::: panel-tabset 
+```{r results='asis'}
 
 # Spatial Error Model 
 # y_growth = (I - rho_W)^-1(b0 + b1_r) + (I - rho_W)^-1e
@@ -1587,7 +1677,8 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
   }
 
-for (j in 1:length(W_list)){
+for (j in 1:length(params$w_names)){
+  cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
     {msummary(., 
@@ -1595,11 +1686,13 @@ for (j in 1:length(W_list)){
               estimate = "{estimate}{stars}", 
               coef_map = c("(Intercept)" = "(Intercept)",
                            "trade_weighted_growth" = "Trade Weighted Growth",
-                           "lambda" = "rho") )} %>% print()
+                           "lambda" = "rho") )} %>% 
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+  cat('\n')
 }
 
 ```
-
+:::
 
 
 # In progress
@@ -1683,81 +1776,11 @@ for(i in spec_mods){
 
 estdf %>% 
   filter(model %in% c("ols", "ols_naive", "slm_ml", "sem_ml")) %>% 
-  filter(wmatrix %in% c("none", "inverse", "qnn", "knn", "proximity")) %>% 
-  point_plot_factor() %>% 
-  point_plot(error = F) %>% 
-  dp$girafe_plot()
-
+  #filter(wmatrix %in% c("none", "inverse", "qnn", "knn", "proximity")) %>% 
+  coef_point_plot(error = F)
 
 ```
 
-
-```{r}
-
-if(FALSE){
-  
-g <- tmp %>% filter(model != "OLS_alt") %>% filter(model != "OLS_w") %>% 
-ggplot(aes(x=indicator, y=estimate, colour=wmatrix, shape=model)) +
-  geom_point_interactive(position = position_dodge(width=.3)) +
-  scale_color_manual(values=c("black", "#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00")) +
-  labs(x = "Growth Indicator", y = "Coeffecient Estimate", color = "W Matrix", shape = "Model") + 
-  geom_hline(yintercept = 0) +
-  theme_minimal() +
-    theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
-          axis.text.y = element_text(size = rel(.75)), legend.margin = margin(r=10, l=5, t=1, b=1) )
-
-
-dp$girafe_plot(ggobj = g)
-
-}
-
-```
-
-
-```{r}
-
-if(FALSE){
-g1 <- ggplot() +
-  geom_point_interactive(aes(x=indicator, y=estimate, colour=wmatrix, shape=model), data = tmp[tmp$model == "OLS", ]) +
-  geom_errorbar(aes(x=indicator, y=estimate, ymin=lower, ymax=upper), width=.2, data = tmp[tmp$model == "OLS", ]) +
-  scale_color_manual(values=c("black", "#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00")) +
-  labs(x="Growth Indicator", y="Coeffecient Estimate", color="W Matrix", shape="Model") + 
-  geom_hline(yintercept = 0) +
-  theme_minimal() +
-    theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
-          axis.text.y = element_text(size = rel(.75)), legend.margin = margin(r=10,l=5,t=1,b=1) )
-
-dp$girafe_plot(ggobj = g1)
-
-
-g <- g1 + geom_point_interactive(aes(x=indicator, y=estimate, colour=wmatrix, shape=model), data = tmp[tmp$model %in% c("slm"), ])
-dp$girafe_plot(ggobj = g)
-
-g <- g1 + geom_point_interactive(aes(x=indicator, y=estimate, colour=wmatrix, shape=model), data = tmp[tmp$model %in% c("sem"), ])
-dp$girafe_plot(ggobj = g)
-
-g <- g1 + geom_point_interactive(aes(x=indicator, y=estimate, colour=wmatrix, shape=model), data = tmp[tmp$model %in% c("slm", "sem"), ])
-dp$girafe_plot(ggobj = g)
-
-g <- g1 + geom_point_interactive(aes(x=indicator, y=estimate, colour=wmatrix, shape=model), data = tmp[tmp$model %in% c("slm", "sem", "sem_w"), ])
-dp$girafe_plot(ggobj = g)
-
-g <- tmp %>% filter(model != "OLS_alt") %>% filter(model != "OLS_w") %>% 
-ggplot(aes(x=indicator, y=estimate, colour=wmatrix, shape=model)) +
-  geom_point_interactive(position = position_dodge(width=.3)) +
-  scale_color_manual(values=c("black", "#a6cee3", "#1f78b4", "#b2df8a", "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00")) +
-  labs(x="Growth Indicator", y="Coeffecient Estimate", color="W Matrix", shape="Model") + 
-  geom_hline(yintercept = 0) +
-  theme_minimal() +
-    theme(axis.text.x = element_text(size = rel(.75), angle = 300, hjust = 0),
-          axis.text.y = element_text(size = rel(.75)), legend.margin = margin(r=10,l=5,t=1,b=1) )
-
-
-dp$girafe_plot(ggobj = g)
-
-}
-
-```
 
 
 
