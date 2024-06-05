@@ -170,8 +170,6 @@ agc = agwork %>%
   mutate(agwork = ifelse(is.na(agwork), 0, agwork), agops = ifelse(is.na(agops), 0, agwork), ag_emp = agwork + agops) %>%
   select(place, ag_emp)
 
-
-
 jobs = jobs_clean %>%
   filter(naics != "------") %>%
   mutate(naicsfilt = substr(naics,3,3), place = str_c(fipstate,"",fipscty)) %>%
@@ -194,6 +192,21 @@ jobs = jobs %>%
   mutate(totemp = cbp.no.ag + ag_emp, pct_ag = ag_emp/totemp, pct_mine = n_mine/totemp, pct_mfg = n_mfg/totemp, pct_fire = n_fire/totemp, pct_edmed = n_edmed/totemp, pct_prof = n_prof/totemp) %>%
   select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed) %>%
   mutate(pct_edmed = ifelse(pct_edmed == "Inf", NA, pct_edmed), pct_fire = ifelse(pct_fire == "Inf", NA, pct_fire))
+
+jobs2 = jobs_clean %>%
+  mutate(n2d = substr(naics,1,2)) %>%
+  mutate(filt3 = substr(naics,4,6)) %>%
+  filter(n2d == "31"|n2d == "32"|n2d == "33") %>%
+  filter(filt3 == "///") %>%
+  mutate(durable = ifelse(n2d < 33, "nondurable", "durable"), durable = ifelse((naics == "321///" | naics == "327///"), "durable", durable), place = str_c(fipstate,"",fipscty)) %>%
+  group_by(place, durable) %>%
+  dplyr::summarize(emp = sum(emp)) %>%
+  pivot_wider(names_from = durable, values_from = emp)
+
+jobs = jobs %>%
+  left_join(y=jobs2, by="place") %>%
+  mutate(pct_durable = durable/jobs, pct_nondurable = nondurable/jobs) %>%
+  select(-durable, -nondurable)
 
 ```
 
@@ -823,10 +836,246 @@ legend_colors <- unlist(lisa_colors)
 legend("bottomleft", border = "#eeeeee")
 ```
 
-
-# clay - regressions
-
+# Clean models (no interact)
+## OLS
 ```{r}
+
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_nondurable, pct_durable, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, uninsured))
+
+
+
+ols2 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
+
+ols2 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_durable + pct_nondurable + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
+
+
+summary(ols2)
+
+
+```
+
+## Sp Error
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+err2 = errorsarlm(data = mi1, paam ~ retention_calc + pct_durable + pct_nondurable + pct_ag + laborforce_part_rate + pct_mine + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured,
+                  lw, zero.policy = TRUE)
+
+
+summary(err2)
+
+
+```
+
+## Aspatial SEM
+```{r}
+
+temp = df_map %>%
+  mutate(z_lfpr = scale(laborforce_part_rate),
+         z_pov = scale(poverty_rate),
+         z_hs = scale(highschool_attainment_rate),
+         z_inc.rt = scale(income_rate))
+
+
+model5 <- '
+  prosperity =~ z_lfpr + z_pov + z_hs + z_inc.rt
+
+  retention_calc ~ pct_durable + pct_nondurable + pct_ag + pct_mine
+  prosperity ~ pct_durable + pct_nondurable + pct_ag + pct_mine + a*retention_calc + logpop
+  paam ~ logpop + uninsured + b*prosperity + pct_durable + pct_nondurable + pct_ag + pct_mine + c*retention_calc + age
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = temp) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=temp)
+
+
+```
+
+## Sp Error SEM
+```{r}
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_durable, pct_nondurable, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, uninsured))
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("pct_durable", "pct_nondurable", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "z_lfpr", "z_pov", "z_hs", "z_inc.rt"))
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi2 <- cbind(mi1, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp_r = mi2 %>%
+  select(r_paam) %>%
+  st_drop_geometry() %>%
+  mutate(to = row_number())
+
+temp_place = mi2 %>%
+  select(place) %>%
+  st_drop_geometry() %>%
+  mutate(from = row_number())
+
+splagerr <- listw2sn(lw) %>%
+  left_join(y=temp_r, by="to") %>%
+  left_join(y=temp_place, by="from") %>%
+  group_by(place) %>%
+  dplyr::summarize(splagerr = weighted.mean(r_paam, weights, na.rm = TRUE))
+
+mi3 = mi2 %>%
+  left_join(y=splagerr, by="place") %>%
+  mutate(z_lfpr = scale(laborforce_part_rate),
+         z_pov = scale(poverty_rate),
+         z_hs = scale(highschool_attainment_rate),
+         z_inc.rt = scale(income_rate))
+
+model6 <- '
+  prosperity =~ z_lfpr + z_pov + z_hs + z_inc.rt
+
+  retention_calc ~ pct_durable + pct_nondurable + pct_ag + pct_mine
+  prosperity ~ pct_durable + pct_nondurable + pct_ag + pct_mine + a*retention_calc + logpop
+  paam ~ logpop + uninsured + b*prosperity + pct_durable + pct_nondurable + pct_ag + pct_mine + c*retention_calc + age + splagerr
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+# Clean models (interact)
+## OLS
+```{r}
+
+ols2 = lm(data = mi1, paam ~ retention_calc + retention_calc*pct_durable + retention_calc*pct_nondurable + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_durable + pct_nondurable + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
+
+
+summary(ols2)
+
+```
+
+## Sp Error
+```{r}
+
+err2 = errorsarlm(data = mi1, paam ~ retention_calc + pct_durable + pct_nondurable + pct_mine + pct_ag + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured + retention_calc*pct_durable + retention_calc*pct_nondurable + retention_calc*pct_mine + retention_calc*pct_ag,
+                  lw, zero.policy = TRUE)
+
+
+summary(err2)
+
+
+```
+
+## Aspatial SEM
+```{r}
+
+temp = df_map %>%
+  mutate(z_lfpr = scale(laborforce_part_rate),
+         z_pov = scale(poverty_rate),
+         z_hs = scale(highschool_attainment_rate),
+         z_inc.rt = scale(income_rate))
+
+
+model5 <- '
+  prosperity =~ z_lfpr + z_pov + z_hs + z_inc.rt
+
+  retention_calc ~ pct_durable + pct_nondurable + pct_ag + pct_mine
+  prosperity ~ pct_durable + pct_nondurable + pct_ag + pct_mine + a*retention_calc + logpop + retention_calc:pct_durable + retention_calc:pct_nondurable + retention_calc:pct_ag
+  paam ~ logpop + uninsured + b*prosperity + pct_durable + pct_nondurable + pct_ag + pct_mine + c*retention_calc + age
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = temp) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=temp)
+
+
+```
+
+## Sp Error SEM
+```{r}
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_nondurable, pct_durable, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, income_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("pct_durable", "pct_nondurable", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "z_lfpr", "z_pov", "z_hs", "z_inc.rt"))
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi2 <- cbind(mi1, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp_r = mi2 %>%
+  select(r_paam) %>%
+  st_drop_geometry() %>%
+  mutate(to = row_number())
+
+temp_place = mi2 %>%
+  select(place) %>%
+  st_drop_geometry() %>%
+  mutate(from = row_number())
+
+splagerr <- listw2sn(lw) %>%
+  left_join(y=temp_r, by="to") %>%
+  left_join(y=temp_place, by="from") %>%
+  group_by(place) %>%
+  dplyr::summarize(splagerr = weighted.mean(r_paam, weights, na.rm = TRUE))
+
+mi3 = mi2 %>%
+  left_join(y=splagerr, by="place") %>%
+  mutate(z_lfpr = scale(laborforce_part_rate),
+         z_pov = scale(poverty_rate),
+         z_hs = scale(highschool_attainment_rate),
+         z_inc.rt = scale(income_rate))
+
+model6 <- '
+  prosperity =~ z_lfpr + z_pov + z_hs + z_inc.rt
+
+  retention_calc ~ pct_nondurable + pct_durable + pct_ag + pct_mine
+  prosperity ~ pct_nondurable + pct_durable + pct_ag + pct_mine + a*retention_calc + logpop + retention_calc:pct_nondurable + retention_calc:pct_durable + retention_calc:pct_ag
+  paam ~ logpop + uninsured + b*prosperity + pct_nondurable + pct_durable + pct_ag + pct_mine + c*retention_calc + age + splagerr
+    
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+
+
+# clay - extra modeling
+
+```{r include = FALSE}
 
 hist(data$paam)
 
@@ -836,9 +1085,9 @@ hist(data$paam)
 ## ols
 ```{r}
 
-ols1 = lm(data = df_map, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+ols1 = lm(data = df_map, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
 
-ols2 = lm(data = df_map, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+ols2 = lm(data = df_map, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
 
 
 summary(ols1)
@@ -857,7 +1106,7 @@ temp =  ols1$resid
 
 ## sp autocorrelation
 ```{r}
-mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, uninsured))
 w <- queen_weights(mi1)
 mi1$r = ols1$resid
 nb <- poly2nb(mi1, queen=TRUE)
@@ -876,7 +1125,7 @@ lisa_map = mi1 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
 plot(st_geometry(lisa_map), 
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "grey80", lwd=0.2)
-title(main = "LISA, aggregate LQI")
+title(main = "LISA, OLS residuals")
 legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 
 
@@ -889,10 +1138,10 @@ legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-err1 = errorsarlm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score,
+err1 = errorsarlm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured,
                   lw, zero.policy = TRUE)
 
-err2 = errorsarlm(data = mi1, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score,
+err2 = errorsarlm(data = mi1, paam ~ retention_calc + retention_calc*pct_mfg + retention_calc*pct_mine + retention_calc*pct_ag + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured,
                   lw, zero.policy = TRUE)
 
 
@@ -907,8 +1156,8 @@ summary(err2)
 ## la grange / robust la grange
 ```{r}
 
-ols1 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
-ols3 = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + pct_fire + pct_edmed + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + HCaccess_score)
+ols1 = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
+ols3 = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + highschool_attainment_rate + poverty_rate + income_rate + logpop + uninsured)
 
 
 nb <- poly2nb(mi1, queen=TRUE)
@@ -924,7 +1173,7 @@ lm.LMtests(ols3, lw, test = c("LMerr","LMlag","RLMerr","RLMlag"), zero.policy = 
 ## sp autocorrelation
 
 ```{r}
-mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score))
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, uninsured))
 mi1$r2 = err2$resid
 w <- queen_weights(mi1)
 nb <- poly2nb(mi1, queen=TRUE)
@@ -943,7 +1192,7 @@ lisa_map = mi1 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
 plot(st_geometry(lisa_map), 
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "grey80", lwd=0.2)
-title(main = "LISA, aggregate LQI")
+title(main = "LISA, spatial error (no SEM) residuals")
 legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 
 
@@ -954,7 +1203,7 @@ legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 
 ```{r}
 temp = df_map %>%
-  select(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, HCaccess_score) %>%
+  select(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, income_rate, logpop, uninsured) %>%
   st_drop_geometry() %>%
   drop_na()
 
@@ -968,14 +1217,23 @@ cov(temp)
 # kinda exogenous (kinda endogenous): retention as predictor of prosperity but not mortality
 # poverty as stand-in for prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
+# logpop and uninsured as exogenous covariates
 # no interactions
 
 
 model1 <- '
-  retention_calc ~ pct_mfg
-  poverty_rate ~ pct_mfg + retention_calc + logpop
-  paam ~ logpop + HCaccess_score + poverty_rate + pct_mfg'
+  retention_calc ~ pct_ag
+  poverty_rate ~ pct_ag + a*retention_calc + logpop
+  paam ~ logpop + uninsured + b*poverty_rate + pct_ag + c*retention_calc
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+
 
 model1.fit <- sem(model1, data = df_map) 
 summary(model1.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
@@ -995,14 +1253,14 @@ lavaanPlot(name = "model1", model1.fit, coefs = TRUE)
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # poverty as stand-in for prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
+# logpop and uninsured as exogenous covariates
 # no interactions
 
 
 model2 <- '
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  poverty_rate ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop
-  paam ~ logpop + HCaccess_score + poverty_rate + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc'
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  poverty_rate ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop
+  paam ~ logpop + uninsured + poverty_rate + pct_mfg + pct_ag + pct_mine + retention_calc'
 
 model2.fit <- sem(model2, data = df_map) 
 summary(model2.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
@@ -1026,16 +1284,16 @@ lavaanPlot(name = "model2", model2.fit, coefs = TRUE)
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # all vars (except income_rate) in prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
+# logpop and uninsured as exogenous covariates
 # no interactions
 
 
 model3 <- '
   prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate + age
 
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop
-  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc
 '
 
 model3.fit <- sem(model3, data = df_map) 
@@ -1057,16 +1315,16 @@ lavaanPlot(name = "model3", model3.fit, coefs = TRUE)
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # all vars (except income_rate) in prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
-# no interactions
+# logpop and uninsured as exogenous covariates
+# w/ interactions
 
 
 model4 <- '
   prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate + age
 
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
-  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc
 '
 
 model4.fit <- sem(model4, data = df_map) 
@@ -1089,22 +1347,36 @@ lavaanPlot(name = "model4", model4.fit, coefs = TRUE)
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # all vars (except income_rate) in prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
-# no interactions
+# logpop and uninsured as exogenous covariates
+# w/ interactions
 
+# temp = df_map %>%
+#   mutate(z_lfpr = scale(laborforce_part_rate),
+#          z_pov = scale(poverty_rate),
+#          z_hs = scale(highschool_attainment_rate),
+#          z_inc.rt = scale(income_rate))
+# 
 
 model5 <- '
   prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
 
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
-  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + age
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + age
+  
+    # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
 '
 
-model5.fit <- sem(model5, data = df_map) 
+model5.fit <- sem(model5, data = temp) 
 summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
 
-fit <- cfa(model5, data=df_map)
+fit <- cfa(model5, data=temp)
+
+
 
 ```
 
@@ -1116,10 +1388,18 @@ lavaanPlot(name = "model5", model5.fit, coefs = TRUE)
 #### sp autocorrelation
 
 ```{r}
-mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, HCaccess_score))
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvy = lavPredictY(fit, ynames = c("paam"),
-                 xnames = c("pct_mfg", "pct_ag", "pct_mine", "pct_fire", "pct_edmed", "retention_calc", "logpop", "HCaccess_score", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvy2 = as.data.frame(sem_pvy)
 sem_pvy3 = sem_pvy2$paam
@@ -1185,16 +1465,16 @@ mi3 = mi2 %>%
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # all vars (except income_rate) in prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
+# logpop and uninsured as exogenous covariates
 # w/ interactions
 
 
 model6 <- '
   prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
 
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
-  paam ~ logpop + HCaccess_score + prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + retention_calc + age + splagerr
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age + splagerr
 '
 
 model6.fit <- sem(model6, data = mi3) 
@@ -1212,16 +1492,16 @@ fit <- cfa(model6, data=mi3)
 # kinda exogenous (kinda endogenous): retention as predictor of both prosperity and mortality
 # all vars (except income_rate) in prosperity latent (endogenous)
 # PAAM as endogenous outcome
-# logpop and HCaccess_score as exogenous covariates
+# logpop and uninsured as exogenous covariates
 # w/ interactions
 
 
 model6b <- '
   prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
 
-  retention_calc ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed
-  prosperity ~ pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + a*retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
-  paam ~ logpop + HCaccess_score + b*prosperity + pct_mfg + pct_ag + pct_mine + pct_fire + pct_edmed + c*retention_calc + age + splagerr
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + age + splagerr
   
   # indirect (a*b)
   ab := a*b
@@ -1238,5 +1518,570 @@ fit <- cfa(model6b, data=mi3)
 
 
 ```
+
+#### sp autocorrelation
+
+```{r}
+
+mi3a = mi3 %>% drop_na(c(splagerr)) %>% dplyr::select(-paam.1, -r_paam)
+
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi4 <- cbind(mi3a, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi4$r_paam
+
+w <- queen_weights(mi4)
+nb <- poly2nb(mi4, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi4$r_paam,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi4['r_paam'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi2 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, spatial SEM residuals")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
+
+```
+
+
+```{r}
+
+model5 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=df_map)
+
+mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
+
+sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi2 <- cbind(mi1, sem_pvy) %>%
+  mutate(r_poverty_rate = poverty_rate - poverty_rate.1)
+
+w <- queen_weights(mi2)
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi2$r_poverty_rate,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi2['r_poverty_rate'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi2 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, aspatial SEM residuals")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
+
+model6 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age + splagerr
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+mi3a = mi3 %>% drop_na(c(splagerr)) %>% dplyr::select(-paam.1, -r_paam)
+
+
+
+sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerr"))
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+
+mi4 <- cbind(mi3a, sem_pvy) %>%
+  mutate(r_poverty_rate = poverty_rate - poverty_rate.1)
+
+temp = mi4$r_poverty_rate
+
+w <- queen_weights(mi4)
+nb <- poly2nb(mi4, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi4$r_poverty_rate,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi4['r_poverty_rate'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi2 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, spatial SEM residuals")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
+
+
+
+```
+
+#### 3 lags
+
+```{r}
+model5 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+fit <- cfa(model5, data=df_map)
+
+ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+ni2 <- cbind(ni1, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp_r = ni2 %>%
+  select(r_paam) %>%
+  st_drop_geometry() %>%
+  mutate(to = row_number())
+
+temp_place = ni2 %>%
+  select(place) %>%
+  st_drop_geometry() %>%
+  mutate(from = row_number())
+
+splagerr <- listw2sn(lw) %>%
+  left_join(y=temp_r, by="to") %>%
+  left_join(y=temp_place, by="from") %>%
+  group_by(place) %>%
+  dplyr::summarize(splagerr = weighted.mean(r_paam, weights, na.rm = TRUE))
+
+ni3 = ni2 %>%
+  left_join(y=splagerr, by="place")
+
+ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
+
+sem_pvyz = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+
+sem_pvyz2 = as.data.frame(sem_pvyz)
+sem_pvyz3 = sem_pvyz2$paam
+
+ni2 <- cbind(ni1, sem_pvyz) %>%
+  mutate(r_paam = ((1*laborforce_part_rate) - (1*laborforce_part_rate.1) + (-1.035*poverty_rate) - (-1.035*poverty_rate.1) + (0.961*highschool_attainment_rate) - (0.961*highschool_attainment_rate.1)))
+
+         
+temp_r = ni2 %>%
+  select(r_paam) %>%
+  st_drop_geometry() %>%
+  mutate(to = row_number())
+
+temp_place = ni2 %>%
+  select(place) %>%
+  st_drop_geometry() %>%
+  mutate(from = row_number())
+
+splagerrz <- listw2sn(lw) %>%
+  left_join(y=temp_r, by="to") %>%
+  left_join(y=temp_place, by="from") %>%
+  group_by(place) %>%
+  dplyr::summarize(splagerrz = weighted.mean(r_paam, weights, na.rm = TRUE))
+
+ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
+
+sem_pvyzz = lavPredictY(fit, ynames = c("retention_calc"),
+                 xnames = c("pct_mfg", "pct_ag"))
+
+sem_pvyzz2 = as.data.frame(sem_pvyzz)
+sem_pvyzz3 = sem_pvyzz2$paam
+
+ni2 <- cbind(ni1, sem_pvyzz) %>%
+  mutate(r_paam = retention_calc - retention_calc.1)
+
+temp_r = ni2 %>%
+  select(r_paam) %>%
+  st_drop_geometry() %>%
+  mutate(to = row_number())
+
+temp_place = ni2 %>%
+  select(place) %>%
+  st_drop_geometry() %>%
+  mutate(from = row_number())
+
+splagerrzz <- listw2sn(lw) %>%
+  left_join(y=temp_r, by="to") %>%
+  left_join(y=temp_place, by="from") %>%
+  group_by(place) %>%
+  dplyr::summarize(splagerrzz = weighted.mean(r_paam, weights, na.rm = TRUE))
+
+
+ni3 = ni2 %>%
+  left_join(y=splagerr, by="place") %>%
+  left_join(y=splagerrz, by="place") %>%
+  left_join(y=splagerrzz, by="place")
+
+model6.3 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + splagerrzz
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag + splagerrz
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age + splagerr
+'
+
+model6.3.fit <- sem(model6.3, data = ni3) 
+summary(model6.3.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6.3, data=ni3)
+
+ni3a = ni3 %>% drop_na(c(splagerrz))
+
+sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerrz"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+
+mi4 <- cbind(ni3a, sem_pvy) %>%
+  mutate(r_poverty_rate = poverty_rate - poverty_rate.1)
+
+
+w <- queen_weights(mi4)
+nb <- poly2nb(mi4, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi4$r_poverty_rate,lw, zero.policy=TRUE)
+
+lisa <- local_moran(w, mi4['r_poverty_rate'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+
+abc = sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])})
+
+lisa_map = mi2 %>% filter(state_name != "Alaska" & state_name != "Hawaii")
+plot(st_geometry(lisa_map), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "grey80", lwd=0.2)
+title(main = "LISA, spatial SEM residuals")
+legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
+
+
+```
+
+
+### separate models (OLS)
+
+```{r}
+
+df_map2 = df_map %>%
+  mutate(prosperity = 1*laborforce_part_rate + -1.035*poverty_rate + 0.961*highschool_attainment_rate)
+
+
+ols11a = lm(data = df_map2, retention_calc ~ pct_mfg + pct_ag + pct_mine)
+ols11b = lm(data = df_map2, prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop)
+ols11c = lm(data = df_map2, paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age)
+
+ols12a = lm(data = df_map2, retention_calc ~ pct_mfg + pct_ag + pct_mine)
+ols12b = lm(data = df_map2, prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc*pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_fire + retention_calc*pct_edmed)
+ols12c = lm(data = df_map2, paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age)
+
+
+summary(ols11a)
+summary(ols11b)
+summary(ols11c)
+summary(ols12a)
+summary(ols12b)
+summary(ols12c)
+
+
+```
+
+
+### separate models (sp error)
+
+```{r}
+
+df_map2 = df_map %>%
+  mutate(prosperity = 1*laborforce_part_rate + -1.035*poverty_rate + 0.961*highschool_attainment_rate)
+
+nb <- poly2nb(df_map2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sem11a = errorsarlm(data = df_map2, retention_calc ~ pct_mfg + pct_ag + pct_mine,
+                  lw, zero.policy = TRUE)
+sem11b = errorsarlm(data = df_map2, prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop,
+                  lw, zero.policy = TRUE)
+sem11c = errorsarlm(data = df_map2, paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age,
+                  lw, zero.policy = TRUE)
+
+sem12a = errorsarlm(data = df_map2, retention_calc ~ pct_mfg + pct_ag + pct_mine,
+                  lw, zero.policy = TRUE)
+sem12b = errorsarlm(data = df_map2, prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc*pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_fire + retention_calc*pct_edmed,
+                  lw, zero.policy = TRUE)
+sem12c = errorsarlm(data = df_map2, paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age,
+                  lw, zero.policy = TRUE)
+
+
+summary(sem11a)
+summary(sem11b)
+summary(sem11c)
+summary(sem12a)
+summary(sem12b)
+summary(sem12c)
+
+
+```
+
+### with and w/o rural dummy
+
+```{r}
+
+df_map3 = df_map %>% mutate(metro = ifelse(metro_nonmetro == "metro", 1, 0))
+
+model5nr <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map3) 
+# summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit1 <- cfa(model5, data=df_map3)
+
+
+model5r <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5r.fit <- sem(model5r, data = df_map3) 
+# summary(model5r.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit2 <- cfa(model5r, data=df_map3)
+
+export_summs(fit1, fit2, scale = TRUE, transform.response = TRUE)
+
+
+```
+
+### with and w/o value added
+
+```{r}
+
+df_map3 = df_map %>% mutate(metro = ifelse(metro_nonmetro == "metro", 1, 0))
+
+model5nr <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map3) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit1 <- cfa(model5, data=df_map3)
+
+
+model5r <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro + va_to_output
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + va_to_output + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + va_to_output + age
+'
+
+model5r.fit <- sem(model5r, data = df_map3) 
+summary(model5r.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit2 <- cfa(model5r, data=df_map3)
+
+
+```
+
+### with and w/o lags
+
+```{r}
+
+model5 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=df_map)
+
+model6 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age + splagerr
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+model6.3 <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + splagerrzz
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + retention_calc:pct_mfg + retention_calc:pct_ag + splagerrz
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age + splagerr
+'
+
+model6.3.fit <- sem(model6.3, data = ni3) 
+summary(model6.3.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6.3, data=ni3)
+
+```
+
+### with and w/o value added
+
+```{r}
+
+df_map3 = df_map %>% mutate(metro = ifelse(metro_nonmetro == "metro", 1, 0))
+
+model5nr <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + age
+'
+
+model5.fit <- sem(model5, data = df_map3) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit1 <- cfa(model5, data=df_map3)
+
+
+model5r <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + metro + emp_to_output
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + emp_to_output + logpop + metro + retention_calc:pct_mfg + retention_calc:pct_ag
+  paam ~ logpop + metro + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc + emp_to_output + age
+'
+
+model5r.fit <- sem(model5r, data = df_map3) 
+summary(model5r.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit2 <- cfa(model5r, data=df_map3)
+
+
+```
+
+### compare latent to pre-created index
+
+```{r}
+
+df_map3t = df_map %>%
+  mutate(pros = 1*laborforce_part_rate + -1.035*poverty_rate + 0.953*highschool_attainment_rate)
+
+model3t <- '
+  prosperity =~ laborforce_part_rate + poverty_rate + highschool_attainment_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop
+  paam ~ logpop + uninsured + prosperity + pct_mfg + pct_ag + pct_mine + retention_calc
+'
+
+model3t.fit <- sem(model3t, data = df_map3t) 
+summary(model3t.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model3t, data=df_map3t)
+
+model3t <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  pros ~ pct_mfg + pct_ag + pct_mine + retention_calc + logpop
+  paam ~ logpop + uninsured + pros + pct_mfg + pct_ag + pct_mine + retention_calc
+'
+
+model3t.fit <- sem(model3t, data = df_map3t) 
+summary(model3t.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model3t, data=df_map3t)
+
+
+```
+
+
 
 
