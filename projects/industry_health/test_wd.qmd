@@ -1391,7 +1391,15 @@ lavaanPlot(name = "model5", model5.fit, coefs = TRUE)
 mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvy = lavPredictY(fit, ynames = c("paam"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvy2 = as.data.frame(sem_pvy)
 sem_pvy3 = sem_pvy2$paam
@@ -1519,7 +1527,15 @@ mi3a = mi3 %>% drop_na(c(splagerr)) %>% dplyr::select(-paam.1, -r_paam)
 
 
 sem_pvy = lavPredictY(fit, ynames = c("paam"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate", "splagerr"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 
 sem_pvy2 = as.data.frame(sem_pvy)
@@ -1552,7 +1568,14 @@ legend('bottomleft', cex=0.7, legend = lisa_labels, fill = lisa_colors)
 
 
 ```
+<<<<<<< HEAD
 
+=======
+<<<<<<< HEAD
+
+=======
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 ```{r}
 
 model5 <- '
@@ -1571,7 +1594,15 @@ fit <- cfa(model5, data=df_map)
 mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvy2 = as.data.frame(sem_pvy)
 sem_pvy3 = sem_pvy2$paam
@@ -1619,7 +1650,15 @@ mi3a = mi3 %>% drop_na(c(splagerr)) %>% dplyr::select(-paam.1, -r_paam)
 
 
 sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerr"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerr"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "splagerr"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 
 sem_pvy2 = as.data.frame(sem_pvy)
@@ -1672,7 +1711,15 @@ fit <- cfa(model5, data=df_map)
 ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvy = lavPredictY(fit, ynames = c("paam"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "uninsured", "age", "laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvy2 = as.data.frame(sem_pvy)
 sem_pvy3 = sem_pvy2$paam
@@ -1702,7 +1749,15 @@ ni3 = ni2 %>%
 ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvyz = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvyz2 = as.data.frame(sem_pvyz)
 sem_pvyz3 = sem_pvyz2$paam
@@ -1730,7 +1785,15 @@ splagerrz <- listw2sn(lw) %>%
 ni1 = df_map %>% drop_na(c(paam, retention_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, highschool_attainment_rate, poverty_rate, logpop, uninsured))
 
 sem_pvyzz = lavPredictY(fit, ynames = c("retention_calc"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 sem_pvyzz2 = as.data.frame(sem_pvyzz)
 sem_pvyzz3 = sem_pvyzz2$paam
@@ -1776,7 +1839,15 @@ fit <- cfa(model6.3, data=ni3)
 ni3a = ni3 %>% drop_na(c(splagerrz))
 
 sem_pvy = lavPredictY(fit, ynames = c("laborforce_part_rate", "poverty_rate", "highschool_attainment_rate"),
+<<<<<<< HEAD
                  xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerrz"))
+=======
+<<<<<<< HEAD
+                 xnames = c("pct_mfg", "pct_ag", "retention_calc", "logpop", "splagerrz"))
+=======
+                 xnames = c("pct_mfg", "pct_ag", "pct_edmed", "retention_calc", "logpop", "splagerrz"))
+>>>>>>> bf38728ff4223f955701ebe8d7e1b33cb942b384
+>>>>>>> cc1ce359f717e7f0470da833cf96e9811c441b5b
 
 
 
@@ -2061,6 +2132,7 @@ model3t.fit <- sem(model3t, data = df_map3t)
 summary(model3t.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
 
 fit <- cfa(model3t, data=df_map3t)
+
 
 ```
 
