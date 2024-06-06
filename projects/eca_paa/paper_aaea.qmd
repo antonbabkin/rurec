@@ -328,6 +328,105 @@ ggplot(d, aes(max_trade_share)) +
 ```
 
 
+```{r}
+# discrete histogram of ECA cluster counts 
+
+dp$viz$hist_dist_plot(df[df$eca_cluster_category == "Destination", ], "cluster_members_count", adaptive_scaling = F) + labs(x = "Number of counties")
+
+```
+
+```{r}
+# density distribution trade share maximium value
+
+dp$viz$density_dist_plot(df, "max_trade_share") 
+
+```
+
+```{r}
+# Distribution of distance (100's of miles, logarithmic scale) from ECA source counties to their respective destinations, compared with the distribution between each possible pair of counties
+
+d_unrest <- dp$call_dist_mat(params$year) %>% 
+  drop_units() %>% 
+  as.data.frame.table() %>% 
+  `colnames<-`(c("rows", "cols", "distance")) %>% 
+  mutate(sample = c("All county pairs")) %>% 
+  {.[.$rows %in% df[df$cbsa_rural_category == "rural", ]$place, ]} %>% 
+  {.[.$distance != 0, ]} %>% 
+  mutate(distance = dp$meters2miles(distance)/100)
+
+d_model <- df[df$cbsa_rural_category == "rural" & df$eca_cluster_category != "Cluster Sink", ] %>% 
+  st_drop_geometry() %>% 
+  {.[c("place", "eca_membership", "eca_center_distance")]} %>%
+  `colnames<-`(c("rows", "cols", "distance")) %>%  
+  mutate(sample = c("ECA source-destination"))
+
+dft <- rbind(d_unrest, d_model)
+
+dft[dft$distance > 0, ] %>% dp$viz$density_dist_plot(., "distance", "sample") + scale_x_log10()
+
+```
+
+```{r}
+# Distance in miles from ECA source counties to their respective destinations
+  df %>% 
+    mutate(eca_center_distance = replace(eca_center_distance, which(eca_center_distance == 0), NA)) %>% 
+  dp$viz$nominal_choro_map(., "eca_center_distance", interactive = F)
+
+```
+
+
+```{r}
+# Comparing ECA and CBSA county assignments
+  tmp <- scale_fill_discrete
+    scale_fill_discrete <- function(...) scale_fill_manual(values = c("Metro only" = "#1f78b4", 
+                                                                      "Micro only" = "#a6cee3", 
+                                                                      "Destination and Metro" = "#33a02c", 
+                                                                      "Destination and Micro" = "#b2df8a", 
+                                                                      "Destination Only" = "#ff7f00"), na.value ="#E0DEDD")
+  p <- dp$viz$cat_choro_map(df, "metro_micro_destination", interactive = F, legend = T)
+    print(p)
+  scale_fill_discrete <- tmp
+
+
+
+```
+```{r}
+
+# PLay with ggplot ECA and CBSA county assignment comparrisons 
+if (FALSE){
+  tmp <- scale_fill_discrete
+    scale_fill_discrete <- function(...) scale_fill_manual(values = c(
+      "ECA dest, own CBSA center" = "#33a02c",
+      "ECA source, non-CBSA" = "#1f78b4",
+      "ECA source, same CBSA" = "#f5f2a3",
+      "ECA source, other CBSA" = "#f5cba3" ,
+      "other ECA, same CBSA" = "grey60",
+      "outside" = "#f2f0ef"))
+    
+
+ECA_n <- "27053"
+cbsa_n <- df[df$place == ECA_n,]$cbsa_of_eca
+
+df[df$STATE %in% c("MN", "WI"),] %>%
+  mutate(
+    comp = ifelse(
+      (place == ECA_n & CBSA_CODE == cbsa_n & eca_central_out_xtab == "Central Sink"), "ECA dest, own CBSA center",
+      ifelse(
+        (CENTRAL_OUTLYING != "rural" & CBSA_CODE != cbsa_n & eca_membership == ECA_n), "ECA source, other CBSA", 
+        ifelse(
+          (eca_membership != ECA_n & CBSA_CODE == cbsa_n), "other ECA, same CBSA",
+          ifelse(
+            (eca_cbsa_xtab == "Rural Source" & eca_membership == ECA_n), "ECA source, non-CBSA", 
+            ifelse(
+              (eca_cbsa_xtab == "Nonrural Source" & CBSA_CODE == cbsa_n & eca_membership == ECA_n), "ECA source, same CBSA",
+              if_else(eca_membership == ECA_n, "here", "outside"))))))) %>% 
+   dp$viz$cat_choro_map(., "comp", interactive = F, legend = F) + guides(fill = guide_legend(title = "Title"))
+    
+  scale_fill_discrete <- tmp
+}
+
+```
+
 
 ```{r}
 

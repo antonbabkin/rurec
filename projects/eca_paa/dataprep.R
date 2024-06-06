@@ -151,6 +151,7 @@ temporal_permutations <- function(year_range){
 viz <- new.env()
 viz$diverge_choro_map <- visualization$diverge_choro_map
 viz$density_dist_plot <- visualization$density_dist_plot
+viz$hist_dist_plot <- visualization$hist_dist_plot
 viz$cat_choro_map <- visualization$cat_choro_map
 viz$nominal_choro_map <- visualization$nominal_choro_map
 viz$normal_choro_map <- visualization$normal_choro_map
