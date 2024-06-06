@@ -3,7 +3,7 @@ title: "paa spatial regress"
 format:
   html:
     toc: true
-    toc-depth: 1
+    toc-depth: 2
     self-contained: true
     page-layout: full
     code-fold: true
@@ -19,7 +19,8 @@ params:
   reg_factors_names: !expr c("Establishment Growth", "Wage Growth", "Job Growth", "Payroll Growth", "Employment Growth", "Poverty Growth", "Income Growth", "Population Growth", "Entry Rate", "Exit Rate")
   reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
   spec_names: !expr c("ols", "ols_weight", "ols_naive", "slm_ml", "slm_iv", "sem_ml", "sem_weight", "sarar", "slm_di", "sem_di", "regime_ols", "regime_slm", "regime_sem", "rural_ols", "rural_ols_naive", "rural_slm", "rural_sem", "nonrural_ols", "nonrural_ols_naive", "nonrural_slm", "nonrural_sem")
-  w_names: !expr c("inverse", "square", "exponential", "gaussian", "qnn", "knn", "proximity", "bi-square" )
+  w_names: !expr c("inverse", "square", "exponential", "gaussian", "qnn", "knn", "proximity", "bi-square")
+  build_w: FALSE
 ---
 
 
@@ -71,16 +72,14 @@ params
 
 proj_path <- "data/projects/eca_paa/space_regress/"
 
-
-
 ```
 
 
-```{r plot vis functions}
-
+```{r plot vis functions, include = FALSE}
 
 twg <- "trade_weighted_growth"
 
+# extract vital statistics from a single level list of regression results into a dataframe 
 spec_f <- function(spec_list, mn = "ols", wm = "none"){
   df <- data.frame()
   for (i in rf){
@@ -95,7 +94,7 @@ spec_f <- function(spec_list, mn = "ols", wm = "none"){
   return(df)
 }
 
-
+# extract vital statistics from a single or multilevel list of regression results into a dataframe 
 spec_df <- function(spec_list, mn = "ols", wm = NULL){
   if(is.null(wm)){
     df <- data.frame()
@@ -110,30 +109,30 @@ spec_df <- function(spec_list, mn = "ols", wm = NULL){
 return(df)
 }
 
-point_plot_factor <- function(df){
-  df$model <- factor(df$model)
-  df$wmatrix <- factor(df$wmatrix, levels=c("none", params$w_names))
-  df$indicator <- factor(df$indicator, levels=c(coef_names), labels = gsub(" Growth*|Rate*", '', coef_names))
-  return(df)
+# extract vital statistics a multilevel list of regression results from a regime model into a dataframe 
+spec_df_regime <- function(spec_list, mn, cn){
+  df <- data.frame()
+  for (j in params$w_names){
+    for (i in rf){
+      estimate <-  summary(spec_list[[match(j, params$w_names)]][[i]])[["CoefTable"]][cn, 1]
+      lower <- summary(specif[[match(j, params$w_names)]][[i]])[["CoefTable"]][cn, 1] - summary(specif[[match(j, params$w_names)]][[i]])[["CoefTable"]][cn, 2] * 1.959964
+      upper <- summary(specif[[match(j, params$w_names)]][[i]])[["CoefTable"]][cn, 1] + summary(specif[[match(j, params$w_names)]][[i]])[["CoefTable"]][cn, 2] * 1.959964
+      wmatrix <- j
+      model <- mn
+      indicator <- coef_names[match(i, rf)]
+      df = rbind(df, data.frame(model, wmatrix, indicator, estimate, lower, upper))
+    }
+  }
+    return(df)
 }
 
-
-# c("none"="black", 
-#   "inverse"="#a6cee3", 
-#   "square"="#1f78b4",
-#   "exponential"="#b2df8a", 
-#   "gaussian"="#33a02c", 
-#   "qnn"="#fb9a99", 
-#   "knn"-"#e31a1c", 
-#   "proximity"="#fdbf6f", 
-#   "bi-square"="#ff7f00")
-
-point_plot <- function(df, error = TRUE){
+# specify the parameters for visualizing and comparing multiple regression coefficient estimates for trade weighted growth
+point_plot <- function(df, error = TRUE, id_variable = "wmatrix"){
   g <- df %>% 
   ggplot(aes(x=indicator, y=estimate, colour=wmatrix, shape=model,
-             tooltip = wmatrix,
-             data_id = wmatrix,
-             `data-id` = wmatrix)) +
+             tooltip = .data[[id_variable]],
+             data_id = .data[[id_variable]],
+             `data-id` = .data[[id_variable]])) +
     geom_point_interactive(position = position_dodge(width=.3)) +
     scale_color_manual_interactive(values=c(
       "none"="black", 
@@ -157,12 +156,38 @@ point_plot <- function(df, error = TRUE){
   return(g)
 }
 
-coef_point_plot <- function(df, error = TRUE){
-  g <- point_plot_factor(df) %>% 
-    point_plot(error = error) %>% 
+
+# given a dataframe of regression results, visualize and compare coefficient estimates
+coef_point_plot <- function(df, error = TRUE, id_variable = "wmatrix"){
+  g <- df %>%
+    (function(x) {
+      x$model <- factor(x$model)
+      x$wmatrix <- factor(x$wmatrix, levels = c("none", params$w_names))
+      x$indicator <- factor(x$indicator, levels = c(coef_names), labels = gsub(" Growth*|Rate*", '', coef_names))
+      return(x) }) %>% 
+    point_plot(error = error, id_variable = id_variable) %>% 
     dp$girafe_plot()
   g[["x"]][["settings"]][["hover"]][["css"]] <- ".hover_data_SVGID_ { stroke:orange;r:4pt; }\ntext.hover_data_SVGID_ { stroke:none;fill:black;fill-opacity:1; }"
   return(g)
+}
+
+# create custom msummary() friendly output for regression results that are not natively supported (e.g., regimes) 
+sum_mod <- function(x){
+  df <- summary(x)
+  ti <- data.frame(
+    term = names(df$CoefTable[, 1]),
+    estimate = df$CoefTable[, 1],
+    std.error = df$CoefTable[, 2],
+    p.value = df$CoefTable[, 4],
+    conf.low = df$CoefTable[, 1] - df$CoefTable[, 2] * 1.959964, 
+    conf.high = df$CoefTable[, 1] + df$CoefTable[, 2] * 1.959964 )
+  gl <- data.frame(
+    n = length(x[[1]]$y))
+  mod <- list(
+    tidy = ti,
+    glance = gl)
+  class(mod) <- "modelsummary_list"
+  return(mod)
 }
 
 ```
@@ -172,7 +197,7 @@ coef_point_plot <- function(df, error = TRUE){
 ## dataframe
 ```{r}
 
-# optional panel data format 
+# call main project dataframe (optional panel data format) 
 if (params$panel_data){
   df <- dp$call_temporal_range_df(params$year_range)
 } else{
@@ -181,11 +206,11 @@ if (params$panel_data){
 
 # scale variables for better summary and coefficient interpretation
   df <- df %>% 
-  mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-  mutate(wage = wage/1000) %>% 
-  mutate(income_rate = income_rate/1000) %>% 
-  mutate(ypll75 = ypll75/100000) %>% 
-  mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
+    mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+    mutate(wage = wage/1000) %>% 
+    mutate(income_rate = income_rate/1000) %>% 
+    mutate(ypll75 = ypll75/100000) %>% 
+    mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
   
 # adjust names to "source" and "destination" vocabulary
 df$metro_micro_destination <- df$metro_micro_sink
@@ -193,13 +218,7 @@ df$metro_micro_destination <- df$metro_micro_sink
     df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
       df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
 
-```
-
-
-## growth rates 
-
-```{r}
-
+# add growth rates to dataframe (for non-panel setup)
 if (!params$panel_data){
   x <- dp$temporal_permutations(params$year_range)
   tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place"))
@@ -218,13 +237,7 @@ if (!params$panel_data){
   rm(x, tmp)
 }
 
-```
-
-
-## circularity
-
-```{r}
-
+# add circularity variables to dataframe
 df <- dp$call_circularity_metrics(
   year = params$year, 
   paradigm = "domestic", 
@@ -234,18 +247,13 @@ df <- dp$call_circularity_metrics(
   select(!(gross_output:extract)) %>% 
   left_join(df, ., by = "place")
 
-```
-
-
-## variables
-
-```{r}
-
 # list out all numeric variables
-df %>% 
-  st_drop_geometry() %>% 
-  select(where(is.numeric)) %>% 
-  names() 
+if (FALSE) {
+  df %>%
+    st_drop_geometry() %>%
+    select(where(is.numeric)) %>%
+    names()
+}
 
 # set of economic indicator growth variables 
 rf <- params$reg_factors
@@ -256,23 +264,9 @@ coef_names <- params$reg_factors_names
 # dummy check for user variable and label length consistency
 stopifnot("variable selection and names do not match" = length(rf) == length(coef_names))
 
-```
-
-
-## trade flow matrix
-
-```{r}
-
 # row normalized trade value matrix of potential excess trade flows between all places
 tm <- dp$call_trade_flows("all_industries") %>% 
   dp$row_normalize()
-
-```
-
-
-## location sample 
-
-```{r}
 
 # all place names common between trade flow data and economic indicator growth data
 pn <- tm %>% 
@@ -290,74 +284,131 @@ pn <- pn %>%
   {dp$call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
   {rownames(.)[rowSums(.) > 1]}
 
-# rurality sub-sets
+# sub-set of rural places
 rural_places <-  df %>% 
   {.[.$place %in% pn, ]} %>% 
   {.[.$cbsa_rural_category == "rural", ]} %>% 
   {.[["place"]]}
 
+# sub-set of nonrural places
 nonrural_places <-  df %>% 
   {.[.$place %in% pn, ]} %>% 
   {.[.$cbsa_rural_category != "rural", ]} %>% 
   {.[["place"]]}
 
-```
-
-
-## regression dataset
-
-```{r}
-
+# dataframe containing only the pertinent variables and values used in the subsiquent analysis and regressions 
 rdf <- df[df$place %in% pn, c("place", "cbsa_rural_category", "trade_capacity", rf)] %>% 
   st_drop_geometry() %>% 
-  as.data.frame() 
+  as.data.frame() %>% (function(x) {
+    for (i in rf) {
+      x <- pn %>%
+        {tm[., .] %*% as.matrix(x[i])} %>%
+        `colnames<-`(c(paste0(i, "_", twg))) %>%
+        {cbind(x, .)}
+    }
+    return(x) 
+    })
 
-for(i in rf){
-  rdf <- pn %>% 
-    {tm[., .] %*% as.matrix(rdf[i])} %>% 
-    `colnames<-`(c(paste0(i, "_", twg))) %>% 
-    {cbind(rdf, .)}
-  }
+# call list of row-normalized W impedance matrices
+if (params$build_w) {
+  W_list <- dp$imped_list(
+    pn_dim = pn, 
+    dmat = dp$call_dist_mat(year = params$year) )
+}  
 
-```
-
-
-## W matrix
-
-```{r}
-
-## Does the model need to be extended with spatial interaction effects? 
-## Is there considerable spatial dependence in these data such that a standard OLS regression that assumes independent observations will be misleading?
-
-W_list <- dp$imped_list(
-  pn_dim = pn, 
-  dmat = dp$call_dist_mat(year = params$year) )
-
-```
-
-
-## W edge list
-
-```{r}
-
-cache_path = glue(proj_path, "W_list_alt.rds")
+# call or derive a list of W matrices in long format edge list of "listw" class
+# typically the necessary format that spatial regression packages use for the integrating spatial weights
+if (params$build_w) {
+  cache_path = glue(proj_path, "W_list_alt.rds")
   if (file.exists(cache_path)) {
     W_list_alt <- readRDS(cache_path)
   } else {
     W_list_alt <- list()
-    for (j in 1:length(W_list)){
-      W_list_alt[[j]] <- intersect(rownames(W_list[[j]]), pn) %>% 
-        {W_list[[j]][., .]} %>% 
-        mat2listw(style="M", zero.policy=TRUE) 
+    for (j in 1:length(W_list)) {
+      W_list_alt[[j]] <- intersect(rownames(W_list[[j]]), pn) %>%
+        {W_list[[j]][., .]} %>%
+        mat2listw(style = "M", zero.policy = TRUE)
     }
     saveRDS(W_list_alt, dp$util$mkdir(cache_path))
+  }
+}
+
+# call or derive the rural subset list of W matrices in long format edge list of "listw" class
+if (params$build_w) {
+  cache_path = glue(proj_path, "W_list_alt_rural.rds")
+  if (file.exists(cache_path)) {
+    W_list_alt_rural <- readRDS(cache_path)
+  } else {
+    W_list_alt_rural <- list()
+    W_list <- dp$imped_list(pn_dim = rural_places,
+                            dmat = dp$call_dist_mat(year = params$year))
+    for (j in 1:length(W_list)) {
+      W_list_alt_rural[[j]] <- W_list[[j]] %>%
+        mat2listw(style = "M", zero.policy = TRUE)
+    }
+    saveRDS(W_list_alt_rural, dp$util$mkdir(cache_path))
+  }
+}
+
+# call or derive the nonrural subset list of W matrices in long format edge list of "listw" class
+if (params$build_w) {
+  cache_path = glue(proj_path, "W_list_alt_nonrural.rds")
+  if (file.exists(cache_path)) {
+    W_list_alt_nonrural <- readRDS(cache_path)
+  } else {
+    W_list_alt_nonrural <- list()
+    W_list <- dp$imped_list(pn_dim = nonrural_places,
+                            dmat = dp$call_dist_mat(year = params$year))
+    for (j in 1:length(W_list)) {
+      W_list_alt_nonrural[[j]] <- W_list[[j]] %>%
+        mat2listw(style = "M", zero.policy = TRUE)
+    }
+    saveRDS(W_list_alt_nonrural, dp$util$mkdir(cache_path))
+  }
+}
+
+```
+
+
+
+# Moran's I
+```{r}
+
+# Does the model need to be extended with spatial interaction effects? 
+# Is there considerable spatial dependence in these data such that a standard OLS regression that assumes independent observations will be misleading?
+
+
+
+# Moran’s I has theoretical limits from -1 for perfect dispersion or repulsion, to +1 for perfect clustering, with 0 indicting a perfectly random pattern.
+
+# Inference is carried out by assessing whether the observed value for Moran’s I is compatible with its distribution under the null hypothesis of spatial randomness. 
+
+# The interpretation of Moran’s I is based on a combination of its sign and its significance. More precisely, the statistic must be compared to its theoretical mean of  -1/(n-1) Values larger than E[I] indicate positive spatial autocorrelation, values smaller suggest negative spatial autocorrelation.
+ 
+# In contrast to a Pearson correlation coefficient, the value of Moran’s I is not meaningful in and of itself. Its interpretation and the comparison of results among variables depend critically on the spatial weights used. Only when the same weights are used are results among variables directly comparable. To avoid this problem, a reliable comparison should be based on the z-values.
+
+  cache_path = glue(proj_path, "moran_base.rds")
+  if (file.exists(cache_path)) {
+    moran_base <- readRDS(cache_path)
+  } else {
+    moran_base <- data.frame()
+    for (j in 1:length(params$w_names)){
+          for (i in rf){
+            moran_base <- moran.test(x = rdf[[i]], listw = W_list_alt[[j]], zero.policy = T) %>% 
+              tidy() %>% 
+              rename_with(~c("moran_stat", "expectation", "variance", "deviation"), 1:4) %>% 
+              mutate("type" = params$w_names[j]) %>% 
+              rbind(moran_base,.)
+          }
+    }
+    saveRDS(moran_base, dp$util$mkdir(cache_path))
   }
 
 ```
 
 
 
-# regression
+# Regression - base
 
 
 ## OLS - normalized trade
@@ -391,7 +442,7 @@ if (file.exists(cache_path)) {
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
                          "trade_weighted_growth" = "Trade Weighted Growth") )}  %>% 
-    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print() %>% cat()
   
 ```
 ```{r}
@@ -429,7 +480,7 @@ if (file.exists(cache_path)) {
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
                          "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
-    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print() %>% cat()
 
   
 ```
@@ -507,6 +558,8 @@ glue(proj_path, "ols_naive.rds") %>%
 ```
 
 
+# Regression - spatial
+
 ## Spatial Lag Model (max likelihood)
 ::: panel-tabset 
 ```{r results='asis'}
@@ -564,7 +617,7 @@ glue(proj_path, "slm_ml.rds") %>%
 ```
 
 
-## *Spatial Lag Model (GM/IV)
+## *Spatial Lag Model (GM/IV) 
 ::: panel-tabset 
 ```{r results='asis'}
 
@@ -843,6 +896,7 @@ contrasts(factor(df$cbsa_rural_category))
 
 ```
 
+# Regression - spatial extras
 
 ## *Spatial Lag Model - rural dummy
 ::: panel-tabset 
@@ -1049,7 +1103,7 @@ for (j in 1:length(params$w_names)){
 ::: 
 
 
-# regression - spatial regimes
+# Regression - spatial regimes
 
 ```{r}
 
@@ -1146,24 +1200,6 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-sum_mod <- function(x){
-  df <- summary(x)
-  ti <- data.frame(
-    term = names(df$CoefTable[, "Estimate"]),
-    estimate = df$CoefTable[, "Estimate"],
-    std.error = df$CoefTable[, "Std. Error"],
-    p.value = df$CoefTable[, "Pr(>|z|)"],
-    conf.low = df$CoefTable[, "Estimate"] - df$CoefTable[, "Std. Error"] * 1.959964, 
-    conf.high = df$CoefTable[, "Estimate"] + df$CoefTable[, "Std. Error"] * 1.959964 )
-  gl <- data.frame(
-    n = length(x[[1]]$y))
-  mod <- list(
-    tidy = ti,
-    glance = gl)
-  class(mod) <- "modelsummary_list"
-  return(mod)
-}
-
 for (j in 1:length(params$w_names)){
   cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
@@ -1207,29 +1243,17 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-sum_mod <- function(x){
-  df <- summary(x)
-  ti <- data.frame(
-    term = c("(Intercept)", "trade_weighted_growth_1", "trade_weighted_growth_2", "lambda1", "lambda2"),
-    estimate = df$CoefTable[, "Estimate"],
-    std.error = df$CoefTable[, "Std. Error"],
-    p.value = df$CoefTable[, "Pr(>|z|)"],
-    conf.low = df$CoefTable[, "Estimate"] - df$CoefTable[, "Std. Error"] * 1.959964, 
-    conf.high = df$CoefTable[, "Estimate"] + df$CoefTable[, "Std. Error"] * 1.959964 )
-  gl <- data.frame(
-    n = length(x[[1]]$y))
-  mod <- list(
-    tidy = ti,
-    glance = gl)
-  class(mod) <- "modelsummary_list"
-  return(mod)
-}
-
 for (j in 1:length(params$w_names)){
   cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
     `names<-`(coef_names) %>%  
-    {lapply(., sum_mod)} %>% 
+    {lapply(., function(x){sum_mod(x) %>% (function(x){
+      x$tidy[, "term"][4:5] <- c("lambda1", "lambda2")
+      rownames(x$tidy)[4:5] <- c("lambda1", "lambda2")
+      return(x)
+    }
+      )}
+    )} %>% 
     {msummary(., 
               statistic = c("conf.int", "{std.error}", "{p.value}"), 
               estimate = "{estimate}{stars}", 
@@ -1244,6 +1268,34 @@ for (j in 1:length(params$w_names)){
 
 ```
 ::: 
+
+```{r}
+
+glue(proj_path, "regime_slm.rds") %>%
+  readRDS() %>%
+  spec_df_regime(mn = "regime_slm_rural", cn = "trade_weighted_growth_2") %>%
+  coef_point_plot()
+
+```
+
+```{r}
+
+glue(proj_path, "regime_slm.rds") %>%
+  readRDS() %>%
+  spec_df_regime(mn = "regime_slm_nonrural", cn = "trade_weighted_growth_1") %>%
+  coef_point_plot()
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 ## SEM
@@ -1269,24 +1321,6 @@ if (file.exists(cache_path)) {
     saveRDS(specif, dp$util$mkdir(cache_path))
 }
 
-sum_mod <- function(x){
-  df <- summary(x)
-  ti <- data.frame(
-    term = names(df$CoefTable[, "Estimate"]),
-    estimate = df$CoefTable[, "Estimate"],
-    std.error = df$CoefTable[, "Std. Error"],
-    p.value = df$CoefTable[, "Pr(>|z|)"],
-    conf.low = df$CoefTable[, "Estimate"] - df$CoefTable[, "Std. Error"] * 1.959964, 
-    conf.high = df$CoefTable[, "Estimate"] + df$CoefTable[, "Std. Error"] * 1.959964 )
-  gl <- data.frame(
-    n = length(x[[1]]$y))
-  mod <- list(
-    tidy = ti,
-    glance = gl)
-  class(mod) <- "modelsummary_list"
-  return(mod)
-}
-
 for (j in 1:length(params$w_names)){
   cat('####', params$w_names[j], ' \n')
   specif[[j]] %>% 
@@ -1308,30 +1342,30 @@ for (j in 1:length(params$w_names)){
 ```
 ::: 
 
-
-# regression - rural only
-
-## W edge list - rural
-
 ```{r}
-
-cache_path = glue(proj_path, "W_list_alt_rural.rds")
-  if (file.exists(cache_path)) {
-    W_list_alt_rural <- readRDS(cache_path)
-  } else {
-    W_list_alt_rural <- list()
-    W_list <- dp$imped_list(
-      pn_dim = rural_places, 
-      dmat = dp$call_dist_mat(year = params$year) )
-    for (j in 1:length(W_list)){
-      W_list_alt_rural[[j]] <- W_list[[j]] %>% 
-        mat2listw(style="M", zero.policy=TRUE) 
-    }
-    saveRDS(W_list_alt_rural, dp$util$mkdir(cache_path))
-  }
+# #TODO:
+# glue(proj_path, "regime_sem.rds") %>%
+#   readRDS() %>%
+#   spec_df_regime(mn = "regime_sem_rural", cn = "trade_weighted_growth_2") %>%
+#   coef_point_plot()
 
 ```
 
+```{r}
+# #TODO:
+# glue(proj_path, "regime_sem.rds") %>%
+#   readRDS() %>%
+#   spec_df_regime(mn = "regime_sem_nonrural", cn = "trade_weighted_growth_1") %>%
+#   coef_point_plot()
+
+```
+
+
+
+
+
+
+# Regression - rural only
 
 ## OLS - normalized trade
 
@@ -1362,11 +1396,20 @@ if (file.exists(cache_path)) {
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
                          "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
-    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print() %>% cat()
 
   
 ```
 
+
+```{r}
+
+glue(proj_path, "rural_ols.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "rural_ols", wm = "none") %>% 
+  coef_point_plot()
+
+```
 
 ## OLS - naive spatial lag
 ::: panel-tabset 
@@ -1412,6 +1455,15 @@ for (j in 1:length(params$w_names)){
 ```
 ::: 
 
+```{r}
+
+glue(proj_path, "rural_ols_naive.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "rural_ols_naive") %>% 
+  coef_point_plot()
+
+```
+
 
 ## Spatial Lag Model (max likelihood)
 ::: panel-tabset 
@@ -1455,6 +1507,15 @@ for (j in 1:length(params$w_names)){
 
 ```
 ::: 
+
+```{r}
+
+glue(proj_path, "rural_slm_ml.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "rural_slm_ml") %>% 
+  coef_point_plot()
+
+```
 
 
 ## Spatial Error Model (max likelihood)
@@ -1500,29 +1561,17 @@ for (j in 1:length(params$w_names)){
 ```
 ::: 
 
-
-# regression - nonrural only
-
-
-## W edge list - nonrural
 ```{r}
 
-cache_path = glue(proj_path, "W_list_alt_nonrural.rds")
-  if (file.exists(cache_path)) {
-    W_list_alt_nonrural <- readRDS(cache_path)
-  } else {
-    W_list_alt_nonrural <- list()
-    W_list <- dp$imped_list(
-      pn_dim = nonrural_places, 
-      dmat = dp$call_dist_mat(year = params$year) )
-    for (j in 1:length(W_list)){
-      W_list_alt_nonrural[[j]] <- W_list[[j]] %>% 
-        mat2listw(style="M", zero.policy=TRUE) 
-    }
-    saveRDS(W_list_alt_nonrural, dp$util$mkdir(cache_path))
-  }
+glue(proj_path, "rural_sem_ml.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "rural_sem_ml") %>% 
+  coef_point_plot()
 
 ```
+
+
+# Regression - nonrural only
 
 
 ## OLS - normalized trade
@@ -1554,11 +1603,19 @@ if (file.exists(cache_path)) {
             estimate = "{estimate}{stars}", 
             coef_map = c("(Intercept)" = "(Intercept)",
                          "trade_weighted_growth" = "Trade Weighted Growth") )} %>% 
-    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print()
+    kable_styling(font_size = 11, bootstrap_options = c("hover", "condensed")) %>% print() %>% cat()
 
   
 ```
 
+```{r}
+
+glue(proj_path, "nonrural_ols.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "nonrural_ols", wm = "none") %>% 
+  coef_point_plot()
+
+```
 
 
 ## OLS - naive spatial lag
@@ -1606,6 +1663,15 @@ for (j in 1:length(params$w_names)){
 ```
 ::: 
 
+```{r}
+
+glue(proj_path, "nonrural_ols_naive.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "nonrural_ols_naive") %>% 
+  coef_point_plot()
+
+```
+
 
 ## Spatial Lag Model (max likelihood)
 ::: panel-tabset 
@@ -1649,6 +1715,15 @@ for (j in 1:length(params$w_names)){
 
 ```
 ::: 
+
+```{r}
+
+glue(proj_path, "nonrural_slm_ml.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "nonrural_slm_ml") %>% 
+  coef_point_plot()
+
+```
 
 
 ## Spatial Error Model (max likelihood)
@@ -1694,44 +1769,17 @@ for (j in 1:length(params$w_names)){
 ```
 :::
 
-
-# In progress
-
-## Moran's I
 ```{r}
 
-if(FALSE){
-  #   wl <- intersect(rownames(W), pn) %>% {W[., .]} %>% mat2listw() 
-  # #lagsarlm(i ~ trade_weighted_growth, data=df_reg, listw = wl, method="eigen", quiet=FALSE)
-  # lagsarlm(population_gr ~ trade_weighted_growth, data=df_reg, listw = W_list_alt[[j]], method="eigen", quiet=FALSE, zero.policy=TRUE)
-  #  moran.test(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
-  #  moran.plot(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
-  # 
-  # moran.test(x = df_reg$population_gr, listw = wl) 
-  #  moran.plot(x = df_reg$population_gr, listw = wl)
+glue(proj_path, "nonrural_sem_ml.rds") %>% 
+  readRDS() %>% 
+  spec_df(spec_list = ., mn = "nonrural_sem_ml") %>% 
+  coef_point_plot()
 
-for (j in 1:length(W_list_alt)){
-      for (i in rf){
-        moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% print()
-      }
-}
-
-mspec <- list()
-      for (i in rf){
-        mspec[[i]] <- moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% tidy()
-        print(mspec[[i]])
-      }
-
-mspec <- data.frame()
-      for (i in rf){
-        mspec <- moran.test(x = rdf[[i]], listw = W_list_alt[[j]], zero.policy = T) %>% tidy() %>% rbind(mspec,.)
-      }
-mspec
-
-#Moran’s I has theoretical limits from -1 for perfect dispersion or repulsion, to +1 for perfect clustering, with 0 indicting a perfectly random pattern.
-}
 ```
 
+
+# Multi model plot
 
 ```{r}
 
@@ -1774,12 +1822,119 @@ for(i in spec_mods){
     estdf <- rbind(estdf, x)
 }
 
+```
+
+
+```{r}
+
 estdf %>% 
-  filter(model %in% c("ols", "ols_naive", "slm_ml", "sem_ml")) %>% 
+  filter(model %in% c("ols", "ols_naive", "slm_ml")) %>% 
   #filter(wmatrix %in% c("none", "inverse", "qnn", "knn", "proximity")) %>% 
-  coef_point_plot(error = F)
+  coef_point_plot(error = F) %>% 
+  (function(x){x[["x"]][["settings"]][["hover"]][["css"]] <- 
+    ".hover_data_SVGID_ { stroke:orange;stroke-width:3px;r:4pt; }\ntext.hover_data_SVGID_ { stroke:none;fill:black;fill-opacity:1; }" 
+   return(x)
+  })
+
 
 ```
+
+```{r}
+
+estdf %>% 
+  filter(model %in% c("slm_ml", "sem_ml", "rural_sem_ml", "nonrural_sem_ml")) %>% 
+  filter(wmatrix %in% c("qnn")) %>% 
+  coef_point_plot(error = F, id_variable = "model") %>% 
+  (function(x){x[["x"]][["settings"]][["hover"]][["css"]] <- 
+    ".hover_data_SVGID_ { stroke:orange;stroke-width:3px;r:4pt; }\ntext.hover_data_SVGID_ { stroke:none;fill:black;fill-opacity:1; }" 
+   return(x)
+  })
+
+```
+
+
+# In progress
+
+```{r}
+
+if(FALSE){
+  #   wl <- intersect(rownames(W), pn) %>% {W[., .]} %>% mat2listw() 
+  # #lagsarlm(i ~ trade_weighted_growth, data=df_reg, listw = wl, method="eigen", quiet=FALSE)
+  # lagsarlm(population_gr ~ trade_weighted_growth, data=df_reg, listw = W_list_alt[[j]], method="eigen", quiet=FALSE, zero.policy=TRUE)
+  #  moran.test(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
+  #  moran.plot(x = df_reg$population_gr, listw = W_list_alt[[j]], zero.policy = T)
+  # 
+  # moran.test(x = df_reg$population_gr, listw = wl) 
+  #  moran.plot(x = df_reg$population_gr, listw = wl)
+
+for (j in 1:length(W_list_alt)){
+      for (i in rf){
+        moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% print()
+      }
+}
+
+mspec <- list()
+      for (i in rf){
+        mspec[[i]] <- moran.test(x = df[df$place %in% pn, ][[i]], listw = W_list_alt[[j]], zero.policy = T) %>% tidy()
+        print(mspec[[i]])
+      }
+
+mspec <- data.frame()
+for (j in 1:length(params$w_names)){
+      for (i in rf){
+        mspec <- moran.test(x = rdf[[i]], listw = W_list_alt[[j]], zero.policy = T) %>% 
+          tidy() %>% 
+          rename_with(~c("moran_stat", "expectation", "variance", "deviation"), 1:4) %>% 
+          mutate("type" = params$w_names[j]) %>% 
+          rbind(mspec,.)
+      }
+}
+
+
+  cache_path = glue(proj_path, "moran_base.rds")
+  if (file.exists(cache_path)) {
+    moran_base <- readRDS(cache_path)
+  } else {
+    moran_base <- data.frame()
+    for (j in 1:length(params$w_names)){
+          for (i in rf){
+            moran_base <- moran.test(x = rdf[[i]], listw = W_list_alt[[j]], zero.policy = T) %>% 
+              tidy() %>% 
+              rename_with(~c("moran_stat", "expectation", "variance", "deviation"), 1:4) %>% 
+              mutate("type" = params$w_names[j]) %>% 
+              rbind(moran_base,.)
+          }
+    }
+    saveRDS(moran_base, dp$util$mkdir(cache_path))
+  }
+
+
+
+# Moran’s I has theoretical limits from -1 for perfect dispersion or repulsion, to +1 for perfect clustering, with 0 indicting a perfectly random pattern.
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
