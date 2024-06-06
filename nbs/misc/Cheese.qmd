@@ -1,0 +1,175 @@
+---
+title: "The Cheese"
+format:
+  html:
+    code-fold: true
+    df-print: paged
+    embed-resources: true
+---
+
+# intro
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+
+library(magick)
+library(rprojroot)
+
+logger::log_threshold(DEBUG)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/dataprep_infogroup.R", local = (infogroup <- new.env()))
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/connectedness.R", local = (connect <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+
+```
+
+
+## data
+
+```{r}
+# list of data objects used throughout the notebook
+ipath <- list(
+  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
+  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}"),
+  population = dataprep$opath$population,
+  infogroup_ = infogroup$opath$county_,
+  io_output_ = glue(place_output$opath$output_, year = "{year}", class_system = "{class_system}", ilevel = "det", bus_data = "{bus_data}"),
+  bea_io_use_det_ = glue(bea_io$opath$use_, level = "det", year = "{year}", labels = FALSE),
+  bea_io_sup_det_ = glue(bea_io$opath$sup_, level = "det", year = "{year}", labels = FALSE),
+  call_dist_mat_ = glue(geo$opath$dist_mat_, year = "{year}", from = "center", cbsa = FALSE)
+)
+
+ipath
+
+```
+
+
+```{r}
+
+
+  key = list(
+    year = 2012,
+    ilevel = "det", # c("det", "sum", "sec")
+    class_system = "commodity", # c("industry", "commodity")
+    paradigm = "domestic", # c("factor", "domestic", "capital")
+    bus_data = "infogroup", # c("cbp_imp", "cbp_raw", "infogroup")
+    verbose = FALSE,
+    cluster_level = "det", # c("sec", "sum", "det")
+    cbsa = FALSE,
+    cluster_subset = "^311513", # NULL
+    trim = "^(60|66|69|78)|(999)$", 
+    spatial = TRUE)
+  
+  df <- place_output$call_extraction_table(
+    year = key$year,
+    ilevel = key$ilevel,
+    class_system = key$class_system,
+    paradigm = key$paradigm,
+    bus_data = key$bus_data,
+    verbose = key$verbose,
+    cluster_level = key$cluster_level,
+    cbsa = key$cbsa,
+    cluster_subset = key$cluster_subset,
+    trim = key$trim,
+    spatial = key$spatial)
+  
+  # subset of place names 
+  spn <- df[df$STATE_CODE == "55",] %>% {.[.$net_supply > 0,]} %>% {.$place}
+  
+  # ordered for spiral animation
+  co <- c("55005",
+          "55119",
+          "55067",
+          "55083",
+          "55115",
+          "55073",
+          "55009",
+          "55087",
+          "55135",
+          "55015",
+          "55097",
+          "55117",
+          "55139",
+          "55039",
+          "55047",
+          "55027",
+          "55141",
+          "55059",
+          "55019",
+          "55001",
+          "55021",
+          "55017",
+          "55057",
+          "55081",
+          "55111",
+          "55045",
+          "55103",
+          "55049",
+          "55053",
+          "55121",
+          "55065",
+          "55123",
+          "55063",
+          "55043",
+          "55011",
+          "55091",
+          "55093",
+          "55109",
+          "55095",
+          "55071")
+  
+
+dn <- "tmp/cheese_wiz/"
+if(!dir.exists(dn)){dir.create("tmp/cheese_wiz/", recursive = TRUE)}
+
+fp <- list()
+for (i in spn){
+  industry_code <- "311513"
+  focus_county <- i
+  fname <- paste0(industry_code, ": Export Flows")
+  dft <- trade_flows$call_trade_flows_custom(industry_code) %>%
+      {connect$eca_table_central(focus_county, .)} %>% 
+      {left_join(geo$call_geog(), ., by = "place")}
+  names(dft)[names(dft) == "export_absorption"] <- fname
+  
+  dft %>% {
+    visual$place_trade_map(
+      place_trade_table = .,
+      central_place = focus_county,
+      fill_variable = fname,
+      censor_scale_lowerbound = 1,
+      interactive = F
+    )
+  }
+  ggsave(file.path(find_rstudio_root_file(),dn, paste0("plot_", i, ".png")))
+ }
+ fnn <- list()
+ for (i in 1:40){
+    fnn[[i]] <- glue("{find_rstudio_root_file()}/{dn}plot_{co[i]}.png")
+ }
+anim <- fnn %>% lapply(image_read) %>% image_join() %>% image_animate(fps = 10)
+image_write(image = anim,
+            format = "gif",
+            path = file.path(find_rstudio_root_file(), dn, paste0("cheese_wiz", ".gif")))
+  
+
+  
+```
+
+
+
+
