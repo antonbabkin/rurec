@@ -169,6 +169,19 @@ call_trade_flows <- trade_flows$call_trade_flows
 call_circularity_metrics <- circularity$call_circularity_metrics
 
 
+# Census  ----
+call_census_regions <- function() {
+  cache_path <- "data/census/regions.pq"
+  if (file.exists(cache_path)) {
+    log_debug(paste("read from cache", cache_path))
+    return(read_parquet(cache_path))
+  }
+  df <- readr::read_csv('https://raw.githubusercontent.com/cphalpert/census-regions/master/us%20census%20bureau%20regions%20and%20divisions.csv')
+  log_debug(paste("save to cache", cache_path))
+  write_parquet(df, util$mkdir(cache_path))
+  return(df)  
+}
+
 
 # Geog ----
 
