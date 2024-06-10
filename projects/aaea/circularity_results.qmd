@@ -1,0 +1,183 @@
+---
+title: "AAEA circularity results"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  year: 2012
+  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
+  reg_factors: !expr c("wage_gr", "payroll_gr", "employment_gr") 
+  reg_factors_names: !expr c("Wage Growth", "Payroll Growth", "Employment Growth")
+  reg_factor_funs: !expr c("call_wage", "call_payroll", "call_employment")
+---
+  
+
+```{r preamble, include = FALSE}
+
+# additional library list
+library(logger)
+library(tidyverse)
+library(correlation)
+library(modelsummary)
+library(kableExtra)
+library(broom)
+library(patchwork)
+
+# scripts
+source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+# initialize parameters
+params
+
+# locate project
+proj_path <- "data/projects/aaea/"
+
+```
+
+
+
+# data
+
+```{r}
+
+# call main project dataframe 
+df <- dp$call_proj_df(params$year)
+
+# scale variables for better summary and coefficient interpretation
+  df <- df %>% 
+    mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
+    mutate(wage = wage/1000) %>% 
+    mutate(income_rate = income_rate/1000) 
+  
+# add growth rates to dataframe
+  x <- dp$temporal_permutations(params$year_range)
+  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place"))
+  for (y in 1:nrow(x)){
+    paste(x[y,1], x[y,2]) %>% print()
+    for (i in params$reg_factor_funs){
+       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>%
+         mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>%
+         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>%
+         left_join(tmp, ., by = "place")
+    }
+  }
+  df <- left_join(df, tmp, by = "place")
+  rm(x, tmp)
+
+
+# add circularity variables to dataframe
+df <- dp$call_circularity_metrics(
+  year = params$year, 
+  paradigm = "domestic", 
+  class_system = "commodity", 
+  bus_data = "infogroup", 
+  spatial = FALSE) %>% 
+  select(!(gross_output:extract)) %>% 
+  left_join(df, ., by = "place")
+
+
+# add census regions 
+df <- dp$call_census_regions()[-1] %>% 
+  `colnames<-`(c("STATE", "Region", "Division" )) %>% 
+  left_join(df, ., by = "STATE")
+
+```
+
+
+# Descriptives table
+```{r}
+
+# Table of Descriptive Statistics - full detail
+# mean, min, max, sd, 25, 75 for all 8 circularity indicators
+# scale limited to -1 to 2
+# Include summary of excess supply, excess demand, and local satiated intermediates
+# in dollars may need to log scale 
+
+```
+
+
+# Density distributions
+```{r}
+
+# density distributions for all 8 circularity indicators
+
+```
+
+
+# Spatial distributions
+```{r}
+
+# maps for all 8 circularity indicators
+
+```
+
+
+# Rural divide 
+```{r}
+# repeat all tables and density plots above with a rurality bifurcation
+
+# motivation: “rural places might be disadvantaged by their place in the supply chain”
+# does this support the hypothesis that values of metro and nonmetro are the same or not?
+# can the indicators be associated with economic outcomes? and across rurality?
+
+```
+
+
+# Correlation tables
+```{r}
+
+# 8 by 8 
+# be sparing, limit overlap with Sara/Clayton results elsewhere
+# add employment growth, payroll growth, wage growth against the 8 circularity indicators
+# look for association of circularity with positive economic outcomes beyond random chance
+
+```
+
+
+# Correlation tables Rurality
+```{r}
+
+# repeat as above with rural divide 
+# what are the policy implications and discrepancies?
+# what indicators are relevant to the rural vs nonrural counties?
+```
+
+
+```{r}
+
+# How does retention and economic outcomes vary across high and low production capacity places?
+# How does autonomy and economic outcomes vary across high and low production dependency places?
+
+```
+
+
+# Regional divide
+```{r}
+
+# repeat all tables and density plots and maps and correlations and analysis above but at the Census Region Level
+# clear spatial patterns in all 8 indicators from maps above but rural stands out in west and mid-west
+
+```
+
+
+
+
+
+
+
