@@ -30,21 +30,25 @@ get_circularity <- function() {
     log_debug("read from cache {cache_path}")
   } else {
     df <- list()
-    for (year in c(2007, 2012, 2017)) {
-      df[[length(df) + 1]] <- circularity_source$call_circularity_metrics(
-        year = year,
-        class_system = "commodity",
-        paradigm = "domestic",
-        bus_data = "infogroup",
-        spatial = FALSE
-      ) |>
-        select(
-          place, gross_output, intermediate_supply, intermediate_demand, net_supply, 
-          net_demand, production_capacity, trade_capacity, retention, 
-          production_dependency, trade_dependency, autonomy, trade_balance, trade_openness) |>
-        rename(county_fips = place, excess_supply = net_supply, excess_demand = net_demand) |>
-        mutate(year = year, .before = 1)
-    }
+    for (l in c("det", "sum", "sec")){
+      for (year in c(2007, 2012, 2017)) {
+        df[[length(df) + 1]] <- circularity_source$call_circularity_metrics(
+          year = year,
+          ilevel = l,
+          class_system = "commodity",
+          paradigm = "domestic",
+          bus_data = "infogroup",
+          spatial = FALSE
+        ) |>
+          select(
+            place, gross_output, intermediate_supply, intermediate_demand, net_supply, 
+            net_demand, production_capacity, trade_capacity, retention, 
+            production_dependency, trade_dependency, autonomy, trade_balance, trade_openness) |>
+          rename(excess_supply = net_supply, excess_demand = net_demand) |>
+          mutate(ilevel = l, .before = 1) |>
+          mutate(year = year, .before = 1)
+      }
+  }
     df <- bind_rows(df)
     
     saveRDS(df, util$mkdir(cache_path))
