@@ -131,7 +131,7 @@ x |> filter(place == "55117")
 
 df <- dp$call_proj_df(params$year) %>% 
   mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-  mutate(income_rate = income_rate/1000) %>%
+  mutate(income_rate = income_rate) %>%
   mutate(payroll = payroll*1000) %>%
   mutate(gdp = gdp*1000)
 
