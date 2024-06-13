@@ -297,7 +297,7 @@ nonrural_places <-  df %>%
   {.[.$cbsa_rural_category != "rural", ]} %>% 
   {.[["place"]]}
 
-# dataframe containing only the pertinent variables and values used in the subsiquent analysis and regressions 
+# dataframe containing only the pertinent variables and values used in the subsequent analysis and regressions 
 rdf <- df[df$place %in% pn, c("place", "cbsa_rural_category", "trade_capacity", rf)] %>% 
   st_drop_geometry() %>% 
   as.data.frame() %>% (function(x) {
