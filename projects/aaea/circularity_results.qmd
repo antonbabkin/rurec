@@ -100,6 +100,14 @@ df <- df %>%
 
 
 
+  df <- dp$call_circularity_metrics(
+    year = params$year,
+    paradigm = "domestic",
+    class_system = "commodity",
+    bus_data = "infogroup",
+    spatial = FALSE, 
+    ilevel = "sec") 
+
 if(FALSE){
   # add circularity variables to dataframe
   df <- dp$call_circularity_metrics(
@@ -107,15 +115,16 @@ if(FALSE){
     paradigm = "domestic",
     class_system = "commodity",
     bus_data = "infogroup",
-    spatial = FALSE) %>%
+    spatial = FALSE, 
+    ilevel = "sec") %>%
     select(c("place", params$circ_factors)) %>%
     left_join(df, ., by = "place")
 } else {
   # Adamson: the "call_circularity_metrics" call above did not work for me ("conda"); I used
   df <- circularity$get_circularity() %>%
     filter(year == params$year) %>%
+    filter(ilevel == "sec") %>%
     select(!(gross_output:intermediate_demand)) %>%
-    rename(place = county_fips) %>%
     left_join(df, ., by = "place")
 }
 
