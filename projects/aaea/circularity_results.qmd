@@ -225,6 +225,7 @@ for (i in params$circ_factors) {
 ```{r}
 # maps for all 8 circularity indicators
 
+
 df %>% shift_geometry() %>% {(
   for (i in params$circ_factors) {(
       tm_shape(.) +
@@ -248,11 +249,7 @@ df %>% shift_geometry() %>% {(
   })
 } 
 
-
 ```
-
-
-
 
 # Rural divide 
 ```{r, message=FALSE}
@@ -602,11 +599,6 @@ cor_employment_gr %>% rename("HIGH P.D. employment_gr"="name")
 cor_wage_gr %>% rename("HIGH P.D. wage_gr"="name")
 cor_payroll_gr %>% rename("HIGH P.D. payroll_gr"="name")
 
-
-
-```
-
-```{r}
 
 
 ```
