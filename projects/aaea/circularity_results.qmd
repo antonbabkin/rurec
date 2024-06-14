@@ -114,7 +114,6 @@ if(FALSE){
   # Adamson: the "call_circularity_metrics" call above did not work for me ("conda"); I used
   df <- circularity$get_circularity() %>%
     filter(year == params$year) %>%
-    filter(ilevel == "sec") %>%
     select(!(gross_output:intermediate_demand)) %>%
     left_join(df, ., by = "place")
 }
@@ -326,29 +325,29 @@ df %>% shift_geometry() %>% {(
 # TODO: Make constant color scale for all maps 
 
 # clayton: not working... :(
-if(FALSE){
-  df %>% shift_geometry() %>% {(
-    for (i in params$circ_factors) {(
-        tm_shape(.) +
-          tm_polygons(
-            title = str_replace_all(i, "_", " ") %>% str_to_title(),
-            col = i,
-            border.alpha = 0.0,
-            style = "cont",
-            midpoint = 0,
-            id = i) +
-          tm_scale_continuous(colors = c("#4b0082", "#ffffff", "#0d573e"), limits = c(-1, 0, 1)) +
-          group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
-          tm_layout(
-            legend.title.size = 1.0,
-            legend.position = c("LEFT", "TOP"),
-            frame = F,
-            fontface = 2 ) +
-          tm_borders(lwd = 1.5) ) %>% 
-        print()
-    })
-  } 
-}
+# if(FALSE){
+#   df %>% shift_geometry() %>% {(
+#     for (i in params$circ_factors) {(
+#         tm_shape(.) +
+#           tm_polygons(
+#             title = str_replace_all(i, "_", " ") %>% str_to_title(),
+#             col = i,
+#             border.alpha = 0.0,
+#             style = "cont",
+#             midpoint = 0,
+#             id = i) +
+#           tm_scale_continuous(colors = c("#4b0082", "#ffffff", "#0d573e"), limits = c(-1, 0, 1)) +
+#           group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
+#           tm_layout(
+#             legend.title.size = 1.0,
+#             legend.position = c("LEFT", "TOP"),
+#             frame = F,
+#             fontface = 2 ) +
+#           tm_borders(lwd = 1.5) ) %>% 
+#         print()
+#     })
+#   } 
+# }
 
 
 ```
@@ -449,20 +448,21 @@ for (i in indicators) {
   test=cor.test(x = df[[i]], y=df[[a]])
   assign(paste0("est_", i), unlist(unname(test$estimate)))
   assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness)
+}
+}
+
+
+for (a in indicators2) {
+for (i in indicators) {
+  test=cor.test(x = df[[i]], y=df[[a]])
+  assign(paste0("est_", i), unlist(unname(test$estimate)))
+  assign(paste0("pval_", i), unlist(unname(test$p.value)))
+    temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness)
   temp3 = c(pval_production_capacity, pval_trade_capacity, pval_retention, pval_production_dependency, pval_trade_dependency, pval_autonomy, pval_trade_balance, pval_trade_openness)
   t4 = as.data.frame(list(name=indicators, est=temp2, pval=temp3))
   assign(paste0("cor_",a), t4)
 }
 }
-
-# for (a in indicators2) {
-# for (i in indicators) {
-#   test=cor.test(x = df[[i]], y=df[[a]])
-#   assign(paste0(a,"_est_", i), unlist(unname(test$estimate)))
-#   assign(paste0(a,"_pval_", i), unlist(unname(test$p.value)))
-# }
-# }
 
 cor_employment_gr %>% rename("employment_gr"="name")
 cor_wage_gr %>% rename("wage_gr"="name")
