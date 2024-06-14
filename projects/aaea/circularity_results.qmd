@@ -172,6 +172,7 @@ if(FALSE){
 # Density distributions
 
 ```{r}
+#| warning: false
 
 # density distributions for all 8 circularity indicators
 
@@ -182,6 +183,7 @@ for (i in params$circ_factors) {
     theme_pander() +
     theme(legend.position = "none") +
     ggtitle(n) +
+    xlim(ifelse(i == "trade_balance", -1, 0), 1) +
     ylab("Density") +
     xlab(n) ) %>%
     print()
@@ -194,6 +196,7 @@ for (i in params$circ_factors) {
     theme_pander() +
     theme(legend.position = "none") +
     ggtitle(n) +
+    xlim(ifelse(i == "trade_balance", -1, 0), 1) +
     ylab("Count") +
     xlab(n) ) %>%
     print()
