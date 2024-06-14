@@ -13,7 +13,7 @@ data/*
 *.xls
 *.xlsx
 *.zip
-
+*.png
 
 # Vim
 *.swp
