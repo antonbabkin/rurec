@@ -42,7 +42,7 @@ library(gtsummary)
 # scripts
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
-
+source("R/basic_utilities.R", local = (util <- new.env()))
 
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE, render = knitr::normal_print) 
@@ -65,6 +65,15 @@ tmap_mode("plot")
 ```
 
 
+```{r}
+# uncomment as needed
+# clear cache
+# util$clear_paths(circularity$opath)
+# create zip file with cache
+# util$zip_pack("tmp/dataset_circularity_v140624.zip", circularity$opath)
+# unpack cache from zip file
+# util$zip_unpack("tmp/dataset_circularity_v140624.zip", overwrite = TRUE)
+```
 
 # Data
 
@@ -105,15 +114,15 @@ if(FALSE){
     year = params$year,
     paradigm = "domestic",
     class_system = "commodity",
-    bus_data = "infogroup",
-    spatial = FALSE, 
-    ilevel = "sec") %>%
+    bus_data = "cbp_imp",
+    spatial = FALSE,
+    ilevel = "det") %>%
     select(c("place", params$circ_factors)) %>%
     left_join(df, ., by = "place")
 } else {
   # Adamson: the "call_circularity_metrics" call above did not work for me ("conda"); I used
   df <- circularity$get_circularity() %>%
-    filter(year == params$year & ilevel == "sec") %>%
+    filter(year == params$year & ilevel == "det" & bus_data == "cbp_imp") %>%
     select(!(gross_output:intermediate_demand)) %>%
     left_join(df, ., by = "place")
 }
@@ -176,18 +185,21 @@ if(FALSE){
 
 # density distributions for all 8 circularity indicators
 
-for (i in params$circ_factors) {
-  n <- str_replace_all(i, "_", " ") %>% str_to_title()
-  (ggplot(df) +
-    geom_density(aes(x = .data[[i]]), fill = "#88CCEE", alpha = 0.4) +
-    theme_pander() +
-    theme(legend.position = "none") +
-    ggtitle(n) +
-    xlim(ifelse(i == "trade_balance", -1, 0), 1) +
-    ylab("Density") +
-    xlab(n) ) %>%
-    print()
+if(FALSE){
+  for (i in params$circ_factors) {
+    n <- str_replace_all(i, "_", " ") %>% str_to_title()
+    (ggplot(df) +
+      geom_density(aes(x = .data[[i]]), fill = "#88CCEE", alpha = 0.4) +
+      theme_pander() +
+      theme(legend.position = "none") +
+      ggtitle(n) +
+      xlim(ifelse(i == "trade_balance", -1, 0), 1) +
+      ylab("Density") +
+      xlab(n) ) %>%
+      print()
+  }
 }
+
 
 for (i in params$circ_factors) {
   n <- str_replace_all(i, "_", " ") %>% str_to_title()
@@ -208,12 +220,11 @@ for (i in params$circ_factors) {
 
 # Spatial distributions
 
-```{r}
 
+
+```{r}
 # maps for all 8 circularity indicators
 
-#OPTION 1
-
 df %>% shift_geometry() %>% {(
   for (i in params$circ_factors) {(
       tm_shape(.) +
@@ -223,58 +234,15 @@ df %>% shift_geometry() %>% {(
           border.alpha = 0.0,
           style = "cont",
           midpoint = 0,
-          limits = c(-1, 1),
-          id = i,
-          palette =
-            if(i %in% c("production_capacity", "production_dependency")) {
-              brewer.pal(9, "PRGn")
-            } else if (i %in% c("trade_capacity", "trade_dependency")) {
-              brewer.pal(9, "RdYlBu")
-            } else if (i %in% c("retention", "autonomy")) {
-              brewer.pal(9, "PuOr")
-            } else if (i == "trade_balance") {
-              brewer.pal(9, "RdBu")
-            } else {
-              rev(brewer.pal(9, "RdYlBu"))
-            }
-          ) +
+          breaks = if(i == "trade_balance"){seq(-.5, .5, .1)}else{c(0, .25, .5, .75, 1)},
+          palette = rev(brewer.pal(9, "RdBu"))) +
         group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
         tm_layout(
-          legend.title.size = 1.0,
+          legend.title.size = .5,
+          legend.text.size = .5,
           legend.position = c("LEFT", "TOP"),
           frame = F,
-          fontface = 2 ) +
-        tm_borders(lwd = 1.5) ) %>% 
-      print()
-  })
-} 
-
-limits = c(-1, 1) 
-  
-```
-
-```{r}
-
-#OPTION 2
-
-df %>% shift_geometry() %>% {(
-  for (i in params$circ_factors) {(
-      tm_shape(.) +
-        tm_polygons(
-          title = str_replace_all(i, "_", " ") %>% str_to_title(),
-          col = i,
-          border.alpha = 0.0,
-          style = "cont",
-          midpoint = 0,
-          #breaks = c(-1, -.8, -.6, -.4, -.2, 0, .2, .4, .6, .8,  1),
-          id = i,
-          palette = brewer.pal(9, "PRGn")) +
-        group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
-        tm_layout(
-          legend.title.size = 1.0,
-          legend.position = c("LEFT", "TOP"),
-          frame = F,
-          fontface = 2 ) +
+          fontface = 1 ) +
         tm_borders(lwd = 1.5) ) %>% 
       print()
   })
@@ -284,73 +252,6 @@ df %>% shift_geometry() %>% {(
 ```
 
 
-```{r}
-
-#OPTION 3
-
-df %>% shift_geometry() %>% {(
-  for (i in params$circ_factors) {(
-      tm_shape(.) +
-        tm_polygons(
-          title = str_replace_all(i, "_", " ") %>% str_to_title(),
-          col = i,
-          border.alpha = 0.0,
-          style = "cont",
-          midpoint = 0,
-          breaks = c(-1, -.8, -.6, -.4, -.2, 0, .2, .4, .6, .8,  1),
-          id = i,
-          palette = turbo(50)) +
-        group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
-        tm_layout(
-          legend.title.size = 1.0,
-          legend.position = c("LEFT", "TOP"),
-          frame = F,
-          fontface = 2 ) +
-        tm_borders(lwd = 1.5) ) %>% 
-      print()
-  })
-} 
-
-
-
-```
-
-
-# Spatial distributions 2
-
-```{r}
-
-# maps for all 8 circularity indicators
-
-# TODO: Make constant color scale for all maps 
-
-# clayton: not working... :(
-# if(FALSE){
-#   df %>% shift_geometry() %>% {(
-#     for (i in params$circ_factors) {(
-#         tm_shape(.) +
-#           tm_polygons(
-#             title = str_replace_all(i, "_", " ") %>% str_to_title(),
-#             col = i,
-#             border.alpha = 0.0,
-#             style = "cont",
-#             midpoint = 0,
-#             id = i) +
-#           tm_scale_continuous(colors = c("#4b0082", "#ffffff", "#0d573e"), limits = c(-1, 0, 1)) +
-#           group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
-#           tm_layout(
-#             legend.title.size = 1.0,
-#             legend.position = c("LEFT", "TOP"),
-#             frame = F,
-#             fontface = 2 ) +
-#           tm_borders(lwd = 1.5) ) %>% 
-#         print()
-#     })
-#   } 
-# }
-
-
-```
 
 
 # Rural divide 
@@ -419,12 +320,6 @@ df %>%
 
 
 ```
-
-
-
-
-
-
 
 
 
