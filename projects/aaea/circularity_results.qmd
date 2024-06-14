@@ -239,11 +239,11 @@ df %>% shift_geometry() %>% {(
           palette = rev(brewer.pal(9, "RdBu"))) +
         group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
         tm_layout(
-          legend.title.size = .5,
+          legend.title.size = .8,
           legend.text.size = .5,
           legend.position = c("LEFT", "TOP"),
           frame = F,
-          fontface = 1 ) +
+          fontface = 2 ) +
         tm_borders(lwd = 1.5) ) %>% 
       print()
   })
@@ -452,8 +452,8 @@ cor_payroll_gr %>% rename("METRO payroll_gr"="name")
 
 # How does retention and economic outcomes vary across high and low production capacity places?
 
-temp = df %>% st_drop_geometry() %>% summarize(p25 = quantile(production_capacity, c(.25)),
-                                            p75 = quantile(production_capacity, c(.75))
+temp = df %>% st_drop_geometry() %>% summarize(p25 = quantile(production_capacity, c(.25), na.rm = TRUE),
+                                            p75 = quantile(production_capacity, c(.75), na.rm = TRUE)
                                             )
 
 pc_p25 = sum(temp$p25)
@@ -526,8 +526,8 @@ cor_wage_gr %>% rename("HIGH P.C. wage_gr"="name")
 cor_payroll_gr %>% rename("HIGH P.C. payroll_gr"="name")
 
 # How does autonomy and economic outcomes vary across high and low production dependency places?
-temp = df %>% st_drop_geometry() %>% summarize(p25 = quantile(production_dependency, c(.25)),
-                                            p75 = quantile(production_dependency, c(.75))
+temp = df %>% st_drop_geometry() %>% summarize(p25 = quantile(production_dependency, c(.25), na.rm = TRUE),
+                                            p75 = quantile(production_dependency, c(.75), na.rm = TRUE)
                                             )
 
 pd_p25 = sum(temp$p25)
