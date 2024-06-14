@@ -113,8 +113,7 @@ if(FALSE){
 } else {
   # Adamson: the "call_circularity_metrics" call above did not work for me ("conda"); I used
   df <- circularity$get_circularity() %>%
-    filter(year == params$year) %>%
-    filter(ilevel == "sec") %>%
+    filter(year == params$year & ilevel == "sec") %>%
     select(!(gross_output:intermediate_demand)) %>%
     left_join(df, ., by = "place")
 }
