@@ -232,7 +232,7 @@ call_ilevel_concord <- function(ilevel = c("det", "sum", "sec"),
     rownames(df) <- 1:nrow(df)
   }
   if(ilevel == "sec"){
-    df <- x %>% select(SECTOR, NAICS) 
+    df <- x %>% select(SECTOR, NAICS) %>% {.[.$SECTOR !="G", ]}
     df$NAICS <- substr(df$NAICS, 1,2)
     df <- df[!duplicated(df), ]
     rownames(df) <- 1:nrow(df)
