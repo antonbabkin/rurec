@@ -411,6 +411,7 @@ call_production <- function(year,
     df <- place_output$call_extraction_table(
       year = year,
       bus_data = bus_data,
+      paradigm = "domestic",
       class_system = class_system,
       ilevel = ilevel,
       spatial = F) %>% 
