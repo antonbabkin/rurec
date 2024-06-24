@@ -200,7 +200,7 @@ call_industry_concordance <- function(year = 2012) {
   df[df[, "summary"] %in% c("HS", "ORE"),"naics"] <- NA 
   df[is.na(df[,"summary"]),"summary"] <- df[is.na(df[,"summary"]),"sector"]
   df[is.na(df[,"detail"]),"detail"] <- df[is.na(df[,"detail"]),"summary"]
-  df[df[, "description"] == "Housing", c("u_summary","naics")] <- "531"
+  df[df[, "description"] == "Housing", c("u_summary", "summary", "detail", "naics")] <- "531"
   df[df[, "description"] == "Construction", c("u_summary","naics")] <- "23" 
   df <- df %>%
     {.[!is.na(.[,"naics"]), ]} %>%
@@ -282,7 +282,8 @@ cluster_logic <- function(ilevel,
 
 # BEA matrix manipulation ----
 
-#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach
+#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach. YES only for CBP could refactor.
+# Note: the commodities 4200ID|S00402|S00300 all have zero commodity output as seen in Supply table
 ### Aggregate and tidy a commodity-by-industry BEA matrix
 condense_bea_matrix <- function(matrix,
                                 ilevel= c("det", "sum", "sec")){
@@ -290,7 +291,7 @@ condense_bea_matrix <- function(matrix,
   if(ilevel == "det"){
     df <- matrix %>% 
       util$matrix_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-      util$matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      util$matrix_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>%
       .[!grepl("4200ID|S00402|S00300", rownames(.)), !grepl("4200ID", colnames(.)), drop=F]
   }
   if(ilevel == "sum"){ 
@@ -305,7 +306,7 @@ condense_bea_matrix <- function(matrix,
   return(df)
 }
 
-#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach
+#TODO: check if "4200ID|S00402|S00300" suppression still needed under the new B/C/D matrix approach. YES only for CBP could refactor.
 ### Aggregate and tidy a BEA row-vector
 condense_bea_vector <- function(vector,
                                 ilevel= c("det", "sum", "sec")){
@@ -313,7 +314,7 @@ condense_bea_vector <- function(vector,
   if(ilevel == "det"){
     df <- vector %>% 
       util$vector_collapse(., grep("^23", colnames(.), value = TRUE), "23") %>% 
-      util$vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>% 
+      util$vector_collapse(., grep("^531", colnames(.), value = TRUE), "531") %>%
       .[,!grepl("4200ID|S00402|S00300", colnames(.)), drop=F]
   }
   if(ilevel == "sum"){ 
