@@ -11,6 +11,8 @@ library(REAT)
 
 # R scripts ----
 source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/geography.R", local = (geog <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
 source("R/place_output.R", local = (place_output <- new.env()))
 
 # Data objects ----
@@ -227,9 +229,10 @@ call_circularity_metrics <- function(year,
 
 test_circ <- function(){
   go <- place_output$call_output(2012, class_system = "commodity") %>% util$long2matrix() 
-  is <- place_output$call_intermediate(2012, schedule = "supply", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix() %>% {.[1,,drop=F]}
-  id <- place_output$call_intermediate(2012, schedule = "demand", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix() %>% {.[1,,drop=F]}
-  test <- circ$circularity_metrics(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
+  is <- place_output$call_intermediate(2012, schedule = "supply", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix()
+  id <- place_output$call_intermediate(2012, schedule = "demand", paradigm = "domestic", class_system = "commodity") %>% util$long2matrix() 
+  test <- trade_openness(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
+  test <- circularity_metrics(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
   test <- call_circularity_metrics(year = 2012, cluster_subset = "^11", class_system = "commodity", paradigm = "domestic", ilevel = "det")
   test <- call_circularity_metrics(year = 2012, class_system = "commodity", paradigm = "domestic", ilevel = "det", cluster_level = "det", cluster_subset = NULL)
   # cor(test[,-1])
