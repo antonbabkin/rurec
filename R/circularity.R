@@ -46,7 +46,7 @@ dfcol2matrix <- function(data_frame,
 # importance of intermediate production relative to the size of local economy
 production_capacity <- function(gross_output_matrix,
                                 intermediate_supply_matrix){
-  df <-  rowSums(t(intermediate_supply_matrix))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  df <-  rowSums(t(intermediate_supply_matrix))%*%diag(1/as.vector(colSums(gross_output_matrix))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -56,8 +56,10 @@ production_capacity <- function(gross_output_matrix,
 
 # importance of intermediate exports relative to the size of local economy
 trade_capacity <- function(gross_output_matrix,
-                           net_supply_matrix){
-  df <-   rowSums(t(net_supply_matrix))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>%
+                           intermediate_supply_matrix, 
+                           intermediate_demand_matrix){
+  net_supply_matrix <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
+  df <-   rowSums(t(net_supply_matrix))%*%diag(1/as.vector(colSums(gross_output_matrix))) %>%
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -68,9 +70,9 @@ trade_capacity <- function(gross_output_matrix,
 # share of intermediate production is used domestically
 retention <- function(gross_output_matrix,
                       intermediate_supply_matrix,
-                      net_supply_matrix){
+                      intermediate_demand_matrix){
   pc <- production_capacity(gross_output_matrix, intermediate_supply_matrix)
-  tc <- trade_capacity(gross_output_matrix, net_supply_matrix)
+  tc <- trade_capacity(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   df <- inner_join(pc, tc, by = "place")
   df$retention <- (1 - (df$trade_capacity/df$production_capacity))
   df <- subset(df, select = c("place", "retention"))
@@ -80,7 +82,7 @@ retention <- function(gross_output_matrix,
 # importance of intermediate input needs relative to the total size of local economy
 production_dependency <- function(gross_output_matrix,
                                   intermediate_demand_matrix){
-  df <-  rowSums(t(intermediate_demand_matrix))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  df <-  rowSums(t(intermediate_demand_matrix))%*%diag(1/as.vector(colSums(gross_output_matrix))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -90,8 +92,10 @@ production_dependency <- function(gross_output_matrix,
 
 # importance of intermediate imports relative to the size of local economy
 trade_dependency <- function(gross_output_matrix,
-                             net_demand_matrix){
-  df <-   rowSums(t(net_demand_matrix))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>%
+                             intermediate_supply_matrix,
+                             intermediate_demand_matrix){
+  net_demand_matrix <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
+  df <-   rowSums(t(net_demand_matrix))%*%diag(1/as.vector(colSums(gross_output_matrix))) %>%
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -101,10 +105,10 @@ trade_dependency <- function(gross_output_matrix,
 
 # share of intermediate input needs are satisfied domestically
 autonomy <- function(gross_output_matrix,
-                     intermediate_demand_matrix,
-                     net_demand_matrix){
+                     intermediate_supply_matrix,
+                     intermediate_demand_matrix){
   pd <- production_dependency(gross_output_matrix, intermediate_demand_matrix)
-  td <- trade_dependency(gross_output_matrix, net_demand_matrix)
+  td <- trade_dependency(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   df <- inner_join(pd, td, by = "place")
   df$autonomy <- (1 - (df$trade_dependency/df$production_dependency))
   df <- subset(df, select = c("place", "autonomy"))
@@ -115,9 +119,9 @@ autonomy <- function(gross_output_matrix,
 trade_balance <- function(gross_output_matrix,
                           intermediate_supply_matrix,
                           intermediate_demand_matrix){
-  net_supply <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
-  net_demand <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
-  df <-  (rowSums(t(net_supply))-rowSums(t(net_demand)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  net_supply_matrix <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
+  net_demand_matrix <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
+  df <-  colSums(net_supply_matrix-net_demand_matrix)%*%diag(1/as.vector(colSums(gross_output_matrix))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -129,9 +133,9 @@ trade_balance <- function(gross_output_matrix,
 trade_openness <- function(gross_output_matrix,
                            intermediate_supply_matrix,
                            intermediate_demand_matrix){
-  net_supply <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
-  net_demand <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
-  df <-  (rowSums(t(net_supply))+rowSums(t(net_demand)))%*%diag(1/as.vector(rowSums(t(gross_output_matrix)))) %>% 
+  net_supply_matrix <- pmax(intermediate_supply_matrix - intermediate_demand_matrix, 0)
+  net_demand_matrix <- pmax(intermediate_demand_matrix - intermediate_supply_matrix, 0)
+  df <-  colSums(net_supply_matrix+net_demand_matrix)%*%diag(1/as.vector(colSums(gross_output_matrix))) %>% 
     `colnames<-`(colnames(gross_output_matrix)) %>% 
     {as.data.frame.table(.)} %>%
     {subset(., select = 2:3)} %>%
@@ -141,15 +145,13 @@ trade_openness <- function(gross_output_matrix,
 
 circularity_metrics <- function(gross_output_matrix,
                                 intermediate_supply_matrix,
-                                intermediate_demand_matrix,
-                                net_demand_matrix,
-                                net_supply_matrix){
+                                intermediate_demand_matrix){
   pc <- production_capacity(gross_output_matrix, intermediate_supply_matrix)
-  tc <- trade_capacity(gross_output_matrix, net_supply_matrix)
-  rt <- retention(gross_output_matrix, intermediate_supply_matrix, net_supply_matrix)
+  tc <- trade_capacity(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
+  rt <- retention(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   pd <- production_dependency(gross_output_matrix, intermediate_demand_matrix)
-  td <- trade_dependency(gross_output_matrix, net_demand_matrix)
-  at <- autonomy(gross_output_matrix, intermediate_demand_matrix, net_demand_matrix)
+  td <- trade_dependency(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
+  at <- autonomy(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   tb <- trade_balance(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   to <- trade_openness(gross_output_matrix, intermediate_supply_matrix, intermediate_demand_matrix)
   df <- bind_cols(pc, tc, rt, pd, td, at, tb, to, .name_repair = "minimal") %>% 
@@ -203,9 +205,7 @@ call_circularity_metrics <- function(year,
 
   cm <- circularity_metrics(gross_output_matrix = fl[c("indcode", "place", "gross_output")] %>% util$long2matrix(), 
                             intermediate_supply_matrix = fl[c("indcode", "place", "intermediate_supply")] %>% util$long2matrix(), 
-                            intermediate_demand_matrix = fl[c("indcode", "place", "intermediate_demand")] %>% util$long2matrix(), 
-                            net_demand_matrix = fl[c("indcode", "place", "net_supply")] %>% util$long2matrix(), 
-                            net_supply_matrix = fl[c("indcode", "place", "net_demand")] %>% util$long2matrix())
+                            intermediate_demand_matrix = fl[c("indcode", "place", "intermediate_demand")] %>% util$long2matrix())
   
   df <- fl[, 2:7] %>% 
     {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
