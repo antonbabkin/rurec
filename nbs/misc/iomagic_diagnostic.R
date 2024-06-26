@@ -67,3 +67,60 @@ dff <- df %>%
   {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
   `colnames<-`(c("place", names(.)[-1]))
 
+
+
+# Why is it that for some counties the circularity metrics Trade Capacity and Production Capacity are greater than one i.e., infeasible?
+# This is an issue because Trade Capacity is given by the ratio (intermediate_supply / gross_output) and Production Capacity is given by the ratio (excess_supply / gross_output). 
+# Where Excess Supply is the Sum of max(intermediate_supply_i - intermediate_demand_i, 0) for all industries or commodities i
+# UPDATE: fixing the HS to 531 concordance issue fixed 4 places with supply>gross
+
+for(l in c("infogroup", "cbp_imp")){
+  for(i in c("sec", "sum", "det")){
+    circularity$call_circularity_metrics(
+      year = 2012,
+      ilevel = i,
+      class_system = "commodity",
+      paradigm = "domestic",
+      bus_data = l,
+      spatial = FALSE ) %>% 
+      filter(if_any(production_capacity:autonomy, \(x) x > 1))  %>% 
+      {dim(.)[1]} %>% 
+      paste(., i, l) %>% 
+      print()
+  }
+}
+
+# Why is it that Intermediate Supply is greater than Gross Output?
+# Why is it only an issue on the supply side?
+for(l in c("infogroup", "cbp_imp")){
+  for(i in c("sec", "sum", "det")){
+    place_output$call_extraction_table(2012, class_system = "commodity", paradigm = "domestic", bus_data = l, spatial = F, ilevel = i) %>% 
+      filter(intermediate_supply/gross_output > 1 | intermediate_demand/gross_output > 1) %>% 
+      {dim(.)[1]} %>% 
+      paste(., i, l) %>% 
+      print()
+  }
+}
+
+
+# Why does CBP exhibit intermediate_supply > gross_output at the commodity specific level too but this does not translate up to the county aggregate level like Infogroup?
+# Are we being led astray by the use of supply and demand and terms? In past we used more IO field specific terminology such as "Industry/Commodity Factor Cost" and "Intermediate Industry/Commodity Use". 
+# Note: it is perfectly reasonable for a county to have zero production in a commodity or by an industry and yet have a need for a specific commodity in an industry production function. 
+# Similarly, it is possible that an industry in a county produces a commodity with no local intermediate market or is a good only consumed by final demand.  
+# Note: Look into negative final demand and what that may mean for the model and results. 
+# Is the issue coming from the industry commodity translation where the supply matrix is not diagonal thus making a county with off diagonal commodities where it has no associated principle industry?
+
+for(l in c("infogroup", "cbp_imp")){
+  for(i in c("sec", "sum", "det")){
+    place_output$call_factor_list(2012, class_system = "commodity", paradigm = "domestic", bus_data = l, ilevel = i) %>% select(place) %>% unique() %>% dim() %>% print()
+    place_output$call_factor_list(2012, class_system = "commodity", paradigm = "domestic", bus_data = l, ilevel = i) %>% mutate(cap = intermediate_supply/gross_output) %>% filter(cap>1) %>% select(place) %>% unique() %>% dim() %>% print()
+    place_output$call_factor_list(2012, class_system = "commodity", paradigm = "domestic", bus_data = l, ilevel = i) %>% mutate(cap = intermediate_supply/gross_output) %>% filter(cap>1) %>% select(indcode) %>% unique() %>% print()
+    paste(i, l) %>% print()
+  }
+}
+
+
+
+
+
+
