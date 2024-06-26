@@ -33,7 +33,7 @@ library(rprojroot)
 
 ############ Load custom functions
 #source(file.path(find_rstudio_root_file(), "nbs", "rural_typology_r_functions.R"))
-source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_visualization_functions.R"))
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "misc", "depreciate", "r_visualization_functions.R"))
 
 ```
 

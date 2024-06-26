@@ -37,7 +37,7 @@ source(file.path(root_dir, "rurec/reticulate_extras.R"))
 source(file.path(root_dir, "nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
 source(file.path(root_dir, "rurec/reseng.R"), local = (reseng <- new.env()))
 
-source(file.path(root_dir, "nbs/r_backend_functions.R"), local = (conn_backend <- new.env()))
+source(file.path(root_dir, "nbs/misc/depreciate/r_backend_functions.R"), local = (conn_backend <- new.env()))
 
 ggplot2::theme_set(theme_minimal())
 Sys.setenv("LOG_LEVEL" = "DEBUG")

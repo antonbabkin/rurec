@@ -28,7 +28,7 @@ library(igraph)
 
 
 
-source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "r_backend_functions.R"))
+source(file.path(rprojroot::find_rstudio_root_file(), "nbs", "misc", "depreciate", "r_backend_functions.R"))
 
 
 # Display start time
