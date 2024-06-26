@@ -235,9 +235,9 @@ test_circ <- function(){
   test <- circularity_metrics(gross_output_matrix = go, intermediate_supply_matrix = is, intermediate_demand_matrix = id)
   test <- call_circularity_metrics(year = 2012, cluster_subset = "^11", class_system = "commodity", paradigm = "domestic", ilevel = "det")
   test <- call_circularity_metrics(year = 2012, class_system = "commodity", paradigm = "domestic", ilevel = "det", cluster_level = "det", cluster_subset = NULL)
-  # cor(test[,-1])
-  # summary(st_drop_geometry(test[,8:21]))
-  # st_drop_geometry(test[,8:21]) %>% cor(use = "complete.obs")
+  head(test)
+  test %>% select(gross_output:trade_openness) %>% st_drop_geometry() %>% skimr::skim()
+  test %>% select(gross_output:trade_openness) %>% st_drop_geometry() %>% cor()
 }
 
 
