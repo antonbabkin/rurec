@@ -873,7 +873,7 @@ df
 ## RAS trade matrices
 
 ```{r}
-source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+source(file.path(find_rstudio_root_file(), "R", "io_analysis.R"))
 tf <- list()
 for (i in Toy_Sectors){
   x = df[[i]]
