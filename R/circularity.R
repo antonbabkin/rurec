@@ -189,38 +189,33 @@ call_circularity_metrics <- function(year,
     return(readRDS(cache_path))
   }
   
-  gross_output_matrix <- place_output$call_extraction_table(
-    year = year,
-    ilevel = ilevel,
-    class_system = class_system,
-    paradigm = paradigm,
-    bus_data = bus_data,
-    verbose = verbose,
-    cluster_level = cluster_level,
-    cbsa = cbsa,
-    cluster_subset = NULL,
-    trim = NULL,
-    spatial = spatial) %>% 
-    {dfcol2matrix(., "gross_output")}
-  
-  df <- place_output$call_extraction_table(year = year,
-                                           ilevel = ilevel,
-                                           class_system = class_system,
-                                           paradigm = paradigm,
-                                           bus_data = bus_data,
-                                           verbose = verbose,
-                                           cluster_level = cluster_level,
-                                           cbsa = cbsa,
-                                           cluster_subset = cluster_subset,
-                                           trim = NULL,
-                                           spatial = spatial)
+  fl <- place_output$call_factor_list(year = year,
+                                      class_system = class_system,
+                                      paradigm = paradigm,
+                                      ilevel = ilevel,
+                                      bus_data = bus_data,
+                                      cbsa = cbsa,
+                                      verbose = verbose) %>% 
+    left_join(., bea_io$call_intra_level_concordance(year = year, cluster_level = cluster_level), by = "indcode")
+  if (!is.null(cluster_subset)){
+    fl <- fl[grepl(cluster_subset, fl[[place_output$short2long(cluster_level)]]), ]
+  }
 
-  cm <- circularity_metrics(gross_output_matrix = gross_output_matrix, 
-                            intermediate_supply_matrix = dfcol2matrix(df, "intermediate_supply"), 
-                            intermediate_demand_matrix = dfcol2matrix(df, "intermediate_demand"),
-                            net_demand_matrix = dfcol2matrix(df, "net_demand"),
-                            net_supply_matrix = dfcol2matrix(df, "net_supply"))
-  df <- inner_join(df, cm, by = "place")
+  cm <- circularity_metrics(gross_output_matrix = fl[c("indcode", "place", "gross_output")] %>% util$long2matrix(), 
+                            intermediate_supply_matrix = fl[c("indcode", "place", "intermediate_supply")] %>% util$long2matrix(), 
+                            intermediate_demand_matrix = fl[c("indcode", "place", "intermediate_demand")] %>% util$long2matrix(), 
+                            net_demand_matrix = fl[c("indcode", "place", "net_supply")] %>% util$long2matrix(), 
+                            net_supply_matrix = fl[c("indcode", "place", "net_demand")] %>% util$long2matrix())
+  
+  df <- fl[, 2:7] %>% 
+    {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+    `colnames<-`(c("place", names(.)[-1])) %>% 
+    inner_join(., cm, by = "place", copy = TRUE)
+
+  if (spatial){
+    geot <- geog$call_geog(year = year, cbsa = cbsa)
+    df <- inner_join(geot, df, by = "place", copy = TRUE)
+  }
   
   log_debug(paste("save to cache", cache_path))
   saveRDS(df, util$mkdir(cache_path))
