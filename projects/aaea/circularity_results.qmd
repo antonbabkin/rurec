@@ -108,24 +108,17 @@ df <- df %>%
   left_join(df, ., by = "place")
 
 
-if(FALSE){
-  # add circularity variables to dataframe
-  df <- dp$call_circularity_metrics(
-    year = params$year,
-    paradigm = "domestic",
-    class_system = "commodity",
-    bus_data = "cbp_imp",
-    spatial = FALSE,
-    ilevel = "det") %>%
-    select(c("place", params$circ_factors)) %>%
-    left_join(df, ., by = "place")
-} else {
-  # Adamson: the "call_circularity_metrics" call above did not work for me ("conda"); I used
-  df <- circularity$get_circularity() %>%
-    filter(year == params$year & ilevel == "det" & bus_data == "cbp_imp") %>%
-    select(!(gross_output:intermediate_demand)) %>%
-    left_join(df, ., by = "place")
-}
+# add circularity variables to dataframe
+df <- dp$call_circularity_metrics(
+  year = params$year,
+  paradigm = "domestic",
+  class_system = "commodity",
+  bus_data = "cbp_imp",
+  spatial = FALSE,
+  ilevel = "det") %>%
+  select(c("place", params$circ_factors)) %>%
+  left_join(df, ., by = "place")
+
 
 
 # add census regions
