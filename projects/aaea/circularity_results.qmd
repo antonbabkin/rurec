@@ -213,6 +213,58 @@ for (i in params$circ_factors) {
 
 # Spatial distributions
 
+```{r}
+
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/visualization.R", local = (visual <- new.env()))
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+
+year = params$year
+class_system = "commodity"
+paradigm = "domestic"
+bus_data = "cbp_imp"
+cluster_level = "det"
+cluster_subset = "^112120"
+place_output$call_extraction_table(
+  year = year,
+  class_system = class_system,
+  paradigm = paradigm,
+  bus_data = bus_data,
+  cluster_level = cluster_level,
+  cluster_subset = cluster_subset) %>% 
+visual$flow_potential_map(
+  spatial_dataframe = .,
+  fill_variable = "extract",
+  year = year,
+  cluster_subset = cluster_subset,
+  cluster_level = cluster_level,
+  legend = TRUE,
+  interactive = FALSE) 
+
+
+year = params$year
+class_system = "commodity"
+paradigm = "domestic"
+bus_data = "cbp_imp"
+cluster_level = "det"
+cluster_subset = "^311513"
+place_output$call_extraction_table(
+  year = year,
+  class_system = class_system,
+  paradigm = paradigm,
+  bus_data = bus_data,
+  cluster_level = cluster_level,
+  cluster_subset = cluster_subset) %>% 
+visual$flow_potential_map(
+  spatial_dataframe = .,
+  fill_variable = "extract",
+  year = year,
+  cluster_subset = cluster_subset,
+  cluster_level = cluster_level,
+  legend = TRUE,
+  interactive = FALSE) 
+  
+```
 
 
 ```{r}
