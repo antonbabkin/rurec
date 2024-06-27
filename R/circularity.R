@@ -199,7 +199,7 @@ call_circularity_metrics <- function(year,
                                       ilevel = ilevel,
                                       bus_data = bus_data,
                                       cbsa = cbsa,
-                                      verbose = verbose) %>% 
+                                      verbose = verbose) %>% mutate(extract = intermediate_demand - intermediate_supply) %>% 
     left_join(., bea_io$call_intra_level_concordance(year = year, cluster_level = cluster_level), by = "indcode")
   if (!is.null(cluster_subset)){
     fl <- fl[grepl(cluster_subset, fl[[place_output$short2long(cluster_level)]]), ]
@@ -209,7 +209,7 @@ call_circularity_metrics <- function(year,
                             intermediate_supply_matrix = fl[c("indcode", "place", "intermediate_supply")] %>% util$long2matrix(), 
                             intermediate_demand_matrix = fl[c("indcode", "place", "intermediate_demand")] %>% util$long2matrix())
   
-  df <- fl[, 2:7] %>% 
+  df <- fl[, 2:8] %>% 
     {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
     `colnames<-`(c("place", names(.)[-1])) %>% 
     inner_join(., cm, by = "place", copy = TRUE)
