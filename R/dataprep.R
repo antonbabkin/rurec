@@ -966,7 +966,7 @@ call_bds_county_exit_rate <- function(year){
     filter(year == !!year) |>
     mutate(place = paste0(st, cty)) |>
     select(place, estabs_exit_rate) |>
-    rename(entry_rate = estabs_exit_rate)
+    rename(exit_rate = estabs_exit_rate)
   return(df)
 }
 
