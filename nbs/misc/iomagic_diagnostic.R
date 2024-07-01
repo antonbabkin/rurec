@@ -69,6 +69,58 @@ dff <- df %>%
   mutate(cap = intermediate_supply/gross_output)
 
 
+
+
+BEA_cov_alt <- rowSums(sm[, iss]) %>% as.matrix() # censored condensed BEA Commodity Output vector
+BEA_csf_alt <- BEA_cov_alt / BEA_cs # censored BEA Commodity Share Factor
+cs_alt <- rowSums(co) / BEA_csf_alt # censored Microdata Commodity Supply vector
+bmat_alt <- um[, iss]  %*% diag(1/as.vector(BEA_iov[rownames(BEA_iov) %in% iss] )) # censored B matrix
+icu_alt <- rowSums(bmat_alt %*% io[iss, ,drop=F]) %>% as.matrix() # censored Microdata Intermediate Commodity Use vector
+cus_alt <- icu_alt / cs_alt # censored Microdata Commodity Use Shares vector
+ics_alt <-  diag(as.vector(cus_alt[css, , drop = F])) %*% co[css, ,  drop = F] %>% `rownames<-`(css) # censored Domestic Intermediate Commodity Supply matrix
+
+co_df <- as.data.frame.table(co) %>% `colnames<-`(c("indcode", "place", "gross_output")) # Microdata Commodity Output dataframe
+ics_df_alt <- as.data.frame.table(ics_alt) %>% `colnames<-`(c("indcode", "place", "intermediate_supply")) # Domestic Intermediate Commodity Supply dataframe
+df_alt <- left_join(co_df, ics_df_alt,  by = join_by(indcode, place)) 
+df_alt[is.na(df_alt)]=0
+
+dff_alt <- df_alt %>% 
+  {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+  `colnames<-`(c("place", names(.)[-1])) %>% 
+  mutate(cap = intermediate_supply/gross_output)
+
+
+
+
+
+
+if(FALSE){
+  sm <- sm[, iss, drop=F] # censored Supply matrix
+  um <- um[, iss, drop=F] # censored Use matrix
+  io <- io[iss, , drop=F] # censored Industry Output
+  
+  
+  # BEA_iov <- colSums(sm) %>% as.matrix() # condensed BEA Industry Output vector
+  # BEA_cov <- rowSums(sm[, iss]) %>% as.matrix() # censored condensed BEA Commodity Output vector
+  # BEA_csf <- BEA_cov / BEA_cs # censored BEA Commodity Share Factor
+  # cs <- rowSums(co) / BEA_csf # censored Microdata Commodity Supply vector
+  # bmat <- um[, iss]  %*% diag(1/as.vector(BEA_iov[rownames(BEA_iov) %in% iss] )) # censored B matrix
+  # icu <- rowSums(bmat %*% io[iss, ,drop=F]) %>% as.matrix() # censored Microdata Intermediate Commodity Use vector
+  # cus <- icu / cs # censored Microdata Commodity Use Shares vector
+  # ics <-  diag(as.vector(cus[css, , drop = F])) %*% co[css, ,  drop = F] %>% `rownames<-`(css) # censored Domestic Intermediate Commodity Supply matrix
+  # 
+  # co_df <- as.data.frame.table(co) %>% `colnames<-`(c("indcode", "place", "gross_output")) # Microdata Commodity Output dataframe
+  # ics_df <- as.data.frame.table(ics) %>% `colnames<-`(c("indcode", "place", "intermediate_supply")) # Domestic Intermediate Commodity Supply dataframe
+  # df <- left_join(co_df, ics_df,  by = join_by(indcode, place)) 
+  # df[is.na(df)]=0
+  # 
+  # dff <- df %>% 
+  #   {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+  #   `colnames<-`(c("place", names(.)[-1])) %>% 
+  #   mutate(cap = intermediate_supply/gross_output)
+}
+
+
 #########
 # Why and how does supply>output?
 
