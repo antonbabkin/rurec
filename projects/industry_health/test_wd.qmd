@@ -42,11 +42,11 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 # #install.packages("margins")
 # install.packages(c("lmtest", "sandwich"))
 # install.packages("spatialreg")
-# install.packages("gridExtra")
-# install.packages("rgeoda") 
-# install.packages("spgwr")
-# install.packages("lavaan")
-# install.packages("lavaanPlot")
+ # install.packages("gridExtra")
+ # install.packages("rgeoda") 
+ # install.packages("spgwr")
+ # install.packages("lavaan")
+ # install.packages("lavaanPlot")
 
 
 
@@ -680,10 +680,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, Premature Age-Adjusted Mortality")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 
 #Retention
@@ -709,10 +709,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, Retention")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 
 #Autonomy
@@ -738,10 +738,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, Autonomy")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 #Value Added- Output
 ##moran global % value added of output
@@ -766,10 +766,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, % Value Added of Output")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 
 #% Worker Share- Value Added
@@ -795,10 +795,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, % Employee Share of Value Added")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 
 
@@ -825,10 +825,10 @@ plot(st_geometry(df_lisa),
      border = "#333333", lwd=0.2)
 title(main = "LISA, % Employee Share of Output")
 
-# Create the legend separately
-legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
-legend_colors <- unlist(lisa_colors)
-legend("bottomleft", border = "#eeeeee")
+# # Create the legend separately
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
 ```
 
 
