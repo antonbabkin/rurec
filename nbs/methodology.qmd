@@ -8,6 +8,8 @@ format:
     embed-resources: true
 ---
 
+# head
+
 This notebook is a comprehensive overview of the project methodology.
 More specific details may be available in other notebooks related to their respective sections.
 Parts of the notebook are illustrated with examples using real or artificial data.
@@ -199,21 +201,6 @@ When industries are aggregated at summary level, we create a concordance that ma
 Many-to-one cases that are created in the process "336" (3361MV, 3364OT) and  "541" (5411, 5412OP, 5415).
 
 
-## Industry <-> Commodity
-
-Code: []()
-
-Economic activity data in CBP and InfoGroup is reported by NAICS industry.
-AgCensus sales are in the commodity space.
-
-- why we need to tranlate
-  - join CBP/InfoGroup with AgCensus
-  - TODO
-- how we translate
-  - B/C/D matrix from Supply/Use TODO
-  
-What happens when industry and commodity lists are not exactly the same (secondary aluminum smelting, scrap).
-
 
 
 ## Place output
@@ -404,15 +391,75 @@ Market clearing / accounting balance: total supply = total use
 `(y_c + w_c) == (x_c + f_c)`
 
 
-(is this relevant?)
-We are using "industry-based" technology, since commodity technology requires inversion of C-matrix.
-ADD REFERENCE TO I-O BOOK.
+Toy example.
 
-### demand
+
+```{r}
+nam_ind <- paste0("i", 1:3)
+nam_com <- paste0("c", 1:3)
+nam_pl <- letters[1:3]
+
+sup_mat <- matrix(c(
+  9, 1, 1,
+  1, 7, 0,
+  0, 2, 4
+), nrow = 3, ncol = 3, byrow = TRUE, dimnames = list(nam_com, nam_ind))
+sup_tab <- bea_io$toy$sup_table(sup_mat, wedge = c(-4, 4, 1))
+
+use_mat <- matrix(c(
+  2, 0, 2,
+  5, 1, 2,
+  0, 6, 0
+), nrow = 3, ncol = 3, byrow = TRUE, dimnames = list(nam_com, nam_ind))
+va <- colSums(sup_mat) - colSums(use_mat)
+try(test_that("value added positive in every industry", {
+  all_true <- is.finite(va)
+  expect_equal(va > 0, all_true) 
+}))
+
+use_tab <- bea_io$toy$use_table(use_mat, va = va, final = c(3, 4, 1))
+
+try(test_that("total supply == total use",
+              expect_equal(sup_tab[nam_com, "c_tot_sup"], use_tab[nam_com, "c_tot_use"])))
+try(test_that("industry output equal between supply and use tables",
+              expect_equal(sup_tab["i_tot_out", nam_ind], use_tab["i_tot_out", nam_ind])))
+
+b_mat <- bea_io$toy$b_matrix(use_tab)
+c_mat <- bea_io$toy$c_matrix(sup_tab)
+d_mat <- bea_io$toy$d_matrix(sup_tab)
+
+pl_i_out <- matrix(c(
+  3, 4, 3,
+  3, 3, 4,
+  1, 3, 1
+), nrow = 3, ncol = 3, byrow = TRUE, dimnames = list(industry = nam_ind, county = nam_pl))
+try(test_that("aggregate industry output matches supply table totals",
+              expect_equal(rowSums(pl_i_out), sup_tab["i_tot_out", nam_ind])))
+
+pl_c_out <- c_mat %*% pl_i_out
+try(test_that("aggregate commodity output matches supply table totals",
+              expect_equal(rowSums(pl_c_out), sup_tab[nam_com, "c_tot_out"])))
+
+cat("\nSupply table\n----\n")
+sup_tab
+cat("\nUse table\n----\n")
+use_tab
+cat("\nB-matrix\n----\n")
+round(b_mat, 2)
+cat("\nC-matrix\n----\n")
+round(c_mat, 2)
+cat("\nD-matrix\n----\n")
+round(d_mat, 2)
+cat("\nIndusty-county output\n----\n")
+pl_i_out
+cat("\nCommodity-county output\n----\n")
+pl_c_out %>% round(2)
+```
+
+
+### commodity demand
 
 Intermediate demand is calculated, applying use table to place industry output.
-
-#### by commodity
 
 County demand for domestically produced intermediate commodities in producer prices:
 How much of every commodity, measured in producer prices, is needed to produce observed level of industry output in a county, excluding the portion satisfied by imports.
@@ -429,39 +476,8 @@ Pre-multiplying total commodity demand by the domestic share vector, we obtain c
 
 
 
-Ponder.
-If local technology is the same everywhere (and same as national) as we assume, does it imply that every place industry and commodity output composition must be a proportion of nation?
-Think about what it means for the choice of commodity<->industry translation.
+### commodity supply
 
-
-
-#### by industry
-
-IGNORE industry for now.
-
-There are two possible interpretations of demand (and supply) by *industry*.
-The first, which we follow here, interprets industry demand as demand of the industry for intermediates.
-For example, "baking industry demand" is the dollar value of inputs that the baking industry needs to produce its observed level of output.
-The second interpretation of "industry demand" is the demand for outputs of the industry, e.g. what other industries need as inputs from what the baking industry produces.
-An analogous pair exists on the supply side, which we discuss in the corresponding section below.
-It is easy to confuse the two alternative meanings, and we try to be precise and explicit when we talk about demand and supply in industry terms.
-
-
-County intermediate *industry* demand: value of intermediates needed by every industry to produce observed level of output.
-National intermediate commodity demand := `colSums(B) * y_i` (element-wise)
-Place intermediate commodity demand := `colSums(B) * Y_i` (every column element-wise)
-Demand of industry `i` in place `j` := `sum(B[., i]) * Y_i[i, j]`
-
-Current implementation: 
-IntermediateIndustryDemand = diag(colSums(D%*%B))*IndustryOutput_county
-`diag(as.vector(colSums(dmat[lnames, ]%*%bmat[, lnames])))%*%df[lnames, ]`
-!!!! why not `colSums(B) * Y_i`? !!!!
-
-
-### supply
-
-
-#### by commodity
 
 County supply of domestically produced intermediate commodities in producer prices:
 How much of every commodity, measured in producer prices, is supplied by domestic producers for domestic use as intermediate inputs, excluding supply for exports and other final uses (consumption etc.)
@@ -477,24 +493,6 @@ Interpretation:
 (national commodity intermediate use / national commodity supply)
 Pre-multiplying total commodity production by the domestic use share vector, we obtain county commodity supply of domestic intermediates.
 
-
-
-#### by industry
-
-IGNORE industry for now.
-
-Intermediate Industry Supply = `D * B * IndustryOutput_county`
-
-County commodity intermediate demand = `B * Y_i`
-Market clearing:
-County commodity intermediate supply != demand = `B * Y_i`
-County
-
-
-
-County demand by commodity = B-matrix * County output by industry ?
-
-County demand by industry = D-matrix * County demand by commodity ?
 
 
 ### market clearing verification
@@ -517,7 +515,105 @@ NOTE: `old_demand=(B*Y_i)=(C*Y_i)*(x_c/(x_c +f_c))/(y_c/(y_c +w_c))=B*y_i*t(D)/y
 
 
 
-## commodity-industry invariance?
+
+```{r}
+pl_use <- b_mat %*% pl_i_out
+try(test_that("Aggregated county use equals total intermediate use", {
+  expect_equal(rowSums(pl_use), use_tab[nam_com, "c_int_use"])}))
+adj_dem <- sup_tab[nam_com, "c_tot_out"] / sup_tab[nam_com, "c_tot_sup"]
+pl_dem <- sweep(pl_use, 1, adj_dem, "*")
+
+adj_sup <- use_tab[nam_com, "c_int_use"] / use_tab[nam_com, "c_tot_use"]
+pl_sup <- sweep(pl_c_out, 1, adj_sup, "*")
+
+try(test_that("Aggregated demand = agg supply for each commodity", {
+  expect_equal(rowSums(pl_dem), rowSums(pl_sup))}))
+
+cat("\nCommodity-county intermediate use\n----\n")
+pl_use %>% round(2)
+cat("\nCommodity-county demand\n----\n")
+pl_dem %>% round(2)
+cat("\nCommodity-county output\n----\n")
+pl_c_out %>% round(2)
+cat("\nCommodity-county supply\n----\n")
+pl_sup %>% round(2)
+```
+
+
+
+### missing industries
+
+Activity in some BEA industries (notably government) is not available in business data.
+Depending on the data source, a few other industries are also missing.
+
+Our approach is to effectively take the corresponding columns out of the core matrices of the Supply and Use Table, and to treat them as another column in the outer section - "wedge" of the Supply Table and "final use" of the Use Table.
+When supply is scaled by `x_c / (x_c + f_c)`, this can be interpreted as exclusion of output used by missing industries.
+When demand is scaled by `y_c / (y_c + w_c)`, this can be interpreted as exclusion of use satisfied by production from missing industries.
+In both cases, commodity use (output) from the missing industries is moved from `x_c` to `f_c` (from `y_c` to `w_c`).
+
+Industry total output still matches BEA national output (for non-missing industries), but aggregate commodity output will be often lower.
+Yet, the demand and supply thus calculated will still balance for each commodity.
+
+Toy example illustrates.
+
+```{r}
+pl_i_out0 <- pl_i_out
+pl_i_out0["i1", ] <- 0
+nam_indp <- rownames(pl_i_out0)[rowSums(pl_i_out0) > 0]
+pl_c_out0 <- c_mat %*% pl_i_out0
+
+pl_use0 <- b_mat %*% pl_i_out0
+
+
+adj_dem <- rowSums(sup_tab[nam_com, nam_indp]) / sup_tab[nam_com, "c_tot_sup"]
+pl_dem0 <- sweep(pl_use0, 1, adj_dem, "*")
+adj_sup <- rowSums(use_tab[nam_com, nam_indp]) / use_tab[nam_com, "c_tot_use"]
+pl_sup0 <- sweep(pl_c_out0, 1, adj_sup, "*")
+
+try(test_that("Aggregated demand = agg supply for each commodity", {
+  expect_equal(rowSums(pl_dem0), rowSums(pl_sup0))}))
+
+cat("\nCommodity-county intermediate use\n----\n")
+pl_use0 %>% round(2)
+cat("\nCommodity-county demand\n----\n")
+pl_dem0 %>% round(2)
+cat("\nCommodity-county output\n----\n")
+pl_c_out0 %>% round(2)
+cat("\nCommodity-county supply\n----\n")
+pl_sup0 %>% round(2)
+
+```
+
+
+
+
+### industry demand and supply
+
+Demand and supply under industry classification are not currently implemented.
+There are several conceptual issues that need to be resolved.
+Initial ideas are left in this section if we want to address this in the future.
+
+
+There are two possible interpretations of demand (and supply) by *industry*.
+The first, which we follow here, interprets industry demand as demand of the industry for intermediates.
+For example, "baking industry demand" is the dollar value of inputs that the baking industry needs to produce its observed level of output.
+The second interpretation of "industry demand" is the demand for outputs of the industry, e.g. what other industries need as inputs from what the baking industry produces.
+An analogous pair exists on the supply side, which we discuss in the corresponding section below.
+It is easy to confuse the two alternative meanings, and we try to be precise and explicit when we talk about demand and supply in industry terms.
+
+
+County intermediate *industry* demand: value of intermediates needed by every industry to produce observed level of output.
+National intermediate commodity demand := `colSums(B) * y_i` (element-wise)
+Place intermediate commodity demand := `colSums(B) * Y_i` (every column element-wise)
+Demand of industry `i` in place `j` := `sum(B[., i]) * Y_i[i, j]`
+
+
+Intermediate Industry Supply = `D * B * IndustryOutput_county`
+
+
+
+
+#### commodity-industry invariance?
 
 Are results sensitive to commodity vs industry classification choice?
 For example, do measures of intermediate circularity stay the same?
