@@ -3,7 +3,7 @@
 options(scipen = 999)
 # source(file.path(
 #   rprojroot::find_rstudio_root_file(),
-#   "nbs",
+#   "nbs", "misc", "depreciate",
 #   "r_backend_functions.R"
 # ))
 

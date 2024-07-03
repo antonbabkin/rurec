@@ -29,7 +29,7 @@ if (!file.exists(file.path(find_rstudio_root_file(), "data", "robjs"))) {
 source(file.path(find_rstudio_root_file(), "R", "basic_utilities.R"))
 
 #IO RAS process
-source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+source(file.path(find_rstudio_root_file(), "R", "io_analysis.R"))
 
 #select if using data from disk in warehouse or built from pubdata python modules
 warehouse = F
@@ -626,7 +626,7 @@ call_imputed_tradeflows <- function(year,
                                     impedance_mat = NULL,
                                     ...){
   if(!"ras_trade_flows" %in% c(lsf.str())){
-    source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+    source(file.path(find_rstudio_root_file(), "R", "io_analysis.R"))
   }
   ilevel <- match.arg(ilevel)
   flow_class <- match.arg(flow_class)
@@ -785,7 +785,7 @@ call_min_imp_ras <- function(year,
     df <- readRDS(file.path(dir_location, nm))
   } else {
     if(!"ras_trade_flows" %in% c(lsf.str())){
-      source(file.path(find_rstudio_root_file(), "nbs", "io_analysis.R"))
+      source(file.path(find_rstudio_root_file(), "R", "io_analysis.R"))
     }
     if(flow_class == "industry"){
       fs <- industry_factor_supply_matrix(year = year, ilevel = ilevel, cbsa_clust = cbsa_clust, data_source = data_source, ...)

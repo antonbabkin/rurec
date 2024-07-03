@@ -34,8 +34,8 @@ repo_path <- rprojroot::find_rstudio_root_file
 
 source(repo_path("rurec/reticulate_extras.R"))
 source(repo_path("nbs/rural_typology_r_functions.R"), local = (conn_fns <- new.env()))
-source(repo_path("nbs/r_backend_functions.R"), local = (circ_fns <- new.env()))
-source(repo_path("nbs/r_visualization_functions.R"), local = (viz_fns <- new.env()))
+source(repo_path("nbs/misc/depreciate/r_backend_functions.R"), local = (circ_fns <- new.env()))
+source(repo_path("nbs/misc/depreciate/r_visualization_functions.R"), local = (viz_fns <- new.env()))
 source(repo_path("rurec/reseng.R"), local = (reseng <- new.env()))
 
 trade_flow_fns <- new.env()

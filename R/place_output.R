@@ -107,6 +107,13 @@ call_output <- function(year,
     as.data.frame() %>% 
     mutate(indcode = rownames(.))
   
+  #test: list of BEA (collapsed) industries with no NAICS concordance match
+  if (verbose){
+    cat(paste("No concordance match: \n"))
+    setdiff(indout$indcode, conc[[1]]) %>% 
+      {cat(paste(.,"\n"))}
+  }
+  
   #test: list of BEA industries with no conceivable NAICS concordance match or only many-to-one NAICS-to-BEA or both
   if (verbose){
     cat(paste("No conceivable match: \n"))
@@ -654,8 +661,9 @@ call_factor_list <- function(year,
   }
   
   df <- inner_join(fs, fd, by = join_by(indcode, place)) %>% 
-    inner_join(to, ., by = join_by(indcode, place)) %>% 
+    left_join(to, ., by = join_by(indcode, place)) %>% 
     `colnames<-`(c("indcode", "place", "gross_output", "intermediate_supply", "intermediate_demand"))
+  df[is.na(df)]=0
   df$net_supply <- pmax(df$intermediate_supply - df$intermediate_demand, 0)
   df$net_demand <- pmax(df$intermediate_demand - df$intermediate_supply, 0)
   
@@ -664,7 +672,7 @@ call_factor_list <- function(year,
   return(df)  
   
 }
-
+  
 # Call intertemporal list factor supply and demand 
 call_temporal_factor_list <- function(set_of_years,
                                       class_system = c("industry", "commodity"),

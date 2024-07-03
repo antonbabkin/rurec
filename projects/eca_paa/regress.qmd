@@ -286,6 +286,14 @@ if (params$show_descriptive_density) {
 
 ```
 
+```{r hist}
+#| warning: false
+
+dp$viz$hist_dist_plot(df[df$eca_cluster_category == "Destination", ], "cluster_members_count", adaptive_scaling = F) + labs(x = "Number of counties") %>% print()
+
+```
+
+
 ### cluster category
 
 ```{r density cluster group}

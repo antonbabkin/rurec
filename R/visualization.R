@@ -290,6 +290,39 @@ density_dist_plot <- function(
   return(p)
 }
 
+hist_dist_plot <- function(
+    dataframe,
+    density_variable_name,
+    group_variable_name = NULL,
+    adaptive_scaling = TRUE){
+  data <- dataframe
+  vn <- density_variable_name
+  gn <- group_variable_name
+  bn <- (length(table(data[[vn]])) + 10)
+  p <- ggplot(data) + {
+    if(is.null(gn)) {
+      geom_histogram_interactive(aes(x = .data[[vn]]), bins=bn, colour="grey30", fill = "dodgerblue", alpha = 0.3)
+    } else {
+      geom_histogram_interactive(aes(x = .data[[vn]], bins=bn, fill = data[[gn]]), alpha = 0.3) 
+    }
+  } + {
+    if(is.null(gn)) {
+      geom_vline_interactive(xintercept = mean(data[[vn]], na.rm = T), color = "red", linetype = "dashed")
+    }
+  } +
+    boil_hist_theme() + {
+      if (adaptive_scaling){
+        if (isTRUE(skewness(data[[vn]], na.rm = T) > 2)) {
+          scale_x_continuous(trans = "log10")
+        }
+      }
+    } +
+    labs(x = underscores2title(vn),
+         y = "Density",
+         fill = element_blank())
+  return(p)
+}
+
 
 # Temporal Absorption Density ----
 ## format data ----
