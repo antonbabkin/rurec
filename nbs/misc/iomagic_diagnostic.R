@@ -69,6 +69,58 @@ dff <- df %>%
   mutate(cap = intermediate_supply/gross_output)
 
 
+
+
+BEA_cov_alt <- rowSums(sm[, iss]) %>% as.matrix() # censored condensed BEA Commodity Output vector
+BEA_csf_alt <- BEA_cov_alt / BEA_cs # censored BEA Commodity Share Factor
+cs_alt <- rowSums(co) / BEA_csf_alt # censored Microdata Commodity Supply vector
+bmat_alt <- um[, iss]  %*% diag(1/as.vector(BEA_iov[rownames(BEA_iov) %in% iss] )) # censored B matrix
+icu_alt <- rowSums(bmat_alt %*% io[iss, ,drop=F]) %>% as.matrix() # censored Microdata Intermediate Commodity Use vector
+cus_alt <- icu_alt / cs_alt # censored Microdata Commodity Use Shares vector
+ics_alt <-  diag(as.vector(cus_alt[css, , drop = F])) %*% co[css, ,  drop = F] %>% `rownames<-`(css) # censored Domestic Intermediate Commodity Supply matrix
+
+co_df <- as.data.frame.table(co) %>% `colnames<-`(c("indcode", "place", "gross_output")) # Microdata Commodity Output dataframe
+ics_df_alt <- as.data.frame.table(ics_alt) %>% `colnames<-`(c("indcode", "place", "intermediate_supply")) # Domestic Intermediate Commodity Supply dataframe
+df_alt <- left_join(co_df, ics_df_alt,  by = join_by(indcode, place)) 
+df_alt[is.na(df_alt)]=0
+
+dff_alt <- df_alt %>% 
+  {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+  `colnames<-`(c("place", names(.)[-1])) %>% 
+  mutate(cap = intermediate_supply/gross_output)
+
+
+
+
+
+
+if(FALSE){
+  sm <- sm[, iss, drop=F] # censored Supply matrix
+  um <- um[, iss, drop=F] # censored Use matrix
+  io <- io[iss, , drop=F] # censored Industry Output
+  
+  
+  # BEA_iov <- colSums(sm) %>% as.matrix() # condensed BEA Industry Output vector
+  # BEA_cov <- rowSums(sm[, iss]) %>% as.matrix() # censored condensed BEA Commodity Output vector
+  # BEA_csf <- BEA_cov / BEA_cs # censored BEA Commodity Share Factor
+  # cs <- rowSums(co) / BEA_csf # censored Microdata Commodity Supply vector
+  # bmat <- um[, iss]  %*% diag(1/as.vector(BEA_iov[rownames(BEA_iov) %in% iss] )) # censored B matrix
+  # icu <- rowSums(bmat %*% io[iss, ,drop=F]) %>% as.matrix() # censored Microdata Intermediate Commodity Use vector
+  # cus <- icu / cs # censored Microdata Commodity Use Shares vector
+  # ics <-  diag(as.vector(cus[css, , drop = F])) %*% co[css, ,  drop = F] %>% `rownames<-`(css) # censored Domestic Intermediate Commodity Supply matrix
+  # 
+  # co_df <- as.data.frame.table(co) %>% `colnames<-`(c("indcode", "place", "gross_output")) # Microdata Commodity Output dataframe
+  # ics_df <- as.data.frame.table(ics) %>% `colnames<-`(c("indcode", "place", "intermediate_supply")) # Domestic Intermediate Commodity Supply dataframe
+  # df <- left_join(co_df, ics_df,  by = join_by(indcode, place)) 
+  # df[is.na(df)]=0
+  # 
+  # dff <- df %>% 
+  #   {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
+  #   `colnames<-`(c("place", names(.)[-1])) %>% 
+  #   mutate(cap = intermediate_supply/gross_output)
+}
+
+
 #########
 # Why and how does supply>output?
 
@@ -76,40 +128,64 @@ dff <- df %>%
 cus[css, , drop=F] %>% {rownames(.)[.>1]} 
 # If icu > cs, then cus > 1
 (icu > cs) %>% {rownames(.)[.]}
-# Thus either icu is too large OR cs os too small OR both. 
+# Thus either icu is too large OR cs is too small OR both. Relative to what standard?
+# If icu is the issue, the theoretical foundation may be at issue!
+# does Intermediate Commodity Use vector recovery from B matrix and Industry Output hold for national level BEA data? Yes* BUT rounding precision is an issue.
+((bmat %*% BEA_iov) == rowSums(um) %>% as.matrix() ) %>% all() # FALSE
+(abs((bmat %*% BEA_iov)-as.matrix(rowSums(um))) <= .0001) %>% all() # TRUE
+# does (abs(rowSums(um)-icu) <= .0001) %>% all()? FALSE
+(abs(rowSums(um)-icu) > .0001) %>% {rownames(.)[.]} # list of commodities not consistent between BEA and microdata. 332 of 389 commodities
+((abs(rowSums(um)-icu) > .0001) %>% {rownames(.)[.]} %>% icu[.,])/((abs(rowSums(um)-icu) > .0001) %>% {rownames(.)[.]} %>% rowSums(um)[.])  # is the difference small or large?
+# or even does sum(icu) == sum(um)? FALSE 
+sum(icu) / sum(um) # is the difference small or large?
+
 # accounting check 0: 
-  # does (rowSums(io) == colSums(sm)) %>% all()? FALSE
-    sum((rowSums(io) != colSums(sm))) == sum(abs(rowSums(io)-colSums(sm)) > .0001) # BUT tolerance is an issue! 124 vs 15 of 391 industries
-  # does (abs(rowSums(io)-colSums(sm)) <= .0001) %>% all()? FALSE
-    (abs(rowSums(io)-colSums(sm)) > .0001) %>% {names(.)[.]} # list of industries that cannot be reconciled between BEA and microdata
+  # does (rowSums(io) == BEA_iov) %>% all()? FALSE
+    sum((rowSums(io) != BEA_iov)) == sum(abs(rowSums(io)-BEA_iov) > .0001) # BUT tolerance is an issue! 124 vs 15 of 391 industries
+  # does (abs(rowSums(io)-BEA_iov) <= .0001) %>% all()? FALSE
+    (abs(rowSums(io)-BEA_iov) > .0001) %>% {rownames(.)[.]} # list of industries that cannot be reconciled between BEA and microdata
     io %>% {rownames(.)[rowSums(.) == 0]} %>% {rownames(sm)[(rowSums(sm[, .]) > 0)]} # list of all commodities produced by industries that cannot be reconciled between BEA and microdata. 128 commodities. 
-    # io %>% {rownames(.)[rowSums(.) == 0]} %>% sm[, .] %>% rowSums() %>% as.data.frame() %>% View() 
-    (abs(rowSums(io)-colSums(sm)) > .0001) %>% {names(.)[.]} %>% rowSums(io)[.] # value of for microdata industries that do not match BEA
-    (abs(rowSums(io)-colSums(sm)) > .0001) %>% {names(.)[.]} %>% colSums(sm)[.] # value of for BEA industries that do not match microdata
+      io %>% {rownames(.)[rowSums(.) == 0]} %>% sm[, .] %>% View() # sub-matrix 
+      # io %>% {rownames(.)[rowSums(.) == 0]} %>% sm[, .] %>% rowSums() %>% as.data.frame() %>% View() 
+    (abs(rowSums(io)-BEA_iov) > .0001) %>% {rownames(.)[.]} %>% rowSums(io)[.] # value of for microdata industries that do not match BEA
+    (abs(rowSums(io)-BEA_iov) > .0001) %>% {names(.)[.]} %>% BEA_iov[.] # value of for BEA industries that do not match microdata
   # or even does sum(io) == sum(sm)? FALSE 
     sum(io)/sum(sm) # is the difference small or large?
   # or even does (rownames(io) == colnames(sm)) %>% all()? TRUE
   # or even does dim(io)[1] == dim(sm)[2]? TRUE
+
+
+# If cs is the issue, look to rowSums(co) OR BEA_csf OR both
+rownames(BEA_cov)[BEA_cov==0] # commodities with zero BEA commodity output? zero
+rownames(BEA_cs)[BEA_cs==0] # commodities with zero BEA commodity supply? 8 
+rownames(BEA_csf)[BEA_csf>1] # commodities with share factor greater than one? 33
+rownames(BEA_csf)[!is.finite(BEA_csf)] # commodities with infinite share factor? 8
+rownames(co)[rowSums(co)==0] # commodities with zero microdata commodity output? 8
+rownames(cs)[rowSums(cs)==0] # commodities with zero microdata commodity supply? 16
+
+# does Commodity Supply vector recovery from Commodity Share Factor and Commodity Output hold for national level BEA data? Yes* BUT rounding precision is an issue.
+(BEA_cs == BEA_cov / BEA_csf) %>% all() # FALSE
+(abs(BEA_cs-(BEA_cov / BEA_csf)) <= .0001) %>% all() # TRUE
+
+
 # accounting check 1: 
-  # does (rowSums(co) == rowSums(sm)) %>% all()? FALSE
-    sum((rowSums(co) != rowSums(sm))) == sum(abs(rowSums(co)-rowSums(sm)) > .0001) # BUT tolerance is an issue! 209 vs 128 of 389 commodities
+  # does (rowSums(co) == BEA_cov) %>% all()? FALSE
+    sum((rowSums(co) != BEA_cov)) == sum(abs(rowSums(co)-BEA_cov) > .0001) # BUT tolerance is an issue! 209 vs 128 of 389 commodities
   # are the non conforming commodities the same as those commodities produced by industries that cannot be reconciled? TRUE 
-    length(io %>% {rownames(.)[rowSums(.) == 0]} %>% {rownames(sm)[(rowSums(sm[, .]) > 0)]}) == sum(abs(rowSums(co)-rowSums(sm)) > .0001)
-    io %>% {rownames(.)[rowSums(.) == 0]} %>% {rownames(sm)[(rowSums(sm[, .]) > 0)]} == (abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]}
-  # does (abs(rowSums(co)-rowSums(sm)) <= .0001) %>% all()? FALSE
-    (abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]} # list of commodities not consistent between BEA and microdata
-    (abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]} %>% rowSums(co)[.] # value of for microdata commodities that do not match BEA
-    (abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]} %>% rowSums(sm)[.] # value of for BEA commodities that do not match microdata
-    ((abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]} %>% rowSums(co)[.]) / ((abs(rowSums(co)-rowSums(sm)) > .0001) %>% {names(.)[.]} %>% rowSums(sm)[.]) # is the difference small or large?
+    length(io %>% {rownames(.)[rowSums(.) == 0]} %>% {rownames(sm)[(rowSums(sm[, .]) > 0)]}) == sum(abs(rowSums(co)-BEA_cov) > .0001)
+    io %>% {rownames(.)[rowSums(.) == 0]} %>% {rownames(sm)[(rowSums(sm[, .]) > 0)]} == (abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]}
+  # does (abs(rowSums(co)-BEA_cov) <= .0001) %>% all()? FALSE
+    (abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]} # list of commodities not consistent between BEA and microdata
+    (abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]} %>% rowSums(co)[.] # value of for microdata commodities that do not match BEA
+    (abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]} %>% BEA_cov[., ] # value of for BEA commodities that do not match microdata
+    ((abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]} %>% rowSums(co)[.]) / ((abs(rowSums(co)-BEA_cov) > .0001) %>% {rownames(.)[.]} %>% BEA_cov[., ]) # is the difference small or large?
   # or even does sum(co) == sum(sm)? FALSE 
     sum(co)/sum(sm) # is the difference small or large?
   # but does sum(co) == sum(io)? TRUE 
   # or even does (rownames(co) == rownames(sm)) %>% all()? TRUE
   # or even does dim(co)[1] == dim(sm)[1]? TRUE
-   
-    
-    
-    
+# accounting check 2: 
+
 #########
 
 
