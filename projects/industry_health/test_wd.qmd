@@ -871,7 +871,7 @@ mi1 = df_map %>% drop_na(c(paam, retention_calc, pct_nondurable, pct_durable, pc
 
 ols2a = lm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
 ols2b = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
-ols2c = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+ols2c = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
 
 
 summary(ols2a)
