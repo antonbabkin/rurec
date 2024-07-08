@@ -4,7 +4,6 @@
 
 # R libraries ----
 library(logger)
-log_threshold(DEBUG)
 library(arrow)
 library(tidyverse)
 library(glue)

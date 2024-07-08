@@ -2,7 +2,6 @@
 
 # R libraries ----
 library(logger)
-log_threshold(DEBUG)
 library(arrow)
 library(tidyverse)
 library(glue)
@@ -79,13 +78,11 @@ call_cbp <- function(year,
   
 
   if (imputed && (year > 2016)) {
-    log_warn(glue("Imputed CBP not available for {year}, using raw"))
-    imputed <- FALSE
+    stop(glue("Imputed CBP not available for year {year}"))
   }
   
   if (imputed && (cbp_scale != "county")) {
-    log_warn(glue("Imputed CBP not available for '{cbp_scale}' scale, using raw"))
-    imputed <- FALSE
+    stop(glue("Imputed CBP not available for '{cbp_scale}' scale"))
   }
 
   cache_path <- glue(opath$cbp_, .envir = list(geo = cbp_scale, year = year, imputed = imputed))

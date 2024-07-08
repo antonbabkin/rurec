@@ -2,7 +2,6 @@
 
 # R libraries ----
 library(logger)
-log_threshold(DEBUG)
 library(arrow)
 library(tidyverse)
 library(glue)
@@ -222,6 +221,24 @@ call_geog <- function(year = 2013,
                      scale = scale)
   }
   return(df)
+}
+
+
+#' County shapefile with state and region columns
+call_county <- function(year = 2013, scale = c("20m", "5m", "500k")) {
+  scale <- match.arg(scale)
+  d1 <- pubdata$get_county_df(year = year, geometry = TRUE, scale = scale) %>%
+    rename_with(str_to_lower) %>%
+    select(!county_code) %>%
+    rename(place = code, county_name = name, state_fips = state_code)
+  d2 <- pubdata$get_state_df(geometry = FALSE, scale = scale) %>%
+    rename_with(str_to_lower) %>%
+    select(!c(aland, awater)) %>%
+    rename(state_fips = code, state_name = name, state_abbr = abbr)
+  df <- left_join(d1, d2, "state_fips") %>%
+    mutate(name = paste0(county_name, ", ", state_abbr), .after = "place") %>%
+    arrange(place)
+  df
 }
 
 ## place codes/concordance ----

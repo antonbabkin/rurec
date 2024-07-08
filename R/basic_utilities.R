@@ -74,9 +74,9 @@ long2matrix <- function(df,
                         names_from = names(df)[2], 
                         id_cols = names(df)[1]){
   df <- df %>% 
-    pivot_wider(id_cols = id_cols, 
-                names_from = names_from, 
-                values_from = values_from) %>% 
+    pivot_wider(id_cols = all_of(id_cols), 
+                names_from = all_of(names_from), 
+                values_from = all_of(values_from)) %>% 
     as.data.frame() 
   rownames(df) <- df[[id_cols]]
   df <- df[-1] %>% 

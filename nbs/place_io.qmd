@@ -1,0 +1,357 @@
+---
+title: "Place I-O"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+---
+
+This notebook demonstrates usage of the `R/place_io.R` module.
+
+# imports
+
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(testthat)
+library(tmap)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+
+log_threshold(WARN)
+tmap_mode("plot")
+```
+
+
+# tests
+
+Run this section to perform a comprehensive test of the module.
+
+`county demand <= output` is known to fail in a handful of counties for `cbp_raw,sum`, `cbp_raw,det`, `cbp_imp,det`.
+Need to investigate further.
+
+```{r}
+#| eval: false
+test_file("tests/test-place_io.R")
+```
+
+
+
+
+# output
+
+County-industry output in thousands of dollars is returned by the `call_output()` function and can be calculated at different parameters.
+
+- `year`: 2012 is the most reliable.
+Other years have not been tested and may need extra work.
+
+- `class_system`: `"industry"` or `"commodity"`.
+BEA classification system of economic activity.
+County-industry output by construction aggregates to BEA national totals.
+Some industries, notably government, are missing in business data and will have zero output in all counties.
+County-commodity output will be lower than BEA national totals for commodities produced by missing industries.
+
+- `ilevel`: `"det"` for detail, `"sum"` for summary, or `"sec"` for sector.
+BEA industry classification levels.
+
+- `bus_data`: `"cbp_imp"` for EFSY-imputed CBP, `"cbp_raw"` for original CBP, `"infogroup"` for InfoGroup.
+Source of information on non-agricultural economic activity in counties.
+
+
+```{r}
+#| tbl-cap: "Example: detail industry output in 2012 from CBP-EFSY"
+place_io$call_output(year = 2012, class_system = "industry", ilevel = "det", bus_data = "cbp_imp") %>%
+  head()
+```
+
+
+## aggregate stats
+
+This table shows aggregate statistics for output dataframes constructed with different parameters.
+
+Table columns.
+`nrow` number of rows.
+`ncty` number of counties.
+`ncty0` number of counties with zero output.
+`nind` number of industries or commodities.
+`nind0` number of industries or commodities with zero output.
+`bea_pct` % of national BEA output.
+
+
+```{r}
+#| column: page
+
+x <- tibble()
+for (year in c(2012)) {
+  for (ilevel in c("sec", "sum", "det")) {
+    bea_tot <- bea_io$call_industry_output(year = year, ilevel = ilevel, condense = TRUE) %>%
+      sum()
+    for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
+      for (class_system in c("industry", "commodity")) {
+        d <- place_io$call_output(
+          year = year,
+          class_system = class_system,
+          ilevel = ilevel,
+          bus_data = bus_data
+        )
+        x <- bind_rows(
+          x,
+          tibble(
+            year = year,
+            ilevel = ilevel,
+            bus_data = bus_data,
+            class_system = class_system,
+            nrow = nrow(d),
+            ncty = n_distinct(d$place),
+            ncty0 = d %>% summarize(output = sum(output), .by = "place") %>% filter(output == 0) %>% nrow(),
+            nind = n_distinct(d$indcode),
+            nind0 = d %>% summarize(output = sum(output), .by = "indcode") %>% filter(output == 0) %>% nrow(),
+            bea_pct = (100 * sum(d$output) / 1000 / bea_tot)
+          )
+        )
+        
+      }
+    }
+  }
+}
+x
+```
+
+
+## distribution
+
+Distribution statistics for one specific output call.
+
+`modification` values:
+
+- `none`: full sample of county-industry detail outputs from InfoGroup.
+- `output > 0`: sample restricted to positive county-industry observations.
+- `industry total`: aggregated by industry.
+- `industry total, output > 0`: aggregated by industry, industries with missing output excluded.
+- `county total`: aggregated by county.
+
+```{r}
+#| column: screen-inset
+#| tbl-cap: County-industry detail level output in $1000s, InfoGroup, 2012
+
+d0 <- place_io$call_output(year = 2012, class_system = "industry", ilevel = "det", bus_data = "infogroup")
+d1 <- summarize(d0, output = sum(output), .by = "indcode")
+d2 <- summarize(d0, output = sum(output), .by = "place")
+
+d <- tibble(modification = "none", output = d0$output) %>%
+  bind_rows(tibble(
+    modification = "output > 0",
+    output = d0 %>% filter(output > 0) %>% pull(output)
+  )) %>%
+  bind_rows(tibble(modification = "industry total", output = d1$output)) %>%
+  bind_rows(tibble(
+    modification = "industry total, output > 0",
+    output = d1 %>% filter(output > 0) %>% pull(output)
+  )) %>%
+  bind_rows(tibble(modification = "county total", output = d2$output))
+
+summ <- function(x) {
+  tibble(n = length(x),
+       n0 = length(x[x == 0]),
+       mean = mean(x) %>% round(),
+       sd = sd(x) %>% round()) %>%
+    add_column(x %>% quantile() %>% round() %>% as.list() %>% as_tibble())
+}
+
+summarize(d, summ(output), .by = "modification")
+
+```
+
+## maps
+
+Total and agricultural (sector 11) industry output from InfoGroup, 2012.
+
+```{r}
+#| column: screen-inset
+#| layout-nrow: 1
+
+d1 <- place_io$call_output(2012, "industry", "sec", "infogroup")
+df <- geography$call_county() %>%
+  filter(contiguous) %>%
+  left_join(summarize(d1, output = sum(output), .by = "place"), "place") %>%
+  left_join(pivot_wider(d1, id_cols = "place", values_from = "output", names_from = "indcode", names_prefix = "output_"), "place") %>%
+  mutate(id = glue("{name} ({place})"))
+
+m1 <- df %>%
+  select(id, output, geometry) %>%
+  tm_shape() +
+  tm_polygons("output", title = "Total output, $1000s", style = "log10", border.alpha = 0.2)
+
+m2 <- df %>%
+  filter(output_11 > 0) %>%
+  select(id, output_11, geometry) %>%
+  tm_shape() +
+  tm_polygons("output_11", title = "Agricultural output, $1000s", style = "log10", border.alpha = 0.2)
+
+m1
+m2
+```
+
+
+
+
+# supply and demand
+
+Function `call_outsupdem()` returns a dataframe with county-commodity output, supply and demand.
+Commodities with zero aggregate supply or demand are omitted.
+
+Parameters:
+
+- `year`: 2012 is the most reliable.
+Other years have not been tested and may need extra work.
+
+- `ilevel`: `"det"` for detail, `"sum"` for summary, or `"sec"` for sector.
+BEA industry classification levels.
+
+- `bus_data`: `"cbp_imp"` for EFSY-imputed CBP, `"cbp_raw"` for original CBP, `"infogroup"` for InfoGroup.
+Source of information on non-agricultural economic activity in counties.
+
+
+```{r}
+#| tbl-cap: "Example: detail output, supply and demand in 2012 from CBP-EFSY"
+place_io$call_outsupdem(year = 2012, ilevel = "det", bus_data = "cbp_imp") %>%
+  head()
+```
+
+
+
+## aggregate stats
+
+This table shows aggregate statistics for supply-demand dataframes constructed with different parameters.
+
+Table columns.
+`nrow` number of rows.
+`ncty` number of counties.
+`nind` number of commodities.
+`out` total output.
+`sup` total supply.
+`dem` total demand.
+
+
+```{r}
+#| column: page
+
+x <- tibble()
+for (year in c(2012)) {
+  for (ilevel in c("sec", "sum", "det")) {
+    for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
+
+        d <- place_io$call_outsupdem(
+          year = year,
+          ilevel = ilevel,
+          bus_data = bus_data
+        )
+        x <- bind_rows(
+          x,
+          tibble(
+            year = year,
+            ilevel = ilevel,
+            bus_data = bus_data,
+            nrow = nrow(d),
+            ncty = n_distinct(d$place),
+            nind = n_distinct(d$indcode),
+            out = sum(d$output),
+            sup = sum(d$supply),
+            dem = sum(d$demand)
+          )
+        )
+        
+      }
+  }
+}
+x
+```
+
+
+## distribution
+
+Distribution statistics for one specific supply-demand call.
+
+`modification` values:
+
+- `none`: full sample of county-commodity detail supply and demand from InfoGroup.
+- `supply > 0`: sample restricted to positive county-commodity supply observations.
+- `demand > 0`: sample restricted to positive county-commodity demand observations.
+- `commodity total`: aggregated by commodity.
+- `county total`: aggregated by county.
+
+```{r}
+#| column: screen-inset
+#| tbl-cap: County-industry detail level supply and demand in $1000s, InfoGroup, 2012
+
+d0 <- place_io$call_outsupdem(year = 2012, ilevel = "det", bus_data = "infogroup")
+d1 <- summarize(d0, supply = sum(supply), demand = sum(demand), .by = "indcode")
+d2 <- summarize(d0, supply = sum(supply), demand = sum(demand), .by = "place")
+
+d <- tibble(modification = "none", supply = d0$supply, demand = d0$demand) %>%
+  bind_rows(tibble(
+    modification = "supply > 0",
+    supply = d0 %>% filter(supply > 0) %>% pull(supply)
+  )) %>%
+  bind_rows(tibble(
+    modification = "demand > 0",
+    demand = d0 %>% filter(demand > 0) %>% pull(demand)
+  )) %>%
+  bind_rows(tibble(modification = "commodity total", supply = d1$supply, demand = d1$demand)) %>%
+  bind_rows(tibble(modification = "county total", supply = d2$supply, demand = d2$demand)) %>%
+  pivot_longer(c(supply, demand), names_to = "variable") %>%
+  drop_na(value)
+
+summ <- function(x) {
+  tibble(n = length(x),
+       n0 = length(x[x == 0]),
+       mean = mean(x) %>% round(),
+       sd = sd(x) %>% round()) %>%
+    add_column(x %>% quantile() %>% round() %>% as.list() %>% as_tibble())
+}
+
+summarize(d, summ(value), .by = c("modification", "variable"))
+
+```
+
+
+
+## maps
+
+Supply and demand in the mining (sector 21) commodity, InfoGroup, 2012.
+
+```{r}
+#| column: screen-inset
+#| layout-nrow: 1
+
+d <- place_io$call_outsupdem(2012, "sec", "infogroup") %>%
+  filter(indcode == "21")
+df <- geography$call_county() %>%
+  filter(contiguous) %>%
+  left_join(d, "place") %>%
+  mutate(id = glue("{name} ({place})"))
+
+m1 <- df %>%
+  filter(supply > 0) %>%
+  tm_shape() +
+  tm_polygons("supply", title = "Mining supply, $1000s", style = "log10", border.alpha = 0.2)
+
+m2 <- df %>%
+  filter(demand > 0) %>%
+  tm_shape() +
+  tm_polygons("demand", title = "Mining demand, $1000s", style = "log10", border.alpha = 0.2)
+
+m1
+m2
+```
+
+

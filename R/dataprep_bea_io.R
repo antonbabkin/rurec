@@ -2,7 +2,6 @@
 
 # R libraries ----
 library(logger)
-log_threshold(DEBUG)
 library(arrow)
 library(tidyverse)
 library(glue)
@@ -707,8 +706,8 @@ toy$use_table <- function(core, va = NA, final = NA) {
   
   t <- matrix(NA, nc + 3, ni + 3,
               dimnames = list(
-                commodity = c(paste0("c_", 1:nc), "i_tot_use", "val_add", "i_tot_out"),
-                industry = c(paste0("i_", 1:ni), "c_int_use", "final_cons", "c_tot_use")
+                commodity = c(c_names, "i_tot_use", "val_add", "i_tot_out"),
+                industry = c(i_names, "c_int_use", "final_cons", "c_tot_use")
               ))
   t[1:nc, 1:ni] <- core
   t[1:nc, "c_int_use"] <- rowSums(core)
