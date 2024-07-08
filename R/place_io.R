@@ -7,7 +7,7 @@ library(logger)
 library(arrow)
 library(tidyverse)
 library(glue)
-library(REAT)
+
 
 
 # R scripts ----
@@ -20,6 +20,7 @@ source("R/geography.R", local = (geog <- new.env()))
 
 
 # Data objects ----
+
 ipath <- list(
   # data dependencies
 )
@@ -35,23 +36,7 @@ clear_outputs <- function() {
 
 # utility functions----
 
-# get long format industry name
-short2long <- function(short_name){
-  switch(short_name, sec = {"sector"}, sum = {"summary"}, det = {"detail"})
-}
 
-# Output functions----
-
-# Aggregate "output" of the CBSA members if in a cluster
-cbsa_aggregate_output <- function(df,
-                                  year = 2012){
-  df <- geog$call_cbsa_concord(year) %>% 
-    {left_join(df, ., by = "place")} %>% 
-    mutate(CBSA_CODE = ifelse(is.na(CBSA_CODE), place, CBSA_CODE)) %>% 
-    {aggregate(.[[3]], list(.$indcode, .$CBSA_CODE), FUN=sum)} %>% 
-    `colnames<-`(names(df))
-  return(df)  
-}
 
 # return commodity output matrix using industry output matrix and supply matrix
 industry2commodity <- function(industry_output_matrix,
@@ -76,9 +61,9 @@ industry2commodity <- function(industry_output_matrix,
 }
 
 
-# Output tables----
+# Output ----
 
-# gross (industry or commodity) output by county across 3 levels ("det", "sum", "sec") and sources of micro data
+#' County output in $1000s
 call_output <- function(year, 
                         class_system = c("industry", "commodity"), 
                         ilevel = c("det", "sum", "sec"),
@@ -362,316 +347,11 @@ call_output <- function(year,
 
 
 
-# Intermediate functions----
 
-#return "factor" paradigm intermediate industry/commodity demand/supply matrix 
-intermediate_activity_factor <- function(industry_output_matrix,
-                                          io_b_matrix,
-                                          io_supply_matrix,
-                                          schedule = c("demand", "supply"),
-                                          class_system = c("industry", "commodity") ){
-  schedule <- match.arg(schedule)
-  class_system <- match.arg(class_system)
-
-  df <- industry_output_matrix
-  bmat <- io_b_matrix
-  smat <- io_supply_matrix
-
-  # commodity output matrix
-  co <- industry2commodity(df, smat)
-
-  #subset of industry names where aggregate output is not zero
-  inames <- df %>%
-    rowSums() %>%
-    {names(.)[.!=0]}
-
-  #subset of commodity names where aggregate output is not zero
-  cnames <- co %>%
-    rowSums() %>%
-    {names(.)[.!=0]}
-
-  #alternate scaled "D" matrix using only industries available in the micro data
-  dmat_alt <- co %>%
-    rowSums() %>%
-    {./1000} %>%
-    as.matrix() %>%
-    {(t(smat[, inames, drop=FALSE]) %*% diag(1/as.vector(.)))} %>%
-    `colnames<-`(rownames(smat))
-
-  if (schedule == "demand" & class_system == "industry"){
-    df <- diag(as.vector(colSums(dmat_alt[inames, cnames, drop = F]%*%bmat[cnames, inames, drop = F])))%*%df[inames, , drop = F] %>%
-      `rownames<-`(inames)
-  }
-  if (schedule == "supply" & class_system == "industry"){
-    df <- (dmat_alt[inames, cnames, drop = F]%*%bmat[cnames, inames, drop = F])%*%df[inames, , drop = F] %>%
-      `rownames<-`(inames)
-  }
-  if (schedule == "demand" & class_system == "commodity"){
-    df <- bmat[cnames, inames, drop = F]%*%df[inames, , drop = F] %>%
-      `rownames<-`(cnames)
-  }
-  if (schedule == "supply" & class_system == "commodity"){
-    df <- diag(as.vector(bmat[cnames, inames, drop = F]%*%rowSums(df[inames, , drop = F])))%*%t(dmat_alt[inames, cnames, drop = F])%*%diag(1/as.vector(rowSums(df[inames, , drop = F])))%*%df[inames, , drop = F] %>%
-      `rownames<-`(cnames)
-  }
-
-  return(df)
-}
-
-#return "domestic" paradigm intermediate industry/commodity demand/supply matrix 
-intermediate_activity_domestic <- function(industry_output_matrix,
-                                            io_b_matrix,
-                                            io_supply_matrix,
-                                            phi,
-                                            schedule = c("demand", "supply"),
-                                            class_system = c("industry", "commodity") ){
-  schedule <- match.arg(schedule)
-  class_system <- match.arg(class_system)
-
-  df <- industry_output_matrix
-  bmat <- io_b_matrix
-  smat <- io_supply_matrix
-  phi <- phi
-
-  # commodity output matrix
-  co <- industry2commodity(df, smat)
-
-  #subset of commodity names where aggregate output is not zero
-  cnames <- co %>%
-    rowSums() %>%
-    {names(.)[.!=0]}
-  
-  #sub-subset of commodity names where phi is defined
-  cnames <- phi %>%
-    {rownames(.)[is.finite(.)]} %>% 
-    {intersect(. , cnames)}
-
-  #aggregate gross commodity supply
-  cs <- co %>%
-    rowSums() %>%
-    {bea_io$commodity_supply(commodity_output_vector = ., phi = phi)}
-
-  if (schedule == "demand" & class_system == "industry"){
-    stop("dummy error")
-  }
-  if (schedule == "supply" & class_system == "industry"){
-    stop("dummy error")
-  }
-  if (schedule == "demand" & class_system == "commodity"){
-    #censored production shares
-    ps <- co %>%
-      rowSums() %>%
-      {bea_io$production_shares(commodity_output_vector = ., commodity_supply_vector = cs)}
-
-    #county demand for domestically produced intermediate commodities in producer prices
-    df <- diag(as.vector(ps[cnames, , drop = F])) %*% (bmat %*% df)[cnames, , drop = F] %>%
-      `rownames<-`(cnames)
-  }
-  if (schedule == "supply" & class_system == "commodity"){
-    #censored commodity use shares
-    cus <- (bmat %*% df)[, , drop = F] %>%
-      rowSums() %>%
-      {bea_io$commodity_use_shares(intermediate_commodity_use_vector = ., commodity_supply_vector = cs)}
-
-    #county supply of domestically produced intermediate commodities in producer prices
-    df <- diag(as.vector(cus[cnames, , drop = F])) %*% co[cnames, , drop = F]  %>%
-      `rownames<-`(cnames)
-  }
-
-  return(df)
-}
+# Supply and demand ----
 
 
-#return "capital" paradigm intermediate industry/commodity demand/supply matrix 
-intermediate_activity_capital <- function(schedule = c("demand", "supply"),
-                                          class_system = c("industry", "commodity") ){
-  schedule <- match.arg(schedule)
-  class_system <- match.arg(class_system)
-
-  if (schedule == "demand" & class_system == "industry"){
-    stop("dummy error")
-  }
-  if (schedule == "supply" & class_system == "industry"){
-    stop("dummy error")
-  }
-  if (schedule == "demand" & class_system == "commodity"){
-    stop("dummy error")
-  }
-  if (schedule == "supply" & class_system == "commodity"){
-    stop("dummy error")
-  }
-
-  return(df)
-}
-
-# return intermediate industry/commodity demand/supply matrix under either factor/domestic/capital paradigm
-intermediate_activity <- function(industry_output_matrix,
-                                  io_b_matrix,
-                                  io_supply_matrix,
-                                  phi,
-                                  schedule = c("demand", "supply"),
-                                  paradigm = c("factor", "domestic", "capital"),
-                                  class_system = c("industry", "commodity") ){
-  schedule <- match.arg(schedule)
-  paradigm <- match.arg(paradigm)
-  class_system <- match.arg(class_system)
-  if(paradigm == "factor"){
-    df <- intermediate_activity_factor(industry_output_matrix = industry_output_matrix,
-                                       io_b_matrix = io_b_matrix,
-                                       io_supply_matrix = io_supply_matrix,
-                                       schedule = schedule,
-                                       class_system = class_system)
-  }
-  
-  if(paradigm == "domestic"){
-    df <- intermediate_activity_domestic(industry_output_matrix = industry_output_matrix,
-                                         io_b_matrix = io_b_matrix,
-                                         io_supply_matrix = io_supply_matrix,
-                                         phi,
-                                         schedule = schedule,
-                                         class_system = class_system)
-  }
-  
-  if(paradigm == "capital"){
-    df <- intermediate_activity_capital(schedule = schedule,
-                                        class_system = class_system)
-  }
-  
-  return(df)  
-}
-
-# Intermediate tables----
-
-# regional intermediate industry demand or supply (in 1,000's of dollars)
-call_intermediate <- function(year,
-                              schedule = c("demand", "supply"),
-                              paradigm = c("factor", "domestic", "capital"),
-                              class_system = c("industry", "commodity"), 
-                              ilevel = c("det", "sum", "sec"),
-                              bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
-                              verbose = FALSE){
-  
-  schedule <- match.arg(schedule)
-  paradigm <- match.arg(paradigm)
-  class_system <- match.arg(class_system)
-  ilevel <- match.arg(ilevel)
-  bus_data <- match.arg(bus_data)
-  
-  #derived subnational industry output
-  iout <- call_output(year = year, 
-                      class_system = "industry", 
-                      ilevel = ilevel, 
-                      bus_data = bus_data,
-                      verbose = verbose) %>% 
-    util$long2matrix()
-  
-  #BEA-IO B matrix 
-  bmat <- bea_io$call_b_matrix(year = year, 
-                               ilevel = ilevel, 
-                               condense = TRUE) 
-  #BEA supply matrix 
-  smat <- bea_io$call_supply_matrix(year = year, 
-                                    ilevel = ilevel, 
-                                    condense = TRUE)
-  #total commodity output's share of total product supply
-  phi <- bea_io$call_commodity_share_factor(year = year, 
-                                             ilevel = ilevel, 
-                                             condense = TRUE)
-
-  df <- intermediate_activity(industry_output_matrix = iout,
-                              io_b_matrix = bmat,
-                              io_supply_matrix = smat,
-                              phi = phi,
-                              paradigm = paradigm,
-                              schedule = schedule,
-                              class_system = class_system) %>% 
-    as.data.frame.table() %>% 
-    `colnames<-`(c("indcode", "place", schedule)) %>%
-    mutate(place = as.character(place)) # place as factor works incorrectly when using as matrix index
-  
-  return(df)  
-}
-
-# Call list factor supply and demand 
-call_factor_list <- function(year,
-                             class_system = c("industry", "commodity"),
-                             paradigm = c("factor", "domestic", "capital"),
-                             ilevel = c("det", "sum", "sec"),
-                             bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
-                             cbsa = FALSE,
-                             verbose = FALSE){
-  
-  class_system <- match.arg(class_system)
-  paradigm <- match.arg(paradigm)
-  ilevel <- match.arg(ilevel)
-  bus_data <- match.arg(bus_data)
-
-  cache_path <- glue(opath$iofactor_)
-  if (file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }
-  
-  to <- call_output(year = year, 
-                    class_system = class_system, 
-                    ilevel = ilevel, 
-                    bus_data = bus_data,
-                    verbose = verbose) 
-  
-  fs <- call_intermediate(year = year,
-                          schedule = "supply",
-                          paradigm = paradigm,
-                          class_system = class_system, 
-                          ilevel = ilevel,
-                          bus_data = bus_data,
-                          verbose = verbose)
-  fd <- call_intermediate(year = year,
-                          schedule = "demand",
-                          paradigm = paradigm,
-                          class_system = class_system, 
-                          ilevel = ilevel,
-                          bus_data = bus_data,
-                          verbose = verbose)
-  if(cbsa){
-    to <- cbsa_aggregate_output(to, year = year)
-    fs <- cbsa_aggregate_output(fs, year = year)
-    fd <- cbsa_aggregate_output(fd, year = year)
-  }
-  
-  df <- inner_join(fs, fd, by = join_by(indcode, place)) %>% 
-    left_join(to, ., by = join_by(indcode, place)) %>% 
-    `colnames<-`(c("indcode", "place", "gross_output", "intermediate_supply", "intermediate_demand"))
-  df[is.na(df)]=0
-  df$net_supply <- pmax(df$intermediate_supply - df$intermediate_demand, 0)
-  df$net_demand <- pmax(df$intermediate_demand - df$intermediate_supply, 0)
-  
-  log_debug(paste("save to cache", cache_path))
-  write_parquet(df, util$mkdir(cache_path))
-  return(df)  
-  
-}
-  
-# Call intertemporal list factor supply and demand 
-call_temporal_factor_list <- function(set_of_years,
-                                      class_system = c("industry", "commodity"),
-                                      paradigm = c("factor", "domestic", "capital"),
-                                      ilevel = c("det", "sum", "sec"),
-                                      bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
-                                      cbsa = FALSE,
-                                      verbose = FALSE){
-  df <- util$temp_fun_recur_list(set_of_years = set_of_years, 
-                                 call_factor_list, 
-                                 paradigm = paradigm,
-                                 class_system = class_system, 
-                                 ilevel = ilevel,
-                                 bus_data = bus_data,
-                                 verbose = verbose) %>%
-    bind_rows(.id = "id_year")
-  return(df) 
-}
-
-
-#' Dataframe with county-commodity output, supply and demand
+#' County-commodity output, supply and demand in $1000s
 call_outsupdem <- function(year,
                            ilevel = c("det", "sum", "sec"),
                            bus_data = c("cbp_imp", "cbp_raw", "infogroup")) {
@@ -758,143 +438,6 @@ call_outsupdem <- function(year,
 
   df
 }
-
-
-# trade flow potential ----
-
-# tidy a long factor list into a place indexed table of economic activity (trade flow potential) for a set/sets of sectors
-extraction_table <- function(intra_level_concordance,
-                             io_factor_list,
-                             cluster_level = c("sec", "sum", "det"),
-                             cbsa = FALSE,
-                             cluster_subset = NULL) {
-  cluster_level <- match.arg(cluster_level)
-  ilc <- intra_level_concordance
-  iol <- io_factor_list
-  df <- left_join(iol, ilc, by = "indcode")
-  if (!is.null(cluster_subset)){
-    df <- df[grepl(cluster_subset, df[[short2long(cluster_level)]]), ]
-  }
-  df <- df %>%
-    {aggregate(.[sapply(.,is.numeric)], list(.[["place"]]), FUN=sum)} %>% 
-    `colnames<-`(c("place", names(.)[-1])) 
-  return(df)
-}
-
-# generate a table of trade flow potential with spatial components
-call_extraction_table <- function(year,
-                                  ilevel = c("det", "sum", "sec"),
-                                  class_system = c("industry", "commodity"),
-                                  paradigm = c("factor", "domestic", "capital"),
-                                  bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
-                                  verbose = FALSE,
-                                  cluster_level = c("sec", "sum", "det"),
-                                  cbsa = FALSE,
-                                  cluster_subset = NULL,
-                                  trim = "^(60|66|69|78)|(999)$", 
-                                  spatial = TRUE){
-  ilevel <- match.arg(ilevel)
-  cluster_level <- match.arg(cluster_level)
-  bea_io$cluster_logic(ilevel, cluster_level)
-  ilc <- bea_io$call_intra_level_concordance(year = year, 
-                                             cluster_level = cluster_level)
-  iol <- call_factor_list(year = year,
-                          class_system = class_system,
-                          paradigm = paradigm,
-                          ilevel = ilevel,
-                          bus_data = bus_data,
-                          cbsa = cbsa,
-                          verbose = verbose)
-  df <- extraction_table(intra_level_concordance = ilc,
-                         io_factor_list = iol,
-                         cluster_level = cluster_level,
-                         cbsa = cbsa,
-                         cluster_subset = cluster_subset) %>% 
-    mutate(extract = intermediate_demand - intermediate_supply) 
-  if (spatial){
-    geot <- geog$call_geog(year = year, cbsa = cbsa)
-    df <- inner_join(geot, df, by = "place", copy = TRUE)
-  }
-  if (!is.null(trim)){
-    df <- df[!grepl(trim, df$place), ]
-  }
-  return(df)
-}
-
-
-
-
-# Tests ----
-
-test_all <- function() {
-  for (y in c(2021:1986)) {
-    for (s in c("industry", "commodity")) {
-      for (i in c("det", "sum", "sec")) {
-        for (b in c("cbp_imp", "cbp_raw", "infogroup")) {
-          if (b == "infogroup" && y > 2017) next
-          call_output(y, s, i, b)
-        }
-      }
-    }
-  }
-}
-
-
-
-# year = 2012
-# class_system = c("industry", "commodity")[1]
-# ilevel = c("det", "sum", "sec")[3]
-# bus_data = c("cbp_imp", "cbp_raw", "infogroup")[1]
-# 
-# test <- call_output(year = year,
-#                     class_system = class_system,
-#                     ilevel = ilevel,
-#                     bus_data = bus_data)
-
-  
-######### notes and other sundry
-
-#Note BEA commodities c("482000", "814000", "S00500", "S00600", "491000", "S00102", "GSLGE",  "GSLGH",  "GSLGO",  "S00900") are drooped/censored 
-# either due to either zero overall domestic intermediate usage c("814000", "S00500", "S00600", "GSLGE", "GSLGH", "GSLGO", "S00900") 
-# and/or have an industry supply source(s) not derivable from the micro data c("482000", "491000", "S00102") 
-
-#Note BEA industries c("335224", "311230", "482000", "814000", "S00500", "S00600", "491000", "S00101", "S00102", "GSLGE", "GSLGH", "GSLGO", "S00201", "S00202", "S00203") are drooped/censored 
-#due to lack of equivalent NIACS concordance c("S00500", "S00600", "S00101", "S00102", "GSLGE", "GSLGH", "GSLGO", "S00201", "S00202", "S00203") and/or no coverage in micro data c("335224", "311230", "482000", "814000", "491000")
-
-#Note: issue stemming from some BEA industries do not exist in underlying data and/or do not have equivalent NAICS codes resulting in NaN's
-#as such going from industry to commodity using the C matrix does not work for commodities which have corresponding non-zero elements in the C matrix 
-#(rownames(cmat)[rowSums(cmat[,names(rowSums(df))[rowSums(df)==0]])>0], where df is the industry-by-place output matrix) 
-#to solve we construct an adjusted C matrix using the derived industry-by-place output totals 
-#additional related issue, because industries with known non-zero BEA commodity supply/ industry output are suppressed, when recovering commodity output from an adjusted C matrix all commodity output from the suppressed industry is absent when comparing to BEA commodity output
-#to solve we do nothing but take note and adjust expectation of national commodity output downward by removing underiveable industries columns from supply table when constructing the "known" commodity output values
-
-###watch for PR, 999's in CBP (state), and 99990 in infogroup (industry)
-  
-  # load business data (non-ag by industry)
-  # 3 paths (cbp, imputed , infogroup)
-  # translate NAISCS to BEA (concordance plus collapse if level) 
-  # if cbp payroll -> output
-###what to do with 814000, 491000, 482000, 335224, 311230 or "311221" "311230" "322110" "331313" "335110" "335222" "335224" "335228" "335912" "336112" "336120" "336414" "336992" "482000" "491000" "814000"?
-### TODO check concordance/cbp validity for place:42007 naics:443 and naics:453 both have ap:4575 AND place:53029 naics:8134 and naics:8139 both have ap:692 Are we double counting?
-  # payroll shares from Use table (bea_io$call_bea_use_table()[V00100,]/bea_io$call_industry_output())
-
-  # output = payroll/share
-  # if infogroup sales == output
-### note some sales do not have BEA equivalents e.g., "921120" "924120" "999990" "922160" "928110" "922110" "926130" "924110" "921130" "923130" "926120" "922190" "926150" "922130" "921190" "922120" "923120" "922150" "922140" "925120" "921110" "923140" "926110" "926140" "923110" "925110" "928120" "927110"
-  # drop ag industries
-  # rescale output to match national total 
-### note scaling is sensitive to selection of places in include/exclude e.g. XX999 FIPS's or PR
-### what to do with "S00500" "S00600" "S00101" "S00102" "GSLGE"  "GSLGH"  "GSLGO"  "S00201" "S00202" "S00203" and "325110", "326140", "331314", "334418", "814000"?
-  # non-ag columns by industry
-  
-  # load census data (ag by industry)  
-  #agcen$call_agoutput()
-  #rescale county's farm industry output proportional to county's share in national ag commodity output
-  #agcen$call_agoutput()/bea_io$call_industry_output()
-  
-  # combine ag and non-ag
-  #if class_system == "industry" then concatenate (rowbind)
-  #if class_system == "commodity" then apply C matrix?
 
 
 
