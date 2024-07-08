@@ -1,0 +1,902 @@
+---
+title: "AAEA circularity results"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+    latex_engine: pdflatex
+params:
+  
+
+---
+  
+
+```{r preamble, include = FALSE}
+
+# additional library list
+library(logger)
+library(tidyverse)
+library(correlation)
+library(modelsummary)
+library(kableExtra)
+library(broom)
+library(patchwork)
+library(ggthemes)
+library(ggridges)
+library(viridis)
+library(tmap)
+library(tigris)
+library(skimr)
+library(gtsummary)
+library(RColorBrewer)
+
+# scripts
+source("projects/aaea/circularity_functions.R", local = (circularity <- new.env()))
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, render = knitr::normal_print) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(DEBUG)
+
+# locate project
+proj_path <- "data/projects/aaea/"
+
+# mapping modality 
+tmap_mode("plot")
+
+# data parameters
+
+params = list(
+  circularity_year = 2012,
+  end_year = 2016,
+  base_year = 2012,
+  ilevel = "det",
+  class_system = "commodity",
+  paradigm = "domestic",
+  bus_data = "cbp_imp",
+  trim = "^(60|66|69|78)|(999)$",
+  cluster_subset = NULL,
+  spatial = TRUE,
+  cbsa = FALSE,
+  cbsa_year = 2013, # (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
+  
+  circ_factors = c("production_capacity", "trade_capacity", "retention", "production_dependency", "trade_dependency", "autonomy", "trade_balance", "trade_openness"),
+  
+  reg_factors = c("employment_gr", "payroll_gr", "wage_gr") 
+)
+
+```
+
+
+```{r}
+# uncomment as needed
+# clear cache
+# util$clear_paths(circularity$opath)
+# create zip file with cache
+# util$zip_pack("tmp/dataset_circularity_v140624.zip", circularity$opath)
+# unpack cache from zip file
+# util$zip_unpack("tmp/dataset_circularity_v140624.zip", overwrite = TRUE)
+```
+
+# Examples
+
+```{r}
+# Dairy and Cheese 
+#industries = c("112120", "311513")
+#counties = c("55117","55081")
+
+# Animal Feed and Dairy
+industries = c("311119", "112120")
+counties = c("17001", "17027")
+
+# Plastics and Medical Device Manufacturing
+#industries = c("^3261", "339112")
+#counties = c("27053","27025")
+
+
+df_example = list()
+
+for (industry in 1:2){
+df_example[[industry]] <- circularity$call_extraction_table(year = params$circularity_year,
+                                    bus_data = params$bus_data,
+                                    ilevel = params$ilevel,
+                                    class_system = params$class_system,
+                                    paradigm = params$paradigm,
+                                    cbsa = params$cbsa,
+                                    cluster_subset = industries[industry],
+                                    from_cache = FALSE,
+                                    to_cache = FALSE,
+                                    overwrite = FALSE,
+                                    spatial = TRUE) |> 
+  mutate(
+    industry = industries[industry],
+    id = paste(NAME, "county,", STATE, "(", place, ")"),
+    locally_met = pmin(intermediate_supply, intermediate_demand)
+  ) 
+}
+
+
+df_12 <- rbind(df_example[[1]], df_example[[2]]) |>
+  filter(place %in% counties) |>
+  mutate(across(where(is.numeric), round))|> 
+  arrange(place, industry) |>
+  st_drop_geometry()
+
+
+df_12 |> 
+  select(id, industry, gross_output, intermediate_supply, intermediate_demand) 
+
+df_12 |> 
+  select(id, industry, intermediate_supply, intermediate_demand, locally_met, net_supply, net_demand)
+
+```
+```{r}
+
+for(industry in 1:2){
+
+df_example[[industry]] %>% 
+  mutate(log_supdem = sign(net_supply-net_demand) * log10(1 + pmax(net_supply, net_demand))) |> 
+  shift_geometry() %>% {(
+      tm_shape(.) +
+        tm_polygons(
+          title = str_replace_all(industries[industry], "_", " ") %>% str_to_title(),
+          col = "log_supdem",
+          border.alpha = 0.0,
+          style = "cont",
+          midpoint = 0,
+          breaks = seq(-10, 10, 2),
+          palette = rev(brewer.pal(9, "RdBu"))) +
+        group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
+        tm_layout(
+          legend.title.size = .8,
+          legend.text.size = .5,
+          legend.position = c("LEFT", "TOP"),
+          frame = F,
+          fontface = 2 ) +
+        tm_borders(lwd = 1.5) ) %>% 
+      print()
+  }
+} 
+
+    
+```
+
+
+
+# Data
+
+```{r}
+
+
+df_busdata<-list()
+
+for (year in c(params$end_year, params$base_year)){
+    pay <- dataprep$call_county_payroll(
+      year = year, 
+      bus_data = "cbp_imp")
+    
+    df_busdata[[paste0("",year)]] <- dataprep$call_county_employment(
+      year = year, 
+      bus_data = params$bus_data) |> 
+      inner_join(pay) |> 
+      mutate(
+        wage = 1000 * payroll / employment
+      )
+}
+
+df_busdata <- inner_join(df_busdata[[1]], df_busdata[[2]], by = join_by(place), suffix = c(".current", ".base")) |> 
+  mutate(
+    employment_gr=(employment.current - employment.base)/(.5 * employment.current + .5 * employment.base),
+    payroll_gr=(payroll.current - payroll.base)/(.5 * payroll.current + .5 * payroll.base),
+    wage_gr=(wage.current - wage.base)/(.5 * wage.current + .5 * wage.base),
+  )
+
+# Bring in the inputs to circularity calculations
+  
+df_circ <- circularity$call_extraction_table(year = params$circularity_year,
+                                    bus_data = params$bus_data,
+                                    ilevel = params$ilevel,
+                                    class_system = params$class_system,
+                                    paradigm = params$paradigm,
+                                    cbsa = params$cbsa,
+                                    cluster_subset = params$cluster_subset,
+                                    from_cache = FALSE,
+                                    to_cache = FALSE,
+                                    overwrite = FALSE,
+                                    spatial = params$spatial)
+
+# Calculate circularity metrics
+
+df_circ <- circularity$calculate_circularity_metrics(df_circ, cluster_subset = params$cluster_subset )
+
+# Bring in CBSA data for metro/non-metro definitions
+
+df_cbsa <- geography$pubdata$get_cbsa_delin_df(params$cbsa_year)%>%
+  select(STATE_CODE, COUNTY_CODE, METRO_MICRO) 
+
+df <- left_join(df_circ,df_busdata, by = join_by(place)) |> 
+  left_join(df_cbsa, by = join_by(STATE_CODE, COUNTY_CODE)) |> 
+  mutate(cbsa_rural_category = if_else(METRO_MICRO == "metro", FALSE, TRUE, missing = TRUE))
+
+
+```
+
+
+# Descriptives table
+
+```{r, message=FALSE}
+#| paged.print=FALSE
+
+
+  df %>%
+  st_drop_geometry() %>%
+  select(c(params$reg_factors, params$circ_factors)) %>%
+  skim()
+```
+
+# Density distributions
+
+```{r}
+#| warning: false
+
+# density distributions for all 8 circularity indicators
+
+if(FALSE){
+  for (circ_measure in params$circ_factors) {
+    n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
+    (ggplot(df) +
+      geom_density(aes(x = .data[[circ_measure]]), fill = "#88CCEE", alpha = 0.4) +
+      theme_pander() +
+      theme(legend.position = "none") +
+      ggtitle(n) +
+      xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
+      ylab("Density") +
+      xlab(n) ) %>%
+      print()
+  }
+}
+
+
+for (circ_measure in params$circ_factors) {
+  n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
+  (ggplot(df) +
+    geom_histogram(aes(x = .data[[circ_measure]]), fill = "#88CCEE", binwidth = 0.01) +
+    theme_pander() +
+    theme(legend.position = "none") +
+    ggtitle(n) +
+    xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
+    ylab("Count") +
+    xlab(n) ) %>%
+    print()
+}
+
+
+```
+
+
+# Spatial distributions
+
+
+
+```{r}
+# maps for all 8 circularity indicators
+
+
+df %>% shift_geometry() %>% {(
+  for (circ_measure in params$circ_factors) {(
+      tm_shape(.) +
+        tm_polygons(
+          title = str_replace_all(circ_measure, "_", " ") %>% str_to_title(),
+          col = circ_measure,
+          border.alpha = 0.0,
+          style = "cont",
+          midpoint = 0,
+          breaks = if(circ_measure == "trade_balance"){seq(-.5, .5, .1)}else{c(0, .25, .5, .75, 1)},
+          palette = rev(brewer.pal(9, "RdBu"))) +
+        group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
+        tm_layout(
+          legend.title.size = .8,
+          legend.text.size = .5,
+          legend.position = c("LEFT", "TOP"),
+          frame = F,
+          fontface = 2 ) +
+        tm_borders(lwd = 1.5) ) %>% 
+      print()
+  })
+} 
+
+```
+
+# Rural divide 
+```{r, message=FALSE}
+#| paged.print=FALSE
+
+
+# repeat all tables and density plots above with a rurality bifurcation
+
+# motivation: “rural places might be disadvantaged by their place in the supply chain”
+# does this support the hypothesis that values of metro and nonmetro are the same or not?
+# can the indicators be associated with economic outcomes? and across rurality?
+
+if(FALSE){
+  print("Non-metro:")
+  df %>%
+    st_drop_geometry() %>%
+    filter(cbsa_rural_category == TRUE) %>%
+    select(params$circ_factors) %>%
+    summary()
+  print("Metro:")
+  df %>%
+    st_drop_geometry() %>%
+    filter(cbsa_rural_category == FALSE) %>%
+    select(params$circ_factors) %>%
+    summary()
+} else {
+df %>%
+  st_drop_geometry() %>%
+  group_by(cbsa_rural_category) %>%
+  mutate(log_excess_supply = log(net_supply), 
+         log_excess_demand = log(net_demand), 
+         log_local_supply = log(intermediate_supply - net_supply), 
+         log_local_demand = log(intermediate_demand - net_demand)) %>% 
+  select(c("log_excess_supply", "log_excess_demand", "log_local_supply", "log_local_demand", params$reg_factors, params$circ_factors)) %>%
+  skim()
+}
+
+
+
+```
+
+```{r}
+# density distributions controlling for rurality
+
+df %>%
+  mutate(metro_status = ifelse(cbsa_rural_category == TRUE, "non-metro", 
+                               ifelse(cbsa_rural_category == FALSE, "metro", NA) )) %>% {
+  
+    (for (circ_measure in params$circ_factors) {
+      n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
+      (
+        ggplot(.) +
+          geom_density(aes(x = .data[[circ_measure]], fill = metro_status), alpha = 0.4) +
+          theme_pander() +
+          xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
+          scale_fill_manual(values = c("black","#88CCEE")) +
+          theme(legend.position = "top") +
+          labs(
+            fill = "CBSA status",
+            y = "Density",
+            x = n,
+            title = n
+          )
+      ) %>% print()
+    })
+  }
+
+
+```
+
+
+
+# Correlation tables
+```{r}
+
+# 8 by 8 
+# be sparing, limit overlap with Sara/Clayton results elsewhere
+# add employment growth, payroll growth, wage growth against the 8 circularity indicators
+# look for association of circularity with positive economic outcomes beyond random chance
+
+correlations <- matrix(nrow = length(params$circ_factors) + 1, ncol = 0)
+for (economic_measure in params$reg_factors) {
+  temp_correlations = matrix(nrow=3, ncol=0)
+  for (circularity_measure in params$circ_factors) {
+    test=cor.test(x = df[[circularity_measure]], y=df[[economic_measure]])
+    c_temp = round(c(test$estimate, test$p.value, nrow(df)-sum(is.na(df$economic_measure)|is.na(df$circularity_measure))), 3)
+    temp_correlations = cbind(temp_correlations, c_temp)
+  }
+  rownames(temp_correlations) = c("correlation", "p_value","obs")
+  temp_correlations <- data.frame(t(temp_correlations)) |> 
+    mutate(
+      sig = if_else(p_value<.01, "**", if_else(p_value<.05,"*","")),
+      result = paste0(correlation, sig)
+    ) |> 
+    select(result, obs)
+  temp_correlations <- rbind(temp_correlations, min(temp_correlations$obs)) |> 
+    select(result)
+  correlations <- cbind(correlations, temp_correlations)
+}
+rownames(correlations) = c(params$circ_factors, "obs")
+colnames(correlations) <- params$reg_factors
+correlations
+
+
+
+```
+
+
+# Correlation tables Rurality
+```{r}
+
+# repeat as above with rural divide 
+# what are the policy implications and discrepancies?
+# what indicators are relevant to the rural vs nonrural counties?
+
+correlations <- list()
+
+for (economic_measure in params$reg_factors) {
+  correlations_measure <- matrix(nrow = (length(params$circ_factors) + 1), ncol = 0)
+  for (rural in c(TRUE, FALSE)){
+    df_corr <- df |> filter(cbsa_rural_category == rural)
+    temp_correlations = matrix(nrow=3, ncol=0)
+    for (circularity_measure in params$circ_factors) {
+      test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
+      c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
+      temp_correlations = cbind(temp_correlations, c_temp)
+    }
+    rownames(temp_correlations) = c("correlation", "p_value", "obs")
+    temp_correlations <- data.frame(t(temp_correlations)) |> 
+      mutate(
+        sig = if_else(p_value<.01, "**", if_else(p_value<.05,"*","")),
+        result = paste0(correlation, sig)
+      ) |> 
+      select(result, obs)
+    temp_correlations <- rbind(temp_correlations, min(temp_correlations$obs)) |> 
+      select(result)
+    rownames(temp_correlations) = c(params$circ_factors, "obs")
+    correlations_measure <- cbind(correlations_measure, temp_correlations)
+  }
+  colnames(correlations_measure) <- c(paste0("rural =", c(TRUE, FALSE)))
+  correlations[[economic_measure]] <- cbind(correlations_measure, economic_measure)
+}
+
+correlations
+
+
+```
+
+
+```{r}
+
+
+
+# How does retention and economic outcomes vary across high and low production capacity places?
+
+temp = df %>% st_drop_geometry() %>% summarize(
+  p25 = quantile(production_capacity, c(.25), na.rm = TRUE),
+  p75 = quantile(production_capacity, c(.75), na.rm = TRUE)
+)
+
+pc_p25 = sum(temp$p25)
+pc_p75 = sum(temp$p75)
+
+# Low production capacity
+df_lowPC = df %>% filter(production_capacity < pc_p25)
+indicators = df_lowPC %>%
+  st_drop_geometry() %>%
+  select('retention', 'trade_capacity') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+
+  }
+    temp2 = c(est_retention, est_trade_capacity)
+    temp3 = c(pval_retention, pval_trade_capacity)
+    t4 = as.data.frame(list(
+      name = indicators,
+      est = temp2,
+      pval = temp3
+    ))
+    assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("LOW P.C. employment_gr" = "name")
+cor_wage_gr %>% rename("LOW P.C. wage_gr" = "name")
+cor_payroll_gr %>% rename("LOW P.C. payroll_gr" = "name")
+
+# Mid production capacity
+df_lowPC = df %>% filter(production_capacity >= pc_p25 &
+                           production_capacity < pc_p75)
+indicators = df_lowPC %>%
+  st_drop_geometry() %>%
+  select('retention', 'trade_capacity') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+
+  }
+    temp2 = c(est_retention, est_trade_capacity)
+    temp3 = c(pval_retention, pval_trade_capacity)
+    t4 = as.data.frame(list(
+      name = indicators,
+      est = temp2,
+      pval = temp3
+    ))
+    assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("MID P.C. employment_gr" = "name")
+cor_wage_gr %>% rename("MID P.C. wage_gr" = "name")
+cor_payroll_gr %>% rename("MID P.C. payroll_gr" = "name")
+
+# High production capacity
+df_lowPC = df %>% filter(production_capacity >= pc_p75)
+indicators = df_lowPC %>%
+  st_drop_geometry() %>%
+  select('retention', 'trade_capacity') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+
+  }
+    temp2 = c(est_retention, est_trade_capacity)
+    temp3 = c(pval_retention, pval_trade_capacity)
+    t4 = as.data.frame(list(
+      name = indicators,
+      est = temp2,
+      pval = temp3
+    ))
+    assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("HIGH P.C. employment_gr" = "name")
+cor_wage_gr %>% rename("HIGH P.C. wage_gr" = "name")
+cor_payroll_gr %>% rename("HIGH P.C. payroll_gr" = "name")
+
+# How does autonomy and economic outcomes vary across high and low production dependency places?
+temp = df %>% st_drop_geometry() %>% summarize(
+  p25 = quantile(production_dependency, c(.25), na.rm = TRUE),
+  p75 = quantile(production_dependency, c(.75), na.rm = TRUE)
+)
+
+pd_p25 = sum(temp$p25)
+pd_p75 = sum(temp$p75)
+
+# Low production dependency
+df_lowPD = df %>% filter(production_dependency < pd_p25)
+indicators = df_lowPD %>%
+  st_drop_geometry() %>%
+  select('autonomy', 'trade_dependency') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+  }
+  temp2 = c(est_autonomy, est_trade_dependency)
+  temp3 = c(pval_autonomy, pval_trade_dependency)
+  t4 = as.data.frame(list(
+    name = indicators,
+    est = temp2,
+    pval = temp3
+  ))
+  assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("LOW P.D. employment_gr" = "name")
+cor_wage_gr %>% rename("LOW P.D. wage_gr" = "name")
+cor_payroll_gr %>% rename("LOW P.D. payroll_gr" = "name")
+
+# Mid production dependency
+df_lowPD = df %>% filter(production_dependency >= pd_p25 &
+                           production_dependency < pd_p75)
+indicators = df_lowPD %>%
+  st_drop_geometry() %>%
+  select('autonomy', 'trade_dependency') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+  }
+  temp2 = c(est_autonomy, est_trade_dependency)
+  temp3 = c(pval_autonomy, pval_trade_dependency)
+  t4 = as.data.frame(list(
+    name = indicators,
+    est = temp2,
+    pval = temp3
+  ))
+  assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("MID P.D. employment_gr" = "name")
+cor_wage_gr %>% rename("MID P.D. wage_gr" = "name")
+cor_payroll_gr %>% rename("MID P.D. payroll_gr" = "name")
+
+# High production dependency
+df_lowPD = df %>% filter(production_dependency >= pd_p75)
+indicators = df_lowPD %>%
+  st_drop_geometry() %>%
+  select('autonomy', 'trade_dependency') %>%
+  colnames()
+indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
+for (a in indicators2) {
+  for (i in indicators) {
+    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
+    assign(paste0("est_", i), unlist(unname(test$estimate)))
+    assign(paste0("pval_", i), unlist(unname(test$p.value)))
+  }
+  temp2 = c(est_autonomy, est_trade_dependency)
+  temp3 = c(pval_autonomy, pval_trade_dependency)
+  t4 = as.data.frame(list(
+    name = indicators,
+    est = temp2,
+    pval = temp3
+  ))
+  assign(paste0("cor_", a), t4)
+}
+cor_employment_gr %>% rename("HIGH P.D. employment_gr" = "name")
+cor_wage_gr %>% rename("HIGH P.D. wage_gr" = "name")
+cor_payroll_gr %>% rename("HIGH P.D. payroll_gr" = "name")
+
+
+```
+
+
+
+<!-- # Archived -->
+<!-- ### Regional divide -->
+<!-- ```{r} -->
+
+<!-- # repeat all tables and density plots and maps and correlations and analysis above but at the Census Region Level -->
+<!-- # clear spatial patterns in all 8 indicators from maps above but rural stands out in west and mid-west -->
+
+<!-- print("West:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "West") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("South:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "South") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Midwest:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Midwest") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Northeast:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Northeast") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+
+
+
+<!-- df_map = df %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   rename("Production capacity"="production_capacity", "Trade capacity"="trade_capacity", "Retention"="retention", "Production dependency"="production_dependency", "Trade dependency"="trade_dependency", "Autonomy"="autonomy", "Trade balance"="trade_balance", "Trade openness"="trade_openness") %>% -->
+<!--   filter(STATE != "PR") %>% -->
+<!--   mutate(metro_status = ifelse(cbsa_rural_category == "rural", "non-metro", ifelse(cbsa_rural_category == "nonrural", "metro", NA))) -->
+
+<!-- indicators = df_map %>% -->
+<!--   select('Production capacity':'Trade openness') %>%  -->
+<!--   colnames() -->
+
+
+<!-- for (i in indicators) { -->
+<!--   temp <- df_map %>% -->
+<!--     mutate(fl = "x") -->
+
+<!--   print((ggplot(df_map, aes(x = .data[[i]], y = Region, fill = Region)) + -->
+<!--   geom_density_ridges_gradient(scale = 1.8, rel_min_height = 0.01) + -->
+<!--            theme_pander() + -->
+<!--            scale_fill_pander() + -->
+<!--   labs(title = i) + -->
+<!--     theme( -->
+<!--       legend.position="none", -->
+<!--       panel.spacing = unit(0.2, "lines"), -->
+<!--       strip.text.x = element_text(size = 8) -->
+<!--     ) + -->
+<!--     xlab(i) + -->
+<!--     ylab("Census Region"))) -->
+<!-- } -->
+
+
+<!-- # correlations -->
+<!-- # WEST -->
+<!-- df2 = df %>% filter(Region == "West") -->
+<!-- indicators = df %>% -->
+<!--   st_drop_geometry() %>%  -->
+<!--   select('production_capacity':'trade_openness') %>%  -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr","payroll_gr","employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!-- for (i in indicators) { -->
+<!--   test=cor.test(x = df2[[i]], y=df2[[a]]) -->
+<!--   assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--   assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness) -->
+<!--   temp3 = c(pval_production_capacity, pval_trade_capacity, pval_retention, pval_production_dependency, pval_trade_dependency, pval_autonomy, pval_trade_balance, pval_trade_openness) -->
+<!--   t4 = as.data.frame(list(name=indicators, est=temp2, pval=temp3)) -->
+<!--   assign(paste0("cor_",a), t4) -->
+<!-- }} -->
+<!-- cor_employment_gr %>% rename("W_employment_gr"="name") -->
+<!-- cor_wage_gr %>% rename("W_wage_gr"="name") -->
+<!-- cor_payroll_gr %>% rename("W_payroll_gr"="name") -->
+
+<!-- # SOUTH -->
+<!-- df2 = df %>% filter(Region == "South") -->
+
+<!-- indicators = df %>% -->
+<!--   st_drop_geometry() %>%  -->
+<!--   select('production_capacity':'trade_openness') %>%  -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr","payroll_gr","employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!-- for (i in indicators) { -->
+<!--   test=cor.test(x = df2[[i]], y=df2[[a]]) -->
+<!--   assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--   assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness) -->
+<!--   temp3 = c(pval_production_capacity, pval_trade_capacity, pval_retention, pval_production_dependency, pval_trade_dependency, pval_autonomy, pval_trade_balance, pval_trade_openness) -->
+<!--   t4 = as.data.frame(list(name=indicators, est=temp2, pval=temp3)) -->
+<!--   assign(paste0("cor_",a), t4) -->
+<!-- }} -->
+<!-- cor_employment_gr %>% rename("S_employment_gr"="name") -->
+<!-- cor_wage_gr %>% rename("S_wage_gr"="name") -->
+<!-- cor_payroll_gr %>% rename("S_payroll_gr"="name") -->
+
+<!-- # MIDWEST -->
+<!-- df2 = df %>% filter(Region == "Midwest") -->
+<!-- indicators = df %>% -->
+<!--   st_drop_geometry() %>%  -->
+<!--   select('production_capacity':'trade_openness') %>%  -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr","payroll_gr","employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!-- for (i in indicators) { -->
+<!--   test=cor.test(x = df2[[i]], y=df2[[a]]) -->
+<!--   assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--   assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness) -->
+<!--   temp3 = c(pval_production_capacity, pval_trade_capacity, pval_retention, pval_production_dependency, pval_trade_dependency, pval_autonomy, pval_trade_balance, pval_trade_openness) -->
+<!--   t4 = as.data.frame(list(name=indicators, est=temp2, pval=temp3)) -->
+<!--   assign(paste0("cor_",a), t4) -->
+<!-- }} -->
+<!-- cor_employment_gr %>% rename("MW_employment_gr"="name") -->
+<!-- cor_wage_gr %>% rename("MW_wage_gr"="name") -->
+<!-- cor_payroll_gr %>% rename("MW_payroll_gr"="name") -->
+
+<!-- # NORTHEAST -->
+<!-- df2 = df %>% filter(Region == "Northeast") -->
+<!-- indicators = df %>% -->
+<!--   st_drop_geometry() %>%  -->
+<!--   select('production_capacity':'trade_openness') %>%  -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr","payroll_gr","employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!-- for (i in indicators) { -->
+<!--   test=cor.test(x = df2[[i]], y=df2[[a]]) -->
+<!--   assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--   assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   temp2 = c(est_production_capacity, est_trade_capacity, est_retention, est_production_dependency, est_trade_dependency, est_autonomy, est_trade_balance, est_trade_openness) -->
+<!--   temp3 = c(pval_production_capacity, pval_trade_capacity, pval_retention, pval_production_dependency, pval_trade_dependency, pval_autonomy, pval_trade_balance, pval_trade_openness) -->
+<!--   t4 = as.data.frame(list(name=indicators, est=temp2, pval=temp3)) -->
+<!--   assign(paste0("cor_",a), t4) -->
+<!-- }} -->
+<!-- cor_employment_gr %>% rename("NE_employment_gr"="name") -->
+<!-- cor_wage_gr %>% rename("NE_wage_gr"="name") -->
+<!-- cor_payroll_gr %>% rename("NE_payroll_gr"="name") -->
+
+
+<!-- ``` -->
+<!-- ### Regions x Rurality -->
+
+<!-- ```{r} -->
+
+
+<!-- df_map = df %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   rename("Production capacity"="production_capacity", "Trade capacity"="trade_capacity", "Retention"="retention", "Production dependency"="production_dependency", "Trade dependency"="trade_dependency", "Autonomy"="autonomy", "Trade balance"="trade_balance", "Trade openness"="trade_openness") %>% -->
+<!--   filter(STATE != "PR") %>% -->
+<!--   mutate(metro_status = ifelse(cbsa_rural_category == "rural", "non-metro", ifelse(cbsa_rural_category == "nonrural", "metro", NA))) -->
+
+<!-- indicators = df_map %>% -->
+<!--   select('Production capacity':'Trade openness') %>%  -->
+<!--   colnames() -->
+
+<!-- for (i in indicators) { -->
+<!--   temp <- df_map %>% -->
+<!--     mutate(fl = "x") -->
+
+<!--   print((ggplot(df_map, aes(x = .data[[i]], y = Region, fill = metro_status)) + -->
+<!--   geom_density_ridges_gradient(scale = 1.8, rel_min_height = 0.01, alpha = 0.4) + -->
+<!--            theme_pander() + -->
+<!--            scale_fill_pander() + -->
+<!--   labs(title = i) + -->
+<!--     theme( -->
+<!--       legend.position="top", -->
+<!--       panel.spacing = unit(0.2, "lines"), -->
+<!--       strip.text.x = element_text(size = 8) -->
+<!--     ) + -->
+<!--     labs(fill='Metro status')  +  -->
+<!--     xlab(i) + -->
+<!--     ylab("Census Region"))) -->
+<!-- } -->
+
+
+<!-- print("West - METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "West" & cbsa_rural_category == "nonrural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("South - METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "South" & cbsa_rural_category == "nonrural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Midwest - METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Midwest" & cbsa_rural_category == "nonrural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Northeast - METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Northeast" & cbsa_rural_category == "nonrural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+
+<!-- print("West - NON-METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "West" & cbsa_rural_category == "rural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("South - NON-METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "South" & cbsa_rural_category == "rural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Midwest - NON-METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Midwest" & cbsa_rural_category == "rural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+<!-- print("Northeast - NON-METRO:") -->
+<!-- df %>%  -->
+<!--   st_drop_geometry() %>%  -->
+<!--   filter(Region == "Northeast" & cbsa_rural_category == "rural") %>% -->
+<!--   select(production_capacity:trade_openness) %>%  -->
+<!--   summary() -->
+
+<!-- ``` -->
+
+
+
+
+
+
