@@ -1256,6 +1256,7 @@ huxreg (re5, re7, re8, re11, re12, re15, re18, re19)
 
 ***Individual effects*** refer to differences between groups (e.g., differences between counties) that persist over time and are not explained by observed variables.
 
+#Paper models 
 ```{r}
 ##----------
 
