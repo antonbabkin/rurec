@@ -10,8 +10,9 @@ library(glue)
 
 # R scripts ----
 source("R/basic_utilities.R", local = (util <- new.env()))
-source("R/place_output.R", local = (place_output <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
 source("R/geography.R", local = (geog <- new.env()))
+
 
 # Data objects ----
 ipath <- list(
@@ -20,7 +21,7 @@ ipath <- list(
 
 opath <- list(
   # data products
-  circularity_ = "data/circularity/circularity_{year}_{ilevel}_{class_system}_{paradigm}_{bus_data}_{cbsa}_{cluster_subset}_{spatial}.rds"
+  circularity_ = "data/projects/aaea/circularity/circularity_{year}_{ilevel}_{bus_data}_{cluster_subset}_{spatial}.rds"
 )
 
 clear_outputs <- function() {
@@ -30,17 +31,17 @@ clear_outputs <- function() {
 #--- Function that creates circularity inputs
 
 call_extraction_table <- function(year,
-                                    bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
-                                    ilevel = "det", # c("det", "sum", "sec")
-                                    class_system = "commodity", # c("industry", "commodity")
-                                    paradigm = "domestic", # c("factor", "domestic", "capital"),
-                                    cbsa = FALSE,
-                                    cluster_subset = NULL,
-                                    from_cache = FALSE,
-                                    to_cache = FALSE,
-                                    overwrite = FALSE,
-                                    spatial = TRUE){
+                                  bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                                  ilevel = c("det", "sum", "sec"),
+                                  cluster_subset = NULL,
+                                  from_cache = FALSE,
+                                  to_cache = FALSE,
+                                  overwrite = FALSE,
+                                  spatial = TRUE) {
 
+  bus_data <- match.arg(bus_data)
+  ilevel <- match.arg(ilevel)
+  
   cache_path <- glue(opath$circularity_)
 
   if (from_cache == TRUE){
@@ -48,19 +49,19 @@ call_extraction_table <- function(year,
       log_debug(paste("read from cache", cache_path))
       return(readRDS(cache_path))
     } else {
-      log_debug("WARNING: Cached version does not exist")
+      log_warn("Cached version does not exist")
       from_cache = FALSE
     }
   } 
 
   if (from_cache == FALSE){
   
-    factor_list <- place_output$call_factor_list(year = year,
-                                                 class_system = class_system,
-                                                 paradigm = paradigm,
-                                                 ilevel = ilevel,
-                                                 bus_data = bus_data,
-                                                 cbsa = cbsa)
+    factor_list <- place_io$call_outsupdem(year = year,
+                                           ilevel = ilevel,
+                                           bus_data = bus_data) |>
+      mutate(net_supply = pmax(supply - demand, 0),
+             net_demand = pmax(demand - supply, 0)) |>
+      rename(gross_output = output, intermediate_supply = supply, intermediate_demand = demand)
     total_output <- factor_list |>
       group_by(place) |>
       summarize(
@@ -74,13 +75,13 @@ call_extraction_table <- function(year,
     df <- factor_list |> 
       group_by(place) |> 
       summarize(
-        across(where(is.numeric), sum)
+        across(c(gross_output, intermediate_supply, intermediate_demand, net_supply, net_demand), sum)
       )
     
-    df <- inner_join(df, total_output)
+    df <- inner_join(df, total_output, by = "place")
     
     if (spatial){
-      geot <- geog$call_geog(year = year, cbsa = cbsa)
+      geot <- geog$call_geog(year = year)
       df <- inner_join(geot, df, by = "place", copy = TRUE)
     }
      

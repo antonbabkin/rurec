@@ -48,7 +48,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, render = knitr::normal_p
 options(scipen=999)
 
 # log output 
-log_threshold(DEBUG)
+log_threshold(WARN)
 
 # locate project
 proj_path <- "data/projects/aaea/"
@@ -63,13 +63,10 @@ params = list(
   end_year = 2016,
   base_year = 2012,
   ilevel = "det",
-  class_system = "commodity",
-  paradigm = "domestic",
-  bus_data = "cbp_imp",
+  bus_data = "infogroup",
   trim = "^(60|66|69|78)|(999)$",
   cluster_subset = NULL,
   spatial = TRUE,
-  cbsa = FALSE,
   cbsa_year = 2013, # (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
   
   circ_factors = c("production_capacity", "trade_capacity", "retention", "production_dependency", "trade_dependency", "autonomy", "trade_balance", "trade_openness"),
@@ -112,9 +109,6 @@ for (industry in 1:2){
 df_example[[industry]] <- circularity$call_extraction_table(year = params$circularity_year,
                                     bus_data = params$bus_data,
                                     ilevel = params$ilevel,
-                                    class_system = params$class_system,
-                                    paradigm = params$paradigm,
-                                    cbsa = params$cbsa,
                                     cluster_subset = industries[industry],
                                     from_cache = FALSE,
                                     to_cache = FALSE,
@@ -208,9 +202,6 @@ df_busdata <- inner_join(df_busdata[[1]], df_busdata[[2]], by = join_by(place), 
 df_circ <- circularity$call_extraction_table(year = params$circularity_year,
                                     bus_data = params$bus_data,
                                     ilevel = params$ilevel,
-                                    class_system = params$class_system,
-                                    paradigm = params$paradigm,
-                                    cbsa = params$cbsa,
                                     cluster_subset = params$cluster_subset,
                                     from_cache = FALSE,
                                     to_cache = FALSE,
