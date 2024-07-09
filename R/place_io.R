@@ -426,15 +426,6 @@ call_outsupdem <- function(year,
   stopifnot(nrow(output_com) == nrow(df_demand))
   df <- inner_join(output_com, df_supply, join_by(indcode, place), relationship = "one-to-one") %>%
     inner_join(df_demand, join_by(indcode, place), relationship = "one-to-one")
-  
-  # drop commodities with zero total demand or supply
-  pos_com_names <- rownames(output_com_mat)[rowSums(supply_mat) > 0 & rowSums(demand_mat) > 0]
-  zero_com_names <- base::setdiff(rownames(output_com_mat), pos_com_names)
-  if (length(zero_com_names) > 0) {
-    log_info(glue("{length(zero_com_names)} commodities have zero supply or demand: {str_c(zero_com_names, collapse = ',')}"))
-  }
-  df <- df %>%
-    filter(indcode %in% pos_com_names)
 
   df
 }

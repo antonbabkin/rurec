@@ -19,7 +19,6 @@ This notebook demonstrates usage of the `R/place_io.R` module.
 library(logger)
 library(tidyverse)
 library(glue)
-library(testthat)
 library(tmap)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
@@ -36,15 +35,10 @@ tmap_mode("plot")
 
 Run this section to perform a comprehensive test of the module.
 
-`county demand <= output` is known to fail in a handful of counties for `cbp_raw,sum`, `cbp_raw,det`, `cbp_imp,det`.
-Need to investigate further.
-
 ```{r}
 #| eval: false
-test_file("tests/test-place_io.R")
+testthat::test_file("tests/test-place_io.R")
 ```
-
-
 
 
 # output
