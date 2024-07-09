@@ -7,16 +7,19 @@ library(tidyverse)
 library(logger)
 library(glue)
 library(readxl)
-log_threshold(DEBUG)
+
 
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
 source("R/place_output.R", local = (place_output <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
 source("R/trade_flows.R", local = (trade_flows <- new.env()))
 source("R/connectedness.R", local = (connectedness <- new.env()))
 source("R/dataprep.R", local = (dataprep_misc <- new.env()))
 source("R/visualization.R", local = (visualization <- new.env()))
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+
+log_threshold(WARN)
 
 # paths ----
 
@@ -462,6 +465,32 @@ call_agcensus12 <- function() {
   return(df)
 }
 
+
+# Circularity indicators ----
+
+#' Calculate retention and autonomy from county intermediate supply and demand
+call_circularity <- function(year,
+                             bus_data = c("cbp_imp", "cbp_raw", "infogroup"),
+                             ilevel = c("det", "sum", "sec")) {
+  bus_data <- match.arg(bus_data)
+  ilevel <- match.arg(ilevel)
+  
+  df <- place_io$call_outsupdem(year = year,
+                                ilevel = ilevel,
+                                bus_data = bus_data) %>%
+    mutate(
+      excess_supply = pmax(supply - demand, 0),
+      excess_demand = pmax(demand - supply, 0)
+    ) %>%
+    dplyr::summarize(across(c(
+      output, supply, demand, excess_supply, excess_demand
+    ), sum), .by = "place") %>%
+    mutate(
+      retention = 1 - (excess_supply / supply),
+      autonomy = 1 - (excess_demand / demand)
+    )
+  df
+}
 
 
 
