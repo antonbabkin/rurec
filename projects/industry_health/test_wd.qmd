@@ -476,72 +476,6 @@ ggplot(nonmetro_data, aes(autonomy_calc, paam)) +
 
 ```
 
-```{r}
-
-map = ih_dp$call_geog(2012)
-df_map <- left_join(map, data, by = "place") %>% shift_geometry()
-
-#install.packages("RColorBrewer")
-# library(RColorBrewer)
- 
- vars = list("paam", "ypll75", "retention_calc", "autonomy_calc", "emp_to_va", "emp_to_output", "va_to_output")
- for (v in vars) {
- 
- mdn = median(df_map[[v]], na.rm = TRUE)
-   
- tmap_mode("plot")
- output = df_map %>%
-   tm_shape() + 
-  tm_polygons(col = v, midpoint = mdn, border.alpha = 0.1, style = "cont", id = v,
-               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE)
-
-print(output)
-
- }
-
-# # Define a color-blind friendly palette from ColorBrewer
-# color_palette <- brewer.pal(4, "Set2")  # Change 4 to the number of quartile bins
-# 
-# for (v in vars) {
-#   # Remove missing values from the variable 'v'
-#   df_map_clean <- df_map[!is.na(df_map[[v]]), ]
-#   
-#   if (nrow(df_map_clean) > 0) {
-#     # Calculate median for each variable
-#     mdn <- median(df_map_clean[[v]], na.rm = TRUE)
-#     
-#     # Create quartile bins for the variable 'v'
-#     df_map_clean$bins <- cut(df_map_clean[[v]], 
-#                               breaks = quantile(df_map_clean[[v]], 
-#                                                 probs = seq(0, 1, by = 0.25), 
-#                                                 na.rm = TRUE, 
-#                                                 dig.lab = 5),  # Increase digits for breaks
-#                               include.lowest = TRUE)
-#     
-#     # Set up the tmap visualization with color-blind friendly palette
-#     output <- df_map_clean %>%
-#       tm_shape() + 
-#       tm_polygons(col = "bins", 
-#                   border.alpha = 0.1, 
-#                   style = "cat", 
-#                   palette = color_palette,
-#                   legend.hist = FALSE,  # Remove the histogram
-#                   legend.format = list(format = list(fun = function(x) { paste0(format(x, scientific = FALSE, trim = TRUE, digits = 2), " - ", format(x + 1, scientific = FALSE, trim = TRUE, digits = 2)) })),  # Format legend bins as "Value - Value"
-#                   legend.title = paste("Quartiles of", v)) +  # Add title to the bins
-#       tm_layout(legend.title.size = 1.5, 
-#                 fontface = 2, 
-#                 legend.position = c("right","bottom"), 
-#                 frame = FALSE)
-#     
-#     print(output)
-#   } else {
-#     warning(paste("No data available for variable", v))
-#   }
-# }
-
-
-```
 
 
 
@@ -584,7 +518,7 @@ plot(st_geometry(df_lisa),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.1)
 title(main = "LISA, Premature Age-Adjusted Mortality")
-
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 # Create the legend separately
 
@@ -670,6 +604,8 @@ ols1a2 = lm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + m
 
 summary(ols1a1)
 summary(ols1a2)
+
+
 ```
 
 #### 2.) industry + trade > prosperity
@@ -2258,222 +2194,47 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 # Output viz
 
-```{r}
+```{r, fig.width=10}
 
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality))
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured', 'metro')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
 
 
-viz1 = viz %>% filter(var == "retention_calc")
-viz2 = viz %>% filter(var == "autonomy_calc")
-viz3 = viz %>% filter(var == "pct_ag")
-
-plot1 = ggplot(viz1) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#3EA5A1", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-se, ymax=coef+se, color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-1.3, 1.9) +
   geom_hline(yintercept = 0) +
-  ggtitle("Retention") +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
 
-plot2 = ggplot(viz2) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#3EA5A1", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Autonomy") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot3 = ggplot(viz3) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("% Manufacturing") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot1 + plot2 + plot3
-# +
-#   plot_annotation(title = "Coefficients",
-#           subtitle = "1 SD increase in independent variable on premature death")
-
-
-viz1 = viz %>% filter(var == "pct_mine")
-viz2 = viz %>% filter(var == "pct_mfg")
-viz3 = viz %>% filter(var == "laborforce_part_rate")
-
-plot1 = ggplot(viz1) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  geom_hline(yintercept = 0) +
-  ggtitle("% Mining") +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot2 = ggplot(viz2) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("% Manufacturing") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot3 = ggplot(viz3) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Labor force participation rate") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot1 + plot2 + plot3
-# +
-#   plot_annotation(title = "Coefficients",
-#           subtitle = "1 SD increase in independent variable on premature death")
-
-
-viz1 = viz %>% filter(var == "bach")
-viz2 = viz %>% filter(var == "income_rate")
-viz3 = viz %>% filter(var == "poverty_rate")
-
-plot1 = ggplot(viz1) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  geom_hline(yintercept = 0) +
-  ggtitle("% with Bachelor's") +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot2 = ggplot(viz2) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Income rate") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot3 = ggplot(viz3) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Poverty rate") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot1 + plot2 + plot3
-# +
-#   plot_annotation(title = "Coefficients",
-#           subtitle = "1 SD increase in independent variable on premature death")
-
-bvar <- c("metro", "metro")
-bcoef <- c(NA, NA)
-bse <- c(NA, NA)
-brurality <- c("metro", "nonmetro")
-
-temp = data.frame(bvar, bcoef, bse, brurality) %>% rename("var"="bvar","coef"="bcoef","se"="bse","rurality"="brurality")
-temp2 = viz %>% filter(var == "metro")
-
-temp3 = rbind(temp2, temp)
-viz1 = viz %>% filter(var == "age")
-viz2 = viz %>% filter(var == "logpop")
-viz3 = temp3 %>% filter(var == "metro")
-
-plot1 = ggplot(viz1) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  geom_hline(yintercept = 0) +
-  ggtitle("Age") +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot2 = ggplot(viz2) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Population (log)") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot3 = ggplot(viz3) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-0.36, 0.51) +
-  ggtitle("Rurality (metro = 1)") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot1 + plot2 + plot3
-# +
-#   plot_annotation(title = "Coefficients",
-#           subtitle = "1 SD increase in independent variable on premature death")
-
-
-
-viz1 = viz %>% filter(var == "uninsured")
-viz2 = viz %>% filter(var == "uninsured")
-viz3 = viz %>% filter(var == "uninsured")
-
-plot1 = ggplot(viz1) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-1.3, 2) +
-  geom_hline(yintercept = 0) +
-  ggtitle("% Uninsured", subtitle = "NOTE: different scale") +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot2 = ggplot(viz2) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-1.3, 2) +
-  ggtitle("% Uninsured", subtitle = "NOTE: different scale") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot3 = ggplot(viz3) +
-  geom_errorbar( aes(x=rurality, ymin=coef-se, ymax=coef+se), width=0.4, colour="#306151", alpha=1.0, size=1.4) +
-  ylim(-1.3, 2) +
-  ggtitle("% Uninsured", subtitle = "NOTE: different scale") +
-  geom_hline(yintercept = 0) +
-  theme_classic() +
-  ylab("") +
-  xlab("") +
-  theme(axis.title.y = element_text(size = 10), plot.title = element_text(size = 10, face = "bold"), plot.subtitle = element_text(size = 10))
-
-plot1 + plot2 + plot3
-# +
-#   plot_annotation(title = "Coefficients",
-#           subtitle = "1 SD increase in independent variable on premature death")
+plot1
 
 ```
 
-change y-lims as per approapriate scale
+
+```{r, fig.width=10}
+
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured', 'metro')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
+
+
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-se, ymax=coef+se, color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-0.4, 0.5) +
+  geom_hline(yintercept = 0) +
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
+
+plot1
+
+```
+
 
 
 
