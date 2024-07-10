@@ -2479,12 +2479,13 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 ```{r, fig.width=10}
 
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
 
 
 plot1 = ggplot(viz) +
   geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-1.3, 1.9) +
+  ylim(-0.4, 0.53) +
   geom_hline(yintercept = 0) +
   # ggtitle("Retention") +
   ylab("Coefficents (standardized)") +
@@ -2500,12 +2501,13 @@ plot1
 
 ```{r, fig.width=10}
 
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'metro', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
 
 
 plot1 = ggplot(viz) +
   geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-0.4, 0.5) +
+  ylim(-1.3, 1.9) +
   geom_hline(yintercept = 0) +
   # ggtitle("Retention") +
   ylab("Coefficents (standardized)") +
