@@ -115,6 +115,25 @@ pubdata$get_cbsa_delin_df <- function(year) {
 
 ## shapes functions----
 
+
+# Spatial union counties and county equivalents geography changes over time
+census_county_cluster <- function(spatial_dataframe,
+                                  temporal_concordance){
+  tc <- temporal_concordance
+  df <- spatial_dataframe %>% 
+    select(names(.)[!(names(.) %in% c("center"))])
+  for (i in unique(tc$merge)){
+    m <- tc[tc$merge == i]$place
+    df[df$place == i, ]$geometry <- df %>% 
+      filter(df$place %in% m) %>% 
+      st_union()
+  }
+  df$center <- df$geometry %>% st_transform("EPSG:26911") %>% st_centroid() %>% st_transform(st_crs(df)[[1]]) 
+  df <- df %>% filter(!place %in% setdiff(tc$place, tc$merge))
+  return(df)
+}
+
+
 # Spatial union each CBSA member in a cluster
 cbsa_spatial_cluster <- function(spatial_dataframe,
                                  cbsa_concordance,
@@ -125,7 +144,7 @@ cbsa_spatial_cluster <- function(spatial_dataframe,
     {.[.$place %in% intersect(.$place, sdf$place), ]} %>% 
     {data.frame(CBSA_CODE = c(.$CBSA_CODE, setdiff(sdf$place, .$place)), 
                 place = c(.$place, setdiff(sdf$place, .$place)),
-                CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) }%>% 
+                CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) } %>% 
     {.[order(.$CBSA_CODE), ]} %>% 
     `rownames<-`(1:nrow(.))  %>% 
     {inner_join(sdf, ., by = "place", copy = TRUE)} 
