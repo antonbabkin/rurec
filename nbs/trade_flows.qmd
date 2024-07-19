@@ -1,0 +1,106 @@
+---
+title: "Trade flows"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+---
+
+# imports
+
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(tmap)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+
+log_threshold(INFO)
+tmap_mode("plot")
+```
+
+
+
+
+# Nuance
+
+## solution accuracy
+
+The transportation problem is solved numerically, and constraints are not always satisfied exactly.
+
+
+
+```{r}
+year <- 2012
+ilevel <- "det"
+bus_data <- "infogroup"
+
+df_supdem <- place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data)
+all_inds <- unique(df_supdem$indcode)
+tr_inds <- trade_flows$call_traded_commodities(year, ilevel = ilevel, bus_data = bus_data)
+counties <- trade_flows$distance_matrix(year) %>%
+  rownames()
+
+df_diag <- data.frame()
+for (ind_code in all_inds) {
+  # skip commodity if no feasible supply or demand
+  if (!(ind_code %in% tr_inds)) {
+    df_diag <- add_row(df_diag, ind = ind_code, exsup = 0)
+    next
+  }
+  
+  # feasible supply and demand
+  d <- df_supdem %>%
+    filter(indcode == ind_code) %>%
+    {
+      inner_join(
+        trade_flows$distribute_to_feasible_counties(.$supply, .$place, counties) %>% rename(supply = value),
+        trade_flows$distribute_to_feasible_counties(.$demand, .$place, counties) %>% rename(demand = value),
+        by = "place"
+      )
+    } %>%
+    mutate(exsup = pmax(supply - demand, 0),
+           exdem = pmax(demand - supply, 0))
+
+  # trade flows limited to counties with positive supply and demand
+  tf <- trade_flows$call_trade_flows(ind_code, year, ilevel = ilevel, bus_data = bus_data)
+  tf <- tf[rowSums(tf) > 0, colSums(tf) > 0, drop = FALSE]
+  # aggregate trade flows to outbound and inbound, and calculate deviation from supply or demand
+  d <- d %>%
+    left_join(rowSums(tf) %>% as_tibble(rownames = "place") %>% rename(outflow = value),
+              by = "place") %>%
+    left_join(colSums(tf) %>% as_tibble(rownames = "place") %>% rename(inflow = value),
+              by = "place") %>%
+    mutate(dev = if_else(is.na(outflow), inflow - exdem, outflow - exsup),
+           reldev = dev / max(exsup, exdem))
+
+  row <- list(
+    ind = ind_code,
+    exsup = sum(d$exsup),
+    tf = sum(tf),
+    rmsd = sqrt(mean(d$dev ^ 2, na.rm = TRUE)),
+    maxad = max(abs(d$dev), na.rm = TRUE),
+    maxrd = max(abs(d$reldev), na.rm = TRUE)
+  )
+  df_diag <- rbind(df_diag, row)
+}
+df_diag <- df_diag |>
+  mutate(abs_dev = abs(tf - exsup),
+         rel_dev = replace_na(abs_dev / exsup, 0),
+         .after = "tf")
+
+df_diag %>% arrange(desc(maxrd))
+```
+
+
+
+

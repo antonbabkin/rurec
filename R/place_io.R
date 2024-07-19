@@ -381,7 +381,7 @@ call_outsupdem <- function(year,
   pos_ind_names <- rownames(output_ind_mat)[rowSums(output_ind_mat) > 0]
   zero_ind_names <- base::setdiff(rownames(output_ind_mat), pos_ind_names)
   if (length(zero_ind_names) > 0) {
-    log_info(glue("{length(zero_ind_names)} industries have zero output: {str_c(zero_ind_names, collapse = ',')}"))
+    log_debug(glue("{length(zero_ind_names)} industries have zero output: {str_c(zero_ind_names, collapse = ',')}"))
   }
   
   # domestic intermediate use share of total use
