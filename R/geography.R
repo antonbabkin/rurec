@@ -725,6 +725,66 @@ call_impedance_distribution_table <- function(central_place,
 }
 
 
+imped_list <- function(
+    pn_dim,
+    dmat){
+  
+  D_inv <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 1)} %>% 
+    util$row_normalize()
+  
+  D_sqr <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 2)} %>% 
+    util$row_normalize()
+  
+  D_exp <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {expo_impedance_mat(., decay_constant = 100000)} %>% 
+    util$row_normalize()
+  
+  D_gau <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {gaus_impedance_mat(., rms_width = 500)} %>% 
+    util$row_normalize()
+  
+  D_qnn <- pn_dim %>% 
+    {call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
+    util$row_normalize()
+  D_qnn[is.na(D_qnn)] = 0
+  
+  D_knn <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {knn_mat(., neighbors = 10)} %>% 
+    util$row_normalize()
+  
+  D_prx <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {prox_impedance_mat(., radius = 500)} %>% 
+    util$row_normalize()
+  D_prx[is.na(D_prx)] = 0
+  
+  D_bis <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {bisquare_impedance_mat(., decay_zero = 500)} %>% 
+    util$row_normalize()
+  D_bis[is.na(D_bis)] = 0
+  
+  W_list <- list(
+    D_inv,
+    D_sqr,
+    D_exp,
+    D_gau,
+    D_qnn,
+    D_knn,
+    D_prx,
+    D_bis)
+  
+  return(W_list)
+} 
+
+
 # tests ----
 test_pubdata <- function() {
   

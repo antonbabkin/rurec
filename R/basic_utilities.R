@@ -155,6 +155,15 @@ edgelist2matrix <- function(x){
   return(df)
 }
 
+
+# row normalize a matrix
+row_normalize <- function(imatrix){
+  x <- imatrix %>%   
+    `diag<-`(0) %>% 
+    {sweep(., 1, rowSums(.), "/")} 
+  return(x)
+}
+
 # spatial concordance ----
 
 # Convert miles to meters

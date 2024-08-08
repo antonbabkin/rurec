@@ -85,6 +85,7 @@ proj_path <- "data/projects/eca_paa/space_regress/"
 
 twg <- "trade_weighted_growth"
 
+
 # extract vital statistics from a single level list of regression results into a dataframe 
 spec_f <- function(spec_list, mn = "ols", wm = "none", rf = params$reg_factors){
   df <- data.frame()
@@ -402,8 +403,8 @@ stopifnot("variable selection and names do not match" = all(rf %in% names(df)))
 
 
 # row normalized trade value matrix of potential excess trade flows between all places
-tm <- dp$call_trade_flows("all_industries") %>% 
-  dp$row_normalize()
+tm <- trade_flows$call_trade_flows("all_industries") %>% 
+  util$row_normalize()
 
 # all place names common between trade flow data and economic indicator growth data
 pn <- tm %>% 
@@ -418,7 +419,7 @@ pn <- df[, c("place", rf)] %>%
 
 # sub-subset of places where not all neighbors get dropped from previous subset step 
 pn <- pn %>% 
-  {dp$call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
+  {geography$call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
   {rownames(.)[rowSums(.) > 1]}
 
 # sub-set of rural places
@@ -446,11 +447,15 @@ rdf <- df[df$place %in% pn, c("place", "cbsa_rural_category", "trade_capacity", 
     return(x) 
     })
 
+
+```
+
+```{r}
 # call list of row-normalized W impedance matrices
 if (params$build_w) {
-  W_list <- dp$imped_list(
+  W_list <- geography$imped_list(
     pn_dim = pn, 
-    dmat = dp$call_dist_mat(year = params$year) )
+    dmat = geography$call_dist_mat(year = params$year) )
 }  
 
 # call or derive a list of W matrices in long format edge list of "listw" class
@@ -466,7 +471,7 @@ if (params$build_w) {
         {W_list[[j]][., .]} %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt, util$mkdir(cache_path))
   }
 }
 
@@ -477,13 +482,12 @@ if (params$build_w) {
     W_list_alt_rural <- readRDS(cache_path)
   } else {
     W_list_alt_rural <- list()
-    W_list <- dp$imped_list(pn_dim = rural_places,
-                            dmat = dp$call_dist_mat(year = params$year))
+    W_list <- geography$imped_list(pn_dim = rural_places, dmat = geography$call_dist_mat(year = params$year))
     for (j in 1:length(W_list)) {
       W_list_alt_rural[[j]] <- W_list[[j]] %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt_rural, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt_rural, util$mkdir(cache_path))
   }
 }
 
@@ -494,13 +498,12 @@ if (params$build_w) {
     W_list_alt_nonrural <- readRDS(cache_path)
   } else {
     W_list_alt_nonrural <- list()
-    W_list <- dp$imped_list(pn_dim = nonrural_places,
-                            dmat = dp$call_dist_mat(year = params$year))
+    W_list <- geography$imped_list(pn_dim = nonrural_places, dmat = geography$call_dist_mat(year = params$year))
     for (j in 1:length(W_list)) {
       W_list_alt_nonrural[[j]] <- W_list[[j]] %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt_nonrural, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt_nonrural, util$mkdir(cache_path))
   }
 }
 
@@ -510,12 +513,17 @@ if (params$build_w) {
 # TODO: add data frame summary stats, tables of variables, density distributions, maps of dispersion and maps of missingness
 
 ```{r}
+
 # scatter plot of variable change across growth time periods
-df_long <- dp$call_temporal_range_df(params$year_range) %>% filter(place %in% rdf$place)
+
+df_long <- util$temp_fun_recur_list(params$year_range, call_proj_df) %>% 
+  bind_rows(., .id = "id_year") %>% 
+  filter(place %in% rdf$place)
+
 prf <- str_remove_all(grep("_gr*", params$reg_factors, value = T), '(_gr)$')
 
-
-tmp <- df_long[c("id_year", "place", prf)] %>% st_drop_geometry() %>% 
+tmp <- df_long[c("id_year", "place", prf)] %>% 
+  st_drop_geometry() %>% 
   pivot_wider(names_from = id_year, values_from = c(prf))
   
 for(i in prf){
@@ -564,7 +572,7 @@ for(i in prf){
 # density plot variables change across growth time periods
 
 for (i in prf){
-  dp$viz$density_dist_plot(df_long, i, "id_year", adaptive_scaling = T) %>% 
+  visualization$density_dist_plot(df_long, i, "id_year", adaptive_scaling = T) %>% 
     print()
 }
 
@@ -577,7 +585,7 @@ for (i in prf){
 # density distributions of growth variables
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., i, adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., i, adaptive_scaling = F) + 
         labs(x = coef_names[match(i, rf)])) %>%
         print(.)
     }
@@ -593,7 +601,7 @@ rdf %>%
 
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., i, "cbsa_rural_category", adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., i, "cbsa_rural_category", adaptive_scaling = F) + 
         labs(x = coef_names[match(i, rf)])) %>%
         print(.)
       }
@@ -608,7 +616,7 @@ rdf %>%
 # density distributions of trade weighted growth variables
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., paste0(i, "_", twg), adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., paste0(i, "_", twg), adaptive_scaling = F) + 
         labs(x = paste("Trade Weighted", coef_names[match(i, rf)]))) %>%
         print(.)
     }
@@ -623,10 +631,24 @@ rdf %>%
 
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., paste0(i, "_", twg), "cbsa_rural_category", adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., paste0(i, "_", twg), "cbsa_rural_category", adaptive_scaling = F) + 
         labs(x = paste("Trade Weighted", coef_names[match(i, rf)]))) %>%
         print(.)
     }
+  }
+
+```
+
+
+```{r}
+#| warning: false
+
+# map of growth variables  
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+
+  for (i in params$reg_factors){
+    visualization$diverge_choro_map(df, i, interactive = F) %>% 
+      print()
   }
 
 ```
@@ -640,7 +662,7 @@ ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh
   tmp <- left_join(df[1:8], rdf, "place") %>% 
     mutate(coverage = ifelse(.$place %in% pn, "Included", "Missing"))
   for (i in params$reg_factors){
-    dp$viz$diverge_choro_map(tmp, i, interactive = F) %>% 
+    visualization$diverge_choro_map(tmp, i, interactive = F) %>% 
       print()
   }
 
@@ -653,7 +675,7 @@ ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh
 
   scale_fill_discrete <- function(...) scale_fill_manual(values = c("Missing" = "black", 
                                                                     "Included" = "white"))
-  dp$viz$cat_choro_map(tmp, "coverage", interactive = F, legend = T)
+  visualization$cat_choro_map(tmp, "coverage", interactive = F, legend = T)
 
 ```
 
