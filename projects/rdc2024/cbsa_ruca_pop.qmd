@@ -1,0 +1,71 @@
+---
+title: "CBSA-RUCA size"
+format: html
+---
+
+
+
+```{r}
+library(tidyverse)
+reticulate::use_condaenv("rurec")
+ers <- reticulate::import("rurec.pubdata.ers_rurality")
+cbsa <- reticulate::import("rurec.pubdata.geography_cbsa")
+```
+
+
+
+```{r}
+d_ruca <- ers$get_ruca_df() %>%
+  rename_with(tolower) %>%
+  filter(year == 2010) %>%
+  select(tract = fips, ruca = ruca_code, pop = population) %>%
+  mutate(ruca = as.character(ruca) %>% as.integer(),
+         stcty = str_sub(tract, 1, 5)) %>%
+  filter(ruca != 99)
+
+d_ruca %>%
+  summarize(tracts = n(), pop = sum(pop), .by = ruca) %>%
+  arrange(ruca)
+
+```
+
+```{r}
+d_cbsa <- cbsa$get_cbsa_delin_df(2013) %>%
+  rename_with(tolower) %>%
+  mutate(stcty = paste0(state_code, county_code)) %>%
+  select(stcty, metro_micro)
+d_cbsa
+```
+
+
+
+```{r}
+df <- d_ruca %>%
+  left_join(d_cbsa, "stcty") %>%
+  mutate(cbsa = case_match(
+    metro_micro,
+    "metro" ~ 1,
+    "micro" ~ 2,
+    .default = 3))
+df
+```
+
+
+```{r}
+t <- list(
+  tracts = df %>%
+    summarize(tracts = n(), .by = c("cbsa", "ruca")) %>%
+    arrange(ruca, cbsa) %>%
+    pivot_wider(id_cols = ruca, names_from = cbsa, names_prefix = "cbsa_", values_from = tracts),
+  population = df %>%
+    summarize(pop = sum(pop), .by = c("cbsa", "ruca")) %>%
+    arrange(ruca, cbsa) %>%
+    pivot_wider(id_cols = ruca, names_from = cbsa, names_prefix = "cbsa_", values_from = pop)
+)
+
+writexl::write_xlsx(t, "tmp/cbsa_ruca.xlsx")
+
+t$tracts
+t$population
+```
+
