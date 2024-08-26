@@ -261,20 +261,6 @@ x <- trade_flows$call_trade_flows("1111A0")
 ```
 
 
-## some industries fail to solve
-
-
-```{r}
-ind_code = "221100"
-year = 2012
-bus_data = "infogroup"
-ilevel = "det"
-
-dem_ %>% summary()
-
-```
-
-
 
 # Diagnostic
 

@@ -158,27 +158,35 @@ solve_lp_trade_flows <- function(sup, dem, dmat) {
   dmat_ <- dmat[spos, dpos, drop = FALSE]
 
   log_debug("Solving LP problem with {nrow(dmat_)} rows and {ncol(dmat_)} columns...")
-
-  sol <- lp.transport(
-    cost.mat = dmat_,
-    row.signs = rep("=", length(sup_)),
-    row.rhs = sup_,
-    col.signs = rep("=", length(dem_)),
-    col.rhs = dem_,
-    integers = NULL
-  )
   
-  # if there is no feasibile solution with exact equality constraints, try inequalities
-  if (sol$status > 0) {
-    log_debug("No feasible solution with equality constraints, trying inequality.")
+  # constraints to iterate over: pairs of (sup, dem) signs to satisfy
+  cons <- list(
+    c("=", "="),
+    c("=", ">="),
+    c("=", "<="),
+    c(">=", "="),
+    c("<=", "="),
+    c(">=", "<="),
+    c("<=", ">="),
+    c(">=", ">=")
+  )
+  for (con in cons) {
+    con_label <- paste0("supply ", con[1], ", demand ", con[2])
+    log_debug("Attempting to solve with constraints {con_label}")
     sol <- lp.transport(
       cost.mat = dmat_,
-      row.signs = rep("<=", length(sup_)),
+      row.signs = rep(con[1], length(sup_)),
       row.rhs = sup_,
-      col.signs = rep(">=", length(dem_)),
+      col.signs = rep(con[2], length(dem_)),
       col.rhs = dem_,
       integers = NULL
     )
+    if (sol$status == 0) {
+      break
+    }
+  }
+  if (sol$status > 0) {
+    warning("NO SOLUTION\n")
   }
   
   # attach dim names
@@ -190,6 +198,8 @@ solve_lp_trade_flows <- function(sup, dem, dmat) {
   x[spos, dpos] <- sol$solution
   rownames(x) <- names(sup)
   colnames(x) <- names(dem)
+  attr(x, "status") <- sol$status
+  attr(x, "constraints") <- con_label
   sol$solution_full <- x
   
   time_diff <- Sys.time() - time_start
@@ -245,15 +255,16 @@ call_trade_flows <- function(ind_code,
              exdem = pmax(demand - supply, 0))
     
     places <- df_feas$place
-    dmat_feas <- dmat[places, places]
+    dmat <- dmat[places, places]
     sup <- df_feas$exsup
     names(sup) <- places
     dem <- df_feas$exdem
     names(dem) <- places
     
-    sol <- solve_lp_trade_flows(sup, dem, dmat_feas)
+    
+    sol <- solve_lp_trade_flows(sup, dem, dmat)
     if (sol$status > 0) {
-      stop(glue("No solution found for {ind_code}"))
+      log_warn("No solution found for {ind_code}")
     }
     y <- sol$solution_full
   }
