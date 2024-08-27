@@ -66,6 +66,27 @@ reticulate_unlist_cols <- function(df) {
   ))
 }
 
+# Set manipulation ----
+
+# Set operation to find the symmetric difference
+symm_diff <- function(x, y){
+  setdiff(union(x, y) , intersect(x, y))
+}
+
+
+temporal_permutations <- function(year_range){
+  df <- c(year_range) %>% 
+    expand_grid(., .) %>% 
+    .[.[1] < .[2], ]
+  return(df)
+}
+
+
+sequential_pairs <- function(year_range){
+  embed(year_range, 2)
+}
+
+
 # matrix manipulation ----
 
 # get matrix output format from long format data used with parquet storage
@@ -132,6 +153,15 @@ edgelist2matrix <- function(x){
                dimnames = list(unique(x[,1]), 
                                unique(x[,2])))
   return(df)
+}
+
+
+# row normalize a matrix
+row_normalize <- function(imatrix){
+  x <- imatrix %>%   
+    `diag<-`(0) %>% 
+    {sweep(., 1, rowSums(.), "/")} 
+  return(x)
 }
 
 # spatial concordance ----

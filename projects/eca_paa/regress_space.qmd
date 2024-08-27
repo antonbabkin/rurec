@@ -12,11 +12,11 @@ format:
     latex_engine: pdflatex
 params:
   year: 2012
-  panel_data: FALSE
-  year_range: !expr c(2012, 2017) # or c(2012, 2015, 2017) or c(2010:2020)
+  year_range: !expr c(2012, 2016) # or c(2012, 2015, 2017) or c(2010:2020)
   reg_factors: !expr c("establishments_gr", "wage_gr", "jobs_gr", "payroll_gr", "employment_gr", "poverty_rate_gr", "income_rate_gr", "population_gr", "entry_rate", "exit_rate") 
   reg_factors_names: !expr c("Establishment Growth", "Wage Growth", "Job Growth", "Payroll Growth", "Employment Growth", "Poverty Growth", "Income Growth", "Population Growth", "Entry Rate", "Exit Rate")
-  reg_factor_funs: !expr c("call_establishments", "call_wage", "call_jobs", "call_payroll", "call_employment", "call_poverty_rate", "call_income_rate", "call_population")
+  reg_factor_funs: !expr c("call_county_establishments", "call_county_wage", "call_county_jobs", "call_county_payroll", "call_county_employment", "call_county_poverty_rate", "call_county_income_rate", "call_county_population")
+  reg_factor_bus_data: !expr c("cbp_imp", "cbp_imp", "cbp_imp", "cbp_imp", "ers", "saipe", "bea_profile", "tidy_acs")
   w_names: !expr c("inverse", "square", "exponential", "gaussian", "qnn", "knn", "proximity", "bi-square")
   build_w: FALSE
 ---
@@ -52,6 +52,16 @@ library(patchwork)
 # scripts
 source("projects/eca_paa/dataprep.R", local = (dp <- new.env()))
 
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/place_output.R", local = (place_output <- new.env()))
+source("R/connectedness.R", local = (connectedness <- new.env()))
+source("R/circularity.R", local = (circularity <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/dataprep.R", local = (dataprep <- new.env()))
+source("R/visualization.R", local = (visualization <- new.env()))
+
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
 
@@ -64,22 +74,17 @@ log_threshold(DEBUG)
 # initialize parameters
 params
 
-```
-
-```{r, include = FALSE}
-
-# uncomment and pack/unpack as necessary
-# dp$zip_pack("tmp/eca_paa_data_v240324.zip", dp$opath)
-# dp$zip_unpack("tmp/eca_paa_data_v240324.zip", overwrite = TRUE)
-
+# project data output location
 proj_path <- "data/projects/eca_paa/space_regress/"
 
 ```
 
 
+
 ```{r plot vis functions, include = FALSE}
 
 twg <- "trade_weighted_growth"
+
 
 # extract vital statistics from a single level list of regression results into a dataframe 
 spec_f <- function(spec_list, mn = "ols", wm = "none", rf = params$reg_factors){
@@ -167,7 +172,7 @@ coef_point_plot <- function(df, error = TRUE, id_variable = "wmatrix", wm = c("n
       x$indicator <- factor(x$indicator, levels = c(coef_names), labels = gsub(" Growth*|Rate*", '', coef_names))
       return(x) }) %>% 
     point_plot(error = error, id_variable = id_variable) %>% 
-    dp$girafe_plot()
+    visualization$girafe_plot()
   g[["x"]][["settings"]][["hover"]][["css"]] <- ".hover_data_SVGID_ { stroke:orange;r:4pt; }\ntext.hover_data_SVGID_ { stroke:none;fill:black;fill-opacity:1; }"
   return(g)
 }
@@ -193,60 +198,188 @@ sum_mod <- function(x){
 
 ```
 
+
 # data
 
-## dataframe
 ```{r}
+# Build collection of data input functions
 
-# call main project dataframe (optional panel data format) 
-if (params$panel_data){
-  df <- dp$call_temporal_range_df(params$year_range)
-} else{
-  df <- dp$call_proj_df(params$year)
+call_prosperity_outcomes <- function(year){
+  dl <- list(
+    # Gross Domestic Product (GDP) in 1,000's of dollars total
+    dataprep$call_county_gdp(year = year, bus_data = "bea_rea", price_level = switch(1, "nominal", "real")),
+    # Population total
+    switch(3, "census", "bea_profile", "tidy_acs") %>% 
+      dataprep$call_county_population(year = year, bus_data = .),
+    # Laborforce Participation rate
+    dataprep$call_county_laborforce_rate(year = year, bus_data = "tidy_acs"),
+    # Highschool Attainment rate
+    dataprep$call_county_highschool_attainment_rate(year = year, bus_data = "tidy_acs"),
+    # Years of Potential Life Lost per 100,000 
+    dataprep$call_county_ypll75(year = year, bus_data = "chr") %>% 
+      mutate(ypll75 = ypll75/100000),
+    # Net Migration rate
+    dataprep$call_net_migration(),
+    # Poverty rate
+    dataprep$call_county_poverty_rate(year = year, bus_data = "saipe"),
+    # Employment total
+    switch(2, "bea_profile", "ers") %>% 
+      dataprep$call_county_employment(year = year, bus_data = . ),
+    # Unemployment rate
+    dataprep$call_county_unemployment_rate(year = year, bus_data = "ers"),
+    # Income per capita in 1,000's of dollars total
+    dataprep$call_county_income_rate(year = year, bus_data = "bea_profile") %>% 
+      mutate(income_rate = income_rate/1000),
+    # Establishment entry rate
+    switch(1, "bds", "infogroup") %>% 
+      dataprep$call_county_entry_rate(year = year, bus_data = .),
+    # Establishment exit rate
+    switch(1, "bds", "infogroup") %>% 
+      dataprep$call_county_exit_rate(year = year, bus_data = .),
+    # Number of Establishment total
+    switch(1, "cbp_imp", "cbp_raw", "infogroup") %>% 
+      dataprep$call_county_establishments(year = year, bus_data = .),
+    # Number of Jobs total
+    switch(1, "cbp_imp", "cbp_raw") %>% 
+      dataprep$call_county_jobs(year = year, bus_data = .),
+    # Annual Payroll in 1,000's of dollars total
+    switch(1, "cbp_imp", "cbp_raw") %>% 
+      dataprep$call_county_payroll(year = year, bus_data = .),
+    # Annual Wages in 1,000's of dollars total
+    bus_data = switch(1, "cbp_imp", "cbp_raw") %>% 
+      dataprep$call_county_wage(year, bus_data = .),
+    # Gross (Commodity) Output in 1,000's of dollars total
+    # Intermediate (Domestic-Commodity) Supply in 1,000's of dollars total
+    # Intermediate (Domestic-Commodity) Demand in 1,000's of dollars total
+    # Excess (Detail level-Domestic-Commodity) Supply in 1,000's of dollars total
+    # Excess (Detail level-Domestic-Commodity) Demand in 1,000's of dollars total
+    bus_data = switch(1, "cbp_imp", "cbp_raw", "infogroup") %>% 
+      place_output$call_extraction_table(year, ., ilevel = "det", class_system = "commodity", paradigm = "domestic", spatial = F) %>% 
+      select(-extract)
+  )
+  df = dl[[1]]
+  for(i in 2:length(dl)){
+    df <- full_join(df, dl[[i]], by = "place")
+  }
+  return(df)
 }
 
-# scale variables for better summary and coefficient interpretation
-  df <- df %>% 
-    mutate(eca_center_distance = dp$meters2miles(eca_center_distance)/100) %>% 
-    mutate(wage = wage/1000) %>% 
-    mutate(income_rate = income_rate/1000) %>% 
-    mutate(ypll75 = ypll75/100000) %>% 
-    mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination"))
-  
-# adjust names to "source" and "destination" vocabulary
-df$metro_micro_destination <- df$metro_micro_sink
-  df$metro_micro_destination[df$metro_micro_destination == "Sink and Metro "] <-  "Destination and Metro"
-    df$metro_micro_destination[df$metro_micro_destination == "Sink and Micro"] <-  "Destination and Micro"
-      df$metro_micro_destination[df$metro_micro_destination == "Sink only"] <-  "Destination Only"
+call_space_df <- function(year){
+  df <- util$year2cbsa(year) %>% 
+    geography$pubdata$get_cbsa_delin_df(.) %>% 
+    mutate(place = {paste0(.$STATE_CODE, .$COUNTY_CODE)}) %>% 
+    mutate(CBSA_TITLE = {paste(str_split_i(.$CBSA_TITLE, ",", 1), "CBSA")}) %>% 
+    {.[c("place", "CBSA_CODE", "CBSA_TITLE", "METRO_MICRO", "CENTRAL_OUTLYING")]} %>% 
+    left_join(geography$call_geog(year), ., by = "place") %>% 
+    replace_na(list(CBSA_CODE = "rural", 
+                    CBSA_TITLE = "rural", 
+                    CENTRAL_OUTLYING = "rural", 
+                    METRO_MICRO = "rural")) %>% 
+    mutate(cbsa_rural_category = factor(CBSA_CODE == "rural", labels = c("nonrural", "rural")) ) %>% 
+    group_by(CBSA_CODE) %>% 
+    mutate(cbsa_members_count = n(), .after = CBSA_CODE) %>% 
+    ungroup() %>% 
+    {left_join(., dataprep$call_ruc(year), by = "place")}
+  return(df)
+}
 
-# add growth rates to dataframe (for non-panel setup)
-if (!params$panel_data){
-  x <- dp$temporal_permutations(params$year_range)
-  tmp <- df$place %>% as.data.frame() %>% `colnames<-`(c("place"))
+call_eca_space_df <- function(year){
+  df_eca <- trade_flows$call_trade_flows("all_industries") %>%
+    {sweep(., 1, rowSums(.), "/")} %>%
+    connectedness$apply_absorption_metrics() %>%
+    connectedness$apply_absorption_algorithm(., threshold = 0) %>%
+    select(place, cluster_category, eca_membership, max_alpha, match) %>%
+    rename(eca_cluster_category = cluster_category, max_trade_share = max_alpha, max_trade_place = match ) %>%
+    mutate(eca_cluster_category = ifelse(eca_cluster_category == "Cluster Source", "Source", "Destination") )
+  df <- left_join(call_space_df(year), df_eca,  by = "place")  %>%
+    na.omit() %>% 
+    group_by(eca_membership) %>% 
+    mutate(cluster_members_count = n(), .after = eca_membership) %>% 
+    ungroup() 
+  df <- df %>% 
+    {.[which(.$place  == .$eca_membership), ]} %>% 
+    select(place, CBSA_CODE) %>% 
+    st_drop_geometry() %>% 
+    `colnames<-`(c("eca_membership", "cbsa_of_eca")) %>% 
+    {left_join(df, . , by = "eca_membership")} %>% 
+    relocate(cbsa_of_eca, .after = eca_membership)
+  dist_mat <- geography$call_dist_mat(year)
+  df <- df %>% 
+    # Distance to ECA destination in 100's of miles
+    mutate(eca_center_distance = apply(df, 1, function(x){drop_units(dist_mat[x$place, x$eca_membership]) %>% {util$meters2miles(.)/100}}) ) %>% 
+    mutate(eca_cbsa_xtab = str_to_title(paste(cbsa_rural_category, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+    mutate(eca_central_out_xtab = str_to_title(paste(CENTRAL_OUTLYING, str_split_i(eca_cluster_category, " ", -1))), .after = eca_cluster_category) %>% 
+    mutate(cbsa_by_eca = ifelse(eca_central_out_xtab == "Central Source", "only CBSA", 
+                                ifelse(eca_central_out_xtab == "Central Destination", "ECA and CBSA", 
+                                       ifelse(eca_central_out_xtab %in% c("Rural Destination", "Outlying Destination"), "only ECA", 
+                                              NA))), .before = eca_membership) %>% 
+    mutate(metro_micro_destination = ifelse(METRO_MICRO == "metro" & eca_cluster_category != "Cluster Destination", "Metro only",
+                                         ifelse(METRO_MICRO == "micro" & eca_cluster_category != "Cluster Destination", "Micro only",
+                                                ifelse(METRO_MICRO == "metro" & eca_cluster_category == "Cluster Destination", "Destination and Metro ",
+                                                       ifelse(METRO_MICRO == "micro" & eca_cluster_category == "Cluster Destination", "Destination and Micro",
+                                                              ifelse(METRO_MICRO == "rural" & eca_cluster_category == "Cluster Destination", "Destination only",
+                                                              NA))))), .before = eca_membership)
+
+  return(df)
+}
+
+call_proj_df <- function(year){
+  df <- left_join(call_eca_space_df(year), call_prosperity_outcomes(year),  by = "place") 
+  
+  # add growth rates to dataframe
+  x <- util$temporal_permutations(params$year_range)
+  tmp <- df$place %>% 
+    as.data.frame() %>% 
+    `colnames<-`(c("place"))
   for (y in 1:nrow(x)){
     paste(x[y,1], x[y,2]) %>% print()
     for (i in params$reg_factor_funs){
-       tmp <- dp$growth_rate(x[y,1], x[y,2], dp[[i]]) %>%
+       tmp <- dataprep$growth_rate(x[y,1], x[y,2], dataprep[[i]], bus_data = params$reg_factor_bus_data[[match(i, params$reg_factor_funs)]]) %>%
          mutate(grow_rate = replace(grow_rate, which(abs(grow_rate) == 200), NA)) %>%
-         rename_at('grow_rate', ~paste0(substring(i, 6), "_gr")) %>%
-         # TODO: develop for more than two year growth delta
-         # rename_at('grow_rate', ~paste0(substring(i, 6), "_gr_", x[y,1], "_", x[y,2])) %>% 
+         rename_at('grow_rate', ~paste0(sub("^call_county_", "", i), "_gr")) %>%
          left_join(tmp, ., by = "place")
     }
   }
   df <- left_join(df, tmp, by = "place")
-  rm(x, tmp)
+  
+  # add circularity variables to dataframe
+  df <- circularity$call_circularity_metrics(
+    year = params$year,
+    ilevel = switch(1, "det", "sum", "sec"),
+    class_system = switch(2, "industry", "commodity"),
+    paradigm = switch(2, "factor", "domestic", "capital"),
+    bus_data = switch(1, "cbp_imp", "cbp_raw", "infogroup"),
+    spatial = FALSE) %>% 
+    select(!(gross_output:extract)) %>% 
+    left_join(df, ., by = "place")
+
+return(df)
 }
 
-# add circularity variables to dataframe
-df <- dp$call_circularity_metrics(
-  year = params$year, 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  bus_data = "infogroup", 
-  spatial = FALSE) %>% 
-  select(!(gross_output:extract)) %>% 
-  left_join(df, ., by = "place")
+
+```
+
+
+
+## dataframe
+```{r}
+# Business
+# Household
+# Social 
+
+# build main project dataframe
+df <- call_proj_df(params$year) 
+
+# TODO: do we need to worry about "02158" "15901" "46102" "51901" "51903" "51907" "51911" "51913" "51918" "51919" "51921" "51923" "51929" "51931" "51933" "51939" "51941" "51942" "51944" "51945" "51947" "51949" "51951" "51953" "51955" "51958" "02201" "02232" "02994" "02995" "02996" "01998" "01999" "02010" "02140" "02231" "02280" 
+
+# 2012 %>% {setdiff(call_prosperity_outcomes(.)$place, call_space_df(.)$place)}
+
+```
+
+
+
+## params
+```{r}
 
 # list out all numeric variables
 if (FALSE) {
@@ -265,9 +398,13 @@ coef_names <- params$reg_factors_names
 # dummy check for user variable and label length consistency
 stopifnot("variable selection and names do not match" = length(rf) == length(coef_names))
 
+# dummy check for user variable choice against dataset availability
+stopifnot("variable selection and names do not match" = all(rf %in% names(df)))
+
+
 # row normalized trade value matrix of potential excess trade flows between all places
-tm <- dp$call_trade_flows("all_industries") %>% 
-  dp$row_normalize()
+tm <- trade_flows$call_trade_flows("all_industries") %>% 
+  util$row_normalize()
 
 # all place names common between trade flow data and economic indicator growth data
 pn <- tm %>% 
@@ -282,7 +419,7 @@ pn <- df[, c("place", rf)] %>%
 
 # sub-subset of places where not all neighbors get dropped from previous subset step 
 pn <- pn %>% 
-  {dp$call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
+  {geography$call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
   {rownames(.)[rowSums(.) > 1]}
 
 # sub-set of rural places
@@ -310,11 +447,15 @@ rdf <- df[df$place %in% pn, c("place", "cbsa_rural_category", "trade_capacity", 
     return(x) 
     })
 
+
+```
+
+```{r}
 # call list of row-normalized W impedance matrices
 if (params$build_w) {
-  W_list <- dp$imped_list(
+  W_list <- geography$imped_list(
     pn_dim = pn, 
-    dmat = dp$call_dist_mat(year = params$year) )
+    dmat = geography$call_dist_mat(year = params$year) )
 }  
 
 # call or derive a list of W matrices in long format edge list of "listw" class
@@ -330,7 +471,7 @@ if (params$build_w) {
         {W_list[[j]][., .]} %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt, util$mkdir(cache_path))
   }
 }
 
@@ -341,13 +482,12 @@ if (params$build_w) {
     W_list_alt_rural <- readRDS(cache_path)
   } else {
     W_list_alt_rural <- list()
-    W_list <- dp$imped_list(pn_dim = rural_places,
-                            dmat = dp$call_dist_mat(year = params$year))
+    W_list <- geography$imped_list(pn_dim = rural_places, dmat = geography$call_dist_mat(year = params$year))
     for (j in 1:length(W_list)) {
       W_list_alt_rural[[j]] <- W_list[[j]] %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt_rural, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt_rural, util$mkdir(cache_path))
   }
 }
 
@@ -358,13 +498,12 @@ if (params$build_w) {
     W_list_alt_nonrural <- readRDS(cache_path)
   } else {
     W_list_alt_nonrural <- list()
-    W_list <- dp$imped_list(pn_dim = nonrural_places,
-                            dmat = dp$call_dist_mat(year = params$year))
+    W_list <- geography$imped_list(pn_dim = nonrural_places, dmat = geography$call_dist_mat(year = params$year))
     for (j in 1:length(W_list)) {
       W_list_alt_nonrural[[j]] <- W_list[[j]] %>%
         mat2listw(style = "M", zero.policy = TRUE)
     }
-    saveRDS(W_list_alt_nonrural, dp$util$mkdir(cache_path))
+    saveRDS(W_list_alt_nonrural, util$mkdir(cache_path))
   }
 }
 
@@ -374,12 +513,17 @@ if (params$build_w) {
 # TODO: add data frame summary stats, tables of variables, density distributions, maps of dispersion and maps of missingness
 
 ```{r}
+
 # scatter plot of variable change across growth time periods
-df_long <- dp$call_temporal_range_df(params$year_range) %>% filter(place %in% rdf$place)
+
+df_long <- util$temp_fun_recur_list(params$year_range, call_proj_df) %>% 
+  bind_rows(., .id = "id_year") %>% 
+  filter(place %in% rdf$place)
+
 prf <- str_remove_all(grep("_gr*", params$reg_factors, value = T), '(_gr)$')
 
-
-tmp <- df_long[c("id_year", "place", prf)] %>% st_drop_geometry() %>% 
+tmp <- df_long[c("id_year", "place", prf)] %>% 
+  st_drop_geometry() %>% 
   pivot_wider(names_from = id_year, values_from = c(prf))
   
 for(i in prf){
@@ -428,7 +572,7 @@ for(i in prf){
 # density plot variables change across growth time periods
 
 for (i in prf){
-  dp$viz$density_dist_plot(df_long, i, "id_year", adaptive_scaling = T) %>% 
+  visualization$density_dist_plot(df_long, i, "id_year", adaptive_scaling = T) %>% 
     print()
 }
 
@@ -441,7 +585,7 @@ for (i in prf){
 # density distributions of growth variables
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., i, adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., i, adaptive_scaling = F) + 
         labs(x = coef_names[match(i, rf)])) %>%
         print(.)
     }
@@ -457,7 +601,7 @@ rdf %>%
 
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., i, "cbsa_rural_category", adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., i, "cbsa_rural_category", adaptive_scaling = F) + 
         labs(x = coef_names[match(i, rf)])) %>%
         print(.)
       }
@@ -472,7 +616,7 @@ rdf %>%
 # density distributions of trade weighted growth variables
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., paste0(i, "_", twg), adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., paste0(i, "_", twg), adaptive_scaling = F) + 
         labs(x = paste("Trade Weighted", coef_names[match(i, rf)]))) %>%
         print(.)
     }
@@ -487,10 +631,24 @@ rdf %>%
 
 rdf %>%
     {for(i in rf){
-      (dp$viz$density_dist_plot(., paste0(i, "_", twg), "cbsa_rural_category", adaptive_scaling = F) + 
+      (visualization$density_dist_plot(., paste0(i, "_", twg), "cbsa_rural_category", adaptive_scaling = F) + 
         labs(x = paste("Trade Weighted", coef_names[match(i, rf)]))) %>%
         print(.)
     }
+  }
+
+```
+
+
+```{r}
+#| warning: false
+
+# map of growth variables  
+ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh(x)} )}
+
+  for (i in params$reg_factors){
+    visualization$diverge_choro_map(df, i, interactive = F) %>% 
+      print()
   }
 
 ```
@@ -504,7 +662,7 @@ ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh
   tmp <- left_join(df[1:8], rdf, "place") %>% 
     mutate(coverage = ifelse(.$place %in% pn, "Included", "Missing"))
   for (i in params$reg_factors){
-    dp$viz$diverge_choro_map(tmp, i, interactive = F) %>% 
+    visualization$diverge_choro_map(tmp, i, interactive = F) %>% 
       print()
   }
 
@@ -517,7 +675,7 @@ ihs_trans <- function(){trans_new("ihs", function(x){asinh(x)}, function(x){sinh
 
   scale_fill_discrete <- function(...) scale_fill_manual(values = c("Missing" = "black", 
                                                                     "Included" = "white"))
-  dp$viz$cat_choro_map(tmp, "coverage", interactive = F, legend = T)
+  visualization$cat_choro_map(tmp, "coverage", interactive = F, legend = T)
 
 ```
 

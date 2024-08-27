@@ -132,7 +132,7 @@ call_output <- function(year,
   }
   
   if(bus_data == "cbp_imp"){
-    #EFCY imputed county business patterns annual payroll across NAICS industry hierarchy by place
+    #EFSY imputed county business patterns annual payroll across NAICS industry hierarchy by place
     df <- cbp$call_cbp(year = year, 
                        cbp_scale = "county",
                        imputed = TRUE) %>% 

@@ -35,7 +35,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
 # install.packages("ggplot2")
 # install.packages("stringr")
 # install.packages("spdep")
-# install.packages("tidycensus")
+#install.packages("tidycensus")
 # install.packages("tigris")
 # install.packages("viridis")
 # install.packages("cowplot")
@@ -49,6 +49,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
  # install.packages("spgwr")
  # install.packages("lavaan")
  # install.packages("lavaanPlot")
+#install.packages("ggthemes")
 
 
 
@@ -96,7 +97,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 options(scipen=999)
 
 # log output 
-log_threshold(DEBUG)
+log_threshold(WARN)
 
 
 
@@ -156,6 +157,12 @@ ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypol
 #   mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
 #   select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
 
+
+# unzip datapacks
+# util$zip_unpack("tmp/datapack_bea_io_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_cbp_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_infogroup_county_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_agcen_v240709.zip", overwrite = TRUE)
 
 ```
 
@@ -272,16 +279,16 @@ data<- left_join (data, jobs, by = "place")
 
 data<- left_join (data, bach, by = "place")
 
-circularity_import <- circularity$get_circularity()
-
-
-YR = 2012
-circu = circularity_import %>%  
-  filter(year == YR & ilevel == "det" & bus_data == "cbp_imp") %>%
-  select(place, retention, autonomy, excess_supply, intermediate_supply, excess_demand, intermediate_demand)
+# circularity_import <- circularity$get_circularity()
+# 
+# 
+# YR = 2012
+# circu = circularity_import %>%  
+#   filter(year == YR & ilevel == "det" & bus_data == "cbp_imp") %>%
+#   select(place, retention, autonomy, excess_supply, intermediate_supply, excess_demand, intermediate_demand)
   
 
-data<- left_join (data, circu, by = "place")
+# data<- left_join (data, circu, by = "place")
 
 print(data)
 
@@ -289,15 +296,24 @@ print(data)
 
 ```
 
+## 7/9/24 circularity
+
+```{r}
+#circu <- ih_dp$call_circularity(2012, bus_data = "infogroup", ilevel = "det") %>%
+circu <- ih_dp$call_circularity(2012, bus_data = "cbp_imp", ilevel = "det") %>%
+  select(place, retention_calc = retention, autonomy_calc = autonomy)
+data <- left_join (data, circu, by = "place")
+```
+
 ##construct alternate retention and autonomy
 
 ```{r}
 
-data <- data %>%
-  mutate(retention_calc = 1 - (excess_supply / intermediate_supply),
-         autonomy_calc = 1 - (excess_demand / intermediate_demand))
-
-print(data)
+# data <- data %>%
+#   mutate(retention_calc = 1 - (excess_supply / intermediate_supply),
+#          autonomy_calc = 1 - (excess_demand / intermediate_demand))
+# 
+# print(data)
 
 #write.csv(data, file = "IH_data.csv")
 
@@ -371,8 +387,13 @@ df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 #install.packages("RColorBrewer")
 # library(RColorBrewer)
  
- vars = list("paam", "ypll75", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured")
- for (v in vars) {
+ vars = list("paam", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured")
+ 
+ titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65")
+ 
+for (i in seq_along(vars)) {
+  v = vars[[i]]
+  legend_title = titles[i]
 
  mdn = median(df_map[[v]], na.rm = TRUE)
 
@@ -381,7 +402,9 @@ df_map <- left_join(map, data, by = "place") %>% shift_geometry()
    tm_shape() +
   tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
                palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE)
+   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_legend(title = legend_title, title.fontface = 2)
 
 print(output)
 
@@ -391,7 +414,8 @@ print(output)
    tm_shape() +
   tm_polygons(col = "pct_mine", n = 4, border.alpha = 0.1, style = "jenks", id = "pct_mine",
                palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE)
+  tm_layout( legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+  tm_legend(title = "% \n Mining", title.fontface = 2)
 
 print(output)
  
@@ -436,6 +460,14 @@ ggplot(data, aes(autonomy_calc, paam)) +
         x = "Autonomy",
         y = "Premature Age Adjusted Mortality")
 
+##scatter plot of retention and autonomy (2012)
+ggplot(data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
+
 
 # Filter the data to include only "nmetro" cases
 metro_data <- subset(data, metro_nonmetro == "metro")
@@ -453,6 +485,14 @@ ggplot(metro_data, aes(autonomy_calc, paam)) +
    labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality for Non-Metro",
         x = "Autonomy",
         y = "Premature Age Adjusted Mortality")
+
+##scatter plot of retention and autonomy (2012)
+ggplot(metro_data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
 
 # Nonmetro plots
 # Filter the data to include only "nonmetro" cases
@@ -472,7 +512,13 @@ ggplot(nonmetro_data, aes(autonomy_calc, paam)) +
         x = "Autonomy",
         y = "Premature Age Adjusted Mortality")
 
-
+##scatter plot of retention and autonomy (2012)
+ggplot(nonmetro_data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
 
 ```
 
@@ -607,6 +653,21 @@ summary(ols1a2)
 
 
 ```
+####1a.) industry> paam
+
+```{r}
+
+ols1a3 = lm(data = mi1, paam ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+
+
+summary(ols1a3)
+
+
+
+```
+
+
 
 #### 2.) industry + trade > prosperity
 ```{r}
@@ -647,6 +708,18 @@ ols2a = lm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct_ag + pc
 
 summary(ols2a)
 ```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+
+ols2a1 = lm(data = mi1,  paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a1)
+
+```
+
+
 
 #### 3.) full
 ```{r}
@@ -673,6 +746,56 @@ plot(st_geometry(Q2ar),
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
+
+#### print results 
+Write OLS retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "OLS_regression_results.xlsx")
+
+
+```
+
+
 
 ### retention only
 #### 1.) industry > trade
@@ -843,6 +966,19 @@ ols1a2 = errorsarlm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + lo
 summary(ols1a1)
 summary(ols1a2)
 ```
+#### 1a.) industry > paam
+
+```{r}
+
+
+ols1a3 = errorsarlm(data = mi1, paam ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a3)
+
+```
+
+
 
 #### 2.) industry + trade > prosperity
 ```{r}
@@ -887,6 +1023,20 @@ ols2a = errorsarlm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct
 
 summary(ols2a)
 ```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+
+ols2a1 = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+
+
+```
+
+
 
 #### 3.) full
 ```{r}
@@ -925,6 +1075,57 @@ plot(st_geometry(Q2ar),
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
+
+
+#### print results 
+Write SE retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "SE_regression_results.xlsx")
+
+
+```
+
+
 
 ### retention only
 #### 1.) industry > trade
@@ -1130,6 +1331,20 @@ ols1a2 = errorsarlm(data = sr_data, autonomy_calc ~ 0 + sr/(pct_ag + pct_mine + 
 summary(ols1a1)
 summary(ols1a2)
 ```
+#### 1a.) industry > paam 
+
+```{r}
+
+ols1a3 = errorsarlm(data = sr_data, paam ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+
+summary(ols1a3)
+
+
+```
+
+
 
 #### 2.) industry + trade > prosperity
 ```{r}
@@ -1176,6 +1391,20 @@ ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention_calc + autonom
 
 summary(ols2a)
 ```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+ols2a1 = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+
+
+```
+
+
+
 
 #### 3.) full
 ```{r}
@@ -1193,6 +1422,7 @@ summary(ols3a)
 
 temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
 temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+
 
 viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
 
@@ -1215,6 +1445,59 @@ plot(st_geometry(Q2ar),
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
+
+
+#### print results 
+Write regime retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "SR_regression_results.xlsx")
+
+
+```
+
+
+
+
 
 ### retention only
 #### 1.) industry > trade
@@ -2196,12 +2479,13 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 ```{r, fig.width=10}
 
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured', 'metro')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
 
 
 plot1 = ggplot(viz) +
-  geom_errorbar( aes(x=var, ymin=coef-se, ymax=coef+se, color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-1.3, 1.9) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-0.4, 0.53) +
   geom_hline(yintercept = 0) +
   # ggtitle("Retention") +
   ylab("Coefficents (standardized)") +
@@ -2217,12 +2501,13 @@ plot1
 
 ```{r, fig.width=10}
 
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'logpop', 'uninsured', 'metro')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all')))
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'metro', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
 
 
 plot1 = ggplot(viz) +
-  geom_errorbar( aes(x=var, ymin=coef-se, ymax=coef+se, color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-0.4, 0.5) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-1.3, 1.9) +
   geom_hline(yintercept = 0) +
   # ggtitle("Retention") +
   ylab("Coefficents (standardized)") +

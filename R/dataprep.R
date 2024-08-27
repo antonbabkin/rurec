@@ -369,6 +369,15 @@ call_net_migration_raw <- function() {
 }
 
 
+call_ruc <- function(year) {
+  df <- pubdata$ers_ruc() %>% 
+    filter(ruc_year == util$year2rucc(year)) %>% 
+    select(fips, ruc_code) %>% 
+    rename(place = fips)
+  return(df)
+}
+
+
 # Population ----
 
 call_population <- function() {
@@ -445,7 +454,7 @@ call_cbp_county_employment <- function(year) {
   return(df)
 }
 
-call_cbp_county_employment_efcy <- function(year) {
+call_cbp_county_employment_efsy <- function(year) {
   df <- cbp$call_cbp(
     year = year,
     cbp_scale = "county",
@@ -482,7 +491,7 @@ call_county_employment <- function(
     year,
     bus_data = c("cbp_imp", "cbp_raw", "infogroup", "bea_profile", "ers") ){
   switch(match.arg(bus_data),
-         "cbp_imp" = {assign("df", call_cbp_county_employment_efcy(year))},
+         "cbp_imp" = {assign("df", call_cbp_county_employment_efsy(year))},
          "cbp_raw" = {assign("df", call_cbp_county_employment(year))},
          "infogroup" = {assign("df", call_infogroup_county_employment(year))},
          "bea_profile" = {assign("df", call_bea_county_employment(year))},
@@ -490,6 +499,16 @@ call_county_employment <- function(
   return(df)
 }
 
+# Jobs ----
+
+call_county_jobs <- function(
+    year,
+    bus_data = c("cbp_imp", "cbp_raw") ){
+  switch(match.arg(bus_data),
+         "cbp_imp" = {assign("df", call_cbp_county_employment_efsy(year) %>% rename(jobs = employment))},
+         "cbp_raw" = {assign("df", call_cbp_county_employment(year) %>% rename(jobs = employment))})
+  return(df)
+}
 
 # Payroll ----
 
@@ -504,7 +523,7 @@ call_cbp_county_payroll <- function(year) {
   return(df)
 }
 
-call_cbp_county_payroll_efcy <- function(year) {
+call_cbp_county_payroll_efsy <- function(year) {
   df <- cbp$call_cbp(
     year = year,
     cbp_scale = "county",
@@ -519,8 +538,39 @@ call_county_payroll <- function(
     year,
     bus_data = c("cbp_imp", "cbp_raw") ){
   switch(match.arg(bus_data),
-         "cbp_imp" = {assign("df", call_cbp_county_payroll_efcy(year))},
+         "cbp_imp" = {assign("df", call_cbp_county_payroll_efsy(year))},
          "cbp_raw" = {assign("df", call_cbp_county_payroll(year))} )
+  return(df)
+}
+
+# Wage ----
+
+call_cbp_county_wage <- function(year){
+  pr <- call_county_payroll(year = year, bus_data = "cbp_raw")
+  em <- call_county_employment(year = year, bus_data = "cbp_raw")
+  df <- inner_join(pr, em, "place") %>%
+    mutate(wage = payroll / employment) %>%
+    select(place, wage) %>%
+    filter(is.finite(wage))
+  return(df)
+}
+
+call_cbp_county_wage_efsy <- function(year){
+  pr <- call_county_payroll(year = year, bus_data = "cbp_imp")
+  em <- call_county_employment(year = year, bus_data = "cbp_imp")
+  df <- inner_join(pr, em, "place") %>%
+    mutate(wage = payroll / employment) %>%
+    select(place, wage) %>%
+    filter(is.finite(wage))
+  return(df)
+}
+
+call_county_wage <- function(
+    year,
+    bus_data = c("cbp_imp", "cbp_raw") ){
+  switch(match.arg(bus_data),
+         "cbp_imp" = {assign("df", call_cbp_county_wage_efsy(year))},
+         "cbp_raw" = {assign("df", call_cbp_county_wage(year))})
   return(df)
 }
 
@@ -543,6 +593,26 @@ call_county_unemployment <- function(
   return(df)
 }
 
+# Unemployment rate ----
+
+call_ers_county_unemployment_rate <- function(year) {
+  lf <- call_county_laborforce(year, bus_data = "ers")
+  un <- call_county_unemployment(year, bus_data = "ers")
+  df <- inner_join(lf, un, "place") %>%
+    mutate(unemp_rate = 100 * (unemployment / laborforce)) %>%
+    select(place, unemp_rate) %>%
+    filter(is.finite(unemp_rate))
+  return(df)
+}
+
+call_county_unemployment_rate <- function(
+    year,
+    bus_data = c("ers") ){
+  switch(match.arg(bus_data),
+         "ers" = {assign("df", call_ers_county_unemployment_rate(year))} )
+  return(df)
+}
+
 # Establishments  ----
 
 call_cbp_county_estab <- function(year) {
@@ -556,7 +626,7 @@ call_cbp_county_estab <- function(year) {
   return(df)
 }
 
-call_cbp_county_estab_efcy <- function(year) {
+call_cbp_county_estab_efsy <- function(year) {
   df <- cbp$call_cbp(
     year = year,
     cbp_scale = "county",
@@ -584,7 +654,7 @@ call_county_establishments <- function(
     year,
     bus_data = c("cbp_imp", "cbp_raw", "infogroup") ){
   switch(match.arg(bus_data),
-         "cbp_imp" = {assign("df", call_cbp_county_estab_efcy(year))},
+         "cbp_imp" = {assign("df", call_cbp_county_estab_efsy(year))},
          "cbp_raw" = {assign("df", call_cbp_county_estab(year))},
          "infogroup" = {assign("df", call_infogroup_county_estab(year))} )
   return(df)

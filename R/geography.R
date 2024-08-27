@@ -115,6 +115,25 @@ pubdata$get_cbsa_delin_df <- function(year) {
 
 ## shapes functions----
 
+
+# Spatial union counties and county equivalents geography changes over time
+census_county_cluster <- function(spatial_dataframe,
+                                  temporal_concordance){
+  tc <- temporal_concordance
+  df <- spatial_dataframe %>% 
+    select(names(.)[!(names(.) %in% c("center"))])
+  for (i in unique(tc$merge)){
+    m <- tc[tc$merge == i]$place
+    df[df$place == i, ]$geometry <- df %>% 
+      filter(df$place %in% m) %>% 
+      st_union()
+  }
+  df$center <- df$geometry %>% st_transform("EPSG:26911") %>% st_centroid() %>% st_transform(st_crs(df)[[1]]) 
+  df <- df %>% filter(!place %in% setdiff(tc$place, tc$merge))
+  return(df)
+}
+
+
 # Spatial union each CBSA member in a cluster
 cbsa_spatial_cluster <- function(spatial_dataframe,
                                  cbsa_concordance,
@@ -125,7 +144,7 @@ cbsa_spatial_cluster <- function(spatial_dataframe,
     {.[.$place %in% intersect(.$place, sdf$place), ]} %>% 
     {data.frame(CBSA_CODE = c(.$CBSA_CODE, setdiff(sdf$place, .$place)), 
                 place = c(.$place, setdiff(sdf$place, .$place)),
-                CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) }%>% 
+                CBSA_TITLE = c(.$CBSA_TITLE, sdf$COUNTY[sdf$place %in% setdiff(sdf$place, .$place)])) } %>% 
     {.[order(.$CBSA_CODE), ]} %>% 
     `rownames<-`(1:nrow(.))  %>% 
     {inner_join(sdf, ., by = "place", copy = TRUE)} 
@@ -704,6 +723,66 @@ call_impedance_distribution_table <- function(central_place,
     {inner_join(geot, ., by = "place")}
   return(list(df, meta))
 }
+
+
+imped_list <- function(
+    pn_dim,
+    dmat){
+  
+  D_inv <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 1)} %>% 
+    util$row_normalize()
+  
+  D_sqr <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {power_impedance_mat(., decay_power = 2)} %>% 
+    util$row_normalize()
+  
+  D_exp <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {expo_impedance_mat(., decay_constant = 100000)} %>% 
+    util$row_normalize()
+  
+  D_gau <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {gaus_impedance_mat(., rms_width = 500)} %>% 
+    util$row_normalize()
+  
+  D_qnn <- pn_dim %>% 
+    {call_bprox_mat(year = params$year, queen = TRUE)[., .]} %>% 
+    util$row_normalize()
+  D_qnn[is.na(D_qnn)] = 0
+  
+  D_knn <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {knn_mat(., neighbors = 10)} %>% 
+    util$row_normalize()
+  
+  D_prx <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {prox_impedance_mat(., radius = 500)} %>% 
+    util$row_normalize()
+  D_prx[is.na(D_prx)] = 0
+  
+  D_bis <- pn_dim %>% 
+    {dmat[., .]} %>% 
+    {bisquare_impedance_mat(., decay_zero = 500)} %>% 
+    util$row_normalize()
+  D_bis[is.na(D_bis)] = 0
+  
+  W_list <- list(
+    D_inv,
+    D_sqr,
+    D_exp,
+    D_gau,
+    D_qnn,
+    D_knn,
+    D_prx,
+    D_bis)
+  
+  return(W_list)
+} 
 
 
 # tests ----
