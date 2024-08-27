@@ -415,6 +415,38 @@ correlations
 
 
 ```
+## figure for slides
+
+
+```{r}
+correlations <- data.frame()
+for (economic_measure in params$reg_factors) {
+  for (circularity_measure in params$circ_factors) {
+    correlations <- cor.test(x = df[[circularity_measure]], y=df[[economic_measure]]) %>%
+      broom::tidy() %>%
+      select(estimate, conf.low, conf.high) %>%
+      mutate(economic_measure = economic_measure, circularity_measure = circularity_measure, .before = 1) %>%
+      rbind(correlations, .)
+  }
+}
+
+p <- correlations %>%  
+  mutate(circularity_measure = ordered(
+    str_replace(circularity_measure, "_", " "),
+    levels = str_replace(params$circ_factors, "_", " ")
+  )) %>%
+  mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
+  ggplot(aes(x = circularity_measure, color = `Economic growth`, group = `Economic growth`)) +
+  geom_point(aes(y = estimate, shape = `Economic growth`), size = 2, position = position_dodge(0.5)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
+
+p
+```
+
+
 
 
 # Correlation tables Rurality
@@ -431,7 +463,7 @@ for (economic_measure in params$reg_factors) {
   for (rural in c(TRUE, FALSE)){
     df_corr <- df |> filter(cbsa_rural_category == rural)
     temp_correlations = matrix(nrow=3, ncol=0)
-    for (circularity_measure in params$circ_factors) {
+  for (circularity_measure in params$circ_factors) {
       test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
       c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
       temp_correlations = cbind(temp_correlations, c_temp)
@@ -457,6 +489,93 @@ correlations
 
 ```
 
+
+## figure for slides
+
+
+```{r}
+correlations <- data.frame()
+for (economic_measure in params$reg_factors) {
+  for (circularity_measure in params$circ_factors) {
+    for (rural in c(TRUE, FALSE)) {
+      correlations <- df %>%
+        filter(cbsa_rural_category == rural) %>%
+        {cor.test(x = .[[circularity_measure]], y = .[[economic_measure]])} %>%
+        broom::tidy() %>%
+        select(estimate, conf.low, conf.high) %>%
+        mutate(
+          economic_measure = economic_measure,
+          circularity_measure = circularity_measure,
+          rural = rural,
+          .before = 1
+        ) %>%
+        rbind(correlations, .)
+    }
+  }
+}
+
+p <- correlations %>%
+  mutate(rural = ordered(case_match(rural, TRUE ~ "non-metro", FALSE ~ "metro"), 
+                         levels = c("non-metro", "metro"))) %>%
+  mutate(circularity_measure = ordered(
+    str_replace(circularity_measure, "_", " "),
+    levels = str_replace(params$circ_factors, "_", " ")
+  )) %>%
+  mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
+  ggplot(aes(x = circularity_measure, color = `Economic growth`, group = `Economic growth`)) +
+  geom_point(aes(y = estimate, shape = `Economic growth`), size = 2, position = position_dodge(0.5)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  facet_wrap("rural", ncol = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
+p
+```
+
+
+
+
+```{r}
+correlations <- data.frame()
+for (economic_measure in params$reg_factors) {
+  for (circularity_measure in params$circ_factors) {
+    for (rural in c(TRUE, FALSE)) {
+      correlations <- df %>%
+        filter(cbsa_rural_category == rural) %>%
+        {cor.test(x = .[[circularity_measure]], y = .[[economic_measure]])} %>%
+        broom::tidy() %>%
+        select(estimate, conf.low, conf.high) %>%
+        mutate(
+          economic_measure = economic_measure,
+          circularity_measure = circularity_measure,
+          rural = rural,
+          .before = 1
+        ) %>%
+        rbind(correlations, .)
+    }
+  }
+}
+
+(
+  p <- correlations %>%
+  filter(economic_measure != "payroll_gr") %>%
+  mutate(rural = case_match(rural, TRUE ~ "non-metro", FALSE ~ "metro")) %>%
+  mutate(circularity_measure = ordered(
+    str_replace(circularity_measure, "_", " "),
+    levels = str_replace(params$circ_factors, "_", " ")
+  )) %>%
+  mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
+  ggplot(aes(x = circularity_measure, color = rural, group = rural)) +
+  geom_point(aes(y = estimate, shape = rural), size = 2, position = position_dodge(0.5)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  facet_wrap(vars(`Economic growth`), ncol = 1) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
+)
+```
+
+# Different level of capacity
 
 ```{r}
 
