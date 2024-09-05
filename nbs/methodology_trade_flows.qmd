@@ -14,18 +14,18 @@ library(patchwork)
 tmap_mode("plot")
 library(lpSolve)
 
-source("R/place_output.R", local = (place_output <- new.env()))
-source("R/trade_flows.R", local = (tf <- new.env()))
-source("R/geography.R", local = (geog <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/trade_flows.R", local = (trade_flows <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
 ```
 
 Diagnostic tool: heat map plot to visualize trade flow matrices.
 
 ```{r}
 x <- matrix(runif(25) * 4, 5, 5)
-tf$plot_heatmap(x)
-tf$plot_heatmap(floor(x))
-tf$plot_heatmap(floor(x), discrete = TRUE)
+trade_flows$plot_heatmap(x)
+trade_flows$plot_heatmap(floor(x))
+trade_flows$plot_heatmap(floor(x), discrete = TRUE)
 ```
 
 # Problem size
@@ -34,28 +34,7 @@ How many counties have positive excess supply or demand in every industry?
 
 
 ```{r}
-
-# county demand
-df <- place_output$call_intermediate(
-  year = 2012, 
-  schedule = "demand", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
-
-# county supply
-d <- place_output$call_intermediate(
-  year = 2012, 
-  schedule = "supply", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
-
-df <- inner_join(df, d, join_by(indcode, place))
-
-df_supdem_counts <- df |>
+df_supdem_counts <- place_io$call_outsupdem(2012, ilevel = "det", bus_data = "infogroup") |>
   group_by(indcode) |>
   summarize(
     sup_pos = sum(supply > 0),
@@ -64,6 +43,8 @@ df_supdem_counts <- df |>
     exdem_pos = sum(demand > supply)
   ) |>
   mutate(ex_size = exsup_pos * exdem_pos)
+
+hist(df_supdem_counts$ex_size)
 ```
 
 
@@ -122,7 +103,7 @@ sol <- lp.transport(
 )
 })
 
-plot_heat(sol$solution)
+trade_flows$plot_heatmap(sol$solution)
 ```
 
 ## real data
@@ -136,35 +117,15 @@ A way to resolve this is to replace supply constraint with `rowSums(x) <= sup` a
 ```{r}
 ind_code <- "1111A0"
 
-# county demand
-df <- place_output$call_intermediate(
-  year = 2012, 
-  schedule = "demand", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup") %>%
+df <- place_io$call_outsupdem(2012, "det", "infogroup") %>%
   filter(indcode == ind_code) %>%
-  select(place, demand)
-
-# county supply
-d <- place_output$call_intermediate(
-  year = 2012, 
-  schedule = "supply", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup") %>%
-  filter(indcode == ind_code) %>%
-  select(place, supply)
-
-df <- inner_join(df, d, "place") %>%
+  select(place, supply, demand) %>%
   mutate(
     exsup = pmax(supply - demand, 0),
     exdem = pmax(demand - supply, 0)
   )
 
-dmat <- geog$call_dist_mat()
+dmat <- geography$call_dist_mat()
 places <- base::intersect(rownames(dmat), df$place)
 
 sup <- df %>%
@@ -204,18 +165,13 @@ d <- trade_flows[, "19193"] %>%
   na_if(0) %>%
   as_tibble(rownames = "place")
 
-df <- geog$call_geog() %>%
-  rename_with(str_to_lower) %>%
+df <- geography$call_county() %>%
   left_join(d, "place")
-d <- geog$pubdata$get_state_df(FALSE) |>
-  rename_with(str_to_lower) |>
-  select(code, contiguous, bea_region_name) |>
-  rename(state_code = code)
-df <- left_join(df, d, "state_code")
+
 
 tm_shape(filter(df, bea_region_name == "Plains")) + tm_fill("value") +
   tm_shape(filter(df, place == "19193")) + tm_fill("blue") +
-  tm_shape(filter(geog$pubdata$get_state_df(TRUE), BEA_REGION_NAME == "Plains")) + tm_borders() +
+  tm_shape(filter(geography$pubdata$get_state_df(TRUE), BEA_REGION_NAME == "Plains")) + tm_borders() +
   tm_layout(main.title = "Oilseed imports to Woodbury County, IA", main.title.size = 1)
 
 ```
@@ -226,18 +182,17 @@ tm_shape(filter(df, bea_region_name == "Plains")) + tm_fill("value") +
 Solver function wrapper passes only positive vectors components to the LP solver.
 
 ```{r}
-source("R/trade_flows.R", local = (tf <- new.env()))
 sup <- c(2, 0, 0, 1, 0)
 dem <- c(0, 1, 1, 0, 1)
 dmat <- dist(1:5) |> as.matrix()
-x <- tf$solve_lp_trade_flows(sup, dem, dmat)
+x <- trade_flows$solve_lp_trade_flows(sup, dem, dmat)
 x$solution_full
 ```
 
 Data prep saves industry-by-county supply and demand matrices.
 
 ```{r}
-tf$prep_demsup_mat()
+trade_flows$prep_demsup_mat()
 ```
 
 Solver prep:
@@ -246,11 +201,45 @@ Solver prep:
 - scale up either supply or demand to make their sums equal
 - calculate excess supply and demand
 
+
+## missing counties
+
+Some place codes do not exist in the reference county list (2013 shapefile).
+Most notably, these are state-wide codes in the CBP ending with "999".
+Others are two AgCensus counties or Virgin Islands counties in InfoGroup.
+
+To include supply and demand of these counties in the trade flows calculation, we distribute their activity proportionally across all active counties in the state (if possible) or nationwide.
+Doing so, maintains global trade balancing condition (aggregate supply == aggregate demand).
+
+
+```{r}
+#| code-summary: Toy example
+feasible_counties <- c("01001", "02001", "02003", "03001")
+x0 <- tribble(
+  ~place, ~value,
+  "01001", 40,
+  "02001", 10,
+  "02003", 30,
+  "02999", 20, # infeasible county
+  "03001", 0,
+  "99001", 20 # infeasible state
+)
+x1 <- trade_flows$distribute_to_feasible_counties(x0$value, x0$place, feasible_counties)
+full_join(x0, x1, "place", suffix = c("_before", "_after")) %>%
+  add_row(place = "total", value_before = sum(.$value_before), value_after = sum(.$value_after, na.rm = TRUE))
+```
+
+
+
+
+
+
+
 TODO: Verify that solutions with total demand and supply vs excess are identical.
 This must be true because local trade is zero distance, and should thus be always filled up by the LP solver.
 
 ```{r}
-x <- tf$prep_lp_solver_inputs("336213")
+x <- trade_flows$prep_lp_solver_inputs("336213")
 str(x)
 ```
 
@@ -259,8 +248,8 @@ Solution object is returned for inspection.
 If equality constraint fails, a second attempt is made with inequality.
 
 ```{r}
-x <- tf$prep_lp_solver_inputs("491000")
-y <- tf$solve_lp_trade_flows(x$sup, x$dem, x$dmat)
+x <- trade_flows$prep_lp_solver_inputs("491000")
+y <- trade_flows$solve_lp_trade_flows(x$sup, x$dem, x$dmat)
 plot_heatmap(y$solution[, 1:100])
 ```
 
@@ -268,53 +257,12 @@ Interface function only returns full trade flows matrix and saves it to cache on
 
 ```{r}
 source("R/trade_flows.R", local = (tf <- new.env()))
-x <- tf$call_trade_flows("1111A0")
+x <- trade_flows$call_trade_flows("1111A0")
 ```
+
 
 
 # Diagnostic
-
-## overview of all industries
-
-```{r}
-solution_deviation_summary <- function() {
-  source("R/trade_flows.R", local = (tf <- new.env()))
-  sup_mat <- readRDS(glue(tf$opath$supply_, .envir = tf$params_econ))
-  dem_mat <- readRDS(glue(tf$opath$demand_, .envir = tf$params_econ))
-  exsup_mat <- pmax(sup_mat - dem_mat, 0)
-  exdem_mat <- pmax(dem_mat - sup_mat, 0)
-  
-  d <- data.frame()
-  for (ind_code in rownames(sup_mat)) {
-    x <- tf$call_trade_flows(ind_code)
-    x <- x[rowSums(x) > 0, colSums(x) > 0, drop = FALSE]
-    if (length(x) == 0) {
-      d <- rbind(d, list(ind = ind_code, sup = 0, tf = 0, rmsd = 0, maxad = 0, maxrd = 0))
-      next
-    }
-    sup <- exsup_mat[ind_code, rownames(x)]
-    dem <- exdem_mat[ind_code, colnames(x)]
-    sol_sup <- rowSums(x)
-    sol_dem <- colSums(x)
-    dev <- c(sol_sup, sol_dem) - c(sup, dem)
-    finmax <- \(x) max(x[is.finite(x)])
-    row <- list(
-      ind = ind_code,
-      sup = sum(sup),
-      tf = sum(x),
-      rmsd = sqrt(mean(dev^2)),
-      maxad = max(abs(dev)),
-      maxrd = finmax(abs(dev) / c(sup, dem))
-    )
-    d <- rbind(d, row)
-  }
-  d <- d |>
-    mutate(abs_dev = abs(tf - sup),
-           rel_dev = replace_na(abs_dev / sup, 0),
-           .after = "tf")
-}
-```
-
 
 
 ## LP constraints
@@ -381,13 +329,13 @@ rs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
 cs1 <- runif(n) |> (\(x) x / sum(x) * sum(x0))() |> sort()
 
 # start with matrix of ones
-tf$ras_rescale(matrix(1, n, n), rs1, cs1, tol = 1e-4)$matrix %>%
+trade_flows$ras_rescale(matrix(1, n, n), rs1, cs1, tol = 1e-4)$matrix %>%
   cbind(rowSums(x = .)) %>%
   rbind(colSums(x = .)) %>%
   round()
 
 # start with random matrix
-tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 20)$matrix %>%
+trade_flows$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 20)$matrix %>%
   cbind(rowSums(x = .)) %>%
   rbind(colSums(x = .)) %>%
   round()
@@ -410,7 +358,7 @@ xnn1 <- rep(NA, m)
 for (i in 1:m) {
   x0m <- x0
   x0m[n, n] <- xnn0[i]
-  sol <- tf$ras_rescale(x0m, rs1, cs1, tol = 1e-1, maxiter = 100)
+  sol <- trade_flows$ras_rescale(x0m, rs1, cs1, tol = 1e-1, maxiter = 100)
   stopifnot(sol$converged)
   xnn1[i] <- sol$matrix[n, n]
 }
@@ -424,12 +372,12 @@ plot(xnn0, xnn1)
 Estimates from gravity equation for different impedance forms.
 
 ```{r}
-x <- tf$test_map_gravity("1111A0", "prox", 300, "55025") |>
+x <- trade_flows$test_map_gravity("1111A0", "prox", 300, "55025") |>
   mutate(imports_from = na_if(imports_from, 0), exports_to = na_if(exports_to, 0))
 ppi <- tm_shape(x) + tm_fill("imports_from")
 ppe <- tm_shape(x) + tm_fill("exports_to")
 
-x <- tf$test_map_gravity("1111A0", "gaus", 300, "55025") |>
+x <- trade_flows$test_map_gravity("1111A0", "gaus", 300, "55025") |>
   mutate(
     imports_from = if_else(imports_from < 0.1, NA, imports_from), 
     exports_to = if_else(exports_to < 0.1, NA, exports_to))
@@ -453,10 +401,10 @@ d <- dist(1:n) |> as.matrix() |> set_units(mi)
 
 sols <- data.frame()
 for (imp_par in 2:10) {
-  imp <- geog$prox_impedance_mat(d, imp_par)
-  x0 <- tf$gravity(rs1, cs1, imp)
+  imp <- geography$prox_impedance_mat(d, imp_par)
+  x0 <- trade_flows$gravity(rs1, cs1, imp)
   diag(x0) <- 0
-  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
+  sol <- trade_flows$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
   
   sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
   
@@ -481,10 +429,10 @@ d <- dist(1:n) |> as.matrix() |> set_units(mi)
 
 sols <- data.frame()
 for (imp_par in 1:7) {
-  imp <- geog$gaus_impedance_mat(d, imp_par)
-  x0 <- tf$gravity(rs1, cs1, imp)
+  imp <- geography$gaus_impedance_mat(d, imp_par)
+  x0 <- trade_flows$gravity(rs1, cs1, imp)
   diag(x0) <- 0
-  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
+  sol <- trade_flows$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
   
   sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
   
@@ -509,10 +457,10 @@ d <- dist(1:n) |> as.matrix() |> set_units(mi)
 
 sols <- data.frame()
 for (imp_par in 2:10) {
-  imp <- geog$gaus_impedance_mat(d, imp_par) * geog$prox_impedance_mat(d, imp_par)
-  x0 <- tf$gravity(rs1, cs1, imp)
+  imp <- geography$gaus_impedance_mat(d, imp_par) * geography$prox_impedance_mat(d, imp_par)
+  x0 <- trade_flows$gravity(rs1, cs1, imp)
   diag(x0) <- 0
-  sol <- tf$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
+  sol <- trade_flows$ras_rescale(x0, rs1, cs1, tol = 1e-4, maxiter = 100)
   
   sols <- rbind(sols, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
   
@@ -543,10 +491,10 @@ plot_heat(drop_units(d)) + labs(title = "Distance")
 sols <- list()
 sol_sum <- data.frame()
 for (imp_par in 1:5) {
-  imp <- geog$gaus_impedance_mat(d, imp_par) * geog$prox_impedance_mat(d, imp_par)
+  imp <- geography$gaus_impedance_mat(d, imp_par) * geography$prox_impedance_mat(d, imp_par)
   p1 <- plot_heatmap(imp) + labs(title = glue("Truncated Gauss par {imp_par}"))
-  x0 <- tf$gravity(sup, dem, imp)
-  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  x0 <- trade_flows$gravity(sup, dem, imp)
+  sol <- trade_flows$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
   sols[[length(sols) + 1]] <- sol
   sol_sum <- rbind(sol_sum, append(list(imp_par = imp_par), sol[c("converged", "iterations", "rmsd", "mad", "maxad")]))
   if (sol$converged) {
@@ -574,9 +522,9 @@ dmat <- dist(loc) |> as.matrix() |> set_units(mi)
 sols <- list()
 sol_sum <- data.frame()
 for (imp_par in 1:20) {
-  imp <- geog$gaus_impedance_mat(dmat, imp_par)
-  x0 <- tf$gravity(sup, dem, imp)
-  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  imp <- geography$gaus_impedance_mat(dmat, imp_par)
+  x0 <- trade_flows$gravity(sup, dem, imp)
+  sol <- trade_flows$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
   sols[[length(sols) + 1]] <- sol
   sol_row <- append(list(imp_par = imp_par, avg_dist = sum(drop_units(dmat) * sol$matrix) / sum(sol$matrix)), sol[c("converged", "iterations", "rmsd", "mad", "maxad")])
   sol_sum <- rbind(sol_sum, sol_row)
@@ -613,10 +561,10 @@ dmat <- dist(1:n) |> as.matrix()
 sols <- list()
 sol_sum <- data.frame()
 for (imp_par in 1:20) {
-  imp <- geog$gaus_impedance_mat(set_units(dmat, mi), imp_par)
+  imp <- geography$gaus_impedance_mat(set_units(dmat, mi), imp_par)
 
-  x0 <- tf$gravity(sup, dem, imp)
-  sol <- tf$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
+  x0 <- trade_flows$gravity(sup, dem, imp)
+  sol <- trade_flows$ras_rescale(x0, sup, dem, tol = 1e-6, maxiter = 100)
   sols[[length(sols) + 1]] <- sol
   sol_row <- append(list(imp_par = imp_par, avg_dist = sum(dmat * sol$matrix) / sum(sol$matrix)), sol[c("converged", "iterations", "rmsd", "mad", "maxad")])
   sol_sum <- rbind(sol_sum, sol_row)
@@ -689,7 +637,7 @@ iter_ras_trade_flows <- function(rs1, cs1, dist_mat, dist_from, dist_to, dist_st
     # impedance and gravity estimates from current distances
     imp_mat <- prox_mat_var_dist(dist_mat, dist_from, dist_to)
     colnames(imp_mat) <- rownames(imp_mat) <- colnames(dist_mat)
-    x0 <- tf$gravity(rs1, cs1, imp_mat)
+    x0 <- trade_flows$gravity(rs1, cs1, imp_mat)
     colnames(x0) <- rownames(x0) <- colnames(dist_mat)
     
     if (verbose) {
@@ -796,7 +744,7 @@ sol$last_ras$trade_matrix |>
 
 ```{r}
 
-df <- geog$call_geog() |>
+df <- geography$call_geog() |>
   rename_with(str_to_lower) |>
   filter(state_code == "55")
 

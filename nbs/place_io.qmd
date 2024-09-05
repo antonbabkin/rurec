@@ -348,4 +348,81 @@ m1
 m2
 ```
 
+# Nuances
+
+## County coverage
+
+Using the Census Bureau 2013 county shapefile as the master list of US counties, some counties do not have positive output in our data.
+Conversely, some of the county we have are not in the geography list.
+Table here shows county counts and aggregate output share for all three possibilities under different data sources at the detail level.
+About 1.2-1.3% (CBP) and 0.01% (InfoGroup) of output is in places not present in the master county list.
+
+```{r}
+df_geo <- geography$call_county() %>%
+  st_drop_geometry() %>%
+  mutate(geo = TRUE)
+df_join <- list()
+
+x <- tibble()
+year <- 2012
+for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
+  df_bus <- place_io$call_output(2012, "industry", ilevel = "det", bus_data = bus_data) %>%
+    summarize(output = sum(output), .by = "place") %>%
+    filter(output > 0) %>%
+    mutate(bus = TRUE)
+  df_join[[bus_data]] <- df_geo %>%
+    full_join(df_bus, by = "place") %>%
+    replace_na(list(geo = FALSE, bus = FALSE))
+  d <- df_join[[bus_data]] %>%
+    summarize(
+      ncty = n(),
+      output = sum(output),
+      .by = c("geo", "bus")
+    ) %>%
+    mutate(
+      year = year,
+      bus_data = bus_data,
+      coverage = case_when(
+        geo & bus ~ "geo and business",
+        geo & !bus ~ "geo only",!geo & bus ~ "business only"
+      ),
+      output_pct = round(100 * output / sum(output, na.rm = TRUE), 3),
+      .before = 1,
+      .keep = "unused"
+    )
+  
+  x <- bind_rows(x, d)
+}
+x
+
+```
+
+Tables below show which counties are not in both data sources.
+
+In CBP-EFSY, business data is not available for two counties in Hawaii (Kalawao, HI, 15005) and Texas (King, TX, 48269), and the 78 municipios of Puerto Rico.
+The counties not in the master geography list are "02010" (Alaska), "46102" (South Dakota) and 50 counties with FIPS codes ending with "999", which stand for state-wide business operation.
+"02010" and "46102" outputs are actually from the Census of Agriculture, and not from CBP.
+
+Raw CBP (not shown) is the same as CBP-EFSY with one more county having no output (Grant, NE, 31075).
+
+```{r}
+#| tbl-cap: CBP-EFSY
+df_join[["cbp_imp"]] %>%
+  filter(xor(geo, bus)) %>%
+  select(place, name, state_name, geo, bus) %>%
+  arrange(desc(geo), desc(bus), place)
+```
+
+
+In InfoGroup, the only county with no positive output is "15005" (Hawaii).
+Counties not in the master list are again "02010" (Alaska) and "46102" (South Dakota) (Census of Agriculture, not from InfoGroup), and 3 counties with state code "78" (Virgin Islands).
+
+```{r}
+#| tbl-cap: InfoGroup
+df_join[["infogroup"]] %>%
+  filter(xor(geo, bus)) %>%
+  select(place, name, state_name, geo, bus)
+```
+
+
 

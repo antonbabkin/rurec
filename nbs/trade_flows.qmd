@@ -1,0 +1,244 @@
+---
+title: "Trade flows"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+---
+
+# imports
+
+
+```{r}
+#| output: false
+library(logger)
+library(tidyverse)
+library(glue)
+library(tmap)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+
+log_threshold(INFO)
+tmap_mode("plot")
+```
+
+# compute all
+
+```{r}
+x <- trade_flows$call_trade_flows("all_industries", year = 2012, ilevel = "det", bus_data = "cbp_imp")
+```
+
+
+
+# Nuance
+
+## solution accuracy
+
+The transportation problem is solved numerically, and constraints are not always satisfied exactly.
+We can look at different metrics of deviation from demand and supply constraints.
+
+
+### inequality constraints
+
+Some industries fail to solve with equality constraints.
+For example (Inforoup, detail, 2012): 221100, 332710, 423800, 482000, 541512, 541800.
+In such cases, we try solving the problem again by replacing constraints with weak inequalities.
+Then solution is obtained for every industry, and inequality constraints are still satisfied very tightly, i.e. almost like equality.
+
+
+```{r}
+year <- 2012
+ilevel <- "det"
+bus_data <- "infogroup"
+
+df_supdem <- place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data)
+all_inds <- unique(df_supdem$indcode)
+tr_inds <- trade_flows$call_traded_commodities(year, ilevel = ilevel, bus_data = bus_data)
+counties <- trade_flows$distance_matrix(year) %>%
+  rownames()
+
+df_diag <- data.frame()
+for (ind_code in all_inds) {
+  # skip commodity if no feasible supply or demand
+  if (!(ind_code %in% tr_inds)) {
+    df_diag <- add_row(df_diag, ind = ind_code, exsup = 0)
+    next
+  }
+  
+  # feasible supply and demand
+  d <- df_supdem %>%
+    filter(indcode == ind_code) %>%
+    {
+      inner_join(
+        trade_flows$distribute_to_feasible_counties(.$supply, .$place, counties) %>% rename(supply = value),
+        trade_flows$distribute_to_feasible_counties(.$demand, .$place, counties) %>% rename(demand = value),
+        by = "place"
+      )
+    } %>%
+    mutate(exsup = pmax(supply - demand, 0),
+           exdem = pmax(demand - supply, 0))
+
+  # trade flows limited to counties with positive supply and demand
+  
+  tf <- trade_flows$call_trade_flows(ind_code, year, ilevel = ilevel, bus_data = bus_data)
+  con_label <- if (is.null(attr(tf, "constraints"))) NA else attr(tf, "constraints")
+  tf <- tf[rowSums(tf) > 0, colSums(tf) > 0, drop = FALSE]
+  # aggregate trade flows to outbound and inbound, and calculate deviation from supply or demand
+  d <- d %>%
+    left_join(rowSums(tf) %>% as_tibble(rownames = "place") %>% rename(outflow = value),
+              by = "place") %>%
+    left_join(colSums(tf) %>% as_tibble(rownames = "place") %>% rename(inflow = value),
+              by = "place") %>%
+    mutate(dev = if_else(is.na(outflow), inflow - exdem, outflow - exsup),
+           reldev = dev / max(exsup, exdem))
+
+  row <- list(
+    ind = ind_code,
+    exsup = sum(d$exsup),
+    exdem = sum(d$exdem),
+    nsup = sum(d$exsup > 0, na.rm = TRUE),
+    ndem = sum(d$exdem > 0, na.rm = TRUE),
+    cons = con_label,
+    tf = sum(tf),
+    rmsd = sqrt(mean(d$dev ^ 2, na.rm = TRUE)),
+    maxad = max(abs(d$dev), na.rm = TRUE),
+    maxrd = max(abs(d$reldev), na.rm = TRUE)
+  )
+  df_diag <- rbind(df_diag, row)
+}
+
+df_diag <- df_diag |>
+  mutate(ntf = nsup * ndem, .after = "ndem") |>
+  mutate(abs_dev = abs(tf - exsup),
+         rel_dev = replace_na(abs_dev / exsup, 0),
+         .after = "tf")
+
+df_diag %>% arrange(desc(maxrd))
+```
+
+
+
+## sensitivity
+
+[lp_solve docs](https://lpsolve.sourceforge.net/5.5/sensitivity.htm)
+
+Comparing `sens.coef.from` and `sens.coef.to` with `costs`, we can see how sensitive is the solution to changes in transportation cost between two places.
+For example, which trade flows are going to change if transportation cost went down by 10%?
+
+Sensitivity analysis also provides values for a dual problem.
+How to interpret them?
+
+Primal problem: Minimize transportation cost (distance) s.t. constrained demand and supply.
+
+Dual problem: The mystery shipper sets prices at each supply
+and demand location so that the net cost of shipping an item is no greater than
+the direct cost (distance), and does so to maximize net revenue.
+
+```{r}
+year <- 2012
+ilevel <- "det"
+bus_data <- "infogroup"
+ind_code = "311513"
+
+sol <- lp.transport(
+  cost.mat = dmat,
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  compute.sens = 1,
+  integers = NULL
+)
+
+str(sol)
+
+
+df_sol <- expand_grid(to = names(dem), from = names(sup)) %>%
+  mutate(costs = sol$costs[-1]) %>%
+  left_join(tibble(to = names(dem), col = sol$crhs), by = "to") %>%
+  left_join(tibble(from = names(dem), row = sol$rrhs), by = "from")
+for (x in c("solution", "sens.coef.from", "sens.coef.to", "duals", "duals.from", "duals.to")) {
+  df_sol[[x]] <- as.vector(sol[[x]])
+}
+df_sol <- df_sol %>%
+  mutate(costs_break = pmin(costs - sens.coef.from, sens.coef.to - costs),
+         costs_break_rel = costs_break / costs)
+
+df_solp <- df_sol %>%
+  filter(row > 0, col > 0)
+
+# solutions that will change if cost (distance) changed more than X miles
+df_solp %>%
+  filter(costs_break < 10) %>%
+  arrange(costs_break)
+
+# solutions that will change if cost per mile changed more than X%
+df_solp %>%
+  filter(costs_break_rel < 0.1) %>%
+  arrange(costs_break_rel)
+
+# duals ?
+```
+
+
+# example to share
+
+Representative industries to solve with an alternative software like GAMS.
+
+```{r}
+year = 2012
+ilevel = "det"
+bus_data = "infogroup"
+
+problems <- list()
+for (ind_code in c(
+  "221100", # fails with s= d=, solves with s= d<=, similar dimensions
+  "541800", # fails with s= d=, solves with s= d<=, skewed dimensions
+  "333993", # solves with s= d=, similar dimensions
+  "311513" # solves with s= d=, skewed dimensions
+)) {
+    
+  df <- place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data) %>%
+    filter(indcode == ind_code)
+  
+  dmat <- trade_flows$distance_matrix(2012)
+  
+  df_feas <- inner_join(
+    trade_flows$distribute_to_feasible_counties(df$supply, df$place, rownames(dmat)) %>% rename(supply = value),
+    trade_flows$distribute_to_feasible_counties(df$demand, df$place, rownames(dmat)) %>% rename(demand = value),
+    by = "place"
+  ) %>%
+    arrange(place) %>%
+    mutate(exsup = pmax(supply - demand, 0),
+           exdem = pmax(demand - supply, 0))
+  
+  places <- df_feas$place
+  dmat <- dmat[places, places]
+  sup <- df_feas$exsup
+  names(sup) <- places
+  dem <- df_feas$exdem
+  names(dem) <- places
+  
+  tf <- trade_flows$call_trade_flows(ind_code, year, ilevel = ilevel, bus_data = bus_data)
+  
+  problems[[ind_code]] <- list(
+    supply = sup,
+    demand = dem,
+    solution = tf
+  )
+}
+distance <- dmat
+save(distance, problems, file = "tmp/lp_problems_2024-08-22.RData")
+
+# load("tmp/lp_problems_2024-08-22.RData", envir = (x <- new.env()))
+
+cbind(rowSums(tf), sup)
+
+sum(sup > 0)
+```

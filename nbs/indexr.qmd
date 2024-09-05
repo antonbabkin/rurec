@@ -45,7 +45,7 @@ bea_io$pubdata$get_naics_concord(2017)
 bea_io$pubdata$get_use(2017, "det", TRUE)$table
 bea_io$call_b_matrix(2017, "det")[1:5, 1:5]
 
-
+# util$zip_pack("tmp/datapack_bea_io_v240709.zip", files = bea_io$opath, overwrite = TRUE)
 ```
 
 # Geography
@@ -78,6 +78,7 @@ source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 # example usage
 cbp$call_cbp(2012, "county", FALSE)
 
+# util$zip_pack("tmp/datapack_cbp_v240710.zip", files = cbp$opath, overwrite = TRUE)
 ```
 
 
@@ -100,12 +101,7 @@ open_dataset(glue(ig$opath$county_, .envir = list(year = 2012))) |>
   arrange(st, cty) |>
   collect()
 
-# packing and unpacking county aggregates (uncomment as needs)
-# source("R/basic_utilities.R", local = (util <- new.env()))
-# util$zip_pack("tmp/infogroup_county_agg_v240220_.zip", ig$opath$county_)
-# util$zip_unpack("tmp/infogroup_county_agg_v240220_.zip", overwrite = TRUE)
-
-
+# util$zip_pack("tmp/datapack_infogroup_county_v240709.zip", files = ig$opath$county_, overwrite = TRUE)
 ```
 
 # Census of Agriculture
@@ -122,7 +118,7 @@ source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 # county output of BEA detail agricultural industries
 agcen$call_agoutput(2012, "county")
 
-
+# util$zip_pack("tmp/datapack_agcen_v240709.zip", files = agcen$opath, overwrite = TRUE)
 ```
 
 
