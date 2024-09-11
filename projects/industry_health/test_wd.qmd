@@ -1781,7 +1781,107 @@ model5 <- '
 model5.fit <- sem(model5, data = mi1) 
 summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
 
-fit <- cfa(model5, data=mi2)
+fit <- cfa(model5, data=mi1)
+```
+
+
+##### 2a.) spatial autocorrelation
+
+```{r}
+
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+mi1_spa = mi2
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi2) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi1_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi1_spa2 <- cbind(mi1_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi1_spa2$r_paam
+
+w <- queen_weights(mi1_spa2)
+nb <- poly2nb(mi1_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+
 ```
 
 
@@ -1882,6 +1982,106 @@ fit <- cfa(model6, data=mi3)
 
 
 ```
+
+##### 4a.) sp autocorrelation
+
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi3_spa = mi3 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi3_spa) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi3_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro", "lag.pct_mfg", "lag.pct_ag", "lag.pct_mine", "lag.retention_calc", "lag.autonomy_calc","lag.logpop", "lag.laborforce_part_rate","lag.poverty_rate","lag.bach","lag.income_rate", "lag.age", "lag.metro","lag.uninsured"))
+
+
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi3_spa2 <- cbind(mi3_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi3_spa2$r_paam
+
+w <- queen_weights(mi3_spa2)
+nb <- poly2nb(mi3_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+
+```
+
 
 
 
