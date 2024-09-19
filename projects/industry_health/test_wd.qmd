@@ -89,6 +89,7 @@ library(lavaan)
 library(lavaanPlot)
 library(ggeffects)
 library(patchwork)
+library(ggthemes)
 
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
@@ -239,9 +240,9 @@ pop<-ih_dp$call_population(2012)
 
 data<- left_join (chr, pop, by = "place")
 
-lfpr<-ih_dp$call_laborforce_rate(2012)
+laborforce_part_rate<-ih_dp$call_laborforce_rate(2012)
 
-data<- left_join (data, lfpr, by = "place")
+data<- left_join (data, laborforce_part_rate, by = "place")
 
 unempr<-ih_dp$call_unemp_rate(2012) 
 
@@ -637,7 +638,7 @@ title(main = "LISA, Autonomy")
 
 # Clean models (no interact)
 ```{r}
-mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE))
+mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
 
 ```
 
@@ -1074,6 +1075,27 @@ plot(st_geometry(Q2ar),
      border = "#333333", lwd=0.2)
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+#### compare SpError to SLX
+
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+summary(slx_import)
+
+
+
 ```
 
 
@@ -1681,6 +1703,383 @@ plot(st_geometry(Q2ar),
      border = "#333333", lwd=0.2)
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+## Structural equation (no interact)
+### retention & autonomy
+#### 1.) aspatial, no residual covariances
+```{r}
+
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+
+
+
+```
+
+
+#### 2.) aspatial, residual covariances
+```{r}
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+```
+
+
+##### 2a.) spatial autocorrelation
+
+```{r}
+
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+mi1_spa = mi2
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi2) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi1_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi1_spa2 <- cbind(mi1_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi1_spa2$r_paam
+
+w <- queen_weights(mi1_spa2)
+nb <- poly2nb(mi1_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+
+```
+
+
+#### 3.) SLX, no residual covariances
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+mi3 = mi1 %>%
+  mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc, 
+         lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine, 
+         lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate, 
+         lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach, 
+         lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate, 
+         lag.logpop = slx_import$model$lag.logpop, lag.metro = slx_import$model$lag.metro, 
+         lag.uninsured = slx_import$model$lag.uninsured
+         )
+
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+
+
+
+```
+
+
+
+
+#### 4.) SLX, residual covariances
+```{r}
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+##### 4a.) sp autocorrelation
+
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi3_spa = mi3 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi3_spa) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi3_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro", "lag.pct_mfg", "lag.pct_ag", "lag.pct_mine", "lag.retention_calc", "lag.autonomy_calc","lag.logpop", "lag.laborforce_part_rate","lag.poverty_rate","lag.bach","lag.income_rate", "lag.age", "lag.metro","lag.uninsured"))
+
+
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi3_spa2 <- cbind(mi3_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi3_spa2$r_paam
+
+w <- queen_weights(mi3_spa2)
+nb <- poly2nb(mi3_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+
 ```
 
 
@@ -2474,6 +2873,188 @@ plot(st_geometry(Q2ar),
 title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
+
+
+## Structural equation (interact)
+### retention & autonomy
+#### 1.) aspatial, no residual covariances
+```{r}
+
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+
+
+
+```
+
+
+#### 2.) aspatial, residual covariances
+```{r}
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi2)
+```
+
+
+#### 3.) SLX, no residual covariances
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+mi3 = mi1 %>%
+  mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc, 
+         lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine, 
+         lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate, 
+         lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach, 
+         lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate, 
+         lag.logpop = slx_import$model$lag.logpop, lag.metro = slx_import$model$lag.metro, 
+         lag.uninsured = slx_import$model$lag.uninsured
+         )
+
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+
+
+
+```
+
+
+
+
+#### 4.) SLX, residual covariances
+```{r}
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+
+
+
 
 # Output viz
 
