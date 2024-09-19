@@ -52,4 +52,5 @@ condor/*
 
 # either use global library or install with renv from DESCRIPTION
 renv.lock
+renv/
 
