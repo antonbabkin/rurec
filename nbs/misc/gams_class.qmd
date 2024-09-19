@@ -1,0 +1,209 @@
+---
+title: "ERS GAMS class examples"
+format: html
+---
+
+
+```{r}
+library(tidyverse)
+library(lpSolve)
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+
+```
+
+
+# lpSolve sensitivity - toy example
+
+
+```{r}
+df <- data.frame(
+  l = LETTERS[1:4],
+  x = c(0.7, 1, 0, 1), 
+  y = c(0.7, 1, 1, 0),
+  s = c(10, 10, 0, 0),
+  d = c(0, 0, 10, 10))
+ggplot(df) +
+  geom_point(aes(x, y, color = l)) +
+  geom_text(aes(x, y, label = l))
+
+dmat <- dist(df[c("x", "y")], diag = TRUE, upper = TRUE) %>%
+  as.matrix()
+
+spos <- df$s > 0
+sup <- df$s[spos]
+sl <- df$l[spos]
+dpos <- df$d > 0
+dem <- df$d[dpos]
+dl <- df$l[dpos]
+dm <- dmat[spos, dpos]
+dimnames(dm) <- list(sl, dl)
+
+sol <- lp.transport(
+  dm,
+  row.signs = rep("=", length(sup)),
+  row.rhs = sup,
+  col.signs = rep("=", length(dem)),
+  col.rhs = dem,
+  compute.sens = 1,
+  integers = NULL
+)
+
+str(sol)
+
+sol$solution %>%
+  `dimnames<-`(list(sl, dl)) %>%
+  trade_flows$plot_heatmap()
+```
+
+
+```{r}
+f <- function(a, b) {
+  x <- matrix(NA, nrow(a), nrow(b))
+  for (i in 1:length(a)) {
+    x[i] <- all.equal(a[i], b[i])
+  }
+  x
+}
+dm
+sol$sens.coef.from
+f(dm, sol$sens.coef.from)
+sol$sens.coef.to
+f(dm, sol$sens.coef.to)
+```
+
+
+
+# example to share
+
+Representative industries to solve with an alternative software like GAMS.
+
+```{r}
+# incomplete code, uses parts of R/trade_flows.R
+
+year = 2012
+ilevel = "det"
+bus_data = "infogroup"
+
+problems <- list()
+for (ind_code in c(
+  "221100", # fails with s= d=, solves with s= d<=, similar dimensions
+  "541800", # fails with s= d=, solves with s= d<=, skewed dimensions
+  "333993", # solves with s= d=, similar dimensions
+  "311513" # solves with s= d=, skewed dimensions
+)) {
+    
+  df <- place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data) %>%
+    filter(indcode == ind_code)
+  
+  dmat <- trade_flows$distance_matrix(2012)
+  
+  df_feas <- inner_join(
+    trade_flows$distribute_to_feasible_counties(df$supply, df$place, rownames(dmat)) %>% rename(supply = value),
+    trade_flows$distribute_to_feasible_counties(df$demand, df$place, rownames(dmat)) %>% rename(demand = value),
+    by = "place"
+  ) %>%
+    arrange(place) %>%
+    mutate(exsup = pmax(supply - demand, 0),
+           exdem = pmax(demand - supply, 0))
+  
+  places <- df_feas$place
+  dmat <- dmat[places, places]
+  sup <- df_feas$exsup
+  names(sup) <- places
+  dem <- df_feas$exdem
+  names(dem) <- places
+  
+  tf <- trade_flows$call_trade_flows(ind_code, year, ilevel = ilevel, bus_data = bus_data)
+  
+  problems[[ind_code]] <- list(
+    supply = sup,
+    demand = dem,
+    solution = tf
+  )
+}
+distance <- dmat
+save(distance, problems, file = "tmp/lp_problems_2024-08-22.RData")
+
+# load("tmp/lp_problems_2024-08-22.RData", envir = (x <- new.env()))
+
+cbind(rowSums(tf), sup)
+
+sum(sup > 0)
+```
+
+
+# solving example problem with sensitivity
+
+runtimes:
+ind    | nr  | nc   | sens, compact | sens, full | no sens, full | no sens, compact
+311513 | 160 | 3060 | 55 sec        | 1,103 sec  | 827 sec       | 45 sec
+
+```{r}
+# load("tmp/lp_problems_2024-08-22.RData", envir = (gams_problems <- new.env()))
+ind_code = "311513"
+
+dmat <- gams_problems$distance
+pr <- gams_problems$problems[[ind_code]]
+dm <- dmat
+sup <- pr$supply
+dem <- pr$demand
+
+
+zeros_rem <- function(x, r, c) {
+  list(
+    x = x[r > 0, c > 0],
+    r = r[r > 0],
+    c = c[c > 0]
+  )
+}
+
+pr1 <- zeros_rem(dmat, pr$supply, pr$demand)
+dm <- pr1$x
+sup <- pr1$r
+dem <- pr1$c
+
+system.time({
+  sol <- lp.transport(
+    dm,
+    row.signs = rep("=", length(sup)),
+    row.rhs = sup,
+    col.signs = rep("=", length(dem)),
+    col.rhs = dem,
+    compute.sens = 1,
+    integers = NULL
+  )
+})
+```
+
+
+## sensitivity
+
+```{r}
+df_sol <- expand_grid(dst = names(dem), src = names(sup)) %>%
+  mutate(costs = sol$costs[-1]) %>%
+  left_join(tibble(src = names(sup), row = sol$rrhs), by = "src") %>%
+  left_join(tibble(dst = names(dem), col = sol$crhs), by = "dst")
+for (x in c("solution", "sens.coef.from", "sens.coef.to")) {
+  df_sol[[x]] <- as.vector(sol[[x]])
+}
+df_sol <- df_sol %>%
+  mutate(costs_slack = pmin(costs - sens.coef.from, sens.coef.to - costs),
+         costs_slack_rel = costs_slack / costs)
+
+df_solp <- df_sol %>%
+  filter(row > 0, col > 0)
+
+df_solp %>%
+  select(src, dst, solution, costs, sens.coef.from, sens.coef.to, costs_slack, costs_slack_rel) %>%
+  filter(between(costs_slack_rel, 0.1, 0.5)) %>%
+  filter(str_sub(src, 1, 2) != "02") %>%
+  filter(str_sub(src, 1, 2) != "72") %>%
+  mutate(sens.coef.to = formatC(sens.coef.to, format = "e")) %>%
+  View()
+
+```
+
+
+
+
+# 

@@ -187,58 +187,5 @@ df_solp %>%
 ```
 
 
-# example to share
 
-Representative industries to solve with an alternative software like GAMS.
 
-```{r}
-year = 2012
-ilevel = "det"
-bus_data = "infogroup"
-
-problems <- list()
-for (ind_code in c(
-  "221100", # fails with s= d=, solves with s= d<=, similar dimensions
-  "541800", # fails with s= d=, solves with s= d<=, skewed dimensions
-  "333993", # solves with s= d=, similar dimensions
-  "311513" # solves with s= d=, skewed dimensions
-)) {
-    
-  df <- place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data) %>%
-    filter(indcode == ind_code)
-  
-  dmat <- trade_flows$distance_matrix(2012)
-  
-  df_feas <- inner_join(
-    trade_flows$distribute_to_feasible_counties(df$supply, df$place, rownames(dmat)) %>% rename(supply = value),
-    trade_flows$distribute_to_feasible_counties(df$demand, df$place, rownames(dmat)) %>% rename(demand = value),
-    by = "place"
-  ) %>%
-    arrange(place) %>%
-    mutate(exsup = pmax(supply - demand, 0),
-           exdem = pmax(demand - supply, 0))
-  
-  places <- df_feas$place
-  dmat <- dmat[places, places]
-  sup <- df_feas$exsup
-  names(sup) <- places
-  dem <- df_feas$exdem
-  names(dem) <- places
-  
-  tf <- trade_flows$call_trade_flows(ind_code, year, ilevel = ilevel, bus_data = bus_data)
-  
-  problems[[ind_code]] <- list(
-    supply = sup,
-    demand = dem,
-    solution = tf
-  )
-}
-distance <- dmat
-save(distance, problems, file = "tmp/lp_problems_2024-08-22.RData")
-
-# load("tmp/lp_problems_2024-08-22.RData", envir = (x <- new.env()))
-
-cbind(rowSums(tf), sup)
-
-sum(sup > 0)
-```
