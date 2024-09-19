@@ -50,6 +50,7 @@ industry2commodity <- function(industry_output_matrix,
   #BEA supply matrix 
   smat <- io_supply_matrix
   
+  # TODO: why divide by data totals and not by BEA Supply table totals?
   #alternate scaled "C" matrix using derived values 
   cmat_alt <- (smat[, names(x)[x!=0], drop=FALSE] %*% diag(1/as.vector(x[names(x)[x!=0]]))) %>%
     `colnames<-`(names(x)[x!=0]) 

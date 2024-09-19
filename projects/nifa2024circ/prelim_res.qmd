@@ -30,8 +30,12 @@ library(skimr)
 # library(gtsummary)
 library(RColorBrewer)
 
+# renv::install("antonbabkin/pubdata@rpkg")
+
 # scripts
 source("projects/nifa2024circ/circularity_functions.R", local = (circularity <- new.env()))
+source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/dataprep.R", local = (dataprep <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
@@ -45,6 +49,7 @@ source("R/geography.R", local = (geography <- new.env()))
 # log verbosity 
 log_threshold(WARN)
 
+theme_set(theme_minimal())
 
 # mapping modality 
 tmap_mode("plot")
@@ -69,28 +74,465 @@ params = list(
 
 ```
 
-# Data cache
+
+
+
+# national I-O over time
+
+## foreign trade
 
 ```{r}
-# uncomment as needed
-# clear cache
-# util$clear_paths(circularity$opath)
-# create zip file with cache
-# util$zip_pack("tmp/datapack_nifa2024circ_vYYYYMMDD.zip", circularity$opath)
-# unpack cache from zip file
-# util$zip_unpack("tmp/datapack_nifa2024circ_vYYYYMMDD.zip", overwrite = TRUE)
+
+d1 <- 1997:2021 %>%
+  map(function(y) {
+    pubdata::bea_io_get(glue("2022_sup_sec_{y}")) %>%
+      filter(col_name %in% c("Total Commodity Output", "Imports")) %>%
+      mutate(year = y, .before = 1)
+  }) %>%
+  bind_rows()
+
+ggplot(d1) +
+  geom_line(aes(year, value, color = col_name)) +
+  facet_wrap("row_name", scales = "free_y") +
+  theme(axis.text.y = element_blank(), legend.position = "none") +
+  labs(title = "import")
+
+d2 <- 1997:2021 %>%
+  map(function(y) {
+    pubdata::bea_io_get(glue("2022_use_sec_{y}")) %>%
+      filter(col_name %in% c("Total Intermediate", "Exports of goods and services")) %>%
+      mutate(year = y, .before = 1)
+  }) %>%
+  bind_rows()
+
+ggplot(d2) +
+  geom_line(aes(year, value, color = col_name)) +
+  facet_wrap("row_name", scales = "free_y") +
+  theme(axis.text.y = element_blank(), legend.position = "none") +
+  labs(title = "export")
+
+
+df <- bind_rows(d1, d2) %>%
+  pivot_wider(id_cols = c(year, row_code, row_name), names_from = "col_name") %>%
+  mutate(import = Imports / `Total Intermediate`,
+         export = `Exports of goods and services` / `Total Commodity Output`)
+
+df %>%
+  select(year, row_name, import, export) %>%
+  pivot_longer(c(import, export)) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("row_name", scale = "free_y") +
+  theme(axis.text.y = element_blank())
+
+df %>%
+  filter(row_code %in% c("11", "21", "31G"))%>%
+  select(year, row_name, import, export) %>%
+  pivot_longer(c(import, export)) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("row_name") +
+  theme(legend.position = "bottom")
 ```
 
-# Examples
+
+## input structure
+
+
+```{r}
+# biggest input commodities
+
+commodities <- pubdata::bea_io_get("2022_use_sec_1997") %>%
+  filter(core_matrix) %>%
+  distinct(row_name) %>%
+  pull()
+
+df <- 1997:2021 %>%
+  map(function(y) {
+    pubdata::bea_io_get(glue("2022_use_sec_{y}")) %>%
+      filter(row_name %in% c(commodities, "Total Intermediate", "Total industry output (basic prices)"),
+             col_name == "Manufacturing") %>%
+      select(row_code, row_name, value) %>%
+      mutate(year = y, .before = 1) 
+  }) %>%
+  bind_rows() %>%
+  group_by(year) %>%
+  mutate(tot_int = max(if_else(row_name == "Total Intermediate", value, NA), na.rm = TRUE),
+         tot_out = max(if_else(row_name == "Total industry output (basic prices)", value, NA), na.rm = TRUE),
+         int_sh = tot_int / tot_out,
+         com_sh = value / tot_int)
+
+d1 <- df %>%
+  mutate(com_sh = round(com_sh, 4)) %>%
+  pivot_wider(id_cols = c(row_code, row_name), values_from = com_sh, names_from = year) %>%
+  filter(row_name %in% commodities)
+
+df %>%
+  filter(row_code %in% c("11", "21", "31G", "PROF", "FIRE", "51")) %>%
+  ggplot() +
+  geom_line(aes(year, com_sh, color = row_name))
+
+
+df %>%
+  filter(row_code %in% c("11", "21", "31G", "PROF", "FIRE", "51")) %>%
+  filter(year %in% c(1997, 2012)) %>%
+  arrange(row_name, year)
+```
+
+
+
+
+# circularity by rural-urban and data source
+
+```{r}
+df_cbsa <- geography$pubdata$get_cbsa_delin_df(params$cbsa_year) %>%
+  rename_with(tolower) %>%
+  mutate(place = paste0(state_code, county_code)) %>%
+  select(place, metro_micro)
+
+df <- bind_rows(
+  circularity$call_extraction_table(params$base_year, bus_data = "cbp_imp", ilevel = "det", spatial = FALSE) %>%
+    circularity$calculate_circularity_metrics() %>%
+    mutate(bus_data = "cbp_imp", .before = 1),
+  circularity$call_extraction_table(params$base_year, bus_data = "infogroup", ilevel = "det", spatial = FALSE) %>%
+    circularity$calculate_circularity_metrics() %>%
+    mutate(bus_data = "infogroup", .before = 1)
+) %>%
+  left_join(df_cbsa, "place") %>%
+  mutate(rural = if_else(metro_micro == "metro", "metro", "nonmetro", missing = "nonmetro"))
+
+df %>%
+  summarize(across(production_capacity:trade_openness, \(x) round(mean(x), 3)), .by = c("bus_data", "rural")) %>%
+  pivot_longer(production_capacity:trade_openness) %>%
+  pivot_wider(id_cols = name, names_from = c(bus_data, rural))
+  
+
+```
+
+# circularity by data source
+
+```{r}
+df_cbsa <- geography$pubdata$get_cbsa_delin_df(params$cbsa_year) %>%
+  rename_with(tolower) %>%
+  mutate(place = paste0(state_code, county_code)) %>%
+  select(place, metro_micro)
+
+df <- bind_rows(
+  circularity$call_extraction_table(params$base_year, bus_data = "cbp_raw", ilevel = "det", spatial = TRUE) %>%
+    circularity$calculate_circularity_metrics() %>%
+    mutate(bus_data = "cbp_raw", .before = 1),
+  circularity$call_extraction_table(params$base_year, bus_data = "cbp_imp", ilevel = "det", spatial = TRUE) %>%
+    circularity$calculate_circularity_metrics() %>%
+    mutate(bus_data = "cbp_imp", .before = 1),
+  circularity$call_extraction_table(params$base_year, bus_data = "infogroup", ilevel = "det", spatial = TRUE) %>%
+    circularity$calculate_circularity_metrics() %>%
+    mutate(bus_data = "infogroup", .before = 1)
+) %>%
+  left_join(df_cbsa, "place") %>%
+  mutate(rural = if_else(metro_micro == "metro", FALSE, TRUE, missing = TRUE))
+
+df1 <- df %>%
+  st_drop_geometry()
+
+# example where ordering cbp_raw < cbp_imp < infogroup does not hold
+df1 %>%
+  pivot_wider(id_cols = place, names_from = bus_data, values_from = retention) %>%
+  filter(str_sub(place, 1, 2) == "55", cbp_imp > infogroup)
+
+ggplot(df) +
+  geom_density(aes(retention, color = bus_data)) +
+  geom_point(aes(retention, 0, color = bus_data), data = filter(df, place == "55013"))
+
+
+
+```
+
+## trade_balance
+
+```{r}
+df1 %>%
+  pivot_wider(id_cols = place, names_from = bus_data, values_from = trade_balance) %>%
+  filter(str_sub(place, 1, 2) == "55", cbp_imp > infogroup)
+
+df1 %>%
+  pivot_wider(id_cols = place, names_from = bus_data, values_from = trade_balance) %>%
+  filter(str_sub(place, 1, 2) == "55", cbp_imp * infogroup < 0) %>%
+  mutate(diff = abs(infogroup - cbp_imp)) %>%
+  arrange(desc(diff))
+
+for (x in names(select(df1, production_capacity:trade_openness))) {
+  p <- ggplot(df1) +
+    geom_density(aes(.data[[x]], color = bus_data)) +
+    geom_point(aes(.data[[x]], 0, color = bus_data, shape = place), data = filter(df, place %in% c("31171", "31071")))
+  print(p)
+}
+
+
+
+```
+
+
+
+
+## final example: Thomas and Garfield, Nebraska
+
+```{r}
+st = "NE"
+highlight_counties = c("31071", "31171")
+
+dh <- df %>%
+  filter(bus_data == "cbp_imp", place %in% highlight_counties) %>%
+  select(place, geometry)
+
+d <- df1 %>%
+  filter(bus_data != "cbp_raw") %>%
+  mutate(bus_data = case_match(bus_data, "cbp_imp" ~ "Imputed CBP", "infogroup" ~ "InfoGroup"))
+p <- ggplot(d) +
+  geom_density(aes(trade_balance, color = bus_data)) +
+  geom_point(aes(trade_balance, 0, color = bus_data, shape = place), size = 3, data = filter(d, place %in% highlight_counties)) +
+  labs(color = "non-farm data", shape = "county", title = "Trade balance density") +
+  xlab(NULL) + ylab(NULL)
+
+# ggsave(util$mkdir("projects/nifa2024circ/output/trade_bal_density.png"), p, bg = "white", width = 6, height = 4)
+p
+
+
+tmap_mode("plot")
+tm <- tmap_arrange(
+  df %>%
+    filter(STATE == st, bus_data == "cbp_imp") %>%
+    tm_shape() +
+    tm_fill(
+      "trade_balance",
+      style = "cont",
+      midpoint = 0,
+      breaks = seq(-0.5, 0.5, 0.5),
+      contrast = c(0, 1),
+      palette = rev(brewer.pal(9, "RdBu")),
+      legend.show = FALSE
+    ) +
+    tm_shape(dh) + tm_borders(lwd = 3) + tm_text("place", ymod = 1.5) +
+    tm_layout(
+      title = "Imputed CBP",
+      title.position = c("right", "top"),
+      frame = FALSE
+    ),
+  df %>%
+    filter(STATE == st, bus_data == "infogroup") %>%
+    tm_shape() +
+    tm_fill(
+      "trade_balance",
+      style = "cont",
+      midpoint = 0,
+      breaks = seq(-0.5, 0.5, 0.5),
+      contrast = c(0, 1),
+      palette = rev(brewer.pal(9, "RdBu")),
+      title = "Trade balance",
+      legend.show = TRUE,
+      legend.is.portrait = FALSE
+    ) +
+    tm_shape(dh) + tm_borders(lwd = 3) + tm_text("place", ymod = 1.5) +
+    tm_layout(
+      title = "InfoGroup",
+      title.position = c("right", "top"),
+      frame = FALSE
+    ),
+  outer.margins = 0
+)
+
+# tmap_save(tm, util$mkdir("projects/nifa2024circ/output/nebraska.png"), height = 7, width = 7)
+tm
+```
+
+
+
+# output change counterfactuals
+
+customized functions
+
+```{r}
+
+#' convert industry output to commodity output
+output_i2c <- function(df) {
+  
+  #BEA supply matrix 
+  smat <- bea_io$call_supply_matrix(year = year, 
+                                    ilevel = ilevel, 
+                                    condense = TRUE)
+  cmat <- sweep(smat, 2, colSums(smat), "/")
+  
+  df <- df %>% 
+    util$long2matrix()
+
+  df <- cmat %*% df
+  
+  df %>% 
+    as.data.frame.table() %>% 
+    `colnames<-`(c("indcode", "place", "output"))
+}
+
+#' output, supply and demand
+outsupdem <- function(output_ind,
+                      output_com,
+                      ilevel = c("det", "sum", "sec")) {
+  
+  ilevel <- match.arg(ilevel)
+
+  
+  # outputs in matrix form for multiplication
+  output_ind_mat <- util$long2matrix(output_ind)
+  output_com_mat <- util$long2matrix(output_com)
+  
+  # non-zero industries
+  pos_ind_names <- rownames(output_ind_mat)[rowSums(output_ind_mat) > 0]
+  zero_ind_names <- base::setdiff(rownames(output_ind_mat), pos_ind_names)
+  if (length(zero_ind_names) > 0) {
+    log_debug(glue("{length(zero_ind_names)} industries have zero output: {str_c(zero_ind_names, collapse = ',')}"))
+  }
+  
+  # domestic intermediate use share of total use
+  # total_use == total_supply, I-O table accounting identity
+  total_use <- bea_io$call_commodity_supply(year = year, ilevel = ilevel, condense = TRUE)[, 1]
+  # in the use table only add up columns with positive industry output
+  dom_int_use <- bea_io$call_use_matrix(year = year, ilevel = ilevel, condense = TRUE)[, pos_ind_names] %>%
+    rowSums()
+  stopifnot(all(names(total_use) == names(dom_int_use)))
+  dom_int_use_share <- dom_int_use / total_use
+  dom_int_use_share[dom_int_use == 0 | total_use == 0] <- 0
+  # tibble(indcode = names(total_use), dom_int_use, total_use, dom_int_use_share) %>% View()
+  
+  # county-commodity supply = commodity_output * use_share
+  stopifnot(all(rownames(output_com_mat) == names(dom_int_use_share)))
+  supply_mat <- sweep(output_com_mat, 1, dom_int_use_share, "*")
+  
+  # producer price domestic output share of total supply
+  total_supply <- total_use
+  # in the supply table only add up columns with positive industry output
+  dom_pp_out <- bea_io$call_supply_matrix(year = year, ilevel = ilevel, condense = TRUE)[, pos_ind_names] %>%
+    rowSums()
+  dom_pp_out_share <- dom_pp_out / total_supply
+  dom_pp_out_share[dom_pp_out == 0 | total_supply == 0] <- 0
+  # tibble(indcode = names(total_supply), dom_pp_out, total_supply, dom_pp_out_share) %>% View()
+
+  # county-commodity demand = B-mat * industry_output * dom_pp_share
+  bmat <- bea_io$call_b_matrix(year = year, ilevel = ilevel, condense = TRUE)
+  stopifnot(all(colnames(bmat) == rownames(output_ind_mat)))
+  demand_mat <- bmat %*% output_ind_mat
+  stopifnot(all(rownames(demand_mat) == names(dom_pp_out_share)))
+  demand_mat <- sweep(demand_mat, 1, dom_pp_out_share, "*")
+  
+  # bind output, supply and demand together into single dataframe
+  df_supply <- supply_mat %>%
+    as_tibble(rownames = "indcode") %>%
+    pivot_longer(!indcode, names_to = "place", values_to = "supply")
+  df_demand <- demand_mat %>%
+    as_tibble(rownames = "indcode") %>%
+    pivot_longer(!indcode, names_to = "place", values_to = "demand")
+  stopifnot(nrow(output_com) == nrow(df_supply))
+  stopifnot(nrow(output_com) == nrow(df_demand))
+  df <- inner_join(output_com, df_supply, join_by(indcode, place), relationship = "one-to-one") %>%
+    inner_join(df_demand, join_by(indcode, place), relationship = "one-to-one")
+
+  df
+}
+
+# circularity indicators
+circ <- function(df_outsupdem) {
+  df_outsupdem %>%
+    mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply)) %>%
+    summarize(across(c(output, supply, demand, exsup, exdem), sum), .by = "place") %>%
+    mutate(
+      production_capacity = supply / output,
+      trade_capacity = exsup / output,
+      retention = 1 - exsup / supply,
+      production_dependency = demand / output,
+      trade_dependency = exdem / output,
+      autonomy = 1 - exdem / demand,
+      trade_balance = (exsup - exdem) / output,
+      trade_openness = (exsup + exdem) / output
+    )
+}
+
+
+
+```
+
+
+Compute for all counties, all industries.
+
+```{r}
+year = 2012
+ilevel = "det"
+bus_data = "cbp_imp"
+
+output_ind0 <- place_io$call_output(year = year, class_system = "industry", ilevel = ilevel, bus_data = bus_data) %>%
+  mutate(output_tot = sum(output), .by = "place")
+output_com0 <- output_i2c(output_ind0)
+osd0 <- outsupdem(output_ind0, output_com0, ilevel = ilevel)
+df_circ0 <- circ(osd0)
+
+df_allind <- list()
+for (industry in unique(output_ind0$indcode)) {
+
+# industry = "111200"
+
+  output_ind1 <- output_ind0 %>%
+    mutate(output = if_else(indcode == industry, output + 0.1 * output_tot, output))
+  output_com1 <- output_i2c(output_ind1)
+  osd1 <- outsupdem(output_ind1, output_com1, ilevel = ilevel)
+  df_circ1 <- circ(osd1)
+  
+  df_circ_diff <- (select(df_circ1, !place) - select(df_circ0, !place)) %>%
+    mutate(place = df_circ1$place, .before = 1)
+  
+  df_allind[[industry]] <- df_circ_diff
+}
+df_diff_allind <- bind_rows(df_allind, .id = "indcode")
+
+df_circ0 %>% select(production_capacity:trade_openness) %>% skim()
+df_diff_allind %>% filter(indcode == "1111A0") %>% select(production_capacity:trade_openness) %>% skim()
+
+for (x in names(select(df_circ0, production_capacity:trade_openness))) {
+  # df_circ_diff <- df_diff_allind %>% filter(indcode == "1111A0")
+  # df_circ_diff <- df_diff_allind %>% filter(place == "55081") # Monroe
+  df_circ_diff <- df_diff_allind %>% filter(place == "31171")
+  qs <- quantile(df_circ_diff[[x]], c(0.01, 0.99))
+  p <- df_circ_diff %>%
+    filter(between(.data[[x]], qs[1], qs[2])) %>%
+    ggplot() +
+    geom_histogram(aes(.data[[x]]), alpha = 0.2) + 
+    geom_density(aes(.data[[x]]))
+  print(p)
+}
+
+```
+
+### retention response in Garfield and Thomas
+
+```{r}
+df_diff_allind %>% 
+  filter(place %in% c("31171", "31071")) %>%
+  filter(between(retention, -0.1, 0.1)) %>%
+  ggplot() +
+  geom_density(aes(retention, color = place)) +
+  theme(legend.position = "inside", legend.position.inside = c(0.9, 0.9)) +
+  labs(color = "county", title = "Retention density") +
+  xlab(NULL) + ylab(NULL)
+```
+
+
+# out-sup-dem examples
+
+## table
 
 ```{r}
 # Dairy and Cheese 
-#industries = c("112120", "311513")
-#counties = c("55117","55081")
+industries = c("112120", "311513")
+counties = c("55117","55081")
 
 # Animal Feed and Dairy
-industries = c("311119", "112120")
-counties = c("17001", "17027")
+# industries = c("311119", "112120")
+# counties = c("17001", "17027")
 
 # Plastics and Medical Device Manufacturing
 #industries = c("^3261", "339112")
@@ -110,7 +552,7 @@ df_example[[industry]] <- circularity$call_extraction_table(year = params$circul
                                     spatial = TRUE) |> 
   mutate(
     industry = industries[industry],
-    id = paste(NAME, "county,", STATE, "(", place, ")"),
+    id = paste0(NAME, " county, ", STATE, " (", place, ")"),
     locally_met = pmin(intermediate_supply, intermediate_demand)
   ) 
 }
@@ -130,6 +572,9 @@ df_12 |>
   select(id, industry, intermediate_supply, intermediate_demand, locally_met, net_supply, net_demand)
 
 ```
+
+## map
+
 ```{r}
 
 for(industry in 1:2){
@@ -161,9 +606,9 @@ df_example[[industry]] %>%
     
 ```
 
+# circularity - growth correlations
 
-
-# Data
+## Data
 
 ```{r}
 
@@ -215,167 +660,12 @@ df <- left_join(df_circ,df_busdata, by = join_by(place)) |>
   left_join(df_cbsa, by = join_by(STATE_CODE, COUNTY_CODE)) |> 
   mutate(cbsa_rural_category = if_else(METRO_MICRO == "metro", FALSE, TRUE, missing = TRUE))
 
-
-```
-
-
-# Descriptives table
-
-```{r, message=FALSE}
-#| paged.print=FALSE
-
-
-  df %>%
-  st_drop_geometry() %>%
-  select(c(params$reg_factors, params$circ_factors)) %>%
-  skim()
-```
-
-# Density distributions
-
-```{r}
-#| warning: false
-
-# density distributions for all 8 circularity indicators
-
-if(FALSE){
-  for (circ_measure in params$circ_factors) {
-    n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
-    (ggplot(df) +
-      geom_density(aes(x = .data[[circ_measure]]), fill = "#88CCEE", alpha = 0.4) +
-      theme_pander() +
-      theme(legend.position = "none") +
-      ggtitle(n) +
-      xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
-      ylab("Density") +
-      xlab(n) ) %>%
-      print()
-  }
-}
-
-
-for (circ_measure in params$circ_factors) {
-  n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
-  (ggplot(df) +
-    geom_histogram(aes(x = .data[[circ_measure]]), fill = "#88CCEE", binwidth = 0.01) +
-    theme_pander() +
-    theme(legend.position = "none") +
-    ggtitle(n) +
-    xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
-    ylab("Count") +
-    xlab(n) ) %>%
-    print()
-}
-
-
-```
-
-
-# Spatial distributions
-
-
-
-```{r}
-# maps for all 8 circularity indicators
-
-
-df %>% shift_geometry() %>% {(
-  for (circ_measure in params$circ_factors) {(
-      tm_shape(.) +
-        tm_polygons(
-          title = str_replace_all(circ_measure, "_", " ") %>% str_to_title(),
-          col = circ_measure,
-          border.alpha = 0.0,
-          style = "cont",
-          midpoint = 0,
-          breaks = if(circ_measure == "trade_balance"){seq(-.5, .5, .1)}else{c(0, .25, .5, .75, 1)},
-          palette = rev(brewer.pal(9, "RdBu"))) +
-        group_by(., STATE_CODE) %>% summarise() %>% tm_shape() +
-        tm_layout(
-          legend.title.size = .8,
-          legend.text.size = .5,
-          legend.position = c("LEFT", "TOP"),
-          frame = F,
-          fontface = 2 ) +
-        tm_borders(lwd = 1.5) ) %>% 
-      print()
-  })
-} 
-
-```
-
-# Rural divide 
-```{r, message=FALSE}
-#| paged.print=FALSE
-
-
-# repeat all tables and density plots above with a rurality bifurcation
-
-# motivation: “rural places might be disadvantaged by their place in the supply chain”
-# does this support the hypothesis that values of metro and nonmetro are the same or not?
-# can the indicators be associated with economic outcomes? and across rurality?
-
-if(FALSE){
-  print("Non-metro:")
-  df %>%
-    st_drop_geometry() %>%
-    filter(cbsa_rural_category == TRUE) %>%
-    select(params$circ_factors) %>%
-    summary()
-  print("Metro:")
-  df %>%
-    st_drop_geometry() %>%
-    filter(cbsa_rural_category == FALSE) %>%
-    select(params$circ_factors) %>%
-    summary()
-} else {
-df %>%
-  st_drop_geometry() %>%
-  group_by(cbsa_rural_category) %>%
-  mutate(log_excess_supply = log(net_supply), 
-         log_excess_demand = log(net_demand), 
-         log_local_supply = log(intermediate_supply - net_supply), 
-         log_local_demand = log(intermediate_demand - net_demand)) %>% 
-  select(c("log_excess_supply", "log_excess_demand", "log_local_supply", "log_local_demand", params$reg_factors, params$circ_factors)) %>%
-  skim()
-}
-
-
-
-```
-
-```{r}
-# density distributions controlling for rurality
-
-df %>%
-  mutate(metro_status = ifelse(cbsa_rural_category == TRUE, "non-metro", 
-                               ifelse(cbsa_rural_category == FALSE, "metro", NA) )) %>% {
-  
-    (for (circ_measure in params$circ_factors) {
-      n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
-      (
-        ggplot(.) +
-          geom_density(aes(x = .data[[circ_measure]], fill = metro_status), alpha = 0.4) +
-          theme_pander() +
-          xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
-          scale_fill_manual(values = c("black","#88CCEE")) +
-          theme(legend.position = "top") +
-          labs(
-            fill = "CBSA status",
-            y = "Density",
-            x = n,
-            title = n
-          )
-      ) %>% print()
-    })
-  }
-
-
+df_main <- df
 ```
 
 
 
-# Correlation tables
+## Correlation tables
 ```{r}
 
 # 8 by 8 
@@ -409,41 +699,10 @@ correlations
 
 
 ```
-## figure for slides
 
 
-```{r}
-correlations <- data.frame()
-for (economic_measure in params$reg_factors) {
-  for (circularity_measure in params$circ_factors) {
-    correlations <- cor.test(x = df[[circularity_measure]], y=df[[economic_measure]]) %>%
-      broom::tidy() %>%
-      select(estimate, conf.low, conf.high) %>%
-      mutate(economic_measure = economic_measure, circularity_measure = circularity_measure, .before = 1) %>%
-      rbind(correlations, .)
-  }
-}
+## Correlation tables Rurality
 
-p <- correlations %>%  
-  mutate(circularity_measure = ordered(
-    str_replace(circularity_measure, "_", " "),
-    levels = str_replace(params$circ_factors, "_", " ")
-  )) %>%
-  mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
-  ggplot(aes(x = circularity_measure, color = `Economic growth`, group = `Economic growth`)) +
-  geom_point(aes(y = estimate, shape = `Economic growth`), size = 2, position = position_dodge(0.5)) +
-  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
-  geom_hline(yintercept = 0, linetype = 2) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
-
-p
-```
-
-
-
-
-# Correlation tables Rurality
 ```{r}
 
 # repeat as above with rural divide 
@@ -484,236 +743,5 @@ correlations
 ```
 
 
-## figure for slides
-
-
-```{r}
-correlations <- data.frame()
-for (economic_measure in params$reg_factors) {
-  for (circularity_measure in params$circ_factors) {
-    for (rural in c(TRUE, FALSE)) {
-      correlations <- df %>%
-        filter(cbsa_rural_category == rural) %>%
-        {cor.test(x = .[[circularity_measure]], y = .[[economic_measure]])} %>%
-        broom::tidy() %>%
-        select(estimate, conf.low, conf.high) %>%
-        mutate(
-          economic_measure = economic_measure,
-          circularity_measure = circularity_measure,
-          rural = rural,
-          .before = 1
-        ) %>%
-        rbind(correlations, .)
-    }
-  }
-}
-
-(
-  p <- correlations %>%
-  filter(economic_measure != "payroll_gr") %>%
-  mutate(rural = case_match(rural, TRUE ~ "non-metro", FALSE ~ "metro")) %>%
-  mutate(circularity_measure = ordered(
-    str_replace(circularity_measure, "_", " "),
-    levels = str_replace(params$circ_factors, "_", " ")
-  )) %>%
-  mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
-  ggplot(aes(x = circularity_measure, color = rural, group = rural)) +
-  geom_point(aes(y = estimate, shape = rural), size = 2, position = position_dodge(0.5)) +
-  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
-  geom_hline(yintercept = 0, linetype = 2) +
-  facet_wrap(vars(`Economic growth`), ncol = 1) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
-)
-```
-
-# Different level of capacity
-
-```{r}
-
-
-
-# How does retention and economic outcomes vary across high and low production capacity places?
-
-temp = df %>% st_drop_geometry() %>% summarize(
-  p25 = quantile(production_capacity, c(.25), na.rm = TRUE),
-  p75 = quantile(production_capacity, c(.75), na.rm = TRUE)
-)
-
-pc_p25 = sum(temp$p25)
-pc_p75 = sum(temp$p75)
-
-# Low production capacity
-df_lowPC = df %>% filter(production_capacity < pc_p25)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
-  }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("LOW P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("LOW P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("LOW P.C. payroll_gr" = "name")
-
-# Mid production capacity
-df_lowPC = df %>% filter(production_capacity >= pc_p25 &
-                           production_capacity < pc_p75)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
-  }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("MID P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("MID P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("MID P.C. payroll_gr" = "name")
-
-# High production capacity
-df_lowPC = df %>% filter(production_capacity >= pc_p75)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
-  }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("HIGH P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("HIGH P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("HIGH P.C. payroll_gr" = "name")
-
-# How does autonomy and economic outcomes vary across high and low production dependency places?
-temp = df %>% st_drop_geometry() %>% summarize(
-  p25 = quantile(production_dependency, c(.25), na.rm = TRUE),
-  p75 = quantile(production_dependency, c(.75), na.rm = TRUE)
-)
-
-pd_p25 = sum(temp$p25)
-pd_p75 = sum(temp$p75)
-
-# Low production dependency
-df_lowPD = df %>% filter(production_dependency < pd_p25)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("LOW P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("LOW P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("LOW P.D. payroll_gr" = "name")
-
-# Mid production dependency
-df_lowPD = df %>% filter(production_dependency >= pd_p25 &
-                           production_dependency < pd_p75)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("MID P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("MID P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("MID P.D. payroll_gr" = "name")
-
-# High production dependency
-df_lowPD = df %>% filter(production_dependency >= pd_p75)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("HIGH P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("HIGH P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("HIGH P.D. payroll_gr" = "name")
-
-
-```
 
 

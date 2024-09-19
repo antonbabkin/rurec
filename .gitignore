@@ -34,6 +34,9 @@ data/*
 nbs/*_cache/
 .Rproj.user
 
+# customize env vars locally
+.Renviron
+
 # symbolic links to packages: OS dependent, created on init
 nbs/rurec
 rurec/reseng
