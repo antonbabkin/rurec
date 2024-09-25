@@ -16,6 +16,14 @@ source("R/place_output.R", local = (place_output <- new.env()))
 
 ```
 
+# About
+
+The economies of rural America continue to lag those in metropolitan areas with many experiencing significant hardship, but there is increasing agreement among researchers and policymakers that existing place typologies are inadequate for addressing urban-rural disparities. Because these typologies emphasize the urban end of the rural-urban continuum with rural treated as the undifferentiated residual category, the complex interaction of economic, demographic, and social factors that define rural places are ignored. To address this challenge, we have developed a data-driven approach to identify connections between places based on the spatial distribution of potential supply chain linkages to generate a new typology – *Economic Catchment Areas (ECAs)* thereby illuminating place-to-place connections obscured in existing place hierarchies. To do so, we construct county-to-county potential trade flows in intermediate inputs as the solution to a transportation distance loss function. Counties that would serve as the most important user of inputs for at least one other county are classified as *destinations* of an ECA, while all the counties for which the destination would be the largest user of their inputs are the *sources* of the ECA.
+
+Additional details are available in the working paper.
+
+Dunn, Richard A., Anton Babkin, Austin Sandler, Katherine J. Curtis, Sara Peters, Clayton Adamson. *Economic Catchment Areas: A New Place Typology Based on Supply Chain Connectedness.* Agricultural and Applied Economics Association (AAEA) 2024 Annual Meeting, July 28-30, New Orleans, LA. https://doi.org/10.22004/ag.econ.345100
+
 
 
 # county industry
