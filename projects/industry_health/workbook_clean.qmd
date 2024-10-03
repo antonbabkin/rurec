@@ -17,6 +17,20 @@ params:
   econ_dynam_data: TRUE
   basic_geog_feature: TRUE
 ---
+#Table of Contents
+[#Summary Statistics](#summary statistics),
+[#Histograms](#histograms),
+[#Density plots](#density),
+[#Maps](#maps),
+[#Scatterplots](#scatterplots),
+[#ESDA](#ESDA),
+[#OLS](#ols),
+[#Model M1-Spatial Error](#model1),
+[#Model M2- Regime- metro/non](#model2),
+[#Model M3-SLX](#model3),
+[#Model M3a-SLX-Metro](#model3a),
+[#Model M3b- nonmetro](#model3b),
+[#Visualization](#visualizations)
 
 
 # setup
