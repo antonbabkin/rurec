@@ -3,34 +3,13 @@ title: "Industry-Health"
 editor: source
 format:
   html:
+    toc: true
+    toc-depth: 4
     self-contained: true
     page-layout: full
     code-fold: true
     code-tools: true
-    code_download: yes
-params:
-  geography_year: 2013
-  focus_county: "55025"
-  map_imped_show: false
-  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
-  map_imped_param: 500 # scale parameter of the impedance function
-  econ_dynam_data: TRUE
-  basic_geog_feature: TRUE
 ---
-#Table of Contents
-[#Summary Statistics](#summary statistics),
-[#Histograms](#histograms),
-[#Density plots](#density),
-[#Maps](#maps),
-[#Scatterplots](#scatterplots),
-[#ESDA](#ESDA),
-[#OLS](#ols),
-[#Model M1-Spatial Error](#model1),
-[#Model M2- Regime- metro/non](#model2),
-[#Model M3-SLX](#model3),
-[#Model M3a-SLX-Metro](#model3a),
-[#Model M3b- nonmetro](#model3b),
-[#Visualization](#visualizations)
 
 
 # setup
@@ -187,7 +166,9 @@ ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypol
 # # not working
 # abc = ih_dp$call_agcensus12()
 
+# https://www.nass.usda.gov/datasets/qs.census2012.txt.gz
 agc_clean = read.delim2("data/projects/industry_health/jobs/qs.census2012.txt") #import ag census
+# https://www2.census.gov/programs-surveys/cbp/datasets/2012/cbp12co.zip
 jobs_clean <- read_delim("data/projects/industry_health/jobs/cbp12co.txt") #import cbp
 
 agwork = agc_clean %>%
@@ -324,7 +305,7 @@ data <- left_join (data, circu, by = "place")
 ```
 
 
-# Summary Statistics {#summary statistics}
+# Summary Statistics
 
 ```{r}
 
@@ -364,7 +345,7 @@ summary_stats_nonmetro
 
 ```
 
-# Histograms {#histograms}
+# Histograms
 
 ```{r}
 data %>% select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
@@ -373,7 +354,7 @@ data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logp
 
 
 ```
-# Density plots {#density}
+# Density plots
 
 ```{r}
 #paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
@@ -430,33 +411,9 @@ for (plot in density_plots) {
 ```
 
 
-# Maps {#maps}
+# Maps
 
 ```{r}
-
-# creating function to streamline creation of maps
-
-ipath <- list(
-  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
-  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}")
-)
-
-ipath
-call_geo <- function() {
-  df <- geo$call_geog(params$geography_year) |>
-    rename_with(str_to_lower)
-  d <- geo$pubdata$get_state_df(FALSE) |>
-    rename_with(str_to_lower) |>
-    select(code, contiguous, bea_region_name) |>
-    rename(state_code = code)
-  df <- left_join(df, d, "state_code")
-  df
-}
-df_map = data 
-df = call_geo()
-df_map <- left_join(df, df_map, by = "place")
-
-# write.csv(df_map, file = "IH_spatial.csv")
 
 
 map = ih_dp$call_geog(2012)
@@ -518,7 +475,7 @@ print(output)
 ```
 
 
-# Scatterplots {#scatterplots}
+# Scatterplots
 ToDO:: create metro/nonmetro scatter plots
 ToDO: scatter plots for prosperity measures
 
@@ -605,7 +562,7 @@ ggplot(nonmetro_data, aes(autonomy_calc, retention_calc)) +
 
 
 
-# ESDA {#ESDA}
+# ESDA
 
 ```{r}
 map = ih_dp$call_geog(2012)
@@ -716,14 +673,14 @@ title(main = "LISA, Autonomy")
 ```
 
 # Clean models (no interact)
-# Models {#models}
+# Models
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
 
 ```
 
 
-## OLS {#ols}
+## OLS
 
 ```{r}
 
@@ -752,7 +709,7 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 
 
-## Model M1-Spatial Error {#model1}
+## Model M1-Spatial Error
 
 ```{r}
 
@@ -815,7 +772,7 @@ summary(slx_import)
 
 
 
-## Model M2- Regime- metro/non {#model2}
+## Model M2- Regime- metro/non
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -874,7 +831,7 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 
 
 ## Structural equation (no interact)
-#### 1.) aspatial SEM {#aspatialSEM}
+#### 1.) aspatial SEM
 ```{r}
 model5 <- '
   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
@@ -986,7 +943,7 @@ moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
 
 
 #### 2.) SLX
-#### Model M3-SLX {#model3}
+#### Model M3-SLX
 
 
 ```{r}
@@ -1117,7 +1074,7 @@ moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 ```
 
-#### Model M3a-SLX-Metro {#model3a}
+#### Model M3a-SLX-Metro
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -1169,7 +1126,7 @@ fit <- cfa(model6, data=mi3_metro)
 
 
 
-#### Model M3b- nonmetro {#model3b}
+#### Model M3b- nonmetro
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
@@ -1216,7 +1173,7 @@ fit <- cfa(model6, data=mi3_nonmetro)
 
 
 
-# Output viz {#visualizations}
+# Output viz
 
 ```{r, fig.width=10}
 
