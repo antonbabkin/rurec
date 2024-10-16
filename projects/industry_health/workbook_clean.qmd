@@ -3,20 +3,14 @@ title: "Industry-Health"
 editor: source
 format:
   html:
+    toc: true
+    toc-depth: 4
     self-contained: true
     page-layout: full
     code-fold: true
     code-tools: true
-    code_download: yes
-params:
-  geography_year: 2013
-  focus_county: "55025"
-  map_imped_show: false
-  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
-  map_imped_param: 500 # scale parameter of the impedance function
-  econ_dynam_data: TRUE
-  basic_geog_feature: TRUE
 ---
+
 
 # setup
 
@@ -122,7 +116,7 @@ age = get_acs(geography = "county",
   select("place"=GEOID, age)
 
 
-##pct over 65
+##% College degree or more
 bach = get_acs(geography = "county",
                    survey = "acs5",
                    variables = c("S1501_C02_012E"
@@ -172,7 +166,9 @@ ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypol
 # # not working
 # abc = ih_dp$call_agcensus12()
 
+# https://www.nass.usda.gov/datasets/qs.census2012.txt.gz
 agc_clean = read.delim2("data/projects/industry_health/jobs/qs.census2012.txt") #import ag census
+# https://www2.census.gov/programs-surveys/cbp/datasets/2012/cbp12co.zip
 jobs_clean <- read_delim("data/projects/industry_health/jobs/cbp12co.txt") #import cbp
 
 agwork = agc_clean %>%
@@ -299,6 +295,8 @@ print(data)
 
 ## 7/9/24 circularity
 
+Commented code is to use infogroup data in sensitivity analysis
+
 ```{r}
 #circu <- ih_dp$call_circularity(2012, bus_data = "infogroup", ilevel = "det") %>%
 circu <- ih_dp$call_circularity(2012, bus_data = "cbp_imp", ilevel = "det") %>%
@@ -306,44 +304,48 @@ circu <- ih_dp$call_circularity(2012, bus_data = "cbp_imp", ilevel = "det") %>%
 data <- left_join (data, circu, by = "place")
 ```
 
-##construct alternate retention and autonomy
+
+# Summary Statistics
 
 ```{r}
 
-# data <- data %>%
-#   mutate(retention_calc = 1 - (excess_supply / intermediate_supply),
-#          autonomy_calc = 1 - (excess_demand / intermediate_demand))
-# 
-# print(data)
-
-#write.csv(data, file = "IH_data.csv")
-
-```
-
-
-
-#summary statistics
-
-```{r}
-
-##summary statistics
-summary_stats = data %>% select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
-  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+##summary statistics- global
+summary_stats = data %>% 
+  select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
 summary_stats
 
 
-# 
-# 
-# retention_ones <- mean(data$retention == 1, na.rm = TRUE) * 100
-# autonomy_ones <- mean(data$autonomy == 1, na.rm = TRUE) * 100
-# 
-# print(retention_ones)
-# print(autonomy_ones)
+# Summary statistics for metro cases 
+summary_stats_metro = data %>%
+   filter(metro_nonmetro == "metro") %>% 
+  select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+
+# Summary statistics for nonmetro cases 
+summary_stats_nonmetro = data %>%
+  filter(metro_nonmetro == "nonmetro") %>% 
+  select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
+summary_stats_nonmetro
+
+
 
 ```
 
-#histograms
+# Histograms
 
 ```{r}
 data %>% select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
@@ -352,34 +354,66 @@ data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logp
 
 
 ```
-
-#maps
+# Density plots
 
 ```{r}
+#paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
 
-# creating function to streamline creation of maps
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 2  # Adjust the number of colors as needed
 
-ipath <- list(
-  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
-  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}")
-)
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
-ipath
-call_geo <- function() {
-  df <- geo$call_geog(params$geography_year) |>
-    rename_with(str_to_lower)
-  d <- geo$pubdata$get_state_df(FALSE) |>
-    rename_with(str_to_lower) |>
-    select(code, contiguous, bea_region_name) |>
-    rename(state_code = code)
-  df <- left_join(df, d, "state_code")
-  df
+
+
+ # Define the variables and titles
+vars = c("paam", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",    "income_rate", "logpop", "uninsured")
+
+titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", 
+           "%\n Agriculture", 
+           "Labor \nForce\n Participation Rate", "% \nOver 65", 
+           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
+           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+
+# Function to create density plots
+create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) {
+  plots <- list()  
+  
+  # Loop through the variable names
+  for (i in seq_along(vars)) {
+    var <- vars[i]          
+    title <- titles[i]     
+    
+    plot <- ggplot(data, aes_string(x = var, group = metro_nonmetro, 
+                                     color = paste0("as.factor(", metro_nonmetro, ")"))) +
+      geom_density() +
+      scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+      labs(title = title,   
+           x = var,        
+           y = "Density") +
+      theme_minimal()  
+    
+    plots[[var]] <- plot  
+  }
+  
+  return(plots)  
 }
-df_map = data 
-df = call_geo()
-df_map <- left_join(df, df_map, by = "place")
 
-# write.csv(df_map, file = "IH_spatial.csv")
+
+# Call the function
+density_plots <- create_density_plots(data, vars, "metro_nonmetro", my_colors, titles)
+
+for (plot in density_plots) {
+  print(plot)
+}
+```
+
+
+# Maps
+
+```{r}
 
 
 map = ih_dp$call_geog(2012)
@@ -388,9 +422,9 @@ df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 #install.packages("RColorBrewer")
 # library(RColorBrewer)
  
- vars = list("paam", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured")
+ vars = list("paam", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
  
- titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65")
+ titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
  
 for (i in seq_along(vars)) {
   v = vars[[i]]
@@ -441,7 +475,9 @@ print(output)
 ```
 
 
-#scatterplots
+# Scatterplots
+ToDO:: create metro/nonmetro scatter plots
+ToDO: scatter plots for prosperity measures
 
 ```{r}
 
@@ -526,7 +562,7 @@ ggplot(nonmetro_data, aes(autonomy_calc, retention_calc)) +
 
 
 
-#exploratory spatial data analysis
+# ESDA
 
 ```{r}
 map = ih_dp$call_geog(2012)
@@ -637,10 +673,12 @@ title(main = "LISA, Autonomy")
 ```
 
 # Clean models (no interact)
+# Models
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
 
 ```
+
 
 ## OLS
 
@@ -669,58 +707,9 @@ title(main = "LISA, aggregate LQI")
 legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
 
-<!-- #### print results  -->
-<!-- Write OLS retention & autonomy results to excel file  -->
-
-<!-- ```{r} -->
-
-<!-- # install.packages("broom") -->
-<!-- # install.packages("writexl") -->
-<!-- library(broom) -->
-<!-- library(writexl) -->
-
-<!-- # Tidy the results of each model -->
-<!-- tidy_ols1 <- tidy(ols1a1) -->
-<!-- tidy_ols2 <- tidy(ols1a2) -->
-<!-- tidy_ols3 <- tidy(ols1a3) -->
-<!-- tidy_ols4 <- tidy(ols2a) -->
-<!-- tidy_ols5 <- tidy(ols2a1) -->
-<!-- tidy_ols6 <- tidy(ols3a) -->
 
 
-<!-- # Add a column to identify the model -->
-
-<!-- tidy_ols1$model <- "Retention-Industry" -->
-<!-- tidy_ols2$model <- "Autonomy-Industry" -->
-<!-- tidy_ols3$model <- "PAAM-Industry" -->
-<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
-<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
-<!-- tidy_ols6$model <- "FULL" -->
-
-<!-- # Combine the tidy results into a single data frame -->
-<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
-
-
-<!-- # Create a list of data frames to be written to different sheets -->
-<!-- results_list <- list( -->
-<!-- "Retention-Industry" = tidy_ols1, -->
-<!-- "Autonomy-Industry" = tidy_ols2, -->
-<!-- "PAAM-Industry" = tidy_ols3, -->
-<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
-<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
-<!-- "FULL" = tidy_ols6 -->
-<!-- ) -->
-
-<!-- # Write the list of data frames to an Excel file -->
-<!-- write_xlsx(results_list, path = "OLS_regression_results.xlsx") -->
-
-
-<!-- ``` -->
-
-
-
-## Sp Error
-#### Model M1
+## Model M1-Spatial Error
 
 ```{r}
 
@@ -796,58 +785,9 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
 
 
-<!-- #### print results  -->
-<!-- Write SE retention & autonomy results to excel file  -->
-
-<!-- ```{r} -->
-
-<!-- # install.packages("broom") -->
-<!-- # install.packages("writexl") -->
-<!-- library(broom) -->
-<!-- library(writexl) -->
-
-<!-- # Tidy the results of each model -->
-<!-- tidy_ols1 <- tidy(ols1a1) -->
-<!-- tidy_ols2 <- tidy(ols1a2) -->
-<!-- tidy_ols3 <- tidy(ols1a3) -->
-<!-- tidy_ols4 <- tidy(ols2a) -->
-<!-- tidy_ols5 <- tidy(ols2a1) -->
-<!-- tidy_ols6 <- tidy(ols3a) -->
 
 
-<!-- # Add a column to identify the model -->
-
-<!-- tidy_ols1$model <- "Retention-Industry" -->
-<!-- tidy_ols2$model <- "Autonomy-Industry" -->
-<!-- tidy_ols3$model <- "PAAM-Industry" -->
-<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
-<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
-<!-- tidy_ols6$model <- "FULL" -->
-
-<!-- # Combine the tidy results into a single data frame -->
-<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
-
-
-<!-- # Create a list of data frames to be written to different sheets -->
-<!-- results_list <- list( -->
-<!-- "Retention-Industry" = tidy_ols1, -->
-<!-- "Autonomy-Industry" = tidy_ols2, -->
-<!-- "PAAM-Industry" = tidy_ols3, -->
-<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
-<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
-<!-- "FULL" = tidy_ols6 -->
-<!-- ) -->
-
-<!-- # Write the list of data frames to an Excel file -->
-<!-- write_xlsx(results_list, path = "SE_regression_results.xlsx") -->
-
-
-<!-- ``` -->
-
-
-
-## Regime - metro/non
-#### Model M2
+## Model M2- Regime- metro/non
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -901,58 +841,12 @@ legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
 ```
 
 
-<!-- #### print results  -->
-<!-- Write regime retention & autonomy results to excel file  -->
 
-<!-- ```{r} -->
-
-<!-- # install.packages("broom") -->
-<!-- # install.packages("writexl") -->
-<!-- library(broom) -->
-<!-- library(writexl) -->
-
-<!-- # Tidy the results of each model -->
-<!-- tidy_ols1 <- tidy(ols1a1) -->
-<!-- tidy_ols2 <- tidy(ols1a2) -->
-<!-- tidy_ols3 <- tidy(ols1a3) -->
-<!-- tidy_ols4 <- tidy(ols2a) -->
-<!-- tidy_ols5 <- tidy(ols2a1) -->
-<!-- tidy_ols6 <- tidy(ols3a) -->
-
-
-<!-- # Add a column to identify the model -->
-
-<!-- tidy_ols1$model <- "Retention-Industry" -->
-<!-- tidy_ols2$model <- "Autonomy-Industry" -->
-<!-- tidy_ols3$model <- "PAAM-Industry" -->
-<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
-<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
-<!-- tidy_ols6$model <- "FULL" -->
-
-<!-- # Combine the tidy results into a single data frame -->
-<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
-
-
-<!-- # Create a list of data frames to be written to different sheets -->
-<!-- results_list <- list( -->
-<!-- "Retention-Industry" = tidy_ols1, -->
-<!-- "Autonomy-Industry" = tidy_ols2, -->
-<!-- "PAAM-Industry" = tidy_ols3, -->
-<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
-<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
-<!-- "FULL" = tidy_ols6 -->
-<!-- ) -->
-
-<!-- # Write the list of data frames to an Excel file -->
-<!-- write_xlsx(results_list, path = "SR_regression_results.xlsx") -->
-
-
-<!-- ``` -->
 
 
 
 ## Structural equation (no interact)
-#### 1.) aspatial
+#### 1.) aspatial SEM
 ```{r}
 model5 <- '
   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
@@ -1160,7 +1054,7 @@ moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
 
 
 #### 2.) SLX
-#### Model M3
+#### Model M3-SLX
 
 
 ```{r}
@@ -1291,8 +1185,7 @@ moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 ```
 
-#### Metro-specific
-#### Model M3a
+#### Model M3a-SLX-Metro
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -1429,9 +1322,7 @@ moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 
 
-
-#### Nonmetro-specific
-#### Model M3b
+#### Model M3b- nonmetro
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
@@ -1560,6 +1451,342 @@ lw$weights[5]
 moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 ```
+
+
+
+# Output viz
+
+```{r, fig.width=10}
+
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
+
+
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-0.4, 0.53) +
+  geom_hline(yintercept = 0) +
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
+
+plot1
+
+```
+
+
+```{r, fig.width=10}
+
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'metro', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
+
+
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-1.3, 1.9) +
+  geom_hline(yintercept = 0) +
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
+
+plot1
+
+```
+
+
+#Old Code
+<!-- # extra -->
+<!-- ### partitioned SEM -->
+<!-- #### metro -->
+<!-- ```{r} -->
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- mi3_metro = mi3 %>% -->
+<!--   filter(metro_nonmetro == "metro") -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+<!--   retention_calc ~~ autonomy_calc -->
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3_metro)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3_metro) -->
+
+
+<!-- ``` -->
+
+<!-- #### nonmetro -->
+<!-- ```{r} -->
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- mi3_nonmetro = mi3 %>% -->
+<!--   filter(metro_nonmetro == "nonmetro") -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+<!--   retention_calc ~~ autonomy_calc -->
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3_nonmetro)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3_nonmetro) -->
+<!-- ``` -->
+
+
+
+<!-- ## comparing covariance matrix setups -->
+<!-- #### no covarance defined -->
+<!-- ```{r} -->
+
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3) -->
+<!-- ``` -->
+
+
+<!-- #### only autonomy/retention -->
+
+<!-- ```{r} -->
+
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+<!--   retention_calc ~~ autonomy_calc -->
+
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3) -->
+<!-- ``` -->
+
+
+<!-- #### retention/autonomy & logpop -->
+<!-- ```{r} -->
+
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+<!--   logpop ~~ poverty_rate -->
+<!--   logpop ~~ bach -->
+<!--   logpop ~~ income_rate -->
+<!--   logpop ~~ pct_mfg -->
+<!--   logpop ~~ pct_ag -->
+<!--   logpop ~~ pct_mine -->
+<!--   logpop ~~ retention_calc -->
+<!--   logpop ~~ autonomy_calc -->
+<!--   logpop ~~ age -->
+<!--   logpop ~~ uninsured -->
+<!--   retention_calc ~~ autonomy_calc -->
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3) -->
+<!-- ``` -->
+
+
+<!-- ## latent covaraties -->
+<!-- ```{r} -->
+
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+
+<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+
+<!-- mi3 = mi1 %>% -->
+<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
+<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
+<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
+<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
+<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
+<!--          lag.logpop = slx_import$model$lag.logpop,  -->
+<!--          lag.uninsured = slx_import$model$lag.uninsured -->
+<!--          ) -->
+
+<!-- model6 <- ' -->
+<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+<!--   controls2 =~ age + uninsured + logpop -->
+
+<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
+<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
+<!--   paam ~ controls2 + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+
+<!--   # indirect (a*b) -->
+<!--   ab := a*b -->
+
+<!--   # total -->
+<!--   total := c + (a*b) -->
+
+<!--   retention_calc ~~ autonomy_calc -->
+
+
+<!-- ' -->
+
+<!-- model6.fit <- sem(model6, data = mi3)  -->
+<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+
+<!-- fit <- cfa(model6, data=mi3) -->
+<!-- ``` -->
+
+
 
 
 
@@ -2534,339 +2761,147 @@ moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 
 
+<!-- #### print results  -->
+<!-- Write regime retention & autonomy results to excel file  -->
 
-# Output viz
-
-```{r, fig.width=10}
-
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
-  drop_na(var)
-
-
-plot1 = ggplot(viz) +
-  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-0.4, 0.53) +
-  geom_hline(yintercept = 0) +
-  # ggtitle("Retention") +
-  ylab("Coefficents (standardized)") +
-  xlab("Independent variables") +
-  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
-  theme_pander() +
-  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
-
-plot1
-
-```
-
-
-```{r, fig.width=10}
-
-viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'metro', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
-  drop_na(var)
-
-
-plot1 = ggplot(viz) +
-  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
-  ylim(-1.3, 1.9) +
-  geom_hline(yintercept = 0) +
-  # ggtitle("Retention") +
-  ylab("Coefficents (standardized)") +
-  xlab("Independent variables") +
-  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
-  theme_pander() +
-  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
-
-plot1
-
-```
-
-
-
-<!-- # extra -->
-<!-- ### partitioned SEM -->
-<!-- #### metro -->
 <!-- ```{r} -->
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+
+<!-- # install.packages("broom") -->
+<!-- # install.packages("writexl") -->
+<!-- library(broom) -->
+<!-- library(writexl) -->
+
+<!-- # Tidy the results of each model -->
+<!-- tidy_ols1 <- tidy(ols1a1) -->
+<!-- tidy_ols2 <- tidy(ols1a2) -->
+<!-- tidy_ols3 <- tidy(ols1a3) -->
+<!-- tidy_ols4 <- tidy(ols2a) -->
+<!-- tidy_ols5 <- tidy(ols2a1) -->
+<!-- tidy_ols6 <- tidy(ols3a) -->
 
 
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+<!-- # Add a column to identify the model -->
 
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
+<!-- tidy_ols1$model <- "Retention-Industry" -->
+<!-- tidy_ols2$model <- "Autonomy-Industry" -->
+<!-- tidy_ols3$model <- "PAAM-Industry" -->
+<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
+<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
+<!-- tidy_ols6$model <- "FULL" -->
 
-<!-- mi3_metro = mi3 %>% -->
-<!--   filter(metro_nonmetro == "metro") -->
+<!-- # Combine the tidy results into a single data frame -->
+<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
 
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
 
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
+<!-- # Create a list of data frames to be written to different sheets -->
+<!-- results_list <- list( -->
+<!-- "Retention-Industry" = tidy_ols1, -->
+<!-- "Autonomy-Industry" = tidy_ols2, -->
+<!-- "PAAM-Industry" = tidy_ols3, -->
+<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
+<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
+<!-- "FULL" = tidy_ols6 -->
+<!-- ) -->
 
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
-
-<!--   # total -->
-<!--   total := c + (a*b) -->
-
-<!--   retention_calc ~~ autonomy_calc -->
-
-<!-- ' -->
-
-<!-- model6.fit <- sem(model6, data = mi3_metro)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
-
-<!-- fit <- cfa(model6, data=mi3_metro) -->
+<!-- # Write the list of data frames to an Excel file -->
+<!-- write_xlsx(results_list, path = "SR_regression_results.xlsx") -->
 
 
 <!-- ``` -->
 
-<!-- #### nonmetro -->
-<!-- ```{r} -->
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
-
-
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
-
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
-
-<!-- mi3_nonmetro = mi3 %>% -->
-<!--   filter(metro_nonmetro == "nonmetro") -->
-
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
-
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
-
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
-
-<!--   # total -->
-<!--   total := c + (a*b) -->
-
-<!--   retention_calc ~~ autonomy_calc -->
-
-<!-- ' -->
-
-<!-- model6.fit <- sem(model6, data = mi3_nonmetro)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
-
-<!-- fit <- cfa(model6, data=mi3_nonmetro) -->
-<!-- ``` -->
-
-
-
-<!-- ## comparing covariance matrix setups -->
-<!-- #### no covarance defined -->
-<!-- ```{r} -->
-
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
-
-
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
-
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
-
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
-
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
-
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
-
-<!--   # total -->
-<!--   total := c + (a*b) -->
-
-
-<!-- ' -->
-
-<!-- model6.fit <- sem(model6, data = mi3)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
-
-<!-- fit <- cfa(model6, data=mi3) -->
-<!-- ``` -->
-
-
-<!-- #### only autonomy/retention -->
+<!-- #### print results  -->
+<!-- Write SE retention & autonomy results to excel file  -->
 
 <!-- ```{r} -->
 
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+<!-- # install.packages("broom") -->
+<!-- # install.packages("writexl") -->
+<!-- library(broom) -->
+<!-- library(writexl) -->
+
+<!-- # Tidy the results of each model -->
+<!-- tidy_ols1 <- tidy(ols1a1) -->
+<!-- tidy_ols2 <- tidy(ols1a2) -->
+<!-- tidy_ols3 <- tidy(ols1a3) -->
+<!-- tidy_ols4 <- tidy(ols2a) -->
+<!-- tidy_ols5 <- tidy(ols2a1) -->
+<!-- tidy_ols6 <- tidy(ols3a) -->
 
 
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+<!-- # Add a column to identify the model -->
 
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
+<!-- tidy_ols1$model <- "Retention-Industry" -->
+<!-- tidy_ols2$model <- "Autonomy-Industry" -->
+<!-- tidy_ols3$model <- "PAAM-Industry" -->
+<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
+<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
+<!-- tidy_ols6$model <- "FULL" -->
 
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
-
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
-
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
-
-<!--   # total -->
-<!--   total := c + (a*b) -->
-
-<!--   retention_calc ~~ autonomy_calc -->
+<!-- # Combine the tidy results into a single data frame -->
+<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
 
 
-<!-- ' -->
+<!-- # Create a list of data frames to be written to different sheets -->
+<!-- results_list <- list( -->
+<!-- "Retention-Industry" = tidy_ols1, -->
+<!-- "Autonomy-Industry" = tidy_ols2, -->
+<!-- "PAAM-Industry" = tidy_ols3, -->
+<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
+<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
+<!-- "FULL" = tidy_ols6 -->
+<!-- ) -->
 
-<!-- model6.fit <- sem(model6, data = mi3)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
+<!-- # Write the list of data frames to an Excel file -->
+<!-- write_xlsx(results_list, path = "SE_regression_results.xlsx") -->
 
-<!-- fit <- cfa(model6, data=mi3) -->
+
 <!-- ``` -->
 
+<!-- #### print results  -->
+<!-- Write OLS retention & autonomy results to excel file  -->
 
-<!-- #### retention/autonomy & logpop -->
 <!-- ```{r} -->
 
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+<!-- # install.packages("broom") -->
+<!-- # install.packages("writexl") -->
+<!-- library(broom) -->
+<!-- library(writexl) -->
+
+<!-- # Tidy the results of each model -->
+<!-- tidy_ols1 <- tidy(ols1a1) -->
+<!-- tidy_ols2 <- tidy(ols1a2) -->
+<!-- tidy_ols3 <- tidy(ols1a3) -->
+<!-- tidy_ols4 <- tidy(ols2a) -->
+<!-- tidy_ols5 <- tidy(ols2a1) -->
+<!-- tidy_ols6 <- tidy(ols3a) -->
 
 
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
+<!-- # Add a column to identify the model -->
 
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
+<!-- tidy_ols1$model <- "Retention-Industry" -->
+<!-- tidy_ols2$model <- "Autonomy-Industry" -->
+<!-- tidy_ols3$model <- "PAAM-Industry" -->
+<!-- tidy_ols4$model <- "Prosp-Trade-Industry" -->
+<!-- tidy_ols5$model <- "PAAM-Trade-Industry" -->
+<!-- tidy_ols6$model <- "FULL" -->
 
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
+<!-- # Combine the tidy results into a single data frame -->
+<!-- tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6) -->
 
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
 
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
+<!-- # Create a list of data frames to be written to different sheets -->
+<!-- results_list <- list( -->
+<!-- "Retention-Industry" = tidy_ols1, -->
+<!-- "Autonomy-Industry" = tidy_ols2, -->
+<!-- "PAAM-Industry" = tidy_ols3, -->
+<!-- "Prosp-Trade-Industry" = tidy_ols4, -->
+<!-- "PAAM-Trade-Industry" = tidy_ols5,  -->
+<!-- "FULL" = tidy_ols6 -->
+<!-- ) -->
 
-<!--   # total -->
-<!--   total := c + (a*b) -->
+<!-- # Write the list of data frames to an Excel file -->
+<!-- write_xlsx(results_list, path = "OLS_regression_results.xlsx") -->
 
-<!--   logpop ~~ poverty_rate -->
-<!--   logpop ~~ bach -->
-<!--   logpop ~~ income_rate -->
-<!--   logpop ~~ pct_mfg -->
-<!--   logpop ~~ pct_ag -->
-<!--   logpop ~~ pct_mine -->
-<!--   logpop ~~ retention_calc -->
-<!--   logpop ~~ autonomy_calc -->
-<!--   logpop ~~ age -->
-<!--   logpop ~~ uninsured -->
-<!--   retention_calc ~~ autonomy_calc -->
 
-<!-- ' -->
-
-<!-- model6.fit <- sem(model6, data = mi3)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
-
-<!-- fit <- cfa(model6, data=mi3) -->
 <!-- ``` -->
-
-
-<!-- ## latent covaraties -->
-<!-- ```{r} -->
-
-<!-- nb <- poly2nb(mi1, queen=TRUE) -->
-<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
-
-
-<!-- slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, lw, zero.policy=TRUE) -->
-
-<!-- mi3 = mi1 %>% -->
-<!--   mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc,  -->
-<!--          lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine,  -->
-<!--          lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate,  -->
-<!--          lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach,  -->
-<!--          lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate,  -->
-<!--          lag.logpop = slx_import$model$lag.logpop,  -->
-<!--          lag.uninsured = slx_import$model$lag.uninsured -->
-<!--          ) -->
-
-<!-- model6 <- ' -->
-<!--   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate -->
-<!--   controls2 =~ age + uninsured + logpop -->
-
-<!--   retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine -->
-<!--   prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop -->
-<!--   paam ~ controls2 + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.uninsured -->
-
-<!--   # indirect (a*b) -->
-<!--   ab := a*b -->
-
-<!--   # total -->
-<!--   total := c + (a*b) -->
-
-<!--   retention_calc ~~ autonomy_calc -->
-
-
-<!-- ' -->
-
-<!-- model6.fit <- sem(model6, data = mi3)  -->
-<!-- summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)  -->
-
-<!-- fit <- cfa(model6, data=mi3) -->
-<!-- ``` -->
-
-
-
 
