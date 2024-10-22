@@ -601,7 +601,7 @@ plot(st_geometry(df_lisa),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.1)
 title(main = "LISA, Premature Age-Adjusted Mortality")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 
 # Create the legend separately
 
@@ -672,7 +672,6 @@ title(main = "LISA, Autonomy")
 # legend("bottomleft", border = "#eeeeee")
 ```
 
-# Clean models (no interact)
 # Models
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
@@ -700,16 +699,18 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar), 
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
+
 ```
 
+### sp auto
 
-
-## Model M1-Spatial Error
+## M1-Spatial Error
 
 ```{r}
 
@@ -729,6 +730,13 @@ temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_long
 viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %>% rename("var"="name") %>%
   filter(var != "X.Intercept.")
 
+
+
+```
+
+### sp auto
+
+```{r}
 # global and local autocorrelation
 Q2ar = mi1
 Q2ar$r = ols3a$resid
@@ -741,14 +749,16 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 ```
 
-#### compare SpError to SLX
+
+## SLX
 
 ```{r}
 
@@ -765,6 +775,12 @@ slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + 
 
 summary(slx_import)
 
+
+```
+
+### sp auto
+```{r}
+
 Q2ar = mi1
 Q2ar$r = slx_import$resid
 nb <- poly2nb(Q2ar, queen=TRUE)
@@ -776,18 +792,31 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 
 ```
 
 
 
+<!-- #### SLX (using package) -->
 
-## Model M2- Regime- metro/non
+<!-- ```{r} -->
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+<!-- SLX_pack <- lmSLX(paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, data=mi1, listw=lw, zero.policy = TRUE) -->
+
+<!-- summary(SLX_pack) -->
+
+<!-- ``` -->
+
+
+
+## M2- Regime- metro/non
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -800,6 +829,7 @@ sr2a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc 
 
 ```
 
+### sp auto
 
 ```{r}
 
@@ -833,20 +863,16 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 ```
 
 
-
-
-
-
-## Structural equation (no interact)
-#### 1.) aspatial SEM
+## aspatial SEM
 ```{r}
 model5 <- '
   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
@@ -874,7 +900,7 @@ fit <- cfa(model5, data=mi1)
 ```
 
 
-##### 2a.) spatial autocorrelation
+### sp auto
 
 ```{r}
 
@@ -954,6 +980,17 @@ nb <- poly2nb(mi1_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+w <- queen_weights(mi1_spa2)
+lisa <- local_moran(w, mi1_spa2['r_paam'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
 
 
 # metro
@@ -1001,6 +1038,13 @@ nb <- poly2nb(mi1_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
 
 
 
@@ -1049,12 +1093,18 @@ nb <- poly2nb(mi1_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
 
 ```
 
 
-#### 2.) SLX
-#### Model M3-SLX
+## M3-SEM-SLX
 
 
 ```{r}
@@ -1103,7 +1153,7 @@ fit <- cfa(model6, data=mi3)
 
 ```
 
-##### 4a.) sp autocorrelation
+### sp auto
 
 ```{r}
 
@@ -1182,10 +1232,16 @@ nb <- poly2nb(mi3_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
 
 ```
 
-#### Model M3a-SLX-Metro
+## M3a-SEM-SLX-Metro
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -1233,7 +1289,7 @@ fit <- cfa(model6, data=mi3_metro)
 
 ```
 
-##### 4a.) sp autocorrelation
+### sp auto
 
 ```{r}
 
@@ -1310,11 +1366,18 @@ mi3_spa2 <- cbind(mi3_metro_metro, sem_pvy) %>%
 
 temp = mi3_spa2$r_paam
 
+
 w <- queen_weights(mi3_spa2)
 nb <- poly2nb(mi3_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
 
 ```
 
@@ -1322,7 +1385,7 @@ moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
 
 
 
-#### Model M3b- nonmetro
+## M3b-SEM-SLX-nonmetro
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
@@ -1367,7 +1430,7 @@ summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE)
 fit <- cfa(model6, data=mi3_nonmetro)
 ```
 
-##### 4a.) sp autocorrelation
+## sp auto
 
 ```{r}
 
@@ -1449,6 +1512,13 @@ nb <- poly2nb(mi3_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
 
 ```
 
@@ -1865,8 +1935,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -1939,8 +2009,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2015,8 +2085,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2109,8 +2179,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -2195,8 +2265,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2282,8 +2352,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2392,8 +2462,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -2484,8 +2554,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2576,8 +2646,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
