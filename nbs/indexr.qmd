@@ -28,8 +28,41 @@ source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 ```
 
 
+# Python pubdata
 
-# BEA IO tables
+```{r}
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+pubdatapy$build_naics(overwrite = FALSE)
+```
+
+
+# BEA I-O tables
+
+BEA Input-Output tables with select industries combined.
+
+```{r}
+source("R/bea_io.R", local = (bea_io <- new.env()))
+
+# cache
+bea_io$cache$enabled # current status, can be set to TRUE or FALSE
+bea_io$cache$clear()
+bea_io$cache$build()
+bea_io$cache$pack("tmp/cache_bea_io_v241031.zip")
+bea_io$cache$unpack("tmp/cache_bea_io_v241031.zip")
+
+# example usage
+bea_io$concordance()
+bea_io$use_table(2012, ilevel = "det")
+bea_io$b_matrix(2012, ilevel = "det")
+bea_io$supply_table(2012, ilevel = "det")
+bea_io$c_matrix(2012, ilevel = "det")
+
+```
+
+
+## Python-pubdata version
+
+This version relies on pubdata with Python and reticulate, and is being phased out.
 
 ```{r}
 source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
@@ -47,6 +80,7 @@ bea_io$call_b_matrix(2017, "det")[1:5, 1:5]
 
 # util$zip_pack("tmp/datapack_bea_io_v240709.zip", files = bea_io$opath, overwrite = TRUE)
 ```
+
 
 # Geography
 

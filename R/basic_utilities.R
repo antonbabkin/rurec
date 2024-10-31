@@ -89,6 +89,35 @@ sequential_pairs <- function(year_range){
 
 # matrix manipulation ----
 
+
+#' Pivot long table to matrix
+#' 
+#' @param tab Dataframe to pivot.
+#' @param row Name of column to be used as matrix rows.
+#' @param col Name of column to be used as matrix columns.
+#' @param val Name of column to use as matrix element value.
+#' 
+tab2mat <- function(tab, row = "row", col = "col", val = "value") {
+  tab %>%
+    pivot_wider(id_cols = {{row}}, names_from = {{col}}, values_from = {{val}}) %>%
+    column_to_rownames(row) %>%
+    as.matrix()
+}
+
+#' Pivot matrix to long table
+#' 
+#' @param mat Matrix to pivot.
+#' @param row Column name for matrix rows.
+#' @param col Column name for matrix columns.
+#' @param val Column name for matrix element values.
+#' 
+mat2tab <- function(mat, row = "row", col = "col", val = "value") {
+  mat %>%
+    as_tibble(rownames = {{row}}) %>%
+    pivot_longer(!{{row}}, names_to = col, values_to = {{val}})
+}
+
+
 # get matrix output format from long format data used with parquet storage
 long2matrix <- function(df, 
                         values_from = names(df)[3], 
@@ -163,6 +192,8 @@ row_normalize <- function(imatrix){
     {sweep(., 1, rowSums(.), "/")} 
   return(x)
 }
+
+
 
 # spatial concordance ----
 
