@@ -47,8 +47,8 @@ source("R/bea_io.R", local = (bea_io <- new.env()))
 bea_io$cache$enabled # current status, can be set to TRUE or FALSE
 bea_io$cache$clear()
 bea_io$cache$build()
-bea_io$cache$pack("tmp/cache_bea_io_v241031.zip")
-bea_io$cache$unpack("tmp/cache_bea_io_v241031.zip")
+bea_io$cache$pack("tmp/cache_bea_io_v241105.zip")
+bea_io$cache$unpack("tmp/cache_bea_io_v241105.zip")
 
 # example usage
 bea_io$concordance()
@@ -156,34 +156,25 @@ agcen$call_agoutput(2012, "county")
 ```
 
 
-# Place output
+# Place I-O
+
+County-industry estimates of output, supply and demand.
 
 ```{r}
-source("R/place_output.R", local = (place_output <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
 
-# testing
-# place_output$test_all()
+# cache
+place_io$cache$enabled # current status, can be set to TRUE or FALSE
+place_io$cache$clear()
+place_io$cache$build()
+place_io$cache$pack("tmp/cache_place_io_v241105.zip")
+place_io$cache$unpack("tmp/cache_place_io_v241105.zip")
 
 # county output
-place_output$call_output(year = 2012, class_system = "commodity", ilevel = "det", bus_data = "infogroup")
-
-# county demand
-place_output$call_intermediate(
-  year = 2012, 
-  schedule = "demand", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
-
-# county supply
-place_output$call_intermediate(
-  year = 2012, 
-  schedule = "supply", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
+place_io$output(year = 2012, classification = "industry", ilevel = "det", bus_data = "cbp_imp")
+place_io$output(year = 2012, classification = "commodity", ilevel = "det", bus_data = "cbp_imp")
+# commodity supply and demand
+place_io$outsupdem(2012, ilevel = "det", bus_data = "cbp_imp")
 
 ```
 
