@@ -59,50 +59,6 @@ opath <- list(
 
 # helper functions ----
 
-#' Drop infeasible counties and distribute their values to remaining feasible counties
-#' 
-#' @param values Vector of values to modify.
-#' @param counties Vector of county codes, aligned with `values`.
-#' @param feasible_counties Vector of feasible county codes.
-distribute_to_feasible_counties <- function(values, counties, feasible_counties) {
-  # validate inputs
-  stopifnot(length(values) == length(counties))
-  stopifnot(all(!is.na(values)))
-  stopifnot(all(!is.na(counties)))
-  stopifnot(all(!is.na(feasible_counties)))
-  
-  # for later check
-  sum_before <- sum(values)
-  
-  # organize values and counties into a dataframe
-  df <- tibble(place = counties, old_value = values) %>%
-    mutate(state = str_sub(place, 1, 2))
-  
-  # drop infeasible states and increase value in all feasible states to keep the total unchanged
-  feasible_states <- unique(str_sub(feasible_counties, 1, 2))
-  df <- df %>%
-    mutate(national_value = sum(old_value)) %>%
-    filter(state %in% feasible_states) %>%
-    mutate(national_mult = national_value / sum(old_value),
-           value = old_value * national_mult)
-  
-  # drop infeasible counties and increase value in remaining counties to keep state-by-state totals unchanged  
-  df <- df %>%
-    mutate(state_value = sum(value), .by = "state") %>%
-    filter(place %in% feasible_counties) %>%
-    mutate(state_mult = if_else(state_value == 0, 0, state_value / sum(value)), .by = "state") %>%
-    mutate(value = value * state_mult)
-  
-  # check that aggregate value remains unchanged
-  stopifnot(all.equal(sum(df$value), sum_before))
-  
-  # verify that only feasible counties remain
-  stopifnot(all(df$place %in% feasible_counties))
-  
-  debug_env_save()
-  select(df, place, value)  
-}
-
 
 
 #' Distance matrix between county centroids in miles

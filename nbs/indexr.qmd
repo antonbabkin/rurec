@@ -28,25 +28,37 @@ source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
 ```
 
 
-
-# BEA IO tables
+# Python pubdata
 
 ```{r}
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+pubdatapy$build_naics(overwrite = FALSE)
+```
 
 
-# test module functions
-# bea_io$clear_outputs()
-# bea_io$test_pubdata()
-# bea_io$test_dataprep()
+# BEA I-O tables
+
+BEA Input-Output tables with select industries combined.
+
+```{r}
+source("R/bea_io.R", local = (bea_io <- new.env()))
+
+# cache
+bea_io$cache$enabled # current status, can be set to TRUE or FALSE
+bea_io$cache$clear()
+bea_io$cache$build()
+bea_io$cache$pack("tmp/cache_bea_io_v241120.zip")
+bea_io$cache$unpack("tmp/cache_bea_io_v241120.zip")
 
 # example usage
-bea_io$pubdata$get_naics_concord(2017)
-bea_io$pubdata$get_use(2017, "det", TRUE)$table
-bea_io$call_b_matrix(2017, "det")[1:5, 1:5]
-
-# util$zip_pack("tmp/datapack_bea_io_v240709.zip", files = bea_io$opath, overwrite = TRUE)
+bea_io$concordance()
+bea_io$make_table(2012, "sum")
+bea_io$domuse_table(2012, "det")
+bea_io$ind_totals(2012, "sum")
+bea_io$com_totals(2012, "sum")
 ```
+
+
 
 # Geography
 
@@ -122,34 +134,24 @@ agcen$call_agoutput(2012, "county")
 ```
 
 
-# Place output
+# Place I-O
+
+County-industry estimates of output, supply and demand.
 
 ```{r}
-source("R/place_output.R", local = (place_output <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
 
-# testing
-# place_output$test_all()
+# cache
+place_io$cache$enabled # current status, can be set to TRUE or FALSE
+place_io$cache$clear()
+place_io$cache$build()
+place_io$cache$pack("tmp/cache_place_io_v241120.zip", overwrite = TRUE)
+place_io$cache$unpack("tmp/cache_place_io_v241120.zip")
 
-# county output
-place_output$call_output(year = 2012, class_system = "commodity", ilevel = "det", bus_data = "infogroup")
-
-# county demand
-place_output$call_intermediate(
-  year = 2012, 
-  schedule = "demand", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
-
-# county supply
-place_output$call_intermediate(
-  year = 2012, 
-  schedule = "supply", 
-  paradigm = "domestic", 
-  class_system = "commodity", 
-  ilevel = "det",
-  bus_data = "infogroup")
+# county industry output
+place_io$ind_output(year = 2012, ilevel = "det", bus_data = "cbp_imp")
+# commodity supply and demand
+place_io$outsupdem(2012, ilevel = "det", bus_data = "cbp_imp")
 
 ```
 

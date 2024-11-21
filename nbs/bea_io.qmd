@@ -1,0 +1,135 @@
+---
+title: "BEA I-O tables"
+format: html
+---
+
+
+```{r}
+source("R/bea_io.R", local = (bea_io <- new.env()))
+```
+
+
+# Combining industries
+
+## sector
+
+Sector tables are more aggregated than sectors in NAICS concordance.
+To align concordance with sector-level tables, we combine codes in the concordance table to match aggregated codes.
+
+Commodity only: Scrap, used and secondhand goods; Noncomparable imports and rest-of-the-world adjustment.
+
+```{r}
+tab_com <- pubdata::bea_io_get("2022_sup_sec_2012") %>%
+  filter(core_matrix) %>%
+  select(code = row_code, commodity = row_name) %>%
+  distinct()
+tab_ind <- pubdata::bea_io_get("2022_sup_sec_2012") %>%
+  filter(core_matrix) %>%
+  select(code = col_code, industry = col_name) %>%
+  distinct()
+conc <- pubdata::bea_io_get("2022_naics") %>%
+  filter(is.na(summary)) %>%
+  select(code = sector, concordance = title)
+x <- full_join(tab_com, tab_ind, "code") %>%
+  full_join(conc, "code")
+
+# before combination: some mis-alignment between commodity and concordance codes
+x %>% filter(is.na(commodity) | is.na(industry) | is.na(concordance))
+
+conc1 <- left_join(
+  conc, 
+  bea_io$ind_code_comb %>%
+    filter(ilevel == "sector") %>%
+    select(code, new_code, new_title),
+  by = "code") %>%
+  mutate(
+    code = if_else(is.na(new_code), code, new_code),
+    concordance = if_else(is.na(new_title), concordance, new_title)
+  ) %>%
+  distinct(code, concordance)
+x1 <- full_join(tab_com, tab_ind, "code") %>%
+  full_join(conc1, "code")
+
+# # after combination: everything matches
+x1 %>% filter(is.na(commodity) | is.na(industry) | is.na(concordance))
+
+```
+
+
+## summary
+
+Nothing needs to be combined at summary level.
+Only discrepancy is in "Used" and "Other" commodities that are not in industry.
+
+
+```{r}
+tab_com <- pubdata::bea_io_get("2022_sup_sum_2012") %>%
+  filter(core_matrix) %>%
+  select(code = row_code, commodity = row_name) %>%
+  distinct()
+tab_ind <- pubdata::bea_io_get("2022_sup_sum_2012") %>%
+  filter(core_matrix) %>%
+  select(code = col_code, industry = col_name) %>%
+  distinct()
+conc <- pubdata::bea_io_get("2022_naics") %>%
+  filter(!is.na(summary), is.na(u_summary)) %>%
+  select(code = summary, concordance = title)
+x <- full_join(tab_com, tab_ind, "code") %>%
+  full_join(conc, "code")
+
+x %>% filter(is.na(commodity) | is.na(industry) | is.na(concordance))
+
+```
+
+
+## detail 
+
+There is one-to-one match between each concordance code and commodity or industry, nothing needs to be combined.
+Commodity only: Scrap; Used and secondhand goods; Noncomparable imports; Rest of the world adjustment.
+Industry only: Secondary smelting and alloying of aluminum; Federal electric utilities; State and local government passenger transit; State and local government electric utilities.
+
+
+```{r}
+tab_com <- pubdata::bea_io_get("2022_sup_det_2012") %>%
+  filter(core_matrix) %>%
+  select(code = row_code, commodity = row_name) %>%
+  distinct()
+tab_ind <- pubdata::bea_io_get("2022_sup_det_2012") %>%
+  filter(core_matrix) %>%
+  select(code = col_code, industry = col_name) %>%
+  distinct()
+conc <- pubdata::bea_io_get("2022_naics") %>%
+  filter(!is.na(detail)) %>%
+  select(code = detail, concordance = title)
+x <- full_join(tab_com, tab_ind, "code") %>%
+  full_join(conc, "code")
+
+x %>% filter(is.na(commodity) | is.na(industry) | is.na(concordance))
+
+```
+
+
+## NAICS duplicates
+
+Some BEA industries refer to the same NAICS code.
+Construction is the primary case, where all codes at every level map to NAICS "23".
+Another case is summary-level Housing ("HS") and Other real estate ("ORE") - both map into NAICS "531".
+Notably, detail "531HSO" and "531HST" are both in summary "HS", but "531HSO" has no NAICS code
+We combine all into "531".
+
+We combine these codes both in concordances and in I-O tables.
+
+```{r}
+# show NAICS duplicates
+pubdata::bea_io_get("2022_naics") %>%
+  filter(!is.na(naics), n() > 1, .by = naics)
+
+```
+
+```{r}
+bea_io$concordance()
+```
+
+
+
+
