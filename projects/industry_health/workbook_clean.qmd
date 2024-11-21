@@ -44,7 +44,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
  # install.packages("lavaan")
  # install.packages("lavaanPlot")
 #install.packages("ggthemes")
-
+# install.packages("sesem")
 
 
 library(vtable)
@@ -84,6 +84,7 @@ library(lavaanPlot)
 library(ggeffects)
 library(patchwork)
 library(ggthemes)
+library(sesem)
 
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
@@ -601,7 +602,7 @@ plot(st_geometry(df_lisa),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.1)
 title(main = "LISA, Premature Age-Adjusted Mortality")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 
 # Create the legend separately
 
@@ -672,7 +673,6 @@ title(main = "LISA, Autonomy")
 # legend("bottomleft", border = "#eeeeee")
 ```
 
-# Clean models (no interact)
 # Models
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
@@ -700,16 +700,18 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar), 
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
+
 ```
 
+### sp auto
 
-
-## Model M1-Spatial Error
+## M1-Spatial Error
 
 ```{r}
 
@@ -729,6 +731,13 @@ temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_long
 viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %>% rename("var"="name") %>%
   filter(var != "X.Intercept.")
 
+
+
+```
+
+### sp auto
+
+```{r}
 # global and local autocorrelation
 Q2ar = mi1
 Q2ar$r = ols3a$resid
@@ -741,14 +750,16 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 ```
 
-#### compare SpError to SLX
+
+## SLX
 
 ```{r}
 
@@ -766,13 +777,47 @@ slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + 
 summary(slx_import)
 
 
+```
+
+### sp auto
+```{r}
+
+Q2ar = mi1
+Q2ar$r = slx_import$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
 
 ```
 
 
 
+<!-- #### SLX (using package) -->
 
-## Model M2- Regime- metro/non
+<!-- ```{r} -->
+<!-- nb <- poly2nb(mi1, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+<!-- SLX_pack <- lmSLX(paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + uninsured, data=mi1, listw=lw, zero.policy = TRUE) -->
+
+<!-- summary(SLX_pack) -->
+
+<!-- ``` -->
+
+
+
+## M2- Regime- metro/non
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -785,6 +830,7 @@ sr2a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc 
 
 ```
 
+### sp auto
 
 ```{r}
 
@@ -818,20 +864,16 @@ lisa <- local_moran(w, Q2ar['r'])
 lisa_colors <- lisa_colors(lisa)
 lisa_labels <- lisa_labels(lisa)
 lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
 plot(st_geometry(Q2ar),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
      border = "#333333", lwd=0.2)
-title(main = "LISA, aggregate LQI")
-legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
 ```
 
 
-
-
-
-
-## Structural equation (no interact)
-#### 1.) aspatial SEM
+## aspatial SEM
 ```{r}
 model5 <- '
   prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
@@ -859,7 +901,7 @@ fit <- cfa(model5, data=mi1)
 ```
 
 
-##### 2a.) spatial autocorrelation
+### sp auto
 
 ```{r}
 
@@ -895,6 +937,7 @@ loading.income_rate = loading.income_rate$est
 mi2 = mi1 %>%
   mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
 
+# pooled
 
 mi1_spa = mi2
 
@@ -938,12 +981,131 @@ nb <- poly2nb(mi1_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+w <- queen_weights(mi1_spa2)
+lisa <- local_moran(w, mi1_spa2['r_paam'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
+
+# metro
+
+mi1_spa_metro = mi2 %>%
+  filter(metro_nonmetro == "metro")
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi1_spa_metro) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi1_spa_metro)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi1_spa2 <- cbind(mi1_spa_metro, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi1_spa2$r_paam
+
+w <- queen_weights(mi1_spa2)
+nb <- poly2nb(mi1_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
+
+
+
+# nonmetro
+
+mi1_spa_nonmetro = mi2 %>%
+  filter(metro_nonmetro == "nonmetro")
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi1_spa_nonmetro) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi1_spa_nonmetro)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi1_spa2 <- cbind(mi1_spa_nonmetro, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi1_spa2$r_paam
+
+w <- queen_weights(mi1_spa2)
+nb <- poly2nb(mi1_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+mi1_spa2 = mi1_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi1_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
 
 ```
 
 
-#### 2.) SLX
-#### Model M3-SLX
+## M3-SEM-SLX
 
 
 ```{r}
@@ -992,7 +1154,7 @@ fit <- cfa(model6, data=mi3)
 
 ```
 
-##### 4a.) sp autocorrelation
+### sp auto
 
 ```{r}
 
@@ -1071,10 +1233,16 @@ nb <- poly2nb(mi3_spa2, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 lw$weights[5]
 moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
 
 ```
 
-#### Model M3a-SLX-Metro
+## M3a-SEM-SLX-Metro
 
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
@@ -1122,11 +1290,103 @@ fit <- cfa(model6, data=mi3_metro)
 
 ```
 
+### sp auto
+
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi3_spa = mi3 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+mi3_metro_metro = mi3_spa %>%
+  filter(metro_nonmetro == "metro")
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age  + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi3_metro_metro) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi3_metro_metro)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "lag.pct_mfg", "lag.pct_ag", "lag.pct_mine", "lag.retention_calc", "lag.autonomy_calc","lag.logpop", "lag.laborforce_part_rate","lag.poverty_rate","lag.bach","lag.income_rate", "lag.age", "lag.uninsured"))
 
 
 
 
-#### Model M3b- nonmetro
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi3_spa2 <- cbind(mi3_metro_metro, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi3_spa2$r_paam
+
+
+w <- queen_weights(mi3_spa2)
+nb <- poly2nb(mi3_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
+```
+
+
+
+
+
+## M3b-SEM-SLX-nonmetro
 ```{r}
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
@@ -1169,6 +1429,521 @@ model6.fit <- sem(model6, data = mi3_nonmetro)
 summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
 
 fit <- cfa(model6, data=mi3_nonmetro)
+```
+
+### sp auto
+
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi3_spa = mi3 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+mi3_metro_nonmetro = mi3_spa %>%
+  filter(metro_nonmetro == "nonmetro")
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age  + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi3_metro_nonmetro) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi3_metro_nonmetro)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "lag.pct_mfg", "lag.pct_ag", "lag.pct_mine", "lag.retention_calc", "lag.autonomy_calc","lag.logpop", "lag.laborforce_part_rate","lag.poverty_rate","lag.bach","lag.income_rate", "lag.age", "lag.uninsured"))
+
+
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi3_spa2 <- cbind(mi3_metro_nonmetro, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi3_spa2$r_paam
+
+w <- queen_weights(mi3_spa2)
+nb <- poly2nb(mi3_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+mi3_spa2 = mi3_spa2 %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(mi3_spa2),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
+
+```
+
+## M4-SE-SEM
+
+
+```{r}
+
+sesem_data = mi1 %>%
+  mutate(Y = sf::st_coordinates(mi1$center)[,1]) %>%
+  mutate(X = sf::st_coordinates(mi1$center)[,2]) %>%
+  dplyr::select(X, Y, paam, laborforce_part_rate, poverty_rate, bach, income_rate, retention_calc, autonomy_calc, pct_ag, pct_mfg, pct_mine, logpop, age, uninsured) %>%
+  st_drop_geometry()
+
+sesem_data2 = as.data.frame(sesem_data)
+sf::st_drop_geometry(sesem_data2)
+
+#Step 2 calculate distance matrix and specify lag distance bin sizes
+
+	# function calc.dist(datafile) calculates and stores the distance matrix for all X-Y pairs
+	#	requires a dataset where the first two columns are x and y coordinates
+
+# sesem_data_dist <-calc.dist(sesem_data2)
+# NOTE: a unit of one is roughly equivalent to 1 mile (at least in the upper midwest)
+# sesem_data_dist_AL <-calc.dist(sesem_data2)
+
+binsize2 = c(0,1,100)
+# using 0 to 50 miles as bin 1, outside that as bin 2
+# results in about 5.9 neighbors per county
+binname2=c("Bin1","Bin2")
+plotbin(sesem_data_dist,binsize2)
+
+sesem_data_covar<-make.covar(sesem_data2,sesem_data_dist,binsize2,binname2)
+
+sesem_model <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  retention_calc ~~ autonomy_calc
+'
+
+sesem_model_results<-runModels(sesem_model,sesem_data_covar)
+
+# Step 5 Extract analysis results
+	
+modelsummary(sesem_model_results)
+
+bin.results(sesem_model_results,bin="Bin1") # prints results for flat (nonspatial) bin
+bin.results(sesem_model_results,bin="Bin2") # prints results for flat (nonspatial) bin
+bin.results(sesem_model_results,bin="binflat") # prints results for flat (nonspatial) bin
+
+
+
+```
+
+### sp auto
+```{r}
+# 
+# m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+# 
+# factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+# summary(factor1)
+# 
+# PE <- parameterEstimates(factor1) %>%
+#   filter(lhs == "prosperity")
+# 
+# loading.laborforce_part_rate = PE %>%
+#   filter(rhs == "laborforce_part_rate") %>%
+#   select(est)
+# loading.laborforce_part_rate = loading.laborforce_part_rate$est
+# 
+# loading.bach = PE %>%
+#   filter(rhs == "bach") %>%
+#   select(est)
+# loading.bach = loading.bach$est
+# 
+# loading.poverty_rate = PE %>%
+#   filter(rhs == "poverty_rate") %>%
+#   select(est)
+# loading.poverty_rate = loading.poverty_rate$est
+# 
+# loading.income_rate = PE %>%
+#   filter(rhs == "income_rate") %>%
+#   select(est)
+# loading.income_rate = loading.income_rate$est
+# 
+# sesem_data2_sp = sesem_data2 %>%
+#   mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+# 
+# sesem_data_covar_sp<-make.covar(sesem_data2_sp,sesem_data_dist,binsize2,binname2)
+# 
+# sesem_model_sp <- '
+#   retention_calc ~ pct_mfg + pct_ag + pct_mine
+#   autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+#   prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+#   paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + uninsured
+#   
+#   # indirect (a*b)
+#   ab := a*b
+#   
+#   # total
+#   total := c + (a*b)
+#   
+#   retention_calc ~~ autonomy_calc
+# '
+# 
+# sesem_model_results_sp<-runModels(sesem_model_sp,sesem_data_covar_sp)
+# 
+# 
+# fit <- cfa(sesem_model_sp, data=sesem_data2_sp)
+# 
+# sem_pvy = lavPredictY(fit, ynames = c("paam"),
+#                  xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "prosperity", "age", "pct_mfg", "pct_ag", "pct_mine"))
+# 
+# 
+# sem_pvy2 = as.data.frame(sem_pvy)
+# sem_pvy3 = sem_pvy2$paam
+# 
+# sesem_data2_sp2 <- cbind(sesem_data2_sp, sem_pvy) %>%
+#   rename("paam_orig"="paam") %>%
+#   mutate(r_paam = paam_orig - paam)
+# 
+# temp = sesem_data2_sp2$r_paam
+# 
+# temp2 = mi1 %>%
+#   select(place, STATE_NAME)
+# 
+# sesem_data2_sp3 = cbind(temp2, sesem_data2_sp2)
+# 
+# w <- queen_weights(sesem_data2_sp3)
+# nb <- poly2nb(sesem_data2_sp3, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(sesem_data2_sp3$r_paam,lw, zero.policy=TRUE)
+# w <- queen_weights(sesem_data2_sp3)
+# lisa <- local_moran(w, sesem_data2_sp3['r_paam'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# sesem_data2_sp3 = sesem_data2_sp3 %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(sesem_data2_sp3),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+# 
+# 
+
+
+```
+
+
+
+```{r}
+truelove#Truelove lowland datafile
+plantcomp #plant competition datafile
+alexfiord #alexandra fiord datafile
+
+# Note that if you are using the script files provided in the appendices to Lamb et al 2014
+# you will need to copy the data and script files to files to your working directory, and use the following scripts to load them:
+	truelove <- read.csv("data/rawdata_truelove.csv") # read Truelove lowland datafile
+ 	alexfiord <- read.csv("data/rawdata_Alexfiord.csv")# read Alexandra Fiord datafile
+	plantcomp <- read.csv("data/rawdata_plantcomp.csv")# read Plant Competition datafile
+
+#Step 2 calculate distance matrix and specify lag distance bin sizes
+
+	# function calc.dist(datafile) calculates and stores the distance matrix for all X-Y pairs
+	#	requires a dataset where the first two columns are x and y coordinates
+
+truelovedist<-calc.dist(truelove)
+alexfiorddist<-calc.dist(alexfiord)
+plantcompdist<-calc.dist(plantcomp)
+
+	# Need to specify 2 vectors for bin sizes:
+	#	binsize is a vector of lag distances starting at 0. The following values are the upper limits of each distance bin
+	#		binsize should have n+1 elements where n is the number of lag distance bins desired
+	#	bin.name is a vector of unique names for each lag distance bin. there should be n elements, one for each bin
+
+	# Bin sizes and names can be specified manually or using function make.bin
+
+#make.bin(dist.mat,type="ALL",p.dist=50,n.bins=10,s.size=100)
+
+	# generates cut off values for lag distance bins and corresponding bin names
+	# The function has three default parameter values available, if user does not want to specify:
+		#Inference distance as a percentage(p.dist) = 50%
+		#Number of bins (n.bins) = 10
+		#Sample size (s.size) = 100
+	#dist.mat is a distance matrix produced by calc.dist
+	#Can use type="ALL","n.bins" OR "s.size" to control parameter values.
+	#The function produces a list object containing (1.)binsize and (2.)binname
+	#These two vectors (binsize and binname) will be used by make.covar to calculate variance covariance matrices for each lag distance bin
+	
+	#Special note:
+	#User specified number of lag distance bins OR sample size 
+	#will be used to calculate initial cutoff value of each lag distance bin.
+	#However, if the cutoff point is in between a lag distance bin, 
+	#real cutoff will apply at the upper margin of the particular bin. 
+	#Therefore, resulting number of bins are less than or equal AND 
+	#resulting sample sizes are greater than or equal to the value specified by the user.
+	
+# function make.bin to generate all possible bins the Truelove lowland dataset to a maximum inference distance of 50%
+
+#	note the need to extract sizes and names from the bin size object as shown below
+
+Truelove_bins<-make.bin(truelovedist,type="ALL") #inference distance=50% AND number of bins=ALL
+truebinsize<-Truelove_bins[1][[1]] #truelove lowland bin sizes
+truebinname<-Truelove_bins[2][[1]] #truelove lowland bin names
+
+# plotbin(distancematrix,binsize) provides a histogram of all pairs in the distance matrix and a plot of sample 
+# 	size for the selected bin size.
+	
+plotbin(truelovedist,truebinsize)
+
+	
+# manual bin sizes for the Alexandra Fiord dataset
+#	note that the bin name vector must have one less element than bin size
+	
+alexbinsize = c(0,1,2,2.2,4,5,8,16,32,64,96,128,160) #alex fiord bin sizes
+alexbinname=c("Bin1","Bin2","Bin3","Bin4","Bin5","Bin6","Bin7","Bin8","Bin9","Bin10","Bin11","Bin12")#alex fiord Bin names
+
+plotbin(alexfiorddist,alexbinsize)
+
+# function make.bin to generate bins with 200 samples each to a maximum inference distance of 50% 
+#	for the Plant Competition dataset
+
+#	note the need to extract sizes and names from the bin size object as shown below
+
+Plant_bins<-make.bin(plantcompdist,type="s.size",s.size=200) #inference distance=50% AND sample size=200
+plantbinsize<-Plant_bins[1][[1]] #plant competition bin sizes
+plantbinname<-Plant_bins[2][[1]] #plant competition bin names
+
+plotbin(plantcompdist,plantbinsize)
+
+	#User can use type="ALL","n.bins" OR "s.size"
+	#make.covar uses binsize and binname, only if attibutes=NULL and is.vector=TRUE.
+
+
+#Step 3 Calculate covariance matrices
+	
+	# function make.covar(datafile,distancematrix,binsize,binname) calculates variance covariance matrices
+	#	for each lag distance bin and for a flat (non-spatial) bin
+	#	Values in the bin summary include the low and high cut points for each bin and the count "aa.lagcnt" of 
+	#	samples in each bin
+	
+	# this step can be computationally time consuming; the resulting object can be saved for later sesem analysis
+	
+truelove_covar<-make.covar(truelove,truelovedist,truebinsize,truebinname)
+alex_covar<-make.covar(alexfiord,alexfiorddist,alexbinsize,alexbinname)
+plant_covar<-make.covar(plantcomp,plantcompdist,plantbinsize,plantbinname)
+
+
+# Step 4 Run Models
+
+# function runModels()  
+# 	lavaan library must be installed. 
+#   need to specifify path model using lavaan syntax. 
+#	See http://cran.r-project.org/web/packages/lavaan/lavaan.pdf for details
+#	list object created by runModels() used in subsequent steps
+
+#Truelove  and Alexandra Fiord Path Models
+spatial_model<-'
+	Gram ~ Moisture
+	N_Fix ~ Bryoph + Lich + SoilCrust
+	SoilCrust ~ Bryoph + Lich + Gram + Shrubs + Forbs	
+	Bryoph ~ Gram + Shrubs + Forbs + Moisture
+	Lich ~ Moisture + Forbs + Gram + Shrubs + Bryoph
+	Forbs ~ Moisture
+	Gram ~~ Forbs
+	Shrubs ~ Moisture	
+	Gram ~~ Shrubs
+	Shrubs ~~ Forbs
+	'
+
+#Plant Competition Path Model
+spatial_model_plant<-'
+	SoilMoist ~ Topog.Pos
+	ShootBio ~ TotalN + Topog.Pos + SoilMoist
+	RootBio ~ TotalN + Topog.Pos + SoilMoist
+	ShootBio ~~ RootBio
+	LightInt ~ ShootBio + Topog.Pos
+	Comp.Intensity ~ LightInt + RootBio + TotalN + SoilMoist
+	SpRich ~ Comp.Intensity + SoilMoist + RootBio + ShootBio + Topog.Pos
+	'
+
+library(lavaan)
+
+spatial_model_results_true<-runModels(spatial_model,truelove_covar)
+spatial_model_results_alex<-runModels(spatial_model,alex_covar)
+spatial_model_results_plant<-runModels(spatial_model_plant,plant_covar)
+
+# Step 5 Extract analysis results
+
+	# modelsummary() extracts basic model summary information from the object
+	# created by runModels in a readable format
+	
+modelsummary(spatial_model_results_true)
+modelsummary(spatial_model_results_alex)
+modelsummary(spatial_model_results_plant)
+
+# bin.results(spatial_model_results,bin="binflat") 
+#	extracts path coefficients, standard errors, and standardized coefficients for a particular bin in a readable format
+
+bin.results(spatial_model_results_true,bin="Bin2")# prints results for bin2 
+bin.results(spatial_model_results_alex,bin="binflat") # prints results for flat (nonspatial) bin
+
+
+# bin.rsquare(spatial_model_results,bin="binflat") 
+#	extracts r-square values for each dependent variable for a particular bin
+
+bin.rsquare(spatial_model_results_plant,bin="binflat")
+
+# Step 6a plot model fit results
+
+#	plotmodelfit(spatial_model_results,plots="all",add.line="none",rmsea_err=T,pch=16,lwd=2,lty=1)
+#	model fit plotting with optional lines, and formatting
+
+#	spatial_model_results = object output by runModels
+#	plots = options for selecting fit indices to plot
+#		"all" indicats all of chi square, cfi, rmsea, and srmr to be plotted 
+#		"chi", "cfi", "rmsea", "srmr" select individual metrics for plotting
+#	add.lines. options for plotting a fit line 
+#		"none" indicates no line
+#		"step" plots straight line segments between points
+#		"smooth" plots a smoothed curve fit using function lowess. Smoothed lines do not include the flat model (lag distance zero)
+#	rmsea_err should confidence limits for rmsea be plotted?
+#	pch, lwd, lty options for formatting points and fit lines.
+library(gplots)
+plotmodelfit(spatial_model_results_true) # plots all metrics without lines and with rmsea errors
+											# note that warnings will arise from the plotting of rmsea errors with zero length
+											#these can be ignored
+plotmodelfit(spatial_model_results_alex,add.line="step",rmsea_err=F,lwd=2) # plots stepped fit line
+plotmodelfit(spatial_model_results_plant,add.line="smooth",rmsea_err=F,pch=16,lty=1) # plots smoothed fit line
+
+plotmodelfit(spatial_model_results_true,plot="cfi",add.line="smooth",pch=16,lty=1,lwd=4,cex.lab=1.5,cex=2,cex.axis=1.5) #plots only cfi
+
+# Step 6b plot path coefficent changes with lag distances
+
+#	plotpath(spatial_model_results,path.type="directed",add.line="none",rmsea_err=T,pch=16,lwd=2,lty=1)
+#   
+#	spatial_model_results = object output by runModels
+#	path.type= options for selecting which paths to plot
+#		"directed" = only directed paths plotted
+#		"undirected" = only undirected correlations plotted
+#		"both" = all paths plotted
+#		"user" = allows user to specify particular paths and a particular order for plotting
+#			argument selectpath must also be provided with path.type="user"
+#	selectpath = required when path.type="user"
+#		usage is selectpath==c(5,18,16,23,29) where values refer to path numbers
+#		path numbers can be obtained using spatial_model_results[2]
+#	add.lines = options for plotting a fit line 
+#		"none" indicates no line
+#		"step" plots straight line segments between points
+#		"smooth" plots a smoothed curve fit using function lowess
+#	add.error = should standard error bars be added for each path coefficient
+#	pcut = p-value cutoff above which points with non significant p-values are shaded grey
+#		set pcut=1 to have all points black
+#	pch, lwd, lty cex, cex.lab, cex.axis, cex.main options for formatting points and fit lines.
+
+library(gplots)
+plotpath(spatial_model_results_true,pch=11) # plots 
+plotpath(spatial_model_results_plant,pch=16,path.type="directed",add.line="smooth")
+plotpath(spatial_model_results_alex,path.type="both",add.error=F,add.line="step",pcut=0.01,lwd=1)
+plotpath(spatial_model_results_true,path.type="user",selectpath=c(5,18,16,23,29),add.error=F,add.line="smooth",pcut=0.01,lwd=1)
+
+#
+#Step 6c plot changes in path coefficents using generalized additive models
+
+#	gam.path(spatial_model_results,path.type="directed",selectpath="none selected",
+#		plot.points=T,se.plot=T,lwd.pred=2,lty.pred=1,lwd.se=2,lty.se=3,cex=1,cex.axis=1,cex.lab=1
+#		,xlab="Lag Distance",ylab="Unst. Path Coeff.",yaxt="s",xaxt="s")
+#
+#	library "mgcv" is required
+   
+#	This function prints some of the gam results for each path in the model as well as producing figures
+   
+#	spatial_model_results = object output by runModels
+#	path.type= options for selecting which paths to plot
+#		"directed" = only directed paths plotted
+#		"undirected" = only undirected correlations plotted
+#		"both" = all paths plotted
+#		"user" = allows user to specify particular paths and a particular order for plotting
+#			argument selectpath must also be provided with path.type="user"
+#	selectpath = required when path.type="user"
+#		usage is selectpath==c(5,18,16,23,29) where values refer to path numbers
+#		path numbers can be obtained using spatial_model_results[2]
+#	plot.points = should points be plotted on figure
+#	se.plot = should standard errors for the prediction lines be printed
+#	additional arguments formatting figure
+
+#displays gam relationships for all directed paths in model
+
+library(mgcv)
+
+par(mar=c(2.5,2.5,1.5,1))
+gam.path(spatial_model_results_true,plot.points=F,se.plot=T)
+
+#displays gam relationships for a selection of paths in model
+gam.path(spatial_model_results_plant,path.type="user",selectpath=c(5,18,16,14,7),plot.points=T,se.plot=T)
+
+gam.path(spatial_model_results_alex,path.type="user",selectpath=c(5,18,16,14,7),plot.points=F,se.plot=F,lwd.pred=2,ylab="",xlab="",yaxt="n",xaxt="n")
+
+
+#Step 7. Optimize model
+
+# avg.modindices() extracts modification indices for all models in the object produced by runModels() 
+# 		and summarizes the mod indices by taking the mean for each possible additional path
+#		across all lag distance bins. The flat model is not included in these calculations
+#	 modcut eliminates printing of average MI values below the cutoff. The default is 4
+# 
+# Based on the modification indices create a new lavaan path model description and return to step 4.
+
+
+avg.modindices(spatial_model_results_true,modcut=3)# display modindices
+avg.modindices(spatial_model_results_alex)# display modindices
+avg.modindices(spatial_model_results_plant,modcut=1)# display modindices
 ```
 
 
@@ -1217,6 +1992,10 @@ plot1 = ggplot(viz) +
 plot1
 
 ```
+
+
+
+
 
 
 #Old Code
@@ -1584,8 +2363,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -1658,8 +2437,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -1734,8 +2513,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -1828,8 +2607,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -1914,8 +2693,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2001,8 +2780,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2111,8 +2890,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 <!-- ### retention only -->
@@ -2203,8 +2982,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2295,8 +3074,8 @@ plot1
 <!-- plot(st_geometry(Q2ar),  -->
 <!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),  -->
 <!--      border = "#333333", lwd=0.2) -->
-<!-- title(main = "LISA, aggregate LQI") -->
-<!-- legend('bottomleft', legend = lisa_labels, fill = lisa_colors) -->
+<!--  -->
+<!--  -->
 <!-- ``` -->
 
 
@@ -2623,4 +3402,272 @@ plot1
 
 
 <!-- ``` -->
+
+
+```{r}
+
+truelove#Truelove lowland datafile
+plantcomp #plant competition datafile
+alexfiord #alexandra fiord datafile
+
+# Note that if you are using the script files provided in the appendices to Lamb et al 2014
+# you will need to copy the data and script files to files to your working directory, and use the following scripts to load them:
+	truelove <- read.csv("data/rawdata_truelove.csv") # read Truelove lowland datafile
+ 	alexfiord <- read.csv("data/rawdata_Alexfiord.csv")# read Alexandra Fiord datafile
+	plantcomp <- read.csv("data/rawdata_plantcomp.csv")# read Plant Competition datafile
+
+#Step 2 calculate distance matrix and specify lag distance bin sizes
+
+	# function calc.dist(datafile) calculates and stores the distance matrix for all X-Y pairs
+	#	requires a dataset where the first two columns are x and y coordinates
+
+truelovedist<-calc.dist(truelove)
+alexfiorddist<-calc.dist(alexfiord)
+plantcompdist<-calc.dist(plantcomp)
+
+	# Need to specify 2 vectors for bin sizes:
+	#	binsize is a vector of lag distances starting at 0. The following values are the upper limits of each distance bin
+	#		binsize should have n+1 elements where n is the number of lag distance bins desired
+	#	bin.name is a vector of unique names for each lag distance bin. there should be n elements, one for each bin
+
+	# Bin sizes and names can be specified manually or using function make.bin
+
+#make.bin(dist.mat,type="ALL",p.dist=50,n.bins=10,s.size=100)
+
+	# generates cut off values for lag distance bins and corresponding bin names
+	# The function has three default parameter values available, if user does not want to specify:
+		#Inference distance as a percentage(p.dist) = 50%
+		#Number of bins (n.bins) = 10
+		#Sample size (s.size) = 100
+	#dist.mat is a distance matrix produced by calc.dist
+	#Can use type="ALL","n.bins" OR "s.size" to control parameter values.
+	#The function produces a list object containing (1.)binsize and (2.)binname
+	#These two vectors (binsize and binname) will be used by make.covar to calculate variance covariance matrices for each lag distance bin
+	
+	#Special note:
+	#User specified number of lag distance bins OR sample size 
+	#will be used to calculate initial cutoff value of each lag distance bin.
+	#However, if the cutoff point is in between a lag distance bin, 
+	#real cutoff will apply at the upper margin of the particular bin. 
+	#Therefore, resulting number of bins are less than or equal AND 
+	#resulting sample sizes are greater than or equal to the value specified by the user.
+	
+# function make.bin to generate all possible bins the Truelove lowland dataset to a maximum inference distance of 50%
+
+#	note the need to extract sizes and names from the bin size object as shown below
+
+Truelove_bins<-make.bin(truelovedist,type="ALL") #inference distance=50% AND number of bins=ALL
+truebinsize<-Truelove_bins[1][[1]] #truelove lowland bin sizes
+truebinname<-Truelove_bins[2][[1]] #truelove lowland bin names
+
+# plotbin(distancematrix,binsize) provides a histogram of all pairs in the distance matrix and a plot of sample 
+# 	size for the selected bin size.
+	
+plotbin(truelovedist,truebinsize)
+
+	
+# manual bin sizes for the Alexandra Fiord dataset
+#	note that the bin name vector must have one less element than bin size
+	
+alexbinsize = c(0,1,2,2.2,4,5,8,16,32,64,96,128,160) #alex fiord bin sizes
+alexbinname=c("Bin1","Bin2","Bin3","Bin4","Bin5","Bin6","Bin7","Bin8","Bin9","Bin10","Bin11","Bin12")#alex fiord Bin names
+
+plotbin(alexfiorddist,alexbinsize)
+
+# function make.bin to generate bins with 200 samples each to a maximum inference distance of 50% 
+#	for the Plant Competition dataset
+
+#	note the need to extract sizes and names from the bin size object as shown below
+
+Plant_bins<-make.bin(plantcompdist,type="s.size",s.size=200) #inference distance=50% AND sample size=200
+plantbinsize<-Plant_bins[1][[1]] #plant competition bin sizes
+plantbinname<-Plant_bins[2][[1]] #plant competition bin names
+
+plotbin(plantcompdist,plantbinsize)
+
+	#User can use type="ALL","n.bins" OR "s.size"
+	#make.covar uses binsize and binname, only if attibutes=NULL and is.vector=TRUE.
+
+
+#Step 3 Calculate covariance matrices
+	
+	# function make.covar(datafile,distancematrix,binsize,binname) calculates variance covariance matrices
+	#	for each lag distance bin and for a flat (non-spatial) bin
+	#	Values in the bin summary include the low and high cut points for each bin and the count "aa.lagcnt" of 
+	#	samples in each bin
+	
+	# this step can be computationally time consuming; the resulting object can be saved for later sesem analysis
+	
+truelove_covar<-make.covar(truelove,truelovedist,truebinsize,truebinname)
+alex_covar<-make.covar(alexfiord,alexfiorddist,alexbinsize,alexbinname)
+plant_covar<-make.covar(plantcomp,plantcompdist,plantbinsize,plantbinname)
+
+
+# Step 4 Run Models
+
+# function runModels()  
+# 	lavaan library must be installed. 
+#   need to specifify path model using lavaan syntax. 
+#	See http://cran.r-project.org/web/packages/lavaan/lavaan.pdf for details
+#	list object created by runModels() used in subsequent steps
+
+#Truelove  and Alexandra Fiord Path Models
+spatial_model<-'
+	Gram ~ Moisture
+	N_Fix ~ Bryoph + Lich + SoilCrust
+	SoilCrust ~ Bryoph + Lich + Gram + Shrubs + Forbs	
+	Bryoph ~ Gram + Shrubs + Forbs + Moisture
+	Lich ~ Moisture + Forbs + Gram + Shrubs + Bryoph
+	Forbs ~ Moisture
+	Gram ~~ Forbs
+	Shrubs ~ Moisture	
+	Gram ~~ Shrubs
+	Shrubs ~~ Forbs
+	'
+
+#Plant Competition Path Model
+spatial_model_plant<-'
+	SoilMoist ~ Topog.Pos
+	ShootBio ~ TotalN + Topog.Pos + SoilMoist
+	RootBio ~ TotalN + Topog.Pos + SoilMoist
+	ShootBio ~~ RootBio
+	LightInt ~ ShootBio + Topog.Pos
+	Comp.Intensity ~ LightInt + RootBio + TotalN + SoilMoist
+	SpRich ~ Comp.Intensity + SoilMoist + RootBio + ShootBio + Topog.Pos
+	'
+
+library(lavaan)
+
+spatial_model_results_true<-runModels(spatial_model,truelove_covar)
+spatial_model_results_alex<-runModels(spatial_model,alex_covar)
+spatial_model_results_plant<-runModels(spatial_model_plant,plant_covar)
+
+# Step 5 Extract analysis results
+
+	# modelsummary() extracts basic model summary information from the object
+	# created by runModels in a readable format
+	
+modelsummary(spatial_model_results_true)
+modelsummary(spatial_model_results_alex)
+modelsummary(spatial_model_results_plant)
+
+# bin.results(spatial_model_results,bin="binflat") 
+#	extracts path coefficients, standard errors, and standardized coefficients for a particular bin in a readable format
+
+bin.results(spatial_model_results_true,bin="Bin2")# prints results for bin2 
+bin.results(spatial_model_results_alex,bin="binflat") # prints results for flat (nonspatial) bin
+
+
+# bin.rsquare(spatial_model_results,bin="binflat") 
+#	extracts r-square values for each dependent variable for a particular bin
+
+bin.rsquare(spatial_model_results_plant,bin="binflat")
+
+# Step 6a plot model fit results
+
+#	plotmodelfit(spatial_model_results,plots="all",add.line="none",rmsea_err=T,pch=16,lwd=2,lty=1)
+#	model fit plotting with optional lines, and formatting
+
+#	spatial_model_results = object output by runModels
+#	plots = options for selecting fit indices to plot
+#		"all" indicats all of chi square, cfi, rmsea, and srmr to be plotted 
+#		"chi", "cfi", "rmsea", "srmr" select individual metrics for plotting
+#	add.lines. options for plotting a fit line 
+#		"none" indicates no line
+#		"step" plots straight line segments between points
+#		"smooth" plots a smoothed curve fit using function lowess. Smoothed lines do not include the flat model (lag distance zero)
+#	rmsea_err should confidence limits for rmsea be plotted?
+#	pch, lwd, lty options for formatting points and fit lines.
+library(gplots)
+plotmodelfit(spatial_model_results_true) # plots all metrics without lines and with rmsea errors
+											# note that warnings will arise from the plotting of rmsea errors with zero length
+											#these can be ignored
+plotmodelfit(spatial_model_results_alex,add.line="step",rmsea_err=F,lwd=2) # plots stepped fit line
+plotmodelfit(spatial_model_results_plant,add.line="smooth",rmsea_err=F,pch=16,lty=1) # plots smoothed fit line
+
+plotmodelfit(spatial_model_results_true,plot="cfi",add.line="smooth",pch=16,lty=1,lwd=4,cex.lab=1.5,cex=2,cex.axis=1.5) #plots only cfi
+
+# Step 6b plot path coefficent changes with lag distances
+
+#	plotpath(spatial_model_results,path.type="directed",add.line="none",rmsea_err=T,pch=16,lwd=2,lty=1)
+#   
+#	spatial_model_results = object output by runModels
+#	path.type= options for selecting which paths to plot
+#		"directed" = only directed paths plotted
+#		"undirected" = only undirected correlations plotted
+#		"both" = all paths plotted
+#		"user" = allows user to specify particular paths and a particular order for plotting
+#			argument selectpath must also be provided with path.type="user"
+#	selectpath = required when path.type="user"
+#		usage is selectpath==c(5,18,16,23,29) where values refer to path numbers
+#		path numbers can be obtained using spatial_model_results[2]
+#	add.lines = options for plotting a fit line 
+#		"none" indicates no line
+#		"step" plots straight line segments between points
+#		"smooth" plots a smoothed curve fit using function lowess
+#	add.error = should standard error bars be added for each path coefficient
+#	pcut = p-value cutoff above which points with non significant p-values are shaded grey
+#		set pcut=1 to have all points black
+#	pch, lwd, lty cex, cex.lab, cex.axis, cex.main options for formatting points and fit lines.
+
+library(gplots)
+plotpath(spatial_model_results_true,pch=11) # plots 
+plotpath(spatial_model_results_plant,pch=16,path.type="directed",add.line="smooth")
+plotpath(spatial_model_results_alex,path.type="both",add.error=F,add.line="step",pcut=0.01,lwd=1)
+plotpath(spatial_model_results_true,path.type="user",selectpath=c(5,18,16,23,29),add.error=F,add.line="smooth",pcut=0.01,lwd=1)
+
+#
+#Step 6c plot changes in path coefficents using generalized additive models
+
+#	gam.path(spatial_model_results,path.type="directed",selectpath="none selected",
+#		plot.points=T,se.plot=T,lwd.pred=2,lty.pred=1,lwd.se=2,lty.se=3,cex=1,cex.axis=1,cex.lab=1
+#		,xlab="Lag Distance",ylab="Unst. Path Coeff.",yaxt="s",xaxt="s")
+#
+#	library "mgcv" is required
+   
+#	This function prints some of the gam results for each path in the model as well as producing figures
+   
+#	spatial_model_results = object output by runModels
+#	path.type= options for selecting which paths to plot
+#		"directed" = only directed paths plotted
+#		"undirected" = only undirected correlations plotted
+#		"both" = all paths plotted
+#		"user" = allows user to specify particular paths and a particular order for plotting
+#			argument selectpath must also be provided with path.type="user"
+#	selectpath = required when path.type="user"
+#		usage is selectpath==c(5,18,16,23,29) where values refer to path numbers
+#		path numbers can be obtained using spatial_model_results[2]
+#	plot.points = should points be plotted on figure
+#	se.plot = should standard errors for the prediction lines be printed
+#	additional arguments formatting figure
+
+#displays gam relationships for all directed paths in model
+
+library(mgcv)
+
+par(mar=c(2.5,2.5,1.5,1))
+gam.path(spatial_model_results_true,plot.points=F,se.plot=T)
+
+#displays gam relationships for a selection of paths in model
+gam.path(spatial_model_results_plant,path.type="user",selectpath=c(5,18,16,14,7),plot.points=T,se.plot=T)
+
+gam.path(spatial_model_results_alex,path.type="user",selectpath=c(5,18,16,14,7),plot.points=F,se.plot=F,lwd.pred=2,ylab="",xlab="",yaxt="n",xaxt="n")
+
+
+#Step 7. Optimize model
+
+# avg.modindices() extracts modification indices for all models in the object produced by runModels() 
+# 		and summarizes the mod indices by taking the mean for each possible additional path
+#		across all lag distance bins. The flat model is not included in these calculations
+#	 modcut eliminates printing of average MI values below the cutoff. The default is 4
+# 
+# Based on the modification indices create a new lavaan path model description and return to step 4.
+
+
+avg.modindices(spatial_model_results_true,modcut=3)# display modindices
+avg.modindices(spatial_model_results_alex)# display modindices
+avg.modindices(spatial_model_results_plant,modcut=1)# display modindices
+
+```
+
 
