@@ -5,7 +5,7 @@
 mkdir <- function(p) {
   d <- dirname(p)
   if (!dir.exists(d)) {
-    logger::log_debug(paste("Creating directory", d))
+    logger::log_info(paste("Creating directory", d))
     dir.create(d, recursive = TRUE)
   }
   return(p)
@@ -20,7 +20,7 @@ clear_paths <- function(paths) {
       Sys.glob()
     for (p in ps) {
       if (file.exists(p)) {
-        log_debug("Removing file ", p)
+        log_info("Removing file ", p)
         unlink(p)
       }
     }

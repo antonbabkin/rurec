@@ -1,0 +1,144 @@
+---
+title: "Revision of data construction methodology"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+---
+
+Methodology of output, supply and demand calculation has been significantly revised.
+
+- Code for output calculation rewritten almost from scratch for better readability and maintainability.
+- Everything is measured in producers' prices instead of basic prices (includes sales taxes now).
+- Government sector is explicitly excluded from output, supply and demand.
+Mostly for clarity, we never had data on gov activity in CBP (InfoGroup had Postal Service, NAICS 491).
+- Switch from Supply-Use to Make-Use framework (this was a big breakthrough!)
+  - Source I-O tables readily available in producers' prices, no need to adjust manually.
+  - Imports and margins are removed from demand (use) in industry-commodity specific proportions.
+  Before they were removed using a single national commodity adjustment factor.
+
+```{r}
+#| output: false
+
+library(tidyverse)
+library(skimr)
+
+source("R/place_io.R", local = (place_io <- new.env()))
+
+theme_set(theme_minimal())
+
+```
+
+
+# circularity indicators before and after
+
+```{r}
+df_bef <- read_csv("tmp/cbp-efsy_2012_detail_outsupdem_2024-08-26.csv", show_col_types = FALSE) %>%
+  rename(place = county_fips) %>%
+  mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply)) %>%
+  summarize(across(output:exdem, sum), .by = "place") %>%
+  mutate(
+    production_capacity = supply / output,
+    trade_capacity = exsup / output,
+    retention = 1 - exsup / supply,
+    production_dependency = demand / output,
+    trade_dependency = exdem / output,
+    autonomy = 1 - exdem / demand,
+    trade_balance = (exsup - exdem) / output,
+    trade_openness = (exsup + exdem) / output,
+    method = "before"
+  )
+
+df_aft <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply)) %>%
+  summarize(across(output:exdem, sum), .by = "place") %>%
+  mutate(
+    production_capacity = supply / output,
+    trade_capacity = exsup / output,
+    retention = 1 - exsup / supply,
+    production_dependency = demand / output,
+    trade_dependency = exdem / output,
+    autonomy = 1 - exdem / demand,
+    trade_balance = (exsup - exdem) / output,
+    trade_openness = (exsup + exdem) / output,
+    method = "after"
+  )
+
+df <- bind_rows(df_bef, df_aft) %>%
+  mutate(method = ordered(method, c("before", "after")))
+
+size_measures <- c("output", "supply", "demand", "exsup", "exdem")
+circ_measures <- c("production_capacity", "trade_capacity", "retention", "production_dependency", "trade_dependency", "autonomy", "trade_balance", "trade_openness")
+
+```
+
+# summary stats
+
+```{r}
+#| column: page
+
+df %>%
+  select(method, all_of(size_measures)) %>%
+  group_by(method) %>%
+  skim_without_charts() %>%
+  select(!c(n_missing, complete_rate))
+
+df %>%
+  select(method, all_of(circ_measures)) %>%
+  group_by(method) %>%
+  skim_without_charts() %>%
+  select(!c(n_missing, complete_rate))
+```
+
+# density plots
+
+```{r, fig.width=9, fig.height=6}
+
+df %>%
+  pivot_longer(!c(place, method)) %>%
+  filter(name %in% circ_measures) %>%
+  mutate(name = ordered(name, circ_measures)) %>%
+  # filter(name == "retention") %>%
+  ggplot() +
+  geom_density(aes(value, color = method)) +
+  scale_color_discrete() +
+  theme(legend.position = "inside", legend.position.inside = c(0.9, 0.95)) +
+  facet_wrap("name", ncol = 3, scales = "free")
+
+```
+
+
+# correlation and scatterplots
+
+```{r}
+d <- df %>%
+  pivot_longer(!c(place, method)) %>%
+  mutate(name = ordered(name, c(size_measures, circ_measures))) %>%
+  pivot_wider(id_cols = c(place, name), names_from = method)
+```
+
+
+```{r, rows.print=99}
+d %>%
+  drop_na() %>%
+  summarize(cor = cor(before, after), .by = "name")
+```
+
+
+```{r, fig.width=9, fig.height=9}
+#| warning: false
+d %>%
+  filter(name %in% circ_measures) %>%
+  mutate(change = after - before) %>%
+  # filter(name == "retention") %>%
+  ggplot() +
+  geom_point(aes(before, change), size = 0.1) +
+  geom_hline(aes(yintercept = 0)) +
+  theme(legend.position = "inside", legend.position.inside = c(0.9, 0.95)) +
+  ylim(-0.3, 0.3) +
+  facet_wrap("name", ncol = 3, scales = "free_x")  
+```
+

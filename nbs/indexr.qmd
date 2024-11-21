@@ -47,39 +47,17 @@ source("R/bea_io.R", local = (bea_io <- new.env()))
 bea_io$cache$enabled # current status, can be set to TRUE or FALSE
 bea_io$cache$clear()
 bea_io$cache$build()
-bea_io$cache$pack("tmp/cache_bea_io_v241105.zip")
-bea_io$cache$unpack("tmp/cache_bea_io_v241105.zip")
+bea_io$cache$pack("tmp/cache_bea_io_v241120.zip")
+bea_io$cache$unpack("tmp/cache_bea_io_v241120.zip")
 
 # example usage
 bea_io$concordance()
-bea_io$use_table(2012, ilevel = "det")
-bea_io$b_matrix(2012, ilevel = "det")
-bea_io$supply_table(2012, ilevel = "det")
-bea_io$c_matrix(2012, ilevel = "det")
-
+bea_io$make_table(2012, "sum")
+bea_io$domuse_table(2012, "det")
+bea_io$ind_totals(2012, "sum")
+bea_io$com_totals(2012, "sum")
 ```
 
-
-## Python-pubdata version
-
-This version relies on pubdata with Python and reticulate, and is being phased out.
-
-```{r}
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
-
-
-# test module functions
-# bea_io$clear_outputs()
-# bea_io$test_pubdata()
-# bea_io$test_dataprep()
-
-# example usage
-bea_io$pubdata$get_naics_concord(2017)
-bea_io$pubdata$get_use(2017, "det", TRUE)$table
-bea_io$call_b_matrix(2017, "det")[1:5, 1:5]
-
-# util$zip_pack("tmp/datapack_bea_io_v240709.zip", files = bea_io$opath, overwrite = TRUE)
-```
 
 
 # Geography
@@ -167,12 +145,11 @@ source("R/place_io.R", local = (place_io <- new.env()))
 place_io$cache$enabled # current status, can be set to TRUE or FALSE
 place_io$cache$clear()
 place_io$cache$build()
-place_io$cache$pack("tmp/cache_place_io_v241105.zip")
-place_io$cache$unpack("tmp/cache_place_io_v241105.zip")
+place_io$cache$pack("tmp/cache_place_io_v241120.zip", overwrite = TRUE)
+place_io$cache$unpack("tmp/cache_place_io_v241120.zip")
 
-# county output
-place_io$output(year = 2012, classification = "industry", ilevel = "det", bus_data = "cbp_imp")
-place_io$output(year = 2012, classification = "commodity", ilevel = "det", bus_data = "cbp_imp")
+# county industry output
+place_io$ind_output(year = 2012, ilevel = "det", bus_data = "cbp_imp")
 # commodity supply and demand
 place_io$outsupdem(2012, ilevel = "det", bus_data = "cbp_imp")
 

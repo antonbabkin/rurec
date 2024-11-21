@@ -20,7 +20,9 @@ ipath <- list(
 opath <- list(
   concordance = "data/bea_io/concordance.pq",
   use_table_ = "data/bea_io/use_table/{year}_{ilevel}.pq",
-  supply_table_ = "data/bea_io/supply_table/{year}_{ilevel}.pq"
+  supply_table_ = "data/bea_io/supply_table/{year}_{ilevel}.pq",
+  domuse_table_ = "data/bea_io/domuse_table/{year}_{ilevel}.pq",
+  make_table_ = "data/bea_io/make_table/{year}_{ilevel}.pq"
 )
 
 # cache management
@@ -29,6 +31,20 @@ with(cache, {
   # use cache when calling functions
   enabled <- TRUE
   
+  read <- function(path) {
+    if (enabled && file.exists(path)) {
+      log_debug(paste("read from cache", path))
+      return(read_parquet(path))
+    }
+  }
+  
+  write <- function(df, path) {
+    if (enabled) {
+      log_debug(paste("save to cache", path))
+      write_parquet(df, util$mkdir(path))
+    }
+  }
+  
   # create cache files by calling all functions that save to cache
   build <- function() {
     concordance()
@@ -36,6 +52,10 @@ with(cache, {
       for (ilevel in c("sec", "sum", "det")) {
         use_table(year, ilevel)
         supply_table(year, ilevel)
+        make_table(year, ilevel) 
+        if (ilevel != "sec") {
+          domuse_table(year, ilevel)
+        }
       }
     }
   }
@@ -108,6 +128,47 @@ ind_code_comb <- tribble(
 
 # Helper functions ----
 
+#' Aggregate (sum) values across commodity/industry codes in rows and columns
+aggregate_ind_codes <- function(tab, ilevel = c("det", "sum", "sec")) {
+  ilevel <- match.arg(ilevel)
+  ilevel_long <- switch(ilevel, det = "detail", sum = "summary", sec = "sector")
+  
+  agg_lookup <- ind_code_comb %>%
+    filter(ilevel == ilevel_long) %>%
+    select(code, new_code, new_title)
+  
+  # combined codes for rows
+  x1 <- tab %>%
+    mutate(code = row_code) %>%
+    left_join(agg_lookup, by = "code") %>%
+    mutate(
+      row_code = if_else(is.na(new_code), row_code, new_code),
+      row_name = if_else(is.na(new_title), row_name, new_title),
+    ) %>%
+    select(!c(code, new_code, new_title))
+  # combined codes for columns
+  x2 <- x1 %>%
+    mutate(code = col_code) %>%
+    left_join(agg_lookup, by = "code") %>%
+    mutate(
+      col_code = if_else(is.na(new_code), col_code, new_code),
+      col_name = if_else(is.na(new_title), col_name, new_title),
+    ) %>%    
+    select(!c(code, new_code, new_title))
+  # add up values in combined rows and columns
+  x <- x2 %>%
+    summarize(
+      value = sum(value, na.rm = TRUE),
+      across(!value, first),
+      .by = c("row_code", "col_code")
+    ) %>% 
+    relocate(row_code, row_name, col_code, col_name, value, core_matrix)
+  
+  x
+}
+
+
+
 
 # Concordance ----
 
@@ -117,11 +178,7 @@ concordance <- function() {
   naics_rev <- 2012
   
   cache_path <- glue(opath$concordance)
-  if (cache$enabled & file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }
-  
+  if (!is.null(x <- cache$read(cache_path))) return(x)
   
   x0 <- pubdata::bea_io_get(glue("{bea_rev}_naics"))
   
@@ -191,7 +248,7 @@ concordance <- function() {
   
   # industry/commodity indicators
   # every code is both commodity and industry with a few exceptions
-  x4 <- x3 %>%
+  df <- x3 %>%
     mutate(
       industry = case_when(
         sector %in% c("Used", "Other") ~ FALSE,
@@ -203,12 +260,8 @@ concordance <- function() {
       )
     )
   
-  if (cache$enabled) {
-    log_debug(paste("save to cache", cache_path))
-    write_parquet(x4, util$mkdir(cache_path))
-  }
-  
-  x4
+  cache$write(df, cache_path)
+  df
 }
 
 
@@ -216,114 +269,179 @@ concordance <- function() {
 
 use_table <- function(year, ilevel = c("det", "sum", "sec")) {
   ilevel <- match.arg(ilevel)
-  ilevel_long <- switch(ilevel, det = "detail", sum = "summary", sec = "sector")
   bea_rev <- 2022
   
   cache_path <- glue(opath$use_table_)
-  if (cache$enabled & file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }
+  if (!is.null(x <- cache$read(cache_path))) return(x)
+
+  df <- pubdata::bea_io_get(glue("{bea_rev}_su_use_{ilevel}_{year}")) %>%
+    aggregate_ind_codes(ilevel)
   
-  df_comb <- ind_code_comb %>%
-    filter(ilevel == ilevel_long) %>%
-    select(code, new_code, new_title)
-  df_tab <- pubdata::bea_io_get(glue("{bea_rev}_use_{ilevel}_{year}"))
-  
-  # combined codes for rows
-  x <- df_tab %>%
-    mutate(code = row_code) %>%
-    left_join(df_comb, by = "code") %>%
-    mutate(
-      row_code = if_else(is.na(new_code), row_code, new_code),
-      row_name = if_else(is.na(new_title), row_name, new_title),
-    ) %>%
-    select(!c(code, new_code, new_title))
-  # combined codes for columns
-  x <- x %>%
-    mutate(code = col_code) %>%
-    left_join(df_comb, by = "code") %>%
-    mutate(
-      col_code = if_else(is.na(new_code), col_code, new_code),
-      col_name = if_else(is.na(new_title), col_name, new_title),
-    ) %>%    
-    select(!c(code, new_code, new_title))
-  # add up values in combined rows and columns
-  x <- x %>%
-    summarize(
-      value = sum(value, na.rm = TRUE),
-      across(!value, first),
-      .by = c("row_code", "col_code")
-    )
-  
-  x <- x %>% 
-    relocate(row_code, row_name, col_code, col_name, value, core_matrix)
-  
-  if (cache$enabled) {
-    log_debug(paste("save to cache", cache_path))
-    write_parquet(x, util$mkdir(cache_path))
-  }
-  
-  x
+  cache$write(df, cache_path)
+  df
 }
+
 
 
 supply_table <- function(year, ilevel = c("det", "sum", "sec")) {
   ilevel <- match.arg(ilevel)
-  ilevel_long <- switch(ilevel, det = "detail", sum = "summary", sec = "sector")
   bea_rev <- 2022
   
   cache_path <- glue(opath$supply_table_)
-  if (cache$enabled & file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }
+  if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  df_comb <- ind_code_comb %>%
-    filter(ilevel == ilevel_long) %>%
-    select(code, new_code, new_title)
-  df_tab <- pubdata::bea_io_get(glue("{bea_rev}_sup_{ilevel}_{year}"))
-  if (ilevel == "sec") {
-    # code is missing in source tables
-    df_tab <- df_tab %>%
-      mutate(row_code = if_else(row_name == "Total industry supply", "T017", row_code))
-  }
-  # combined codes for rows
-  x <- df_tab %>%
-    mutate(code = row_code) %>%
-    left_join(df_comb, by = "code") %>%
+  df <- pubdata::bea_io_get(glue("{bea_rev}_su_sup_{ilevel}_{year}")) %>%
+    aggregate_ind_codes(ilevel)
+  
+  cache$write(df, cache_path)
+  df
+}
+
+
+#' Domestic use table
+#' 
+#' Use table minus import table
+#' Make-Use framework, before redefinitions, producers' prices
+domuse_table <- function(year, ilevel = c("det", "sum", "sec")) {
+  ilevel <- match.arg(ilevel)
+  # import tables are not available on sector level, need to be aggregated up manually
+  if (ilevel == "sec") stop("Not implemented")
+  bea_rev <- 2022
+  
+  cache_path <- glue(opath$domuse_table_)
+  if (!is.null(x <- cache$read(cache_path))) return(x)
+  
+  use <- pubdata::bea_io_get(glue("{bea_rev}_mu_use-bef-pro_{ilevel}_{year}")) %>%
     mutate(
-      row_code = if_else(is.na(new_code), row_code, new_code),
-      row_name = if_else(is.na(new_title), row_name, new_title),
-      ) %>%
-    select(!c(code, new_code, new_title))
-  # combined codes for columns
-  x <- x %>%
-    mutate(code = col_code) %>%
-    left_join(df_comb, by = "code") %>%
+      col_code = case_when(
+        col_name == "Total Intermediate" ~ "T001",
+        col_name == "Total Final Uses (GDP)" ~ "T004",
+        col_name == "Total Commodity Output" ~ "T007",
+        .default = col_code
+      )
+    ) %>%
+    aggregate_ind_codes(ilevel)
+  imp <- pubdata::bea_io_get(glue("{bea_rev}_imp-bef_{ilevel}_{year}")) %>%
+    aggregate_ind_codes(ilevel)
+  
+  # verify consistency of table dimensions
+  # rows: only core matrix (commodities)
+  core_row_codes <- use %>% 
+    filter(core_matrix) %>% 
+    distinct(row_code) %>% 
+    pull()
+  stopifnot(base::setequal(
+    core_row_codes,
+    imp %>% distinct(row_code) %>% pull()
+  ))
+  # columns: only "Total Commodity Output" (T007) is absent in import table
+  stopifnot(base::setequal(
+    use %>% distinct(col_code) %>% pull(),
+    c(imp %>% distinct(col_code) %>% pull(), "T007")
+  ))
+  
+  use_imp <- use %>%
+    filter(row_code %in% core_row_codes, col_code != "T007") %>%
+    select(row_code, col_code, use = value) %>%
+    full_join(
+      imp %>% select(row_code, col_code, imp = value),
+      by = c("row_code", "col_code")
+    ) %>%
+    mutate(value = use - imp) %>%
+    left_join(
+      use %>% select(row_code, col_code, row_name, col_name, core_matrix),
+      by = c("row_code", "col_code")
+    ) %>%
+    select(row_code, row_name, col_code, col_name, value, core_matrix)
+  
+  # add total use column
+  total_use <- use_imp %>%
+    filter(col_name %in% c("Total Intermediate", "Total Final Uses (GDP)")) %>%
+    summarize(row_name = first(row_name), value = sum(value), .by = row_code) %>%
+    mutate(col_code = "total_use", col_name = "total_use", core_matrix = FALSE)
+  df <- bind_rows(use_imp, total_use)
+  
+  cache$write(df, cache_path)
+  df
+}
+
+
+#' Make table
+#' Make-Use framework, before redefinitions, producers' prices
+make_table <- function(year, ilevel = c("det", "sum", "sec")) {
+  ilevel <- match.arg(ilevel)
+  bea_rev <- 2022
+  
+  cache_path <- glue(opath$make_table_)
+  if (!is.null(x <- cache$read(cache_path))) return(x)
+  
+  df <- pubdata::bea_io_get(glue("{bea_rev}_mu_mak-bef_{ilevel}_{year}")) %>%
     mutate(
-      col_code = if_else(is.na(new_code), col_code, new_code),
-      col_name = if_else(is.na(new_title), col_name, new_title),
-    ) %>%    
-    select(!c(code, new_code, new_title))
-  # add up values in combined rows and columns
-  x <- x %>%
-    summarize(
-      value = sum(value, na.rm = TRUE),
-      across(!value, first),
-      .by = c("row_code", "col_code")
-    )
+      row_code = case_when(
+        row_name == "Total Commodity Output" ~ "T007",
+        .default = row_code
+      ),
+      col_code = case_when(
+        col_name == "Total Industry Output" ~ "T008",
+        .default = col_code
+      )
+    ) %>%
+    aggregate_ind_codes(ilevel)
   
-  x <- x %>%
-    relocate(row_code, row_name, col_code, col_name, value, core_matrix)
+  cache$write(df, cache_path)
+  df
+}
+
+
+## aggregates ----
+
+#' Industry totals
+#' Make-Use framework, before redefinitions, producers' prices
+ind_totals <- function(year, ilevel = c("det", "sum", "sec")) {
+  ilevel <- match.arg(ilevel)
   
-  if (cache$enabled) {
-    log_debug(paste("save to cache", cache_path))
-    write_parquet(x, util$mkdir(cache_path))
-  }
+  mak <- make_table(year, ilevel)
+  codes <- mak %>% filter(core_matrix) %>% distinct(row_code) %>% pull()
+  
+  tot_mak <- mak %>%
+    filter(row_code %in% codes, col_name == "Total Industry Output") %>%
+    select(ind_code = row_code, ind_name = row_name, make = value)
+  
+  use <- domuse_table(year, ilevel)
+  tot_use <- use %>%
+    filter(core_matrix) %>%
+    summarize(value = sum(value), .by = col_code) %>%
+    rename(ind_code = col_code, int_use = value)
+  
+  x <- full_join(tot_mak, tot_use, by = "ind_code")
   
   x
 }
+
+
+#' Commodity totals
+#' Make-Use framework, before redefinitions, producers' prices
+com_totals <- function(year, ilevel = c("det", "sum", "sec")) {
+  ilevel <- match.arg(ilevel)
+  
+  mak <- make_table(year, ilevel)
+  codes <- mak %>% filter(core_matrix) %>% distinct(col_code) %>% pull()
+  
+  tot_mak <- mak %>%
+    filter(col_code %in% codes, row_name == "Total Commodity Output") %>%
+    select(com_code = col_code, com_name = col_name, make = value)
+  
+  use <- domuse_table(year, ilevel)
+  tot_use <- use %>%
+    filter(row_code %in% codes, !core_matrix) %>%
+    pivot_wider(id_cols = row_code, names_from = col_name) %>%
+    select(com_code = row_code, int_use = `Total Intermediate`, fin_use = `Total Final Uses (GDP)`, use = total_use)
+  
+  x <- full_join(tot_mak, tot_use, by = "com_code")
+  
+  x
+}
+
 
 
 

@@ -22,7 +22,7 @@ ipath <- list(
 )
 
 opath <- list(
-  output_ = "data/place_io/output/{year}_{classification}_{ilevel}_{bus_data}.pq",
+  ind_output_ = "data/place_io/ind_output/{year}_{ilevel}_{bus_data}.pq",
   outsupdem_ = "data/place_io/outsupdem/{year}_{ilevel}_{bus_data}.pq"
 )
 
@@ -32,15 +32,27 @@ with(cache, {
   # use cache when calling functions
   enabled <- TRUE
   
+  read <- function(path) {
+    if (enabled && file.exists(path)) {
+      log_debug(paste("read from cache", path))
+      return(read_parquet(path))
+    }
+  }
+  
+  write <- function(df, path) {
+    if (enabled) {
+      log_debug(paste("save to cache", path))
+      write_parquet(df, util$mkdir(path))
+    }
+  }
+
   # create cache files by calling all functions that save to cache
   build <- function() {
     for (year in c(2012)) {
-      for (classification in c("industry", "commodity")) {
-        for (ilevel in c("sec", "sum", "det")) {
-          for (bus_data in c("cbp_imp", "cbp_raw", "infogroup")) {
-            output(year, classification, ilevel, bus_data)
-            outsupdem(year, ilevel, bus_data)
-          }
+      for (ilevel in c("sum", "det")) {
+        for (bus_data in c("cbp_imp", "cbp_raw", "infogroup")) {
+          ind_output(year, ilevel, bus_data)
+          outsupdem(year, ilevel, bus_data)
         }
       }
     }
@@ -116,24 +128,19 @@ distribute_to_feasible_counties <- function(values, counties, feasible_counties)
 
 # Output ----
 
+x <- cache$read("foobar")
 
-#' County output by industry or commodity
-output <- function(year,
-                   classification = c("industry", "commodity"),
-                   ilevel = c("det", "sum", "sec"),
-                   bus_data = c("cbp_imp", "cbp_raw", "infogroup")) {
+#' County output by industry
+ind_output <- function(year,
+                       ilevel = c("det", "sum", "sec"),
+                       bus_data = c("cbp_imp", "cbp_raw", "infogroup")) {
   
-  stopifnot(year %in% c(2012))
-  classification <- match.arg(classification)
+  if (year != 2012) stop("Not implemented")
   ilevel <- match.arg(ilevel)
-  ilevel_long <- switch(ilevel, det = "detail", sum = "summary", sec = "sector")
   bus_data <- match.arg(bus_data)
    
-  cache_path <- glue(opath$output_)
-  if (cache$enabled & file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }  
+  cache_path <- glue(opath$ind_output_)
+  if (!is.null(x <- cache$read(cache_path))) return(x)
   
   # industry concordance table
   df_conc <- bea_io$concordance() %>%
@@ -143,13 +150,13 @@ output <- function(year,
   df_ag_val <- agcen$get_farm_sales_by_bea_detail(year = year, geo_level = "county") %>%
     util$mat2tab("place", "detail")
   
-  # non-agricultural industry value at detail level
+  # non-agricultural, non-government industry value at detail level
   if (bus_data %in% c("cbp_imp", "cbp_raw")) {
     # CBP: join with multi-level naics-bea concordance 
     # to always use higher level CBP aggregation because it is less subject to supression
     # payroll is used as county-industry value
     x1 <- df_conc %>%
-      filter(summary != "111CA") %>%
+      filter(summary != "111CA", sector != "G") %>%
       distinct(detail, naics)
     x2 <- cbp$call_cbp(
       year = year,
@@ -165,7 +172,7 @@ output <- function(year,
   } else if (bus_data == "infogroup") {
     # infogroup: join with 6-digit naics-bea concordance
     x1 <- df_conc %>%
-      filter(summary != "111CA") %>%
+      filter(summary != "111CA", sector != "G") %>%
       distinct(detail, naics6)
     x2 <- glue(infogroup$opath$county_) %>%
       open_dataset() %>%
@@ -203,14 +210,8 @@ output <- function(year,
   ))
   
   # national industry output by detail
-  x <- bea_io$supply_table(year, ilevel = "det")
-  ind_codes <- x %>% 
-    filter(core_matrix) %>% 
-    distinct(col_code) %>% 
-    pull()
-  nat_out <- x %>%
-    filter(row_name == "Total industry supply", col_code %in% ind_codes) %>%
-    select(detail = col_code, nat_out = value)
+  nat_out <- bea_io$ind_totals(year, "det") %>%
+    select(detail = ind_code, nat_out = make)
   
   # calc place shares by detail, calc place output in $1000s by detail
   df_out_det <- df_feas %>%
@@ -218,44 +219,30 @@ output <- function(year,
     left_join(nat_out, by = "detail") %>%
     mutate(output = place_sh * 1000 * nat_out)
   
-  # add missing industries, aggregate to requested ilevel, complete to full panel
+  # add missing industries, aggregate to requested ilevel
   if (ilevel == "det") {
-    df_ind <- df_conc %>%
+    df <- df_conc %>%
       distinct(detail) %>%
       left_join(select(df_out_det, detail, place, output), by = "detail") %>%
-      rename(indcode = detail)
+      rename(ind_code = detail)
   } else {
-    df_ind <- df_conc %>%
-      select(indcode = {{ilevel_long}}, detail) %>%
+    ilevel_long <- switch(ilevel, det = "detail", sum = "summary", sec = "sector")
+    df <- df_conc %>%
+      select(ind_code = {{ilevel_long}}, detail) %>%
       distinct() %>%
       left_join(select(df_out_det, detail, place, output), by = "detail") %>%
-      summarize(output = sum(output, na.rm = TRUE), .by = c("place", "indcode"))
+      summarize(output = sum(output, na.rm = TRUE), .by = c("place", "ind_code"))
   }
-  df_ind <- df_ind %>%
-    complete(place, indcode, fill = list(output = 0)) %>%
-    filter(!is.na(place))
+  # complete to full panel, add industry names
+  x <- bea_io$ind_totals(year, ilevel) %>%
+    select(ind_code, ind_name)
+  df <- df %>%
+    complete(place, ind_code, fill = list(output = 0)) %>%
+    filter(!is.na(place)) %>%
+    left_join(x, by = "ind_code") %>%
+    relocate(place, ind_code, ind_name, output)
 
-  # convert to commodity if requested
-  if (classification == "industry") {
-    df <- df_ind
-  } else { # commodity
-    cmat <- bea_io$c_matrix(year, ilevel = ilevel)
-    output_mat <- df_ind %>%
-      util$tab2mat("indcode", "place", "output")
-    stopifnot(base::setequal(rownames(output_mat), colnames(cmat)))
-    output_mat <- output_mat[colnames(cmat), ]
-    df <- (cmat %*% output_mat) %>%
-      as_tibble(rownames = "comcode") %>%
-      pivot_longer(!comcode, names_to = "place", values_to = "output") %>%
-      relocate(place, comcode, output) %>%
-      arrange(place, comcode)
-  }
-
-  if (cache$enabled) {
-    log_debug(paste("save to cache", cache_path))
-    write_parquet(df, util$mkdir(cache_path))
-  }
-  
+  cache$write(df, cache_path)
   df
 }
 
@@ -277,97 +264,99 @@ outsupdem <- function(year,
   bus_data <- match.arg(bus_data)
 
   cache_path <- glue(opath$outsupdem_)
-  if (cache$enabled & file.exists(cache_path)) {
-    log_debug(paste("read from cache", cache_path))
-    return(read_parquet(cache_path))
-  }
+  if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  # I-O tables
-  sup_tab <- bea_io$supply_table(year, ilevel = ilevel)
-  use_tab <- bea_io$use_table(year, ilevel = ilevel)
-  bmat <- bea_io$b_matrix(year, ilevel = ilevel)
-  com_codes <- use_tab %>% filter(core_matrix) %>% distinct(row_code) %>% pull()
-  ind_codes <- use_tab %>% filter(core_matrix) %>% distinct(col_code) %>% pull()
+  #### I-O national tables
+  # make table and matrix
+  mak_tab <- bea_io$make_table(year, ilevel)
+  mak_mat <- mak_tab %>%
+    filter(core_matrix) %>%
+    util$tab2mat("row_code", "col_code")
+  # C-matrix is commodity-by-industry, make matrix is industry-by-commodity
+  c_mat <- sweep(mak_mat, 1, rowSums(mak_mat), "/") %>%
+    t()
+  stopifnot(all.equal(colSums(c_mat), rep(1, ncol(c_mat)), check.names = FALSE))
+  # use table
+  use_tab <- bea_io$domuse_table(year, ilevel)
+  use_mat <- use_tab %>%
+    filter(core_matrix) %>%
+    util$tab2mat("row_code", "col_code")
+  # commodity and industry codes and totals
+  ind_tot <- bea_io$ind_totals(year, ilevel)
+  com_tot <- bea_io$com_totals(year, ilevel)
+  # (domestic) B-matrix, commodity-by-industry
+  stopifnot(all(colnames(use_mat) == ind_tot$ind_code))
+  b_mat <- sweep(use_mat, 2, ind_tot$make, "/")
+  # verify alignment
+  stopifnot(all(rownames(c_mat) == com_tot$com_code))
+  stopifnot(all(colnames(c_mat) == ind_tot$ind_code))
   
-  #### output
-  # county-industry output
-  output_ind <- output(year, classification = "industry", ilevel = ilevel, bus_data = bus_data)
-  # county-commodity output
-  output_com <- output(year, classification = "commodity", ilevel = ilevel, bus_data = bus_data)
-  
-  # outputs in matrix form for multiplication
+  #### output by industry
+  # county-industry output table
+  output_ind <- ind_output(year, ilevel = ilevel, bus_data = bus_data)
+  # industry-by-county output in matrix form
   # rearrange rows to align with I-O tables
-  output_ind_mat <- util$tab2mat(output_ind, row = "indcode", col = "place", val = "output")
-  stopifnot(base::setequal(rownames(output_ind_mat), ind_codes))
-  output_ind_mat <- output_ind_mat[ind_codes, ]
-  output_com_mat <- util$tab2mat(output_com, row = "comcode", col = "place", val = "output")
-  stopifnot(base::setequal(rownames(output_com_mat), com_codes))
-  output_com_mat <- output_com_mat[com_codes, ]
+  output_ind_mat <- util$tab2mat(output_ind, row = "ind_code", col = "place", val = "output")
+  stopifnot(base::setequal(rownames(output_ind_mat), ind_tot$ind_code))
+  output_ind_mat <- output_ind_mat[ind_tot$ind_code, ]
   
-  # non-zero industries
+  #### adjustment factors from national totals
+  adj <- com_tot
+  # industries with zero output are moved off-core in I-O matrices
   pos_ind_codes <- rownames(output_ind_mat)[rowSums(output_ind_mat) > 0]
-  zero_ind_codes <- base::setdiff(rownames(output_ind_mat), pos_ind_codes)
-  if (length(zero_ind_codes) > 0) {
-    log_debug(glue("{length(zero_ind_codes)} industries have zero output: {str_c(zero_ind_codes, collapse = ',')}"))
-  }
-  
-  #### supply
-  # domestic intermediate use share of total use
-  total_use <- use_tab %>%
-    filter(col_name == "Total use of products", row_code %in% com_codes) %>%
-    pull(value, name = "row_code")
-  # in the use table only add up columns with positive industry output
-  dom_int_use <- use_tab %>%
-    filter(core_matrix, col_code %in% pos_ind_codes) %>%
-    util$tab2mat(row = "row_code", col = "col_code") %>%
+  # national commodity output of observed industries
+  pos_ind_make <- mak_mat[pos_ind_codes, ] %>%
+    colSums()
+  stopifnot(all(names(pos_ind_make) == adj$com_code))
+  adj$make_pos <- pos_ind_make
+  # national commodity demand from observed industries
+  pos_ind_use <- use_mat[, pos_ind_codes] %>%
     rowSums()
-  stopifnot(all(names(total_use) == names(dom_int_use)))
-  dom_int_use_share <- dom_int_use / total_use
-  dom_int_use_share[dom_int_use == 0 | total_use == 0] <- 0
-  # tibble(comcode = names(total_use), dom_int_use, total_use, dom_int_use_share) %>% View()
+  stopifnot(all(names(pos_ind_use) == adj$com_code))
+  adj$int_use_pos <- pos_ind_use
+  # adjustment factors for supply and demand
+  adj <- adj %>%
+    mutate(
+      pos_int_use_sh = case_when(
+        int_use_pos > 0 & use > 0 ~ int_use_pos / use,
+        .default = 0),
+      pos_make_sh = case_when(
+        make_pos > 0 & make > 0 ~ make_pos / make,
+        .default = 0)
+      )
   
-  # county-commodity supply = commodity_output * use_share
-  stopifnot(all(rownames(output_com_mat) == names(dom_int_use_share)))
-  supply_mat <- sweep(output_com_mat, 1, dom_int_use_share, "*")
-  
-  #### demand
-  # producer price domestic output share of total supply
-  # total_use == total_supply, I-O table accounting identity
-  total_supply <- total_use
-  # in the supply table only add up columns with positive industry output
-  dom_pp_out <- sup_tab %>%
-    filter(core_matrix, col_code %in% pos_ind_codes) %>%
-    util$tab2mat("row_code", "col_code") %>%
-    rowSums()
-  stopifnot(all(names(total_supply) == names(dom_pp_out)))
-  dom_pp_out_share <- dom_pp_out / total_supply
-  dom_pp_out_share[dom_pp_out == 0 | total_supply == 0] <- 0
-  # tibble(comcode = names(total_supply), dom_pp_out, total_supply, dom_pp_out_share) %>% View()
-
-  # county-commodity demand = B-mat * industry_output * dom_pp_share
-  stopifnot(all(colnames(bmat) == rownames(output_ind_mat)))
-  demand_mat <- bmat %*% output_ind_mat
-  stopifnot(all(rownames(demand_mat) == names(dom_pp_out_share)))
-  demand_mat <- sweep(demand_mat, 1, dom_pp_out_share, "*")
-  
+  #### supply and demand
+  # commodity-by-county output matrix
+  stopifnot(all(colnames(c_mat) == rownames(output_ind_mat)))
+  output_com_mat <- c_mat %*% output_ind_mat
+  # commodity-by-county supply = commodity_output * pos_int_use_sh
+  stopifnot(all(rownames(output_com_mat) == adj$com_code))
+  supply_mat <- sweep(output_com_mat, 1, adj$pos_int_use_sh, "*")
+  # commodity-by-county demand = B-mat * industry_output * pos_make_sh
+  stopifnot(all(colnames(b_mat) == rownames(output_ind_mat)))
+  demand_mat <- b_mat %*% output_ind_mat
+  stopifnot(all(rownames(demand_mat) == adj$com_code))
+  demand_mat <- sweep(demand_mat, 1, adj$pos_make_sh, "*")
   
   #### bind output, supply and demand together into single dataframe
+  df_output <- output_com_mat %>%
+    as_tibble(rownames = "com_code") %>%
+    pivot_longer(!com_code, names_to = "place", values_to = "output")    
   df_supply <- supply_mat %>%
-    as_tibble(rownames = "comcode") %>%
-    pivot_longer(!comcode, names_to = "place", values_to = "supply")
+    as_tibble(rownames = "com_code") %>%
+    pivot_longer(!com_code, names_to = "place", values_to = "supply")
   df_demand <- demand_mat %>%
-    as_tibble(rownames = "comcode") %>%
-    pivot_longer(!comcode, names_to = "place", values_to = "demand")
-  stopifnot(nrow(output_com) == nrow(df_supply))
-  stopifnot(nrow(output_com) == nrow(df_demand))
-  df <- inner_join(output_com, df_supply, join_by(comcode, place), relationship = "one-to-one") %>%
-    inner_join(df_demand, join_by(comcode, place), relationship = "one-to-one")
-
-  if (cache$enabled) {
-    log_debug(paste("save to cache", cache_path))
-    write_parquet(df, util$mkdir(cache_path))
-  }
+    as_tibble(rownames = "com_code") %>%
+    pivot_longer(!com_code, names_to = "place", values_to = "demand")
+  df <- com_tot %>%
+    select(com_code, com_name) %>%
+    full_join(df_output, "com_code", relationship = "one-to-many") %>%
+    full_join(df_supply, c("com_code", "place"), relationship = "one-to-one") %>%
+    full_join(df_demand, c("com_code", "place"), relationship = "one-to-one") %>%
+    arrange(place, com_code) %>%
+    relocate(place, com_code, com_name, output, supply, demand)
   
+  cache$write(df, cache_path)
   df
 }
 
