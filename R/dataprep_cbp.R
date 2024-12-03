@@ -85,7 +85,7 @@ call_cbp <- function(year,
     stop(glue("Imputed CBP not available for '{cbp_scale}' scale"))
   }
 
-  cache_path <- glue(opath$cbp_, .envir = list(geo = cbp_scale, year = year, imputed = imputed))
+  cache_path <- glue(opath$cbp_, geo = cbp_scale)
   if (file.exists(cache_path)) {
     log_debug(paste("read from cache", cache_path))
     return(read_parquet(cache_path))
@@ -93,7 +93,7 @@ call_cbp <- function(year,
 
   if (!imputed) {
     pubdata$prep_cbp(cbp_scale, year)
-    p <- glue(ipath$cbp_, .envir = list(geo = cbp_scale, year = year))
+    p <- glue(ipath$cbp_, geo = cbp_scale)
     df <- open_dataset(p) %>%
       select(any_of(c("fipstate", "fipscty", "lfo")), naics, est, emp, ap, qp1) %>%
       collect()
@@ -113,7 +113,7 @@ call_cbp <- function(year,
     pubdata$prep_efsy(year)
     
     # CBP raw county data
-    p <- glue(ipath$cbp_, .envir = list(geo = "county", year = year))
+    p <- glue(ipath$cbp_, geo = "county")
     df <- open_dataset(p) %>%
       select(fipstate, fipscty, naics, est, emp, ap, qp1) %>%
       collect()
@@ -132,7 +132,7 @@ call_cbp <- function(year,
     df <- left_join(df, d, join_by(fipstate, fipscty, naics))
 
     # calculate and merge total suppressed emp and pay
-    p <- glue(ipath$cbp_, .envir = list(geo = "us", year = year))
+    p <- glue(ipath$cbp_, geo = "us")
     dsup <- open_dataset(p)
     if ("lfo" %in% names(dsup)) {
       dsup <- filter(dsup, lfo == "-")
