@@ -120,6 +120,7 @@ We then impute annual payroll in counties with EFSY employment as `ap_efsy(count
 Intuition of this calculation is that county share of suppressed payroll is proportional to it's share of suppressed employment.
 
 The table below shows percentage of employment and payroll in raw and imputed CBP relative to national totals at different NAICS digit levels from 2012.
+It is worth noting that even at the national level some lower-level industries are supressed in the CBP.
 
 
 ```{r}
@@ -137,8 +138,7 @@ dsum <- df |>
   group_by(naics_dig) |>
   summarize(across(starts_with(c("emp", "ap")), sum))
 
-d <- cbp$call_cbp(year = 2012, cbp_scale = "us", imputed = FALSE) |>
-  filter(lfo == "-") |>
+d <- cbp$impute_national(2012) |>
   select(naics, emp, ap) |>
   rename_with(\(x) paste0(x, "_nat"), !naics) |>
   mutate(naics_dig = str_length(naics)) |>
@@ -157,6 +157,42 @@ left_join(dsum, d, join_by(naics_dig)) |>
 
 
 ```
+
+
+### National suppression
+
+Values for some industries are suppressed in CBP even at the national level.
+National industry totals are needed for payroll imputation in suppressed counties.
+We impute missing national numbers interpolating from the number of establishments.
+
+```{r}
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+
+# national before imputation
+d0 <- ipath$cbp_ %>%
+  glue(year = 2012, geo = "us") %>%
+  read_parquet() %>%
+  filter(lfo == "-") %>%
+  select(naics, est, emp, ap) %>%
+  mutate(naics = str_remove_all(naics, "[-/]"))
+
+# after imputation
+d1 <- cbp$impute_national(2012)
+
+# combined
+d <- inner_join(d0, d1, by = c("naics", "est"), suffix = c("0", "1"))
+
+# example: imputed 5-digit level employment within respective 4-digit indutries
+dig <- 5
+imp_naics <- d %>%
+  filter(emp0 == 0, str_length(naics) == dig) %>%
+  pull(naics)
+d %>%
+  filter(str_sub(naics, 1, dig-1) %in% str_sub(imp_naics, 1, dig-1), str_length(naics) %in% c(dig-1, dig)) %>%
+  select(naics, est, emp0, emp1)
+
+```
+
 
 
 
@@ -204,34 +240,6 @@ Many-to-one cases that are created in the process "336" (3361MV, 3364OT) and  "5
 
 
 ## Place output
-
-Code: [R/place_output.R]()
-
-Dollar value of economic output by industry in a place (county) is calculated separately for agricultural and non-agricultural sectors.
-We assume that economic activity in the agricultural sector, defined here as NAICS codes 111 and 112, is fully covered by the Census of Agriculture.
-Activity in the rest of the economy is taken from a business dataset, such as CBP or InfoGroup.
-In the case of InfoGroup, establishments with agricultural NAICS codes are dropped to avoid double-counting over the Census of Agriculture.
-
-Toy example.
-
-```{r}
-industry_names <- c("ag_1", "ag_2", "nonag_1", "nonag_2")
-industry_count_ag <- 2
-industry_count_nonag <- 2
-place_names <- c("a", "b")
-
-sup_tab <- matrix(c(9, 0, 1, 1, 
-                    0, 7, 2, 1, 
-                    1, 0, 18, 3,
-                    0, 1, 1, 23), length(industry_names), length(industry_names), dimnames = list(industry_names, industry_names)) %>%
-  bea_io$toy$sup_table(0)
-c_mat <- bea_io$toy$c_matrix(sup_tab)
-d_mat <- bea_io$toy$d_matrix(sup_tab)
-
-sup_tab
-c_mat
-d_mat
-```
 
 ### agricultural sector
 
@@ -285,74 +293,6 @@ x[1:10] %>%
   list_transpose(simplify = TRUE) %>%
   set_names(c("code", "label")) %>%
   data.frame()
-```
-
-
-Although we assume that the Census of Agriculture covers the entirety of the agricultural sector (NAICS 111 and 112), farm sales do not include non-agricultural commodity outputs observed in the agricultural columns of the Supply table.
-In addition, AgCensus national sales are close, but do not exactly match national numbers in the Supply table.
-To account for both discrepancies, we rescale numbers obtained from AgCensus so that national totals match Total industry supply (row "T017") of the agricultural sector in the Supply table.
-
-
-
-```{r}
-industry_ag_names <- industry_names[1:industry_count_ag]
-agcen_sales <- matrix(c(4, 4, 1, 4), industry_count_ag, length(place_names), 
-                      dimnames = list(industry_ag_names, place_names))
-
-# every county's farm industry output is proportional to county's share in national ag commodity output
-nat_output <- sup_tab["i_tot_out", industry_ag_names]
-place_share <- sweep(agcen_sales, 1, rowSums(agcen_sales), "/")
-ag_i_tot_out <- sweep(place_share, 1, nat_output, "*")
-
-
-nat_output
-agcen_sales
-place_share
-ag_i_tot_out
-```
-
-### non-agricultural sector
-
-- business data from CBP or InfoGroup
-- county share trick: can use either payroll or sales, don't need to explicitly turn payroll into output
-
-```{r}
-nonag_industry_names <- industry_names[-(1:industry_count_ag)]
-nonag_bus_value <- matrix(c(10, 10, 
-                            20, 10), 
-                          industry_count_nonag, length(place_names),
-                          byrow = TRUE,
-                          dimnames = list(nonag_industry_names, place_names))
-
-nonag_nat_output <- sup_tab["i_tot_out", nonag_industry_names]
-
-# every county's nonag industry output is proportional to county's share in national nonag "value" (payroll or sales)
-place_share <- sweep(nonag_bus_value, 1, rowSums(nonag_bus_value), "/")
-nonag_i_tot_out <- sweep(place_share, 1, nonag_nat_output, "*")
-
-
-nonag_nat_output
-nonag_bus_value
-place_share
-nonag_i_tot_out
-```
-
-
-### combine ag and nonag, translate to commodity space
-
-
-```{r}
-i_tot_out <- rbind(ag_i_tot_out, nonag_i_tot_out)
-c_tot_out <- c_mat %*% i_tot_out
-
-i_tot_out
-c_tot_out
-# county total output is the same whether measured in industry or commodity space
-all.equal(colSums(i_tot_out), colSums(c_tot_out))
-# industry total output matches national total from Supply table
-all.equal(rowSums(i_tot_out), sup_tab["i_tot_out", industry_names])
-# commodity total output matches national total from Supply table
-all.equal(rowSums(c_tot_out), sup_tab[industry_names, "c_tot_out"])
 ```
 
 
@@ -836,6 +776,7 @@ d |> count(eca_cluster_category_same, eca_membership_same)
 
 ggplot(d) + geom_boxplot(aes(max_trade_share_dev))
 ```
+
 
 
 

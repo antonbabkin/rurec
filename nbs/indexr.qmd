@@ -90,7 +90,9 @@ source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 # example usage
 cbp$call_cbp(2012, "county", FALSE)
 
-# util$zip_pack("tmp/datapack_cbp_v240710.zip", files = cbp$opath, overwrite = TRUE)
+util$zip_pack("tmp/cache_cbp_v241205.zip", files = cbp$opath)
+
+
 ```
 
 
@@ -145,8 +147,8 @@ source("R/place_io.R", local = (place_io <- new.env()))
 place_io$cache$enabled # current status, can be set to TRUE or FALSE
 place_io$cache$clear()
 place_io$cache$build()
-place_io$cache$pack("tmp/cache_place_io_v241120.zip", overwrite = TRUE)
-place_io$cache$unpack("tmp/cache_place_io_v241120.zip")
+place_io$cache$pack("tmp/cache_place_io_v241205.zip")
+place_io$cache$unpack("tmp/cache_place_io_v241205.zip")
 
 # county industry output
 place_io$ind_output(year = 2012, ilevel = "det", bus_data = "cbp_imp")

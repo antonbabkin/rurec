@@ -132,4 +132,148 @@ bea_io$concordance()
 
 
 
+# Import
+
+```{r}
+pubdata::bea_io_get("2022_imp_det_2012") %>% head()
+
+```
+
+
+
+```{r}
+import_table <- pubdata::bea_io_get("2022_imp_det_2012")
+use_table <- pubdata::bea_io_get("2022_use_det_2012")
+
+df <- full_join(
+  import_table %>%
+    filter(core_matrix) %>%
+    select(comcode = row_code, comname = row_name, indcode = col_code, indname = col_name, import = value) %>%
+    mutate(import_sh = import / sum(import, na.rm = TRUE), .by = "comcode"),
+  use_table %>%
+    filter(core_matrix) %>%
+    select(comcode = row_code, indcode = col_code, use = value) %>%
+    mutate(use_sh = use / sum(use, na.rm = TRUE), .by = "comcode"),
+  by = c("comcode", "indcode")
+)
+
+df %>% head()
+```
+
+
+
+
+```{r}
+x <- df %>%
+  summarize(import_tot = sum(import, na.rm = TRUE), .by = "comcode") %>%
+  mutate(com_imp_rank = row_number(desc(import_tot)))
+dfgg <- df %>%
+  left_join(x, by = "comcode") %>%
+  arrange(com_imp_rank, desc(use)) %>%
+  slice_head(n = 10, by = "comcode")
+
+theme_set(theme_minimal())
+ps <- list()
+for (r in 1:30) {
+  xtitle <- dfgg %>%
+    filter(com_imp_rank == r) %>%
+    distinct(comcode, comname) %>%
+    mutate(label = glue("{comcode} ({comname})")) %>%
+    pull(label)
+    
+  ps[[r]] <- dfgg %>%
+    filter(com_imp_rank == r) %>%
+    select(indcode, use_sh, import_sh) %>%
+    pivot_longer(!indcode) %>%
+    mutate(indcode = ordered(indcode, unique(indcode)),
+           name = ordered(name, c("use_sh", "import_sh"))) %>%
+    ggplot() +
+    geom_col(aes(indcode, value, fill = name), position = "dodge") +
+    theme(legend.position = "inside", legend.position.inside = c(0.9, 0.9)) +
+    labs(title = xtitle, x = NULL, y = NULL)
+}
+
+p <- patchwork::wrap_plots(ps[1:10], ncol = 2)
+ps[[1]]
+```
+
+```{r}
+for (p in ps) {
+  print(p)
+}
+```
+
+
+## Intermediate vs consumer use.
+
+334300	Audio and video equipment manufacturing
+
+```{r}
+import_table <- pubdata::bea_io_get("2022_imp_det_2012")
+use_table <- pubdata::bea_io_get("2022_use_det_2012")
+
+df <- full_join(
+  use_table %>% 
+    filter(col_name %in% c("Total Intermediate", "Total use of products")) %>%
+    pivot_wider(id_cols = c("row_code", "row_name"), names_from = col_name) %>%
+    rename(comcode = row_code, comname = row_name, use_int = `Total Intermediate`, use_tot = `Total use of products`) %>%
+    mutate(use_int_sh = use_int / abs(use_tot)),
+  import_table %>%
+    filter(col_name %in% c("Imports of goods and services", "Total Intermediate")) %>%
+    pivot_wider(id_cols = c("row_code", "row_name"), names_from = col_name) %>%
+    rename(comcode = row_code, comname = row_name, imp_int = `Total Intermediate`, imp_tot = `Imports of goods and services`) %>%
+    mutate(imp_tot = abs(imp_tot), imp_int_sh = imp_int / imp_tot),
+  by = c("comcode", "comname")
+)
+
+# fishing for a good example
+df %>%
+  mutate(across(c(imp_int_sh, use_int_sh), \(x) round(x, 4))) %>%
+  filter((imp_int_sh < 0.3 | imp_int_sh > 0.7), between(use_int_sh, 0.4, 0.6)) %>%
+  View()
+
+df %>%
+  mutate(across(c(imp_int_sh, use_int_sh), \(x) round(x, 4))) %>%
+  filter(comcode %in% c("337215", "311700"))
+
+```
+
+
+# Tests
+
+Verify that detail matrix aggregated to summary level via concordance is the same as the original summary matrix.
+
+```{r}
+
+local({
+  conc <- bea_io$concordance() %>%
+    distinct(summary, detail) %>%
+    drop_na()
+  for (tab_fn_name in c("supply_table", "use_table")) {
+    tab_fn <- get(tab_fn_name, envir = bea_io)
+    tab_sum <- tab_fn(2012, "sum") %>% filter(core_matrix)
+    tab_det <- tab_fn(2012, "det") %>% filter(core_matrix)
+    
+    tab_det_agg <- tab_det %>%
+      left_join(conc, join_by(row_code == detail)) %>%
+      mutate(row_code = summary) %>%
+      select(!summary) %>%
+      left_join(conc, join_by(col_code == detail)) %>%
+      mutate(col_code = summary) %>%
+      summarize(value = sum(value), .by = c("row_code", "col_code"))
+      
+    tab_compare <- tab_sum %>%
+      select(row_code, col_code, value) %>%
+      full_join(tab_det_agg, by = c("row_code", "col_code"), suffix = c("_sum", "_det")) %>%
+      mutate(adif = abs(value_sum - value_det))
+    
+    # within rounding tolerance
+    stopifnot(all(tab_compare$adif < 14))
+  }
+})
+
+```
+
+
+
 

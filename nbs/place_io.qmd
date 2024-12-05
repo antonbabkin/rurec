@@ -22,12 +22,10 @@ library(glue)
 library(tmap)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
-source("R/dataprep_bea_io.R", local = (bea_io <- new.env()))
+source("R/bea_io.R", local = (bea_io <- new.env()))
 source("R/place_io.R", local = (place_io <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
 
-log_threshold(WARN)
-tmap_mode("plot")
 ```
 
 
@@ -37,11 +35,190 @@ Run this section to perform a comprehensive test of the module.
 
 ```{r}
 #| eval: false
-testthat::test_file("tests/test-place_io.R")
+# testthat::test_file("tests/test-place_io.R")
+
+```
+
+
+# toy example
+
+Methodology is demonstrated using a small toy example with artificial data.
+In this section we define all inputs that are later used throughout the notebook.
+
+```{r}
+toy <- new.env()
+
+with(toy, {
+  ind_names_ag <- c("a1", "a2")
+  ind_names_nag <- c("n1", "n2")
+  ind_names <- c(ind_names_ag, ind_names_nag)
+  ind_n_ag <- length(ind_names_ag)
+  ind_n_nag <- length(ind_names_nag)
+  ind_n <- ind_n_ag + ind_n_nag
+  county_names <- c("a", "b")
+  
+  sup_tab <- matrix(
+    c(9, 0, 1, 0, 
+      0, 7, 0, 1, 
+      1, 2, 18, 1, 
+      1, 1, 3, 23),
+    nrow = ind_n,
+    ncol = ind_n,
+    byrow = TRUE,
+    dimnames = list(paste0("c_", ind_names), paste0("i_", ind_names))
+  ) %>%
+    bea_io$toy$sup_table(wedge = 0)
+  c_mat <- bea_io$toy$c_matrix(sup_tab)
+  d_mat <- bea_io$toy$d_matrix(sup_tab)
+  
+  agcen_sales <- matrix(
+    c(4, 1, 
+      4, 4),
+    nrow = ind_n_ag,
+    ncol = length(county_names),
+    byrow = TRUE,
+    dimnames = list(commodity = ind_names_ag, county = county_names)
+  )
+  
+  bus_emp <- matrix(
+    c(10, 10, 
+      20, 10),
+    nrow = ind_n_nag,
+    ncol = length(county_names),
+    byrow = TRUE,
+    dimnames = list(industry = ind_names_nag, county = county_names)
+  )
+
+})
+
+
+```
+
+The example economy consists of `r toy$ind_n_ag` agricultural industries (`r toy$ind_names_ag`) and `r toy$ind_n_nag` non-agricultural industries (`r toy$ind_names_nag`).
+
+Supply table:
+```{r}
+toy$sup_tab
+```
+
+C-matrix (commodity composition of industry outputs):
+```{r}
+toy$c_mat %>% round(3)
+```
+
+D-matrix (industry source of commodity outputs):
+```{r}
+toy$d_mat %>% round(3)
+```
+
+Agricultural sales by county:
+```{r}
+toy$agcen_sales
+```
+
+Non-agricultural employment by county:
+```{r}
+toy$bus_emp
 ```
 
 
 # output
+
+## methodology
+
+### county share of national industry output
+
+#### agricultural industries
+
+Dollar value of economic output by industry in a place (county) is calculated separately for agricultural and non-agricultural sectors.
+We assume that economic activity in the agricultural sector, defined here as NAICS codes 111 and 112, is fully covered by the Census of Agriculture.
+Activity in the rest of the economy is taken from a business dataset, such as CBP or InfoGroup.
+In the case of InfoGroup, establishments with agricultural NAICS codes are dropped to avoid double-counting over the Census of Agriculture.
+
+Although we assume that the Census of Agriculture covers the entirety of the agricultural sector (NAICS 111 and 112), farm sales do not include non-agricultural commodity outputs observed in the agricultural columns of the Supply table.
+In addition, AgCensus national sales are close, but do not exactly match national numbers in the Supply table.
+To account for both discrepancies, we rescale numbers obtained from AgCensus so that national totals match Total industry supply (row "T017") of the agricultural sector in the Supply table.
+
+
+```{r}
+with(toy, {
+  county_share_ag <- sweep(agcen_sales, 1, rowSums(agcen_sales), "/")
+  dimnames(county_share_ag) <- list(industry = paste0("i_", ind_names_ag), county = county_names)
+})
+```
+
+
+County shares of agricultural industry output:
+```{r}
+toy$county_share_ag
+```
+
+#### non-agricultural industries
+
+Business data from CBP or InfoGroup.
+Assume that county's share in national industry output is equal to county's share in employment, payroll or sales - depending on the data source.
+
+```{r}
+with(toy, {
+  county_share_nag <- sweep(bus_emp, 1, rowSums(bus_emp), "/")
+  dimnames(county_share_nag) <- list(industry = paste0("i_", ind_names_nag), county = county_names)
+})
+```
+
+
+County shares of non-agricultural industry output:
+```{r}
+toy$county_share_nag %>% round(3)
+```
+
+### county industry output
+
+Stack agricultural and non-agricultural shares and multiply by national total industry output.
+
+```{r}
+with(toy, {
+  county_share <- rbind(county_share_ag, county_share_nag)
+  names(dimnames(county_share)) <- c("industry", "county")
+  nat_ind_out <- sup_tab["i_tot_out", paste0("i_", ind_names)]
+  county_ind_out <- sweep(county_share, 1, nat_ind_out, "*")
+})
+
+toy$county_share %>% round(2)
+toy$nat_ind_out
+toy$county_ind_out %>% round(2)
+```
+
+
+### county commodity output
+
+```{r}
+with(toy, {
+  nat_com_out <- sup_tab[paste0("c_", ind_names), "c_tot_out"]
+  county_com_out <- c_mat %*% county_ind_out
+})
+
+toy$nat_com_out
+toy$county_com_out %>% round(2)
+```
+
+
+### verification
+
+```{r}
+with(toy, {
+  # county total output is the same whether measured in industry or commodity space
+  all.equal(colSums(county_ind_out), colSums(county_com_out)) %>% stopifnot()
+  # industry total output matches national total from Supply table
+  all.equal(rowSums(county_ind_out), nat_ind_out) %>% stopifnot()
+  # commodity total output matches national total from Supply table
+  all.equal(rowSums(county_com_out), nat_com_out) %>% stopifnot()
+})
+```
+
+
+
+
+## interface
 
 County-industry output in thousands of dollars is returned by the `call_output()` function and can be calculated at different parameters.
 
@@ -63,7 +240,7 @@ Source of information on non-agricultural economic activity in counties.
 
 ```{r}
 #| tbl-cap: "Example: detail industry output in 2012 from CBP-EFSY"
-place_io$call_output(year = 2012, class_system = "industry", ilevel = "det", bus_data = "cbp_imp") %>%
+place_io$output(year = 2012, classification = "industry", ilevel = "det", bus_data = "cbp_imp") %>%
   head()
 ```
 
@@ -87,38 +264,36 @@ Table columns.
 x <- tibble()
 for (year in c(2012)) {
   for (ilevel in c("sec", "sum", "det")) {
-    bea_tot <- bea_io$call_industry_output(year = year, ilevel = ilevel, condense = TRUE) %>%
-      sum()
+    bea_tot <- bea_io$supply_table(year, ilevel) %>%
+      filter(row_name == "Total industry supply", col_name == "Total Commodity Output") %>%
+      pull(value)
     for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
-      for (class_system in c("industry", "commodity")) {
-        d <- place_io$call_output(
-          year = year,
-          class_system = class_system,
-          ilevel = ilevel,
-          bus_data = bus_data
-        )
+      for (classification in c("industry", "commodity")) {
+        d <- place_io$output(year, classification, ilevel, bus_data)
+        ind_code <- switch(classification, industry = "indcode", commodity = "comcode")
         x <- bind_rows(
           x,
           tibble(
             year = year,
             ilevel = ilevel,
             bus_data = bus_data,
-            class_system = class_system,
+            classification = classification,
             nrow = nrow(d),
             ncty = n_distinct(d$place),
             ncty0 = d %>% summarize(output = sum(output), .by = "place") %>% filter(output == 0) %>% nrow(),
             nind = n_distinct(d$indcode),
-            nind0 = d %>% summarize(output = sum(output), .by = "indcode") %>% filter(output == 0) %>% nrow(),
+            nind0 = d %>% summarize(output = sum(output), .by = {{ind_code}}) %>% filter(output == 0) %>% nrow(),
             bea_pct = (100 * sum(d$output) / 1000 / bea_tot)
           )
         )
-        
+
       }
     }
   }
 }
 x
 ```
+
 
 
 ## distribution
@@ -137,7 +312,7 @@ Distribution statistics for one specific output call.
 #| column: screen-inset
 #| tbl-cap: County-industry detail level output in $1000s, InfoGroup, 2012
 
-d0 <- place_io$call_output(year = 2012, class_system = "industry", ilevel = "det", bus_data = "infogroup")
+d0 <- place_io$output(2012, "industry", "det", "infogroup")
 d1 <- summarize(d0, output = sum(output), .by = "indcode")
 d2 <- summarize(d0, output = sum(output), .by = "place")
 
@@ -156,6 +331,7 @@ d <- tibble(modification = "none", output = d0$output) %>%
 summ <- function(x) {
   tibble(n = length(x),
        n0 = length(x[x == 0]),
+       sum = sum(x) %>% round(),
        mean = mean(x) %>% round(),
        sd = sd(x) %>% round()) %>%
     add_column(x %>% quantile() %>% round() %>% as.list() %>% as_tibble())
@@ -173,7 +349,7 @@ Total and agricultural (sector 11) industry output from InfoGroup, 2012.
 #| column: screen-inset
 #| layout-nrow: 1
 
-d1 <- place_io$call_output(2012, "industry", "sec", "infogroup")
+d1 <- place_io$output(2012, "industry", "sec", "infogroup")
 df <- geography$call_county() %>%
   filter(contiguous) %>%
   left_join(summarize(d1, output = sum(output), .by = "place"), "place") %>%
@@ -197,7 +373,6 @@ m2
 
 
 
-
 # supply and demand
 
 Function `call_outsupdem()` returns a dataframe with county-commodity output, supply and demand.
@@ -217,7 +392,7 @@ Source of information on non-agricultural economic activity in counties.
 
 ```{r}
 #| tbl-cap: "Example: detail output, supply and demand in 2012 from CBP-EFSY"
-place_io$call_outsupdem(year = 2012, ilevel = "det", bus_data = "cbp_imp") %>%
+place_io$outsupdem(year = 2012, ilevel = "det", bus_data = "cbp_imp") %>%
   head()
 ```
 
@@ -230,11 +405,15 @@ This table shows aggregate statistics for supply-demand dataframes constructed w
 Table columns.
 `nrow` number of rows.
 `ncty` number of counties.
-`nind` number of commodities.
+`ncom` number of commodities.
 `out` total output.
 `sup` total supply.
 `dem` total demand.
 
+Aggregate supply and demand are not exactly equal.
+The reasons have not been fully discovered.
+At summary and sector level, inconsistency between output (aggregated from detail, some industries have zero output) and I-O tables likely plays a role.
+This is not a factor at detail level, and difference is minuscule - possibly just caused by numerical precision at county-industry level.
 
 ```{r}
 #| column: page
@@ -244,11 +423,7 @@ for (year in c(2012)) {
   for (ilevel in c("sec", "sum", "det")) {
     for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
 
-        d <- place_io$call_outsupdem(
-          year = year,
-          ilevel = ilevel,
-          bus_data = bus_data
-        )
+        d <- place_io$outsupdem(year, ilevel, bus_data)
         x <- bind_rows(
           x,
           tibble(
@@ -257,13 +432,13 @@ for (year in c(2012)) {
             bus_data = bus_data,
             nrow = nrow(d),
             ncty = n_distinct(d$place),
-            nind = n_distinct(d$indcode),
+            ncom = n_distinct(d$comcode),
             out = sum(d$output),
             sup = sum(d$supply),
             dem = sum(d$demand)
           )
         )
-        
+
       }
   }
 }
@@ -287,8 +462,8 @@ Distribution statistics for one specific supply-demand call.
 #| column: screen-inset
 #| tbl-cap: County-industry detail level supply and demand in $1000s, InfoGroup, 2012
 
-d0 <- place_io$call_outsupdem(year = 2012, ilevel = "det", bus_data = "infogroup")
-d1 <- summarize(d0, supply = sum(supply), demand = sum(demand), .by = "indcode")
+d0 <- place_io$outsupdem(year = 2012, ilevel = "det", bus_data = "infogroup")
+d1 <- summarize(d0, supply = sum(supply), demand = sum(demand), .by = "comcode")
 d2 <- summarize(d0, supply = sum(supply), demand = sum(demand), .by = "place")
 
 d <- tibble(modification = "none", supply = d0$supply, demand = d0$demand) %>%
@@ -308,6 +483,7 @@ d <- tibble(modification = "none", supply = d0$supply, demand = d0$demand) %>%
 summ <- function(x) {
   tibble(n = length(x),
        n0 = length(x[x == 0]),
+       sum = sum(x) %>% round(),
        mean = mean(x) %>% round(),
        sd = sd(x) %>% round()) %>%
     add_column(x %>% quantile() %>% round() %>% as.list() %>% as_tibble())
@@ -327,8 +503,8 @@ Supply and demand in the mining (sector 21) commodity, InfoGroup, 2012.
 #| column: screen-inset
 #| layout-nrow: 1
 
-d <- place_io$call_outsupdem(2012, "sec", "infogroup") %>%
-  filter(indcode == "21")
+d <- place_io$outsupdem(2012, "sec", "infogroup") %>%
+  filter(comcode == "21")
 df <- geography$call_county() %>%
   filter(contiguous) %>%
   left_join(d, "place") %>%
@@ -390,7 +566,7 @@ for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
       .before = 1,
       .keep = "unused"
     )
-  
+
   x <- bind_rows(x, d)
 }
 x
@@ -423,6 +599,291 @@ df_join[["infogroup"]] %>%
   filter(xor(geo, bus)) %>%
   select(place, name, state_name, geo, bus)
 ```
+
+
+
+
+## Infogroup value variable
+
+There are three possible variables to use as the measure of county-industry value in the Infogroup: number of establishments, employment and sales.
+Number of establishments is strictly worse than the other two, since it does not capture difference between establishment sizes.
+Sales are almost exact measure of output, which is good, but are missing much more often than employment.
+Out of nearly 1 million county-industry Infogroup observations in 2012 with positive employment, almost 13% have zero sales.
+For this reason, we choose employment as the value variable for Infogroup.
+
+```{r}
+x <- place_io$infogroup$opath$county_ %>%
+  glue(year = 2012) %>%
+  arrow::open_dataset() %>%
+  collect() %>%
+  mutate(emp_pos = (emp > 0), sales_pos = (sales > 0))
+
+x %>%
+  count(emp_pos, sales_pos) %>%
+  mutate(pct = 100 * n / sum(n))
+
+```
+
+
+
+## does output match national total?
+
+At sector (and probably summary) level - no, it does not.
+
+```{r}
+sup_tab <- bea_io$supply_table(2012, "sec")
+ind_codes <- sup_tab %>% filter(core_matrix) %>% distinct(col_code) %>% pull()
+x <- full_join(
+  sup_tab %>% 
+    filter(row_name == "Total industry supply", col_code %in% ind_codes) %>%
+    select(ind = col_code, bea = value),
+  place_io$output(2012, "industry", "sec", "cbp_imp") %>%
+    summarize(cty = sum(output) / 1000, .by = "indcode") %>%
+    rename(ind = indcode),
+  by = "ind"
+) %>%
+  mutate(dif = round(bea - cty))
+
+x
+
+```
+
+On detail - only when industries have zero output in business data (15 total, government and a few others).
+
+```{r}
+sup_tab <- bea_io$supply_table(2012, "det")
+ind_codes <- sup_tab %>% filter(core_matrix) %>% distinct(col_code) %>% pull()
+x <- full_join(
+  sup_tab %>% 
+    filter(row_name == "Total industry supply", col_code %in% ind_codes) %>%
+    select(ind = col_code, bea = value),
+  place_io$output(2012, "industry", "det", "cbp_imp") %>%
+    summarize(cty = sum(output) / 1000, .by = "indcode") %>%
+    rename(ind = indcode),
+  by = "ind"
+) %>%
+  mutate(dif = round(bea - cty))
+
+x %>% filter(dif != 0)
+
+```
+
+
+## supply and demand
+
+where supply and demand dont match? in 80% of commodities! something is wrong.
+update: in relative terms, difference are small and likely caused by numerical precision.
+this section is valuable, but needs to be cleaned up. 
+
+
+```{r}
+x <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  summarize(demand = sum(demand), supply = sum(supply), .by = "comcode") %>%
+  mutate(dif = round(demand - supply))
+
+x
+x %>% count(dif != 0)
+```
+
+
+Is it the ones that where missing industry either produces or supplies commodity?
+No, this is not the case - there is a mix.
+
+TODO: Why is 311230	Breakfast cereal manufacturing always 0 from CBP_IMP? Verify that payroll is indeed 0 in all counties in source data.
+
+```{r}
+ind_code_0 <- place_io$output(2012, "industry", "det", "cbp_imp") %>%
+  summarize(output = sum(output), .by = "indcode") %>% 
+  filter(output == 0) %>% 
+  pull(indcode)
+
+com_sup_0 <- bea_io$supply_table(2012, "det") %>%
+  filter(core_matrix, col_code %in% ind_code_0, value > 0) %>%
+  distinct(row_code) %>%
+  pull()
+
+com_use_0 <- bea_io$use_table(2012, "det") %>%
+  filter(core_matrix, col_code %in% ind_code_0, value > 0) %>%
+  distinct(row_code) %>%
+  pull()
+
+x <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  summarize(output = sum(output), demand = sum(demand), supply = sum(supply), .by = "comcode") %>%
+  mutate(supdem_adif = abs(demand - supply),
+         supdem_rdif = supdem_adif / supply, 
+         ind_0 = (comcode %in% com_sup_0 | comcode %in% com_use_0))
+
+# bea commodity output
+com_codes <- bea_io$supply_table(2012, "det") %>% filter(core_matrix) %>% distinct(row_code) %>% pull()
+x1 <- bea_io$supply_table(2012, "det") %>% 
+  filter(row_code %in% com_codes, col_name == "Total Commodity Output") %>%
+  select(comcode = row_code, comname = row_name, bea_output = value)
+x <- left_join(x, x1, by = "comcode") %>%
+  mutate(bea_output = bea_output * 1000, output_adif = abs(output - bea_output), output_rdif = output_adif / bea_output)
+
+# number of using industries
+x1 <- bea_io$use_table(2012, "det") %>%
+  filter(core_matrix) %>%
+  summarize(used_by = sum(value > 0), row_name = first(row_name), .by = "row_code") %>%
+  select(comcode = row_code, used_by)
+x <- left_join(x, x1, by = "comcode")
+
+# number of supplying industries
+x1 <- bea_io$supply_table(2012, "det") %>%
+  filter(core_matrix) %>%
+  summarize(prod_by = sum(value > 0), row_name = first(row_name), .by = "row_code") %>%
+  select(comcode = row_code, prod_by)
+x <- left_join(x, x1, by = "comcode")
+
+x <- relocate(x, comname, comcode)
+
+x
+```
+
+Work through the problem of supply != demand in a small example
+
+
+```{r}
+x %>% filter(dif != 0, !ind_0, used_by < 5, prod_by < 5)
+x %>% filter(!ind_0) %>% arrange(desc(abs(dif)))
+
+```
+
+
+Single industry example.
+336111 commodity - few supplying industries and only 1 use industry.
+
+Demand
+
+```{r}
+
+
+# B * output, = BEA national use
+(bmat %*% output_ind_mat)["336111", ] %>% sum()
+
+# share of domestic supply
+tibble(comcode = names(total_supply), dom_pp_out, total_supply, dom_pp_out_share) %>%
+  filter(comcode == "336111") %>%
+  as.matrix()
+
+# demand = B * output * domestic share
+sweep((bmat %*% output_ind_mat), 1, dom_pp_out_share, "*")["336111", ] %>% sum()
+
+# same number in function code
+demand_mat["336111", ] %>% sum()
+
+```
+
+Supply
+
+```{r}
+
+# total commodity output
+output_com_mat["336111", ] %>% sum()
+
+
+# domestic intermediate use
+tibble(comcode = names(total_use), dom_int_use, total_use, dom_int_use_share) %>%
+  filter(comcode == "336111") %>%
+  as.matrix()
+
+supply_mat["336111", ] %>% sum()
+```
+
+What about another commodity that is only made by 1 industry?
+
+
+```{r}
+
+
+```
+
+```{r}
+df %>% filter(comcode == "312120") %>% pull(output) %>% sum()
+output_com %>% filter(comcode == "312120") %>% pull(output) %>% sum()
+sup_tab %>% filter(row_code == "312120", col_name == "Total Commodity Output") %>% pull(value)
+```
+
+
+# make-use framework
+
+## ind output
+
+```{r}
+
+x <- tibble()
+for (year in c(2012)) {
+  bea_tot <- bea_io$ind_totals(year, "sum") %>%
+    filter(!str_starts(ind_code, "G")) %>%
+    pull(make) %>%
+    sum()
+  for (ilevel in c("sum", "det")) {
+    for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
+        d <- place_io$ind_output(year, ilevel, bus_data)
+        x <- bind_rows(
+          x,
+          tibble(
+            year = year,
+            ilevel = ilevel,
+            bus_data = bus_data,
+            nrow = nrow(d),
+            ncty = n_distinct(d$place),
+            ncty0 = d %>% summarize(output = sum(output), .by = "place") %>% filter(output == 0) %>% nrow(),
+            nind = n_distinct(d$ind_code),
+            nind0 = d %>% summarize(output = sum(output), .by = ind_code) %>% filter(output == 0) %>% nrow(),
+            bea_pct = (100 * sum(d$output) / 1000 / bea_tot)
+          )
+        )
+    }
+  }
+}
+x
+
+
+```
+
+## com out, sup, dem
+
+```{r}
+
+x <- tibble()
+for (year in c(2012)) {
+  for (ilevel in c("sum", "det")) {
+    for (bus_data in c("cbp_raw", "cbp_imp", "infogroup")) {
+
+        d <- place_io$outsupdem(year, ilevel, bus_data)
+        x <- bind_rows(
+          x,
+          tibble(
+            year = year,
+            ilevel = ilevel,
+            bus_data = bus_data,
+            nrow = nrow(d),
+            ncty = n_distinct(d$place),
+            ncom = n_distinct(d$com_code),
+            out = sum(d$output),
+            sup = sum(d$supply),
+            dem = sum(d$demand)
+          )
+        )
+      }
+  }
+}
+x
+```
+
+```{r}
+x = place_io$outsupdem(2012, "det", "cbp_imp")
+x %>%
+  summarize(across(output:demand, sum), .by = "com_code") %>%
+  mutate(rdif = abs(supply - demand) / supply) %>%
+  View()
+```
+
+
+
+
+
 
 
 

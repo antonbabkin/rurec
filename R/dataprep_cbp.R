@@ -68,6 +68,102 @@ pubdata$prep_efsy <- function(year) {
 
 # Imputed CBP  ----
 
+#' National CBP with missing employment and payroll imputed
+#' 
+#' Imputation is done by linear interpolation of emp and pay in suppressed industries 
+#' from higher digit in proportion to number of establishments.
+impute_national <- function(year) {
+  
+  df <- ipath$cbp_ %>%
+    glue(year = year, geo = "us") %>%
+    read_parquet() %>%
+    {
+      if ("lfo" %in% names(.)) filter(., lfo == "-")
+      else .
+    } %>%
+    select(naics, est, emp, ap) %>%
+    mutate(
+      naics = str_remove_all(naics, "[-/]"),
+      digits = if_else(naics == "", 1, str_length(naics))
+    )
+  
+  # skip years with issues (assertions fail) - investigate if years are needed in future
+  if (year %in% c(2001, 2009)) {
+    warning("CBP imputation might have issues in ", year)
+    return(select(df, !digits))
+  }
+  
+  
+  # Iterate from higher to lower levels of aggregation,
+  # imputing missing values on the level below at every step.
+  for (dig in 1:5) {
+    # total emp and pay at "dig" level
+    d_tot <- df %>%
+      filter(digits == dig) %>%
+      rename(naics_tot = naics) %>%
+      select(!digits)
+    # industries for imputation at "dig+1" level
+    d_imp <- df %>%
+      filter(digits == dig + 1) %>%
+      {
+        if (dig == 1) mutate(., naics_tot = "")
+        else mutate(., naics_tot = str_sub(naics, 1, dig))
+      }
+    # some special cases at 2-digit level
+    if (dig == 2) {
+      # "95" and "99" are missing industry codes and does not go below 2-digit level
+      d_tot <- filter(d_tot, !(naics_tot %in% c("95", "99")))
+      # over-ride first 2 digits of 3-digit industries for merge
+      # "31" consists of "31x", "32x" and "33x"
+      # "44" consists of "44x" and "45x"
+      # "48" consists of "48x" and "49x"
+      d_imp <- d_imp %>%
+        mutate(naics_tot = case_match(naics_tot, "32" ~ "31", "33" ~ "31", "45" ~ "44", "49" ~ "48", .default = naics_tot))
+    }
+    # sum at "dig+1" level
+    # if somethig is suppressed, total at "dig" > sum at "dig+1"
+    d_sum <- d_imp %>%
+      summarize(across(c(est, emp, ap), sum), .by = "naics_tot")
+    
+    # verify 1-to-1 merge
+    stopifnot(all(d_tot$naics_tot == d_sum$naics_tot))
+    # no suppression in est:
+    stopifnot(all(d_tot$est == d_sum$est))
+    
+    # interpolation
+    d_imp <- d_imp %>%
+      left_join(d_tot, by = "naics_tot", suffix = c("",  "_tot")) %>%
+      left_join(d_sum, by = "naics_tot", suffix = c("",  "_sum")) %>%
+      # combined emp and pay in all suppressed "dig+1" industries within single "dig" industry
+      mutate(
+        emp_sup = emp_tot - emp_sum,
+        ap_sup = ap_tot - ap_sum
+      ) %>%
+      # combined est in "dig+1" industries where emp or pay is suppressed
+      mutate(
+        est_sup_emp = sum(if_else(emp == 0, est, 0)),
+        est_sup_ap = sum(if_else(ap == 0, est, 0)),
+        .by = "naics_tot"
+      ) %>%
+      # emp(pay) is distributed among suppressed "dig+1" industries within single "dig" industry
+      # in proportion with est
+      mutate(
+        emp = if_else(emp == 0, emp_sup * est / est_sup_emp, emp),
+        ap = if_else(ap == 0, ap_sup * est / est_sup_ap, ap)
+      )
+    
+    # take interpolated values back into main df
+    df <- left_join(df, select(d_imp, naics, emp_imp = emp, ap_imp = ap), "naics") %>%
+      mutate(
+        emp = if_else(is.na(emp_imp), emp, emp_imp),
+        ap = if_else(is.na(ap_imp), ap, ap_imp)
+      ) %>%
+      select(naics, est, emp, ap, digits)
+  }
+  
+  df %>% select(!digits)
+}
+
 
 # Call up and clean CBP ($1,000 of dollars) available for years 1986:2021
 #' @param imputed if TRUE derive county-level annual payroll from county-level EFSY imputed employment and CBP annual payroll
@@ -84,6 +180,11 @@ call_cbp <- function(year,
   if (imputed && (cbp_scale != "county")) {
     stop(glue("Imputed CBP not available for '{cbp_scale}' scale"))
   }
+  
+  if (imputed && year %in% c(2001, 2009)) {
+    # national imputation is skipped for these years
+    warning("CBP imputation might have issues in ", year)
+  }
 
   cache_path <- glue(opath$cbp_, geo = cbp_scale)
   if (file.exists(cache_path)) {
@@ -96,7 +197,9 @@ call_cbp <- function(year,
     p <- glue(ipath$cbp_, geo = cbp_scale)
     df <- open_dataset(p) %>%
       select(any_of(c("fipstate", "fipscty", "lfo")), naics, est, emp, ap, qp1) %>%
-      collect()
+      collect() %>%
+      mutate(naics = str_remove_all(naics, "[-/]"))
+    
     if (cbp_scale == "county") {
       df$place <- paste0(df$fipstate, df$fipscty)
     }
@@ -113,16 +216,18 @@ call_cbp <- function(year,
     pubdata$prep_efsy(year)
     
     # CBP raw county data
-    p <- glue(ipath$cbp_, geo = "county")
-    df <- open_dataset(p) %>%
-      select(fipstate, fipscty, naics, est, emp, ap, qp1) %>%
-      collect()
-    df$place <- paste0(df$fipstate, df$fipscty)
+    df <- glue(ipath$cbp_, geo = "county") %>%
+      open_dataset() %>%
+      select(fipstate, fipscty, naics, est, emp, ap) %>%
+      collect() %>%
+      mutate(place = paste0(fipstate, fipscty),
+             naics = str_remove_all(naics, "[-/]"))
 
     # merge EFSY county employment
-    p <- glue(ipath$efsy_)
-    d <- open_dataset(p) %>%
-      mutate(efsy_emp = (lb + ub) / 2) %>%
+    d <- glue(ipath$efsy_) %>%
+      open_dataset() %>%
+      mutate(efsy_emp = (lb + ub) / 2,
+             naics = str_remove_all(naics, "[-/]")) %>%
       select(fipstate, fipscty, naics, efsy_emp) %>%
       collect()
     if (year == 1999) {
@@ -131,25 +236,19 @@ call_cbp <- function(year,
     }      
     df <- left_join(df, d, join_by(fipstate, fipscty, naics))
 
-    # calculate and merge total suppressed emp and pay
-    p <- glue(ipath$cbp_, geo = "us")
-    dsup <- open_dataset(p)
-    if ("lfo" %in% names(dsup)) {
-      dsup <- filter(dsup, lfo == "-")
-    }
-    dsup <- dsup |>
-      select(naics, emp, ap) |>
-      rename(emp_nat = emp, ap_nat = ap) |>
-      collect()
-
-    d <- df |>
-      group_by(naics) |>
+    ## calculate and merge total suppressed emp and pay
+    # unsuppressed total emp and pay by naics
+    d <- df %>%
+      group_by(naics) %>%
       summarize(emp_unsup = sum(emp), ap_unsup = sum(ap))
-    dsup <- left_join(dsup, d, join_by(naics)) |>
+    # national emp and pay by naics
+    dsup <- impute_national(year) %>%
+      select(naics, emp_nat = emp, ap_nat = ap) %>%
+      left_join(d, "naics") %>%
       mutate(emp_sup = emp_nat - emp_unsup, ap_sup = ap_nat - ap_unsup)
     
-    # non-blocking sanity check
-    d_sus <- dsup |>
+    # sanity check
+    d_sus <- dsup %>%
       filter(((emp_nat > 0) & (emp_nat < emp_unsup))
         | ((ap_nat > 0) & (ap_nat < ap_unsup)))
     if (nrow(d_sus) > 0) {
@@ -160,17 +259,16 @@ call_cbp <- function(year,
     df <- left_join(df, dsup, join_by(naics))
     
     # fill missing with imputed
-    df <- df |>
-      mutate(imputed = (emp == 0 & efsy_emp > 0)) |>
-      mutate(emp = if_else(imputed, efsy_emp, emp)) |>
+    df <- df %>%
+      mutate(imputed = (emp == 0 & efsy_emp > 0)) %>%
+      mutate(emp = if_else(imputed, efsy_emp, emp)) %>%
       mutate(ap = if_else(imputed & (emp_nat > 0), emp / emp_sup * ap_sup, ap))
     
     # drop temporary columns
-    df <- df |>
-      select(place, naics, est, emp, ap, qp1, imputed, fipstate, fipscty)
+    df <- df %>%
+      select(place, naics, est, emp, ap, imputed)
   }
-  
-  df$naics <- str_remove_all(df$naics, "[-/]")
+
   
   log_debug(paste("save to cache", cache_path))
   write_parquet(df, util$mkdir(cache_path))
