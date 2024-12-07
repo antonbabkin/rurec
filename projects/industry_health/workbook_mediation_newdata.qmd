@@ -966,6 +966,53 @@ plot(st_geometry(Q2ar),
 
 ```
 
+###Print Results to Excel
+
+```{r}
+
+ #### print results  -->
+# Write OLS retention & autonomy results to excel file  -->
+
+install.packages("broom")
+install.packages("writexl")
+library(broom)
+library(writexl)
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
+
+
+```
+
+
 ## Regime - 1-2/3/4-9
 
 ### part 1 - industry > trade
@@ -1056,7 +1103,50 @@ summary(sr3a)
 
 ```
 
-## Regime - 1-2/3/4-5/-9
+###Print Results to Excel
+
+
+```{r}
+
+ #### print results  -->
+# Write OLS retention & autonomy results to excel file  -->
+
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+
+
+```
+
+## Regime - 1-2/3/4-5/6-9
 
 ### part 1 - industry > trade
 ```{r}
@@ -1143,6 +1233,48 @@ summary(sr3a)
 # plot(st_geometry(Q2ar),
 #      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
 #      border = "#333333", lwd=0.2)
+
+```
+
+###Print Results to Excel
+
+```{r}
+
+ #### print results  -->
+# Write model results to excel file in separate sheets  -->
+
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+
 
 ```
 
