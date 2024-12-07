@@ -1007,7 +1007,7 @@ results_list <- list(
 )
 
 # Write the list of data frames to an Excel file -->
-  write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
+  #write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
 
 
 ```
@@ -1141,7 +1141,7 @@ results_list <- list(
 )
 
 # Write the list of data frames to an Excel file -->
-  write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+  #write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
 
 
 ```
@@ -1273,7 +1273,7 @@ results_list <- list(
 )
 
 # Write the list of data frames to an Excel file -->
-  write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+  #write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
 
 
 ```
