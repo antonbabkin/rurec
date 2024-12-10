@@ -1,0 +1,260 @@
+---
+title: "Rural in BDS"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    code-fold: true
+---
+
+
+```{r}
+#| output: false
+
+library(tidyverse)
+
+theme_set(theme_minimal())
+
+param <- list(
+  rural_ruc = 4:9
+)
+```
+
+# Data
+
+```{r}
+df_ruc_2003 <- pubdata::ers_rural_get("ruc_2003")
+
+df_ruc_2023 <- pubdata::ers_rural_get("ruc_2023") %>%
+  mutate(name = case_match(
+    attribute,
+    "Population_2020" ~ "population_2020",
+    "RUCC_2023" ~ "ruc_code_2023",
+    "Description" ~ "ruc_desc_2023"
+    )) %>%
+  pivot_wider(id_cols = c("fips", "state", "county_name")) %>%
+  mutate(across(c(population_2020, ruc_code_2023), as.numeric))
+
+df_bds <- pubdata::bds_get("2022_st_cty")
+
+df_main <- df_bds %>%
+  mutate(fips = paste0(st, cty), .before = "st") %>%
+  left_join(df_ruc_2003 %>% select(fips, ruc_code_2003), by = "fips") %>%
+  left_join(df_ruc_2023 %>% select(fips, ruc_code_2023), by = "fips") %>%
+  mutate(
+    rural_2003 = (ruc_code_2003 %in% param$rural_ruc),
+    rural_2023 = (ruc_code_2023 %in% param$rural_ruc),
+    rural_tr = case_when(
+      rural_2003 & !rural_2023 ~ "fr",
+      !rural_2023 ~ "urban",
+      .default = "rural"
+    )
+  )
+
+df_ruc_2003 %>% head()
+df_ruc_2023 %>% head()
+df_main %>% head()
+
+
+```
+
+
+# Rurality definition
+
+```{r}
+df_ruc_2003 %>%
+  summarize(counties = n(), population_2000 = sum(population_2000, na.rm = TRUE), .by = c(ruc_code_2003, ruc_desc_2003)) %>%
+  arrange(ruc_code_2003)
+
+df_ruc_2023 %>%
+  summarize(counties = n(), population_2020 = sum(population_2020), .by = c(ruc_code_2023, ruc_desc_2023)) %>%
+  arrange(ruc_code_2023)
+```
+
+Defining rural as "non-metro".
+
+```{r}
+param["rural_ruc"]
+
+df_main %>%
+  filter(year == 2022) %>%
+  count(rural_2003, rural_2023)
+
+```
+
+
+# Establishment and employment growth
+
+From 2000 to 2019, urban greatly outperforms rural.
+Rural looks worse under more recent definition.
+
+```{r}
+
+comp_gr <- function(rur_col, y0, y1) {
+df_main %>%
+  filter(between(year, y0, y1)) %>%
+  summarize(estabs = sum(estabs, na.rm = TRUE), emp = sum(emp, na.rm = TRUE), .by = c(year, .data[[rur_col]])) %>%
+  mutate(
+    est_gr = estabs / first(if_else(year == y0, estabs, NA)),
+    emp_gr = emp / first(if_else(year == y0, emp, NA)),
+    .by = .data[[rur_col]]
+  ) %>%
+  pivot_longer({{rur_col}}, names_to = "rurality", values_to = "rural")
+}
+
+bind_rows(
+  comp_gr("rural_2003", 2000, 2019),
+  comp_gr("rural_2023", 2000, 2019)
+) %>%
+  pivot_longer(c(est_gr, emp_gr)) %>%
+  ggplot() + 
+  geom_line(aes(year, value, color = rurality, linetype = rural)) +
+  facet_wrap("name") +
+  theme(legend.position = "bottom")
+
+```
+
+From Great Recession to Covid, rural employment growth lagged, and number of establishments remained stagnant.
+
+```{r}
+
+comp_gr("rural_2023", 2010, 2019) %>%
+  pivot_longer(c(est_gr, emp_gr)) %>%
+  ggplot() + 
+  geom_line(aes(year, value, linetype = rural)) +
+  facet_wrap("name") +
+  theme(legend.position = "bottom")
+
+```
+
+
+# Job creation and destruction
+
+Rural employment is less dynamic: both job creation and destruction rates are below urban.
+
+```{r}
+y0 = 2010
+y1 = 2019
+
+d <- df_main %>%
+  filter(between(year, y0, y1)) %>%
+  summarize(across(
+    c(denom, job_creation, job_creation_births, job_creation_continuers, job_destruction, job_destruction_deaths, job_destruction_continuers),
+    \(x) sum(x, na.rm = TRUE)), 
+    .by = c(year, rural_2023)) %>%
+  mutate(across(
+    c(job_creation, job_creation_births, job_creation_continuers, job_destruction, job_destruction_deaths, job_destruction_continuers),
+    \(x) x / denom))
+
+d %>%
+  pivot_longer(c(job_creation, job_destruction)) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name, linetype = rural_2023)) +
+  ylim(c(0, NA))
+
+```
+
+
+Job destruction rate by continuing establishments in rural is similar to urban, but creation is much lower.
+Net creation by continuers is thus much higher in urban than in rural.
+
+```{r}
+d %>%
+  pivot_longer(c(job_creation_births, job_creation_continuers, job_destruction_deaths, job_destruction_continuers)) %>%
+  mutate(name = ordered(name, c("job_creation_births", "job_destruction_deaths", "job_creation_continuers", "job_destruction_continuers"))) %>%
+  ggplot() +
+  geom_line(aes(year, value, linetype = rural_2023)) +
+  ylim(c(0, NA)) +
+  facet_wrap("name", ncol = 2)
+
+
+```
+
+"Creative destruction" (birth and death) accounts for about a third of all job dynamism in both rural and urban.
+In other words, about half as many jobs are created and destroyed by entry and exit.
+
+If we combine young establishments with birth, the role of start-ups in job creation will be even higher. 
+*No figure here to support this claim, but it is almost certainly true.*
+
+
+```{r}
+d %>%
+  pivot_longer(c(job_creation_births, job_creation_continuers, job_destruction_deaths, job_destruction_continuers)) %>%
+  mutate(continuer = str_detect(name, "continuers"), creation = str_detect(name, "creation")) %>%
+  mutate(creation = case_match(creation, TRUE ~ "creation", FALSE ~ "destruction"),
+         continuer = case_match(continuer, TRUE ~ "continuer", FALSE ~ "death birth"),
+         rural_2023 = case_match(rural_2023, TRUE ~ "rural", FALSE ~ "urban")) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = creation, linetype = continuer)) +
+  ylim(c(0, NA)) +
+  facet_wrap("rural_2023", ncol = 2)
+
+```
+
+# Creative destruction across counties
+
+Looking at un-weighted correlation between county establishment and employment growth rate from 2010 to 2019, employment dynamism plays smaller role in job creation in rural areas.
+But if we weight counties by employment, rural effect becomes positive.
+
+```{r}
+d <- df_main %>%
+  filter(year %in% c(y0, y1)) %>%
+  rename(est = estabs) %>%
+  arrange(fips, year) %>%
+  mutate(
+    est_net = last(est) - first(est),
+    est_denom = 0.5 * last(est) + 0.5 * first(est),
+    est_gr = est_net / est_denom,
+    emp_net = last(emp) - first(emp),
+    emp_denom = 0.5 * last(emp) + 0.5 * first(emp),
+    emp_gr = emp_net / emp_denom,
+    churn = estabs_entry_rate + estabs_exit_rate,
+    .by = fips
+  ) %>%
+  filter(year == y0)
+
+d %>%
+  ggplot(aes(est_gr, emp_gr, color = rural_2023)) +
+  geom_point(size = 0.1) +
+  geom_smooth() +
+  lims(x = c(-0.5, 0.5), y = c(-0.5, 0.5))
+
+```
+
+
+```{r}
+lm("emp_gr ~ est_gr * rural_2023", data = d) %>%
+  summary()
+
+lm("emp_gr ~ est_gr * rural_2023", data = d, weights = d$emp_denom) %>%
+  summary()
+
+```
+
+## Establishment churn in base year
+
+
+```{r}
+
+d %>%
+  ggplot(aes(churn, emp_gr, color = rural_2023)) +
+  geom_point(size = 0.1) + geom_smooth() +
+  lims(x = c(5, 30), y = c(-0.5, 0.5))
+
+
+lm("emp_gr ~ churn * rural_2023", data = d) %>%
+  summary()
+
+lm("emp_gr ~ churn * rural_2023", data = d, weights = d$emp_denom) %>%
+  summary()
+
+```
+
+
+# Business survival
+
+We can use by age tables to generate survival rates of differet business cohorts over time, including COVID years.
+Tables by metro/non-metro include detailed age groups with 1-year age bins up to age 5.
+Are survival rates are higher in rural?
+
