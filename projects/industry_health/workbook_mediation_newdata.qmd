@@ -821,7 +821,7 @@ nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
-ols2a = errorsarlm(data = mi1, prosperity ~ retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro,
+ols2a = errorsarlm(data = mi1, prosperity ~ retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop,
                   lw, zero.policy = TRUE)
 
 summary(ols2a)
@@ -892,7 +892,7 @@ sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro,
                                              ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
                                                     ifelse((rucc >= 6), "small.nonmetro", NA)))))
 
-sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
                   lw, zero.policy = TRUE)
@@ -908,7 +908,7 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
@@ -1029,7 +1029,7 @@ sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro,
                                              ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
                                                     ifelse((rucc >= 6), "small.nonmetro", NA)))))
 
-sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro),
                   lw, zero.policy = TRUE)
@@ -1045,7 +1045,7 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
@@ -1162,9 +1162,9 @@ sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro,
                                              ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
                                                     ifelse((rucc >= 6), "small.nonmetro", NA)))))
 
-sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
-sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 summary(sr1a)
 summary(sr1b)
@@ -1178,7 +1178,7 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
