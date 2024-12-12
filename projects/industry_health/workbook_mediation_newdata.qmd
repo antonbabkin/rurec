@@ -821,7 +821,7 @@ nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
-ols2a = errorsarlm(data = mi1, prosperity ~ retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro,
+ols2a = errorsarlm(data = mi1, prosperity ~ retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop,
                   lw, zero.policy = TRUE)
 
 summary(ols2a)
@@ -883,9 +883,16 @@ plot(st_geometry(Q2ar),
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, 
+                         sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc >= 4), "nonmetro", NA))),
+                         sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+                                                    ifelse((rucc >= 6), "small.nonmetro", NA)))))
 
-sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
                   lw, zero.policy = TRUE)
@@ -901,7 +908,7 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
@@ -959,5 +966,316 @@ plot(st_geometry(Q2ar),
 
 ```
 
+###Print Results to Excel
+
+```{r}
+
+ #### print results  -->
+# Write OLS retention & autonomy results to excel file  -->
+
+install.packages("broom")
+install.packages("writexl")
+library(broom)
+library(writexl)
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  #write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
+
+
+```
+
+
+## Regime - 1-2/3/4-9
+
+### part 1 - industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, 
+                         sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc >= 4), "nonmetro", NA))),
+                         sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+                                                    ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+summary(sr1a)
+summary(sr1b)
+
+
+```
+
+
+### part 2 - industry + trade > prosperity
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2a)
+
+```
+
+
+### part 3 - full model
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3a)
+
+```
+
+### sp auto
+
+```{r}
+
+# sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+# 
+# ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + autonomy + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# 
+# temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# 
+# 
+# viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = ols3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+
+```
+
+###Print Results to Excel
+
+
+```{r}
+
+ #### print results  -->
+# Write OLS retention & autonomy results to excel file  -->
+
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  #write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+
+
+```
+
+## Regime - 1-2/3/4-5/6-9
+
+### part 1 - industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, 
+                         sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc >= 4), "nonmetro", NA))),
+                         sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+                                      ifelse((rucc == 3), "small.metro",
+                                             ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+                                                    ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+sr1b = errorsarlm(data = sr_data, autonomy ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+summary(sr1a)
+summary(sr1b)
+
+
+```
+
+
+### part 2 - industry + trade > prosperity
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + autonomy + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2a)
+
+```
+
+
+### part 3 - full model
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3a)
+
+```
+
+### sp auto
+
+```{r}
+# 
+# sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+# 
+# ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + autonomy + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# 
+# temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# 
+# 
+# viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = ols3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+
+```
+
+###Print Results to Excel
+
+```{r}
+
+ #### print results  -->
+# Write model results to excel file in separate sheets  -->
+
+
+## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr3a <- tidy(sr3a)
+
+
+
+# Identify each model
+
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr3a$model <- "FULL"
+
+
+# # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+
+
+# Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  #write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+
+
+```
 
 
