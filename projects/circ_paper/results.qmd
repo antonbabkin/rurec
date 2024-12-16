@@ -319,11 +319,74 @@ df_main %>%
 ```
 ## Spatial Analysis
 
+calculate univariate moran's for all vars
+
 ```{r}
 
-print("MAKE A TABLE OF SPATIAL ANALYTSIS STATS")
+varlist_temp = df_main %>%
+  st_drop_geometry() %>%
+  select(all_of(c(outcomes, params$circ_indicators))) %>%
+  colnames()
+
+object1 = df_main %>%
+  select(all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+# object1$r = df_main$resid
+nb <- poly2nb(object1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+for (i in varlist_temp) {
+  temp_output = moran.test(object1[[i]],lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+df_esda = result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic")
+
 
 ```
+
+make table of univariate moran's I's
+
+Title: "Global Univariate Moran's I of Variables"
+```{r}
+df_esda %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+# %>% 
+#       set_caption("Global Univariate Moran's I of Variables")
+
+```
+
 
 ## Correlates of Circularity
 
@@ -889,6 +952,73 @@ results_tables$employment_gr_C
 ```
 
 ## Spatial Regression?
+
+
+### Spatial autocorrelation of OLS residuals
+
+```{r}
+
+results_tables<-list()
+
+for (outcome in outcomes){
+  models= list()
+  for (circ_measure in params$circ_indicators){
+    df_reg <- df_main |> 
+      mutate(circ = .data[[circ_measure]])
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_", " ", circ_measure)  
+    models[[model_name]] <- lm(formula, data = df_reg)
+    names(models[[model_name]]$coefficients) <- c("constant", 
+                                                  "circ",
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+  }
+  
+}
+
+```
+
+```{r}
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+Q2ar$r = models$'production capacity'$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  
+```
+
+
+### Spatial error models
+```{r}
+results_tables<-list()
+
+for (outcome in outcomes){
+  models= list()
+  for (circ_measure in params$circ_indicators){
+    df_reg <- df_main |> 
+      mutate(circ = .data[[circ_measure]])
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_", " ", circ_measure)  
+    models[[model_name]] <- lm(formula, data = df_reg)
+    names(models[[model_name]]$coefficients) <- c("constant", 
+                                                  "circ",
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+  }
+
+  results_tables[[outcome]]<-huxreg(models, 
+                                         number_format = 3, 
+                                         bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
+}
+
+results_tables$employment_gr
+```
+
 
 ## Put correlates from above on RHS?
 
