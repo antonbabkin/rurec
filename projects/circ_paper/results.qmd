@@ -3,60 +3,95 @@ title: "Circularity paper results"
 format:
   html:
     toc: true
-    toc-depth: 2
+    toc-depth: 3
     embed-resources: true
     code-fold: true
 ---
-  
 
-```{r}
+# Libraries and sourced files
 
+```{r, message=FALSE}
 # additional library list
 library(logger)
 library(tidyverse)
-library(correlation)
-library(modelsummary)
-library(kableExtra)
 library(broom)
-library(patchwork)
+
+# Formatting output
+
+library(skimr)
+library(RColorBrewer)
 library(ggthemes)
-library(ggridges)
-library(viridis)
+library(huxtable)
+library(gtsummary)
+library(cardx)
+
+# Mapping libraries
+library(sf)
 library(tmap)
 library(tigris)
-library(skimr)
-library(gtsummary)
-library(RColorBrewer)
+library(spdep)
+library(spatialreg)
+```
 
+
+```{r, message=FALSE}
 # scripts
-source("R/basic_utilities.R", local = (util <- new.env()))
-source("R/dataprep.R", local = (dataprep <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
 source("R/place_io.R", local = (place_io <- new.env()))
 source("R/circularity.R", local = (circularity <- new.env()))
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
 
+```
+
+# Analysis parameters
+
+```{r}
 # data parameters
 params = list(
-  circularity_year = 2012,
   shapefile_year = 2013,
-  base_year = 2012,
-  end_year = 2016,
-  bus_data = "cbp_imp",
-  cbsa_year = 2013, # (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020)
-  circ_indicators = c("production_capacity", "trade_capacity", "retention", "production_dependency", "trade_dependency", "autonomy", "trade_balance", "trade_openness"),
-  outcomes = c("employment_gr", "payroll_gr", "wage_gr") 
+  cbsa_year = 2013, # (Delineations available for years 2003:2009, 2013, 2015, 2017, 2018, 2020),
+  
+  circularity_data = "cbp_imp",
+  circularity_year = 2012,
+  circ_indicators = c("production_capacity", "trade_capacity", "retention", 
+                      "production_dependency", "trade_dependency", "autonomy", 
+                      "trade_balance", "trade_openness"
+                      ),
+  base_year = 2010,
+  end_year = 2019
 )
+
+outcomes = c("establishment_gr",
+             "employment_gr",
+             "payroll_gr",
+             "wage_gr")
+
+#*Rural Definitions
+#*  
+#*  Mmn: Metro/Micro/Non-core
+#*    M: Metro/Non-metro
+#*    C: Core/Non-core
+#*    
+#*A function to generate these definitions is defined in chunk "Define Rural"
+
+rural_definition = "M"  
 
 ```
 
 # Data cache
 
 ```{r}
+
+if(FALSE){
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+  
 ipath <- c(dataprep$opath, geography$opath, place_io$opath)
 # create zip file with cache
 # util$zip_pack("tmp/cache_circ_paper_results_v241126.zip", ipath)
 # unpack cache from zip file
 # util$zip_unpack("tmp/cache_circ_paper_results_v241126.zip", overwrite = TRUE)
+}
 ```
 
 
@@ -64,29 +99,37 @@ ipath <- c(dataprep$opath, geography$opath, place_io$opath)
 
 ```{r}
 df_geo <- geography$call_geog(params$shapefile_year)
-df_outsupdem <- place_io$outsupdem(params$circularity_year, "det", params$bus_data) %>%
+df_outsupdem <- place_io$outsupdem(params$circularity_year, "det", params$circularity_data) %>%
   mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply))
-df_circ <- circularity$circularity_indicators(params$circularity_year, params$bus_data)
+df_circ <- circularity$circularity_indicators(params$circularity_year, params$circularity_data)
 
-# business growth rates
+# business activity growth rates
 df_busdata <- list()
 for (period in c("base", "end")) {
   year <- params[[paste0(period, "_year")]]
-  pay <- dataprep$call_county_payroll(year, params$bus_data)
-  df_busdata[[period]] <- dataprep$call_county_employment(year, params$bus_data) %>%
-    inner_join(pay, by = "place") %>%
-    mutate(wage = 1000 * payroll / employment)
+  df_busdata[[period]] <- cbp$call_cbp(year = year, cbp_scale = "county", imputed = FALSE) %>%
+    filter(naics == "") |> 
+    select(est, emp, ap, place) |> 
+    mutate(wage = 1000 * ap / emp) |> 
+    rename(establishments = est,
+           employment = emp,
+           payroll = ap
+           )
 }
+
 df_busdata <- inner_join(df_busdata$end, df_busdata$base, by = "place", suffix = c(".current", ".base")) %>%
+  filter(if_all(c(ends_with("base"), ends_with("current")), ~ . > 0)) |> 
   mutate(
+    establishment_gr = (establishments.current - establishments.base) / (.5 * establishments.current + .5 * establishments.base),
     employment_gr = (employment.current - employment.base) / (.5 * employment.current + .5 * employment.base),
     payroll_gr = (payroll.current - payroll.base) / (.5 * payroll.current + .5 * payroll.base),
-    wage_gr = (wage.current - wage.base) / (.5 * wage.current + .5 * wage.base),
+    wage_gr = (wage.current - wage.base) / (.5 * wage.current + .5 * wage.base)
   )
 
 # CBSA data for metro/non-metro definitions
 df_cbsa <- geography$pubdata$get_cbsa_delin_df(params$cbsa_year)%>%
   select(STATE_CODE, COUNTY_CODE, METRO_MICRO) 
+
 
 df_main <- df_geo %>%
   right_join(df_circ, "place") %>%
@@ -94,9 +137,43 @@ df_main <- df_geo %>%
   left_join(df_cbsa, by = join_by(STATE_CODE, COUNTY_CODE)) %>%
   mutate(cbsa_rural_category = if_else(METRO_MICRO == "metro", FALSE, TRUE, missing = TRUE))
 
-df_main %>% head()
+#df_main %>% head()
 ```
 
+
+
+## county-year panel for time trend plots
+
+GDP price deflator from BEA, downloaded from [FRED](https://fred.stlouisfed.org/series/A191RD3A086NBEA).
+TODO: Wrap in a script or pubdata and add deflation to wage and payroll in all dataframes.
+
+```{r}
+if (FALSE) {
+
+x = read_csv("data/A191RD3A086NBEA.csv", col_names = c("date", "deflator"), skip = 1) %>%
+  arrange(date) %>%
+  mutate(year = year(date),
+    price_idx = deflator / last(deflator))
+  
+
+df_buspanel <- list()
+for (year in params$base_year:params$end_year) {
+  df_buspanel[[as.character(year)]] <- cbp$opath$cbp_ %>%
+    glue(geo = "county", year = year, imputed = FALSE) %>%
+    open_dataset() %>%
+    filter(naics == "") %>%
+    select(place, est, emp, ap) %>%
+    collect()
+}
+df_buspanel <- bind_rows(df_buspanel, .id = "year") %>%
+  mutate(year = as.numeric(year)) %>%
+  # only keep counties without suppression
+  filter(min(emp) > 0, .by = "place") %>%
+  left_join(select(x, year, price_idx), by = "year") %>%
+  mutate(pay = ap / price_idx)
+
+}
+```
 
 
 # Examples
@@ -148,7 +225,7 @@ for (com in commodities) {
       style = "cont",
       midpoint = 0,
       breaks = seq(-10, 10, 2),
-      palette = rev(brewer.pal(9, "RdBu"))) +
+      palette = rev(brewer.pal(9, "PRGn"))) +
     tm_shape(x_st) +
     tm_layout(
       legend.title.size = .8,
@@ -164,19 +241,25 @@ for (com in commodities) {
     
 ```
 
+# Nationwide Analysis
 
-# Descriptives table
+## Descriptives table
 
 ```{r, message=FALSE}
 #| paged.print=FALSE
 
 df_main %>%
   st_drop_geometry() %>%
-  select(c(params$outcomes, params$circ_indicators)) %>%
+  select(all_of(c(outcomes, params$circ_indicators))) %>%
+  skim()
+
+df_main %>%
+  st_drop_geometry() %>%
+  select(any_of(c(ends_with("base"),ends_with("current")))) |> 
   skim()
 ```
 
-# Density distributions
+## Density distributions
 
 ```{r}
 #| warning: false
@@ -186,7 +269,6 @@ df_main %>%
 for (circ_measure in params$circ_indicators) {
   n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
   (ggplot(df_main) +
-    # geom_density(aes(x = .data[[circ_measure]]), fill = "#88CCEE", alpha = 0.4) +
     geom_histogram(aes(x = .data[[circ_measure]]), fill = "#88CCEE", binwidth = 0.01) +
     theme_pander() +
     theme(legend.position = "none") +
@@ -201,8 +283,7 @@ for (circ_measure in params$circ_indicators) {
 ```
 
 
-# Spatial distributions
-
+## Spatial distributions
 
 
 ```{r}
@@ -238,89 +319,83 @@ df_main %>%
 } 
 
 ```
+## Spatial Analysis
 
-# Rural divide 
-```{r, message=FALSE}
-#| paged.print=FALSE
+calculate univariate moran's for all vars
+make table of univariate moran's I's
 
+Title: "Global Univariate Moran's I of Variables"
+```{r}
 
-# repeat all tables and density plots above with a rurality bifurcation
-
-# motivation: “rural places might be disadvantaged by their place in the supply chain”
-# does this support the hypothesis that values of metro and nonmetro are the same or not?
-# can the indicators be associated with economic outcomes? and across rurality?
-
-if (FALSE) {
-  print("Non-metro:")
-  df_main %>%
-    st_drop_geometry() %>%
-    filter(cbsa_rural_category == TRUE) %>%
-    select(params$circ_indicators) %>%
-    summary()
-  print("Metro:")
-  df_main %>%
-    st_drop_geometry() %>%
-    filter(cbsa_rural_category == FALSE) %>%
-    select(params$circ_indicators) %>%
-    summary()
-} else {
-df_main %>%
+varlist_temp = df_main %>%
   st_drop_geometry() %>%
-  group_by(cbsa_rural_category) %>%
-  mutate(log_excess_supply = log(exsup), 
-         log_excess_demand = log(exdem), 
-         log_local_supply = log(supply - exsup), 
-         log_local_demand = log(demand - exdem)) %>% 
-  select(c("log_excess_supply", "log_excess_demand", "log_local_supply", "log_local_demand", params$outcomes, params$circ_indicators)) %>%
-  skim()
+  select(all_of(c(outcomes, params$circ_indicators))) %>%
+  colnames()
+
+object1 = df_main %>%
+  select(all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+# object1$r = df_main$resid
+nb <- poly2nb(object1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+for (i in varlist_temp) {
+  temp_output = moran.test(object1[[i]],lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
 }
 
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
 
 
 ```
 
 
+## Correlates of Circularity
+
 ```{r}
-# density distributions controlling for rurality
 
-df_main %>%
-  mutate(metro_status = ifelse(cbsa_rural_category == TRUE, "non-metro", 
-                               ifelse(cbsa_rural_category == FALSE, "metro", NA) )) %>% {
-  
-    (for (circ_measure in params$circ_indicators) {
-      n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
-      (
-        ggplot(.) +
-          geom_density(aes(x = .data[[circ_measure]], fill = metro_status), alpha = 0.4) +
-          theme_pander() +
-          xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
-          scale_fill_manual(values = c("black","#88CCEE")) +
-          theme(legend.position = "top") +
-          labs(
-            fill = "CBSA status",
-            y = "Density",
-            x = n,
-            title = n
-          )
-      ) %>% print()
-    })
-  }
-
+print("INCORPORATE STAGE 0")
 
 ```
 
+## Correlation tables
 
-
-# Correlation tables
 ```{r}
-
-# 8 by 8 
-# be sparing, limit overlap with Sara/Clayton results elsewhere
-# add employment growth, payroll growth, wage growth against the 8 circularity indicators
-# look for association of circularity with positive economic outcomes beyond random chance
 
 correlations <- matrix(nrow = length(params$circ_indicators) + 1, ncol = 0)
-for (economic_measure in params$outcomes) {
+for (economic_measure in outcomes) {
   temp_correlations = matrix(nrow=3, ncol=0)
   for (circularity_measure in params$circ_indicators) {
     test=cor.test(x = df_main[[circularity_measure]], y=df_main[[economic_measure]])
@@ -339,18 +414,20 @@ for (economic_measure in params$outcomes) {
   correlations <- cbind(correlations, temp_correlations)
 }
 rownames(correlations) = c(params$circ_indicators, "obs")
-colnames(correlations) <- params$outcomes
-correlations
+colnames(correlations) <- outcomes
 
-
+correlations |> data.frame() |> 
+  rownames_to_column(var = "circularity_indicator")
 
 ```
-## figure for slides
 
+### figure for slides
 
 ```{r}
+
+
 correlations <- data.frame()
-for (economic_measure in params$outcomes) {
+for (economic_measure in outcomes) {
   for (circularity_measure in params$circ_indicators) {
     correlations <- cor.test(x = df_main[[circularity_measure]], y=df_main[[economic_measure]]) %>%
       broom::tidy() %>%
@@ -377,9 +454,184 @@ p
 ```
 
 
+# Urban-Rural Analysis
+
+## Define rural
+
+```{r, message=FALSE}
+
+rural_function <- function(df, rural_definition) {
+  
+  df$METRO_MICRO <- replace_na(df$METRO_MICRO, "non-core")
+
+  if(rural_definition=="Mmn"){
+    df |> mutate(rural = if_else(is.na(METRO_MICRO), "non-core", METRO_MICRO))
+  } else if(rural_definition == "M"){
+    df |> mutate(rural = if_else(METRO_MICRO == "metro", "metro", "non-metro"))
+  } else if(rural_definition == "C"){
+    df |> mutate(rural = if_else(METRO_MICRO == "metro" | METRO_MICRO == "micro", "core", "non-core"))
+  }
+}
+
+df_main <- df_main |> rural_function(rural_definition)
+```
+
+## Descriptives table
+
+```{r, message=FALSE}
+#| paged.print=FALSE
+
+# For review
+
+df_main %>%
+  st_drop_geometry() %>% 
+  mutate(log_excess_supply = log(exsup), 
+         log_excess_demand = log(exdem), 
+         log_local_supply = log(supply - exsup), 
+         log_local_demand = log(demand - exdem)) %>% 
+  select(c("rural", "log_excess_supply", "log_excess_demand", "log_local_supply", "log_local_demand", all_of(outcomes), params$circ_indicators)) %>%
+    tbl_summary(
+      by = rural,
+      statistic = ~ "{mean} ({sd}) [{min}-{max}]",
+      missing = "ifany"
+      )|> 
+  add_p () |> 
+  modify_spanning_header(all_stat_cols() ~ "**Urban-Rural Category**")
+
+# For reporting
+
+df_main %>%
+  st_drop_geometry() %>% 
+  select(c("rural", all_of(outcomes), params$circ_indicators)) %>%
+    tbl_summary(
+      by = rural,
+      statistic = ~ "{mean} ({sd})",
+      missing = "no"
+      )|> 
+  add_p () |> 
+  modify_spanning_header(all_stat_cols() ~ "**Urban-Rural Category**") |> 
+  modify_caption(paste("Comparing attributes by urban-rural category:", params$base_year, "to", params$end_year, sep =" "))
+
+```
+
+### Comparing rural definitions
+
+```{r}
+descriptives <- list()
+
+for(definition in c("Mmn", "M", "C")){
+  descriptives[[definition]]<- df_main %>%
+    st_drop_geometry() %>%
+    rural_function(definition) |> 
+    select(c("rural", all_of(outcomes), params$circ_indicators)) %>%
+      tbl_summary(
+        by = rural,
+        statistic = ~ "{mean} ({sd})",
+        missing = "no"
+        )|> 
+    add_p () |> 
+    modify_spanning_header(all_stat_cols() ~ "**Urban-Rural Category**") |> 
+    modify_caption(paste("Comparing attributes by urban-rural category:", params$base_year, "to", params$end_year, sep =" "))
+
+}
+
+descriptives$Mmn
+descriptives$M
+descriptives$C
+
+```
+
+## Density distributions
+
+```{r}
+# density distributions controlling for rurality
+df_main %>% 
+  shift_geometry() %>% {(
+    for (circ_measure in params$circ_indicators) {
+      n <- str_replace_all(circ_measure, "_", " ") %>% str_to_title()
+      (
+        ggplot(.) +
+          geom_density(aes(x = .data[[circ_measure]], fill = rural), alpha = 0.4) +
+          theme_pander() +
+          xlim(ifelse(circ_measure == "trade_balance", -1, 0), ifelse(circ_measure == "trade_openness", 2, 1)) +
+          scale_fill_manual(values = c("black","#88CCEE")) +
+          theme(legend.position = "top") +
+          labs(
+            fill = "urban-rural category",
+            y = "Density",
+            x = n,
+            title = n
+          )
+      ) %>% print()
+    }
+  )}
+```
+
+## Time trends
 
 
-# Correlation tables Rurality
+
+```{r, fig.height = 8, fig.width = 6}
+
+df_rur_cir <- df_main %>%
+  st_drop_geometry() %>%
+  # mutate(rural = case_match(METRO_MICRO, "metro" ~ "CBSA", "micro" ~ "CBSA", .default = "non-core")) %>%
+  mutate(rural = case_match(METRO_MICRO, "metro" ~ "metro", .default = "non-metro")) %>%
+  select(place, rural, all_of(params$circ_indicators))
+
+f <- function(x) {
+  tibble(
+    q = c("p25", "p75"),
+    value = quantile(x, c(0.25, 0.75))
+  )
+}
+
+circ_q <- params$circ_indicators %>%
+  set_names() %>%
+  map(\(x) df_rur_cir %>% reframe(f(.data[[x]]), .by = rural) %>% pivot_wider(id_cols = rural, names_from = q))
+
+
+# skip until deflators for df_buspanel are finished
+if (FALSE) {
+# for (circi in c("retention", "autonomy")) {
+
+  x <- df_rur_cir %>%
+    left_join(circ_q[[circi]], "rural") %>%
+    mutate(circ_bin = case_when(
+      .data[[circi]] < p25 ~ "low",
+      .data[[circi]] > p75 ~ "high",
+      .default = "mid"
+   )) %>%
+    select(place, rural, {{circi}}, circ_bin)
+  
+  df <- df_buspanel %>%
+    left_join(x, "place") %>%
+    summarize(counties = n(), across(c(est, emp, pay), sum), .by = c(year, rural, circ_bin)) %>%
+    filter(!is.na(rural)) %>%
+    mutate(wage = pay / emp) %>%
+    pivot_longer(c(est, emp, pay, wage)) %>%
+    relocate(rural, circ_bin, name, year, value) %>%
+    arrange(rural, circ_bin, name, year) %>%
+    mutate(val_y0 = first(if_else(year == params$circularity_year, value, NA), na_rm = TRUE), .by = c("rural", "circ_bin", "name")) %>%
+    mutate(val_gr = value / val_y0)
+  
+  p <- df %>%
+    filter(circ_bin != "mid") %>%
+    ggplot() +
+    geom_line(aes(year, val_gr, color = circ_bin, linetype = rural)) +
+    facet_wrap("name", ncol = 2, scales = "free_y") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    labs(title = paste("Economic growth of counties in the top and bottom quartiles of", circi)) +
+    scale_x_continuous(breaks = seq(y0, y1, 2)) +
+    ylab(NULL)
+  
+  print(p)
+}
+```
+
+## Correlation Tables 
+
 ```{r}
 
 # repeat as above with rural divide 
@@ -388,15 +640,15 @@ p
 
 correlations <- list()
 
-for (economic_measure in params$outcomes) {
+for (economic_measure in outcomes) {
   correlations_measure <- matrix(nrow = (length(params$circ_indicators) + 1), ncol = 0)
-  for (rural in c(TRUE, FALSE)){
-    df_corr <- df_main |> filter(cbsa_rural_category == rural)
+  for (category in unique(df_main$rural)){
+    df_corr <- df_main |> filter(rural == category)
     temp_correlations = matrix(nrow=3, ncol=0)
-  for (circularity_measure in params$circ_indicators) {
-      test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
-      c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
-      temp_correlations = cbind(temp_correlations, c_temp)
+    for (circularity_measure in params$circ_indicators) {
+        test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
+        c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
+        temp_correlations = cbind(temp_correlations, c_temp)
     }
     rownames(temp_correlations) = c("correlation", "p_value", "obs")
     temp_correlations <- data.frame(t(temp_correlations)) |> 
@@ -410,23 +662,98 @@ for (economic_measure in params$outcomes) {
     rownames(temp_correlations) = c(params$circ_indicators, "obs")
     correlations_measure <- cbind(correlations_measure, temp_correlations)
   }
-  colnames(correlations_measure) <- c(paste0("rural =", c(TRUE, FALSE)))
+  colnames(correlations_measure) <- unique(df_main$rural)
   correlations[[economic_measure]] <- cbind(correlations_measure, economic_measure)
 }
 
 correlations
 
 
+
+
+
+# for (economic_measure in outcomes) {
+#   correlations_measure <- matrix(nrow = (length(params$circ_indicators) + 1), ncol = 0)
+#   for (rural in c(TRUE, FALSE)){
+#     df_corr <- df_main |> filter(cbsa_rural_category == rural)
+#     temp_correlations = matrix(nrow=3, ncol=0)
+#   for (circularity_measure in params$circ_indicators) {
+#       test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
+#       c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
+#       temp_correlations = cbind(temp_correlations, c_temp)
+#     }
+#     rownames(temp_correlations) = c("correlation", "p_value", "obs")
+#     temp_correlations <- data.frame(t(temp_correlations)) |> 
+#       mutate(
+#         sig = if_else(p_value<.01, "**", if_else(p_value<.05,"*","")),
+#         result = paste0(correlation, sig)
+#       ) |> 
+#       select(result, obs)
+#     temp_correlations <- rbind(temp_correlations, min(temp_correlations$obs)) |> 
+#       select(result)
+#     rownames(temp_correlations) = c(params$circ_indicators, "obs")
+#     correlations_measure <- cbind(correlations_measure, temp_correlations)
+#   }
+#   colnames(correlations_measure) <- c(paste0("rural =", c(TRUE, FALSE)))
+#   correlations[[economic_measure]] <- cbind(correlations_measure, economic_measure)
+# }
+# 
+# correlations
+
+
 ```
-
-
-## figure for slides
-
-
+### Comparing urban-rural definitions  
 
 ```{r}
+
+# repeat as above with rural divide 
+# what are the policy implications and discrepancies?
+# what indicators are relevant to the rural vs nonrural counties?
+
+for(definition in c("Mmn", "M", "C")){
+
+    df_temp <- df_main |> 
+    rural_function(definition)
+  
+  correlations <- list()
+  
+  for (economic_measure in outcomes) {
+    correlations_measure <- matrix(nrow = (length(params$circ_indicators) + 1), ncol = 0)
+    for (category in unique(df_temp$rural)){
+      df_corr <- df_temp |> filter(rural == category)
+      temp_correlations = matrix(nrow=3, ncol=0)
+      for (circularity_measure in params$circ_indicators) {
+          test=cor.test(x = df_corr[[circularity_measure]], y=df_corr[[economic_measure]])
+          c_temp = round(c(test$estimate, test$p.value, nrow(df_corr)-sum(is.na(df_corr$economic_measure)|is.na(df_corr$circularity_measure))), 3)
+          temp_correlations = cbind(temp_correlations, c_temp)
+      }
+      rownames(temp_correlations) = c("correlation", "p_value", "obs")
+      temp_correlations <- data.frame(t(temp_correlations)) |> 
+        mutate(
+          sig = if_else(p_value<.01, "**", if_else(p_value<.05,"*","")),
+          result = paste0(correlation, sig)
+        ) |> 
+        select(result, obs)
+      temp_correlations <- rbind(temp_correlations, min(temp_correlations$obs)) |> 
+        select(result)
+      rownames(temp_correlations) = c(params$circ_indicators, "obs")
+      correlations_measure <- cbind(correlations_measure, temp_correlations)
+    }
+    colnames(correlations_measure) <- unique(df_temp$rural)
+    correlations[[economic_measure]] <- cbind(correlations_measure, economic_measure)
+  }
+  
+  print(correlations)
+}
+```
+
+### figure for slides
+
+```{r}
+
+if(FALSE){
 correlations <- data.frame()
-for (economic_measure in params$outcomes) {
+for (economic_measure in outcomes) {
   for (circularity_measure in params$circ_indicators) {
     for (rural in c(TRUE, FALSE)) {
       correlations <- df_main %>%
@@ -448,210 +775,1313 @@ for (economic_measure in params$outcomes) {
 (
   p <- correlations %>%
   filter(economic_measure != "payroll_gr") %>%
-  mutate(rural = case_match(rural, TRUE ~ "non-metro", FALSE ~ "metro")) %>%
+  mutate(rural = case_match(rural, TRUE ~ "non-metro", FALSE ~ "metro"))   %>%
   mutate(circularity_measure = ordered(
     str_replace(circularity_measure, "_", " "),
     levels = str_replace(params$circ_indicators, "_", " ")
-  )) %>%
+  ))  %>%
   mutate(`Economic growth` = str_sub(economic_measure, 1, -4)) %>%
   ggplot(aes(x = circularity_measure, color = rural, group = rural)) +
-  geom_point(aes(y = estimate, shape = rural), size = 2, position = position_dodge(0.5)) +
-  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
-  geom_hline(yintercept = 0, linetype = 2) +
-  facet_wrap(vars(`Economic growth`), ncol = 1) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
+    geom_point(aes(y = estimate, shape = rural), size = 2, position = position_dodge(0.5)) +
+    geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2, position = position_dodge(0.5)) +
+    geom_hline(yintercept = 0, linetype = 2) +
+    facet_wrap(vars(`Economic growth`), ncol = 1) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1), axis.title = element_blank())
 )
+}
 ```
 
-# Different level of capacity
+# Regressions
+
+```{r}
+df_main |> 
+  ggplot(aes(x = retention, y = employment_gr, group = rural))+
+  geom_point()+
+  geom_smooth(aes(color =  rural), method = "lm")
+
+```
+
+## By circularity measure
+
+this chunk runs the model
+OLS
 
 ```{r}
 
+results_tables<-list()
 
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^model_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
 
-# How does retention and economic outcomes vary across high and low production capacity places?
-
-temp = df_main %>% st_drop_geometry() %>% summarize(
-  p25 = quantile(production_capacity, c(.25), na.rm = TRUE),
-  p75 = quantile(production_capacity, c(.75), na.rm = TRUE)
-)
-
-pc_p25 = sum(temp$p25)
-pc_p75 = sum(temp$p75)
-
-# Low production capacity
-df_lowPC = df_main %>% filter(production_capacity < pc_p25)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
+for (circ_measure in params$circ_indicators){
+  models= list()
+  for (outcome in outcomes){
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_gr", " growth rate", outcome)  
+    models[[model_name]] <- lm(formula, data = df_main)
+    names(models[[model_name]]$coefficients) <- c("constant", 
+                                                  gsub("_", " ", circ_measure),
+                                                  levels(as.factor(df_main$rural))[-1], 
+                                                  paste0(gsub("_", " ", circ_measure), " X ", levels(as.factor(df_main$rural))[-1]))
+    
   }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
+    assign(paste0("model_", circ_measure), models)
+
+  results_tables[[circ_measure]]<-huxreg(models, 
+                                         number_format = 3, 
+                                         bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
 }
-cor_employment_gr %>% rename("LOW P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("LOW P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("LOW P.C. payroll_gr" = "name")
-
-# Mid production capacity
-df_lowPC = df_main %>% filter(production_capacity >= pc_p25 &
-                           production_capacity < pc_p75)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
-  }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("MID P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("MID P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("MID P.C. payroll_gr" = "name")
-
-# High production capacity
-df_lowPC = df_main %>% filter(production_capacity >= pc_p75)
-indicators = df_lowPC %>%
-  st_drop_geometry() %>%
-  select('retention', 'trade_capacity') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-
-  }
-    temp2 = c(est_retention, est_trade_capacity)
-    temp3 = c(pval_retention, pval_trade_capacity)
-    t4 = as.data.frame(list(
-      name = indicators,
-      est = temp2,
-      pval = temp3
-    ))
-    assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("HIGH P.C. employment_gr" = "name")
-cor_wage_gr %>% rename("HIGH P.C. wage_gr" = "name")
-cor_payroll_gr %>% rename("HIGH P.C. payroll_gr" = "name")
-
-# How does autonomy and economic outcomes vary across high and low production dependency places?
-temp = df_main %>% st_drop_geometry() %>% summarize(
-  p25 = quantile(production_dependency, c(.25), na.rm = TRUE),
-  p75 = quantile(production_dependency, c(.75), na.rm = TRUE)
-)
-
-pd_p25 = sum(temp$p25)
-pd_p75 = sum(temp$p75)
-
-# Low production dependency
-df_lowPD = df_main %>% filter(production_dependency < pd_p25)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("LOW P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("LOW P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("LOW P.D. payroll_gr" = "name")
-
-# Mid production dependency
-df_lowPD = df_main %>% filter(production_dependency >= pd_p25 &
-                           production_dependency < pd_p75)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("MID P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("MID P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("MID P.D. payroll_gr" = "name")
-
-# High production dependency
-df_lowPD = df_main %>% filter(production_dependency >= pd_p75)
-indicators = df_lowPD %>%
-  st_drop_geometry() %>%
-  select('autonomy', 'trade_dependency') %>%
-  colnames()
-indicators2 = c("wage_gr", "payroll_gr", "employment_gr")
-for (a in indicators2) {
-  for (i in indicators) {
-    test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]])
-    assign(paste0("est_", i), unlist(unname(test$estimate)))
-    assign(paste0("pval_", i), unlist(unname(test$p.value)))
-  }
-  temp2 = c(est_autonomy, est_trade_dependency)
-  temp3 = c(pval_autonomy, pval_trade_dependency)
-  t4 = as.data.frame(list(
-    name = indicators,
-    est = temp2,
-    pval = temp3
-  ))
-  assign(paste0("cor_", a), t4)
-}
-cor_employment_gr %>% rename("HIGH P.D. employment_gr" = "name")
-cor_wage_gr %>% rename("HIGH P.D. wage_gr" = "name")
-cor_payroll_gr %>% rename("HIGH P.D. payroll_gr" = "name")
 
 
 ```
+
+this chunk is writing a function for global autocorrelation calculation
+OLS residuals
+```{r}
+
+MIfun = function(df_reg, models) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$varlist_temp)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+varlist_temp = Q2ar %>% select(all_of(c(outcomes))) %>%
+  st_drop_geometry()
+colnames(varlist_temp) = gsub("_gr", " growth rate", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = models[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+
+
+```
+
+this chunk runs the model
+spatial error
+```{r}
+
+spresults_tables<-list()
+
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+# here's where I've restricted the loop to only look up retention (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+# for (circ_measure in params$circ_indicators){
+abc = "retention"
+for (circ_measure in abc){
+  spmodels= list()
+  for (outcome in outcomes){
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_gr", " growth rate", outcome)  
+    spmodels[[model_name]] <- errorsarlm(formula, data = Q2ar,
+                  lw, zero.policy = TRUE)
+    names(spmodels[[model_name]]$coefficients) <- c("constant", 
+                                                  gsub("_", " ", circ_measure),
+                                                  levels(as.factor(Q2ar$rural))[-1], 
+                                                  paste0(gsub("_", " ", circ_measure), " X ", levels(as.factor(Q2ar$rural))[-1]))
+    
+  }
+    assign(paste0("spmodel_", circ_measure), spmodels)
+
+  spresults_tables[[circ_measure]]<-huxreg(spmodels, 
+                                         number_format = 3, 
+                                         bold_signif = .05) |> 
+                                  set_italic(final(1),1)
+}
+
+```
+
+```{r}
+
+spMIfun = function(df_reg, spmodels) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$varlist_temp)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+varlist_temp = Q2ar %>% select(all_of(c(outcomes))) %>%
+  st_drop_geometry()
+colnames(varlist_temp) = gsub("_gr", " growth rate", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = spmodels[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+
+```
+
+
+this chunk allows you to specify commands
+
+```{r}
+
+# e.g., trade_dependency
+results_tables$retention
+
+# e.g., model_trade_dependency
+MIfun(df_reg, model_retention)
+
+# e.g., trade_dependency
+spresults_tables$retention
+
+
+# e.g., model_trade_dependency
+spMIfun(df_reg, spmodel_retention)
+
+
+```
+
+
+### Comparing rural category
+
+```{r}
+results_tables<-list()
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^model_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+for(definition in c("Mmn", "M", "C")){ 
+  df_reg <- df_main |> 
+    st_drop_geometry() %>%
+    rural_function(definition)
+  for (circ_measure in params$circ_indicators){
+    models= list()
+    df_reg <- df_reg |> 
+      mutate(circ = .data[[circ_measure]])
+    for (outcome in outcomes){
+      formula <- paste(outcome, "~" , "circ * rural" )
+      model_name = gsub("_gr", " growth rate", outcome)  
+      models[[model_name]] <- lm(formula, data = df_reg)
+          names(models[[model_name]]$coefficients) <- c("constant", 
+                                                  gsub("_", " ", circ_measure),
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0(gsub("_", " ", circ_measure), " X ", levels(as.factor(df_reg$rural))[-1]))
+    }
+      assign(paste0("model_", circ_measure, "_", definition), models)
+
+    results_tables[[paste0(circ_measure, "_", definition)]]<-huxreg(models, 
+                                           number_format = 3, 
+                                           bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
+  }
+
+}
+
+```
+
+```{r}
+MIfun2 = function(df_reg, models) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+varlist_temp = Q2ar %>% select(all_of(c(outcomes))) %>%
+  st_drop_geometry()
+colnames(varlist_temp) = gsub("_gr", " growth rate", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+for (i in varlist_temp) {
+  temp_df = models[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+```
+
+spatial error
+```{r}
+spresults_tables<-list()
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, METRO_MICRO, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+# I've further restricted this loop to only lookup "C" for the sake of time
+# uncomment/comment as desired
+#for(definition in c("Mmn", "M", "C")){ 
+for(definition in c("C")){ 
+  df_reg <- Q2ar |> 
+    rural_function(definition)
+# here's where I've restricted the loop to only look up retention (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+# for (circ_measure in params$circ_indicators){
+abc = "retention"
+for (circ_measure in abc) {
+    spmodels= list()
+    df_reg <- df_reg |> 
+      mutate(circ = .data[[circ_measure]])
+    for (outcome in outcomes){
+      formula <- paste(outcome, "~" , "circ * rural" )
+      model_name = gsub("_gr", " growth rate", outcome)  
+      spmodels[[model_name]] <- errorsarlm(formula, data = df_reg,
+                  lw, zero.policy = TRUE)
+          names(spmodels[[model_name]]$coefficients) <- c("constant", 
+                                                  gsub("_", " ", circ_measure),
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0(gsub("_", " ", circ_measure), " X ", levels(as.factor(df_reg$rural))[-1]))
+    }
+      assign(paste0("spmodel_", circ_measure, "_", definition), spmodels)
+
+    spresults_tables[[paste0(circ_measure, "_", definition)]]<-huxreg(spmodels, 
+                                           number_format = 3, 
+                                           bold_signif = .05
+                                         ) |> 
+                                  set_italic(final(1),1)
+  }
+
+}
+
+```
+
+sperror residual autocorrelation
+```{r}
+spMIfun2 = function(df_reg, spmodels) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+varlist_temp = Q2ar %>% select(all_of(c(outcomes))) %>%
+  st_drop_geometry()
+colnames(varlist_temp) = gsub("_gr", " growth rate", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+for (i in varlist_temp) {
+  temp_df = spmodels[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+```
+
+
+
+
+
+
+
+
+```{r}
+
+# e.g., trade_dependency
+results_tables$retention_C
+
+# e.g., model_trade_dependency
+MIfun2(df_reg, model_retention_C)
+
+# e.g., trade_dependency
+spresults_tables$retention_C
+
+# e.g., model_trade_dependency
+spMIfun2(df_reg, spmodel_retention_C)
+
+```
+
+## By outcome
+
+```{r}
+
+results_tables<-list()
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^model_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+for (outcome in outcomes){
+  models= list()
+  for (circ_measure in params$circ_indicators){
+    df_reg <- df_main |> 
+      mutate(circ = .data[[circ_measure]])
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_", " ", circ_measure)  
+    models[[model_name]] <- lm(formula, data = df_reg)
+    names(models[[model_name]]$coefficients) <- c("constant", 
+                                                  "circ",
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+  }
+    assign(paste0("model_", outcome), models)
+
+  results_tables[[outcome]]<-huxreg(models, 
+                                         number_format = 3, 
+                                         bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
+}
+
+```
+
+```{r}
+MIfun3 = function(df_reg, models) {
+  # this is where we input the model summary list output
+
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = models[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+}
+
+```
+
+sperror
+```{r}
+
+spresults_tables<-list()
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+# here's where I've restricted the loop to only look up wage gr (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+#for (outcome in outcomes){
+xyz = "wage_gr"
+for (outcome in xyz){  
+  spmodels= list()
+  for (circ_measure in params$circ_indicators){
+
+    df_reg <- Q2ar |> 
+      mutate(circ = .data[[circ_measure]])
+    formula <- paste(outcome, "~" , circ_measure, " * rural" )
+    model_name = gsub("_", " ", circ_measure)  
+    spmodels[[model_name]] <- errorsarlm(formula, data = df_reg,
+                  lw, zero.policy = TRUE)
+    names(spmodels[[model_name]]$coefficients) <- c("constant", 
+                                                  "circ",
+                                                  levels(as.factor(df_reg$rural))[-1], 
+                                                  paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+  }
+    assign(paste0("spmodel_", outcome), spmodels)
+
+  spresults_tables[[outcome]]<-huxreg(spmodels, 
+                                         number_format = 3, 
+                                         bold_signif = .05
+                                         ) |> 
+                                  set_italic(final(1),1)
+}
+
+```
+
+residual autocorrelation of sperror
+```{r}
+spMIfun3 = function(df_reg, spmodels) {
+  # this is where we input the model summary list output
+
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = spmodels[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+}
+
+```
+
+
+```{r}
+
+# e.g., employment_gr
+results_tables$wage_gr
+
+# e.g., model_employment_gr
+MIfun3(df_reg, model_wage_gr)
+
+# e.g., employment_gr
+spresults_tables$wage_gr
+
+# e.g., model_employment_gr
+spMIfun3(df_reg, spmodel_wage_gr)
+
+
+```
+
+
+### Comparing rural definitons
+
+```{r}
+
+results_tables<-list()
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^model_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+for(definition in c("Mmn", "M", "C")){ 
+  df_reg <- df_main |> 
+    st_drop_geometry() %>%
+    rural_function(definition)
+  for (outcome in outcomes){
+    models= list()
+    for (circ_measure in params$circ_indicators){
+      df_reg <- df_reg |> 
+        mutate(circ = .data[[circ_measure]])
+      formula <- paste(outcome, "~" , circ_measure, " * rural" )
+      model_name = gsub("_", " ", circ_measure)  
+      models[[model_name]] <- lm(formula, data = df_reg)
+      names(models[[model_name]]$coefficients) <- c("constant", 
+                                                    "circ",
+                                                    levels(as.factor(df_reg$rural))[-1], 
+                                                    paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+    }
+        assign(paste0("model_", outcome, "_", definition), models)
+
+    results_tables[[paste0(outcome,"_", definition)]]<-huxreg(models, 
+                                           number_format = 3, 
+                                           bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
+  }
+}
+
+# Different level of capacity
+
+```
+
+```{r}
+MIfun4 = function(df_reg, models) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = models[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+```
+
+
+spatial error
+
+```{r}
+
+spresults_tables<-list()
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, METRO_MICRO, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior regression results extraction loop
+objs <- ls()
+objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
+rm(list = objs_to_remove)
+
+# I've further restricted this loop to only lookup "C" for the sake of time
+# uncomment/comment as desired
+#for(definition in c("Mmn", "M", "C")){ 
+for(definition in c("C")){ 
+  df_reg <- Q2ar |> 
+    rural_function(definition)
+# here's where I've restricted the loop to only look up wage gr (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+  #for (outcome in outcomes){
+  xyz = "wage_gr"
+  for (outcome in xyz) {
+    spmodels= list()
+    for (circ_measure in params$circ_indicators){
+      df_reg <- df_reg |> 
+        mutate(circ = .data[[circ_measure]])
+      formula <- paste(outcome, "~" , circ_measure, " * rural" )
+      model_name = gsub("_", " ", circ_measure)  
+      spmodels[[model_name]] <- errorsarlm(formula, data = df_reg,
+                  lw, zero.policy = TRUE)
+      names(spmodels[[model_name]]$coefficients) <- c("constant", 
+                                                    "circ",
+                                                    levels(as.factor(df_reg$rural))[-1], 
+                                                    paste0("circ X ", levels(as.factor(df_reg$rural))[-1]))
+    }
+        assign(paste0("spmodel_", outcome, "_", definition), spmodels)
+
+    spresults_tables[[paste0(outcome,"_", definition)]]<-huxreg(spmodels, 
+                                           number_format = 3, 
+                                           bold_signif = .05
+                                         ) |> 
+                                  set_italic(final(1),1)
+  }
+}
+
+# Different level of capacity
+
+```
+
+spatial autocorrelation of sperror residuals
+
+```{r}
+spMIfun4 = function(df_reg, spmodels) {
+  # this is where we input the model summary list output
+df_reg = df_main
+Q2ar = df_reg %>%
+  select(place, rural, all_of(c(outcomes, params$circ_indicators))) %>%
+  drop_na()
+
+varlist_temp = Q2ar %>%
+  st_drop_geometry() %>%
+  select(all_of(c(params$circ_indicators)))
+colnames(varlist_temp) = gsub("_", " ", colnames(varlist_temp))
+varlist_temp = varlist_temp %>%
+  colnames()
+
+
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# remove df's from prior MI calc/extraction
+# remove df's from prior MI calc/extraction
+objs <- ls()
+objs_to_remove <- objs[grepl("^MI_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^sd_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+objs <- ls()
+objs_to_remove <- objs[grepl("^pval_", objs) & sapply(objs, function(x) is.data.frame(get(x)))]
+rm(list = objs_to_remove)
+
+
+for (i in varlist_temp) {
+  temp_df = spmodels[[i]]
+  Q2ar$r = temp_df$resid
+  temp_output = moran.test(Q2ar$r,lw, zero.policy=TRUE)
+  temp_output2 = temp_output$estimate
+  temp_output3 = temp_output2[[1]]
+  temp_output4 = temp_output2[[3]]
+  temp_output4 = sqrt(temp_output4)
+  temp_output5 = temp_output$p.value
+  temp_output3b = data.frame(MI = temp_output3) %>%
+    mutate(Characteristic = i)
+  temp_output4b = data.frame(sd = temp_output4) %>%
+    mutate(Characteristic = i)
+  temp_output5b = data.frame(pval = temp_output5) %>%
+    mutate(Characteristic = i)
+  assign(paste0("MI_", i), temp_output3b)
+  assign(paste0("sd_", i), temp_output4b)
+  assign(paste0("pval_", i), temp_output5b)
+}
+
+dfs_MI <- lapply(ls(pattern="^MI_"), function(x) get(x))
+dfs_sd <- lapply(ls(pattern="^sd_"), function(x) get(x))
+dfs_pval <- lapply(ls(pattern="^pval_"), function(x) get(x))
+result_MI <- data.table::rbindlist(dfs_MI)
+result_sd <- data.table::rbindlist(dfs_sd)
+result_pval <- data.table::rbindlist(dfs_pval)
+
+result_MI %>%
+  left_join(y=result_sd, by="Characteristic") %>%
+  left_join(y=result_pval, by="Characteristic") %>%
+  mutate(p.value = ifelse(pval < 0.001, "<0.001", ifelse(pval < 0.01, "<0.01",ifelse(pval <0.05, "<0.05",pval)))) %>%
+  select(Characteristic, "Moran's I"=MI, sd, p.value) %>%
+  hux() %>% 
+      set_background_color(evens, everywhere, "grey95") %>% 
+      set_all_padding(4) %>% 
+      set_outer_padding(0) %>% 
+      set_number_format(3) %>% 
+      set_bold(row = 1, col = everywhere) %>% 
+      set_bottom_border(row = 1, col = everywhere) %>% 
+      set_width(0.4) 
+
+  
+}
+```
+
+
+```{r}
+
+# e.g., employment_gr_C
+results_tables$wage_gr_C
+
+# e.g., model_employment_gr_C
+MIfun4(df_reg, model_wage_gr_C)
+
+# e.g., employment_gr_C
+spresults_tables$wage_gr_C
+
+# e.g., model_employment_gr_C
+spMIfun4(df_reg, spmodel_wage_gr_C)
+
+```
+
+## Put correlates from above on RHS?
+
+<!-- ## By size -->
+
+
+<!-- ```{r} -->
+<!-- if(FALSE){ -->
+
+<!-- # How does retention and economic outcomes vary across high and low production capacity places? -->
+
+<!-- temp = df_main %>% st_drop_geometry() %>% summarize( -->
+<!--   p25 = quantile(production_capacity, c(.25), na.rm = TRUE), -->
+<!--   p75 = quantile(production_capacity, c(.75), na.rm = TRUE) -->
+<!-- ) -->
+
+<!-- pc_p25 = sum(temp$p25) -->
+<!-- pc_p75 = sum(temp$p75) -->
+
+<!-- # Low production capacity -->
+<!-- df_lowPC = df_main %>% filter(production_capacity < pc_p25) -->
+<!-- indicators = df_lowPC %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('retention', 'trade_capacity') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+
+<!--   } -->
+<!--     temp2 = c(est_retention, est_trade_capacity) -->
+<!--     temp3 = c(pval_retention, pval_trade_capacity) -->
+<!--     t4 = as.data.frame(list( -->
+<!--       name = indicators, -->
+<!--       est = temp2, -->
+<!--       pval = temp3 -->
+<!--     )) -->
+<!--     assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("LOW P.C. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("LOW P.C. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("LOW P.C. payroll_gr" = "name") -->
+
+<!-- # Mid production capacity -->
+<!-- df_lowPC = df_main %>% filter(production_capacity >= pc_p25 & -->
+<!--                            production_capacity < pc_p75) -->
+<!-- indicators = df_lowPC %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('retention', 'trade_capacity') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+
+<!--   } -->
+<!--     temp2 = c(est_retention, est_trade_capacity) -->
+<!--     temp3 = c(pval_retention, pval_trade_capacity) -->
+<!--     t4 = as.data.frame(list( -->
+<!--       name = indicators, -->
+<!--       est = temp2, -->
+<!--       pval = temp3 -->
+<!--     )) -->
+<!--     assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("MID P.C. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("MID P.C. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("MID P.C. payroll_gr" = "name") -->
+
+<!-- # High production capacity -->
+<!-- df_lowPC = df_main %>% filter(production_capacity >= pc_p75) -->
+<!-- indicators = df_lowPC %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('retention', 'trade_capacity') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPC[[i]], y = df_lowPC[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+
+<!--   } -->
+<!--     temp2 = c(est_retention, est_trade_capacity) -->
+<!--     temp3 = c(pval_retention, pval_trade_capacity) -->
+<!--     t4 = as.data.frame(list( -->
+<!--       name = indicators, -->
+<!--       est = temp2, -->
+<!--       pval = temp3 -->
+<!--     )) -->
+<!--     assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("HIGH P.C. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("HIGH P.C. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("HIGH P.C. payroll_gr" = "name") -->
+
+<!-- # How does autonomy and economic outcomes vary across high and low production dependency places? -->
+<!-- temp = df_main %>% st_drop_geometry() %>% summarize( -->
+<!--   p25 = quantile(production_dependency, c(.25), na.rm = TRUE), -->
+<!--   p75 = quantile(production_dependency, c(.75), na.rm = TRUE) -->
+<!-- ) -->
+
+<!-- pd_p25 = sum(temp$p25) -->
+<!-- pd_p75 = sum(temp$p75) -->
+
+<!-- # Low production dependency -->
+<!-- df_lowPD = df_main %>% filter(production_dependency < pd_p25) -->
+<!-- indicators = df_lowPD %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('autonomy', 'trade_dependency') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   } -->
+<!--   temp2 = c(est_autonomy, est_trade_dependency) -->
+<!--   temp3 = c(pval_autonomy, pval_trade_dependency) -->
+<!--   t4 = as.data.frame(list( -->
+<!--     name = indicators, -->
+<!--     est = temp2, -->
+<!--     pval = temp3 -->
+<!--   )) -->
+<!--   assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("LOW P.D. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("LOW P.D. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("LOW P.D. payroll_gr" = "name") -->
+
+<!-- # Mid production dependency -->
+<!-- df_lowPD = df_main %>% filter(production_dependency >= pd_p25 & -->
+<!--                            production_dependency < pd_p75) -->
+<!-- indicators = df_lowPD %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('autonomy', 'trade_dependency') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   } -->
+<!--   temp2 = c(est_autonomy, est_trade_dependency) -->
+<!--   temp3 = c(pval_autonomy, pval_trade_dependency) -->
+<!--   t4 = as.data.frame(list( -->
+<!--     name = indicators, -->
+<!--     est = temp2, -->
+<!--     pval = temp3 -->
+<!--   )) -->
+<!--   assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("MID P.D. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("MID P.D. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("MID P.D. payroll_gr" = "name") -->
+
+<!-- # High production dependency -->
+<!-- df_lowPD = df_main %>% filter(production_dependency >= pd_p75) -->
+<!-- indicators = df_lowPD %>% -->
+<!--   st_drop_geometry() %>% -->
+<!--   select('autonomy', 'trade_dependency') %>% -->
+<!--   colnames() -->
+<!-- indicators2 = c("wage_gr", "payroll_gr", "employment_gr") -->
+<!-- for (a in indicators2) { -->
+<!--   for (i in indicators) { -->
+<!--     test = cor.test(x = df_lowPD[[i]], y = df_lowPD[[a]]) -->
+<!--     assign(paste0("est_", i), unlist(unname(test$estimate))) -->
+<!--     assign(paste0("pval_", i), unlist(unname(test$p.value))) -->
+<!--   } -->
+<!--   temp2 = c(est_autonomy, est_trade_dependency) -->
+<!--   temp3 = c(pval_autonomy, pval_trade_dependency) -->
+<!--   t4 = as.data.frame(list( -->
+<!--     name = indicators, -->
+<!--     est = temp2, -->
+<!--     pval = temp3 -->
+<!--   )) -->
+<!--   assign(paste0("cor_", a), t4) -->
+<!-- } -->
+<!-- cor_employment_gr %>% rename("HIGH P.D. employment_gr" = "name") -->
+<!-- cor_wage_gr %>% rename("HIGH P.D. wage_gr" = "name") -->
+<!-- cor_payroll_gr %>% rename("HIGH P.D. payroll_gr" = "name") -->
+
+<!-- } -->
+<!-- ``` -->
 
 
 
