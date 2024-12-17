@@ -6,6 +6,7 @@ format:
     toc-depth: 2
     embed-resources: true
     code-fold: true
+    df-print: paged
 ---
 
 
@@ -13,6 +14,9 @@ format:
 #| output: false
 
 library(tidyverse)
+library(patchwork)
+library(tigris)
+library(tmap)
 
 theme_set(theme_minimal())
 
@@ -24,6 +28,20 @@ param <- list(
 # Data
 
 ```{r}
+#| output: false
+
+df_bds_met <- pubdata::bds_get("2022_met") %>%
+  mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
+
+df_bds_met_eac <- pubdata::bds_get("2022_met_eac") %>%
+  mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
+
+df_bds_met_ezc <- pubdata::bds_get("2022_met_ezc") %>%
+  mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
+
+df_bds_met_sec <- pubdata::bds_get("2022_met_sec") %>%
+  mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
+
 df_ruc_2003 <- pubdata::ers_rural_get("ruc_2003")
 
 df_ruc_2023 <- pubdata::ers_rural_get("ruc_2023") %>%
@@ -36,9 +54,9 @@ df_ruc_2023 <- pubdata::ers_rural_get("ruc_2023") %>%
   pivot_wider(id_cols = c("fips", "state", "county_name")) %>%
   mutate(across(c(population_2020, ruc_code_2023), as.numeric))
 
-df_bds <- pubdata::bds_get("2022_st_cty")
+df_bds_st_cty <- pubdata::bds_get("2022_st_cty")
 
-df_main <- df_bds %>%
+df_st_cty <- df_bds_st_cty %>%
   mutate(fips = paste0(st, cty), .before = "st") %>%
   left_join(df_ruc_2003 %>% select(fips, ruc_code_2003), by = "fips") %>%
   left_join(df_ruc_2023 %>% select(fips, ruc_code_2023), by = "fips") %>%
@@ -52,13 +70,13 @@ df_main <- df_bds %>%
     )
   )
 
-df_ruc_2003 %>% head()
-df_ruc_2023 %>% head()
-df_main %>% head()
-
+df_geo = tigris::counties(cb = TRUE, resolution = "20m") %>%
+  rename_with(tolower) %>%
+  rename(fips = geoid)
 
 ```
 
+# --- Introduction ---
 
 # Rurality definition
 
@@ -77,7 +95,7 @@ Defining rural as "non-metro".
 ```{r}
 param["rural_ruc"]
 
-df_main %>%
+df_st_cty %>%
   filter(year == 2022) %>%
   count(rural_2003, rural_2023)
 
@@ -92,7 +110,7 @@ Rural looks worse under more recent definition.
 ```{r}
 
 comp_gr <- function(rur_col, y0, y1) {
-df_main %>%
+df_st_cty %>%
   filter(between(year, y0, y1)) %>%
   summarize(estabs = sum(estabs, na.rm = TRUE), emp = sum(emp, na.rm = TRUE), .by = c(year, .data[[rur_col]])) %>%
   mutate(
@@ -128,6 +146,369 @@ comp_gr("rural_2023", 2010, 2019) %>%
 
 ```
 
+# --- Results ---
+
+# 1. Establishment and Employment Dynamism
+
+Establishment and Employment Dynamism [2000-2022] for Metro and Non-metro Counties 
+
+```{r}
+t1 = df_bds_met %>%
+  filter(year >= 2000, !is.na(rural)) %>%
+  select(year, rural, estabs_entry_rate, estabs_exit_rate, job_creation_rate, job_destruction_rate) %>%
+  mutate(
+    estabs_churn_rate = estabs_entry_rate + estabs_exit_rate,
+    job_churn_rate = job_creation_rate + job_destruction_rate
+  )
+
+t1
+```
+
+Establishment: entry, exit, and churn rates
+
+- Establishment dynamism is declining over time.
+- Rural has less dynamism, both in entry and exit.
+- Dynamism increases during Covid - not just exit, but also entry go up.
+
+```{r}
+t1 %>%
+  select(year, rural, starts_with("estabs")) %>%
+  pivot_longer(!c(year, rural)) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name, linetype = rural)) +
+  ylim(c(0, NA))
+```
+
+
+Employment: Job creation, destruction, and churn rates
+
+- Employment dynamism shows trends similar to establishment dynamism.
+- Job destruction rate was similar between urban and rural in 2011-2020.
+
+
+```{r}
+t1 %>%
+  select(year, rural, starts_with("job")) %>%
+  pivot_longer(!c(year, rural)) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name, linetype = rural)) +
+  ylim(c(0, NA))
+```
+
+# 2. Job creation and destruction
+
+Job creation and destruction by entrants, continuers, and exiters for Metro and Non-metro counties.
+
+```{r}
+t2 = df_bds_met %>%
+  filter(year >= 2000, !is.na(rural)) %>%
+  mutate(
+    job_creation_rate_continuers = 100 * job_creation_continuers / denom,
+    job_destruction_rate_continuers = 100 * job_destruction_continuers / denom
+  )
+
+t2 %>%
+  select(year, rural, job_creation_rate, job_creation_rate_births, job_creation_rate_continuers, job_destruction_rate, job_destruction_rate_deaths, job_destruction_rate_continuers)
+```
+
+- Entry and exit contribute about 1/3 of job dynamism.
+
+
+```{r}
+t2 %>%
+  select(year, rural, job_creation_rate_births, job_creation_rate_continuers, job_destruction_rate_deaths, job_destruction_rate_continuers) %>%
+  pivot_longer(!c(year, rural)) %>%
+  mutate(continuer = str_detect(name, "continuers"), creation = str_detect(name, "creation")) %>%
+  mutate(creation = case_match(creation, TRUE ~ "creation", FALSE ~ "destruction"),
+         continuer = case_match(continuer, TRUE ~ "continuer", FALSE ~ "entry/exit")) %>%
+  ggplot() +
+  geom_line(aes(year, value, color = creation, linetype = rural)) +
+  ylim(c(0, NA)) +
+  facet_wrap("continuer") +
+  theme(legend.position = "bottom")
+```
+
+
+# 3. Age Distribution and Dynamism for Metro and Non-metro counties 
+
+```{r}
+t3 = df_bds_met_eac %>%
+  filter(year >= 2000, !is.na(rural)) %>%
+  mutate(
+    job_creation_rate_continuers = 100 * job_creation_continuers / denom,
+    job_destruction_rate_continuers = 100 * job_destruction_continuers / denom
+  )
+
+t3 %>% 
+  relocate(
+    year, rural, eagecoarse, estabs, emp,
+    estabs_entry,
+    estabs_entry_rate,
+    estabs_exit,
+    estabs_exit_rate,
+    contains("job")
+  )
+```
+
+## establishments
+
+- Most establishments are 11+ years old.
+- Age distribution is shifting towards higher age over time.
+- Especially in rural areas.
+- "Left Censored" can be combined with 11+ group.
+
+```{r}
+x = t3 %>%
+  select(year, rural, eagecoarse, estabs) %>%
+  pivot_longer(!c(year, rural, eagecoarse)) %>%
+  filter(name == "estabs", year %in% c(2000, 2010, 2020, 2022)) %>%
+  mutate(year = as.factor(year))
+
+x %>%
+  ggplot() +
+  geom_col(aes(eagecoarse, value, fill = year), position = "dodge") +
+  facet_wrap("rural", nrow = 1, scales = "free_y") +
+  labs(title = "Number of establishments") +
+  theme(legend.position = "bottom")
+
+x %>%
+  mutate(eagecoarse = if_else(eagecoarse == "e) Left Censored", "d) 11+", eagecoarse)) %>%
+  summarize(value = sum(value, na.rm = TRUE), .by = c(year, rural, eagecoarse)) %>%
+  ggplot() +
+  geom_col(aes(eagecoarse, value, fill = year), position = "dodge") +
+  facet_wrap("rural", nrow = 1, scales = "free_y") +
+  labs(title = "Number of establishments") +
+  theme(legend.position = "bottom")
+
+```
+
+- Entry happens even at 1+ age (re-entry).
+
+```{r}
+x = t3 %>%
+  select(year, rural, eagecoarse, estabs_entry, estabs_exit) %>%
+  pivot_longer(!c(year, rural, eagecoarse)) %>%
+  mutate(eagecoarse = if_else(eagecoarse == "e) Left Censored", "d) 11+", eagecoarse)) %>%
+  summarize(value = sum(value, na.rm = TRUE), .by = c(year, rural, eagecoarse, name))
+
+p1 = x %>%
+  filter(rural == "metro") %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("eagecoarse", nrow = 1) +
+  labs(title = "Number of entering and exiting establishments by age group") +
+  theme(legend.position = "none") +
+  ylab("metro")
+
+p2 = x %>%
+  filter(rural == "non-metro") %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("eagecoarse", nrow = 1) +
+  theme(legend.position = "bottom") +
+  ylab("non-metro")
+
+p1 / p2
+```
+
+- Dynamism declines with establishment age.
+- Although overall entry rate is lower in rural, re-entry of age 1+ establishments is slightly higher.
+
+```{r, fig.width=10, fig.height=5}
+t3 %>%
+  select(year, rural, eagecoarse, estabs_entry_rate, estabs_exit_rate) %>%
+  pivot_longer(c(estabs_entry_rate, estabs_exit_rate)) %>%
+  filter(value < 200) %>%
+  ggplot() +
+  geom_line(aes(year, value, linetype = rural, color = name)) +
+  ylim(c(0, NA)) +
+  facet_wrap("eagecoarse", nrow = 1) +
+  theme(legend.position = "bottom") +
+  labs(title = "Entry and exit rate by establishment age group")
+
+
+```
+
+
+## jobs
+
+- Most jobs are in the 11+ age group, and start-ups have smallest number of jobs.
+- All net job creation is happening among startups.
+- All age groups were net creators of jobs in urban in 2022, but not in rural.
+
+```{r}
+x = t3 %>%
+  select(year, rural, eagecoarse, emp, net_job_creation) %>%
+  pivot_longer(!c(year, rural, eagecoarse)) %>%
+  filter(year %in% c(2000, 2010, 2020, 2022)) %>%
+  mutate(eagecoarse = if_else(eagecoarse == "e) Left Censored", "d) 11+", eagecoarse)) %>%
+  summarize(value = sum(value, na.rm = TRUE), .by = c(year, rural, eagecoarse, name)) %>%
+  mutate(year = as.factor(year))
+
+x %>%
+  ggplot() +
+  geom_col(aes(eagecoarse, value, fill = year), position = "dodge") +
+  facet_wrap(c("name", "rural"), nrow = 2, scales = "free_y") +
+  labs(title = "Number of jobs") +
+  theme(legend.position = "bottom")
+```
+
+
+```{r}
+x = t3 %>%
+  select(year, rural, eagecoarse, job_creation, job_destruction) %>%
+  pivot_longer(!c(year, rural, eagecoarse)) %>%
+  mutate(eagecoarse = if_else(eagecoarse == "e) Left Censored", "d) 11+", eagecoarse)) %>%
+  summarize(value = sum(value, na.rm = TRUE), .by = c(year, rural, eagecoarse, name))
+
+p1 = x %>%
+  filter(rural == "metro") %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("eagecoarse", nrow = 1) +
+  labs(title = "Jon creation and destruction by age group") +
+  theme(legend.position = "none") +
+  ylab("metro")
+
+p2 = x %>%
+  filter(rural == "non-metro") %>%
+  ggplot() +
+  geom_line(aes(year, value, color = name)) +
+  facet_wrap("eagecoarse", nrow = 1) +
+  theme(legend.position = "bottom") +
+  ylab("non-metro")
+
+p1 / p2
+```
+
+- Job creation and destruction rates are declining over time.
+
+```{r, fig.width=10, fig.heigth=8}
+t3 %>%
+  select(year, rural, eagecoarse, matches("job.*rate_")) %>%
+  pivot_longer(!c(year, rural, eagecoarse)) %>%
+  mutate(continuer = str_detect(name, "continuers"), creation = str_detect(name, "creation")) %>%
+  mutate(creation = case_match(creation, TRUE ~ "creation", FALSE ~ "destruction"),
+         continuer = case_match(continuer, TRUE ~ "continuer", FALSE ~ "entry/exit")) %>%
+  filter(eagecoarse != "a) 0") %>%
+  ggplot() +
+  geom_line(aes(year, value, linetype = rural, color = creation)) +
+  ylim(c(0, NA)) +
+  facet_wrap(c("continuer", "eagecoarse"), nrow = 2) +
+  theme(legend.position = "bottom")
+```
+
+# 4. Size Distribution and Dynamism for Metro and Non-metro counties 
+
+```{r}
+t4 = df_bds_met_ezc %>%
+  filter(year >= 2000, !is.na(rural))
+
+t4 %>% 
+  relocate(
+    year, rural, esizecoarse, estabs, emp,
+    estabs_entry,
+    estabs_entry_rate,
+    estabs_exit,
+    estabs_exit_rate,
+    contains("job")
+  )
+```
+
+## establishments
+
+```{r}
+x = t4 %>%
+  select(year, rural, esizecoarse, estabs) %>%
+  pivot_longer(!c(year, rural, esizecoarse)) %>%
+  filter(name == "estabs", year %in% c(2000, 2010, 2020, 2022)) %>%
+  mutate(year = as.factor(year))
+
+x %>%
+  ggplot() +
+  geom_col(aes(esizecoarse, value, fill = year), position = "dodge") +
+  facet_wrap("rural", nrow = 1, scales = "free_y") +
+  labs(title = "Number of establishments") +
+  theme(legend.position = "bottom")
+
+
+```
+
+
+
+## jobs
+
+```{r}
+x = t4 %>%
+  select(year, rural, esizecoarse, emp, net_job_creation) %>%
+  pivot_longer(!c(year, rural, esizecoarse)) %>%
+  filter(year %in% c(2000, 2010, 2020, 2022)) %>%
+  mutate(year = as.factor(year))
+
+x %>%
+  ggplot() +
+  geom_col(aes(esizecoarse, value, fill = year), position = "dodge") +
+  facet_wrap(c("name", "rural"), nrow = 2, scales = "free_y") +
+  labs(title = "Number of jobs") +
+  theme(legend.position = "bottom")
+```
+
+
+
+# 5. Sectoral Distribution and Dynamism for Metro and Non-metro 
+
+2-digit NAICS.
+Too many sectors to report everything?
+Which should we merge together?
+
+```{r}
+df_bds_met_sec %>%
+  filter(year == 2022, !is.na(rural)) %>%
+  select(year, sector, rural, firms, estabs, emp, estabs_entry_rate, estabs_exit_rate, net_job_creation_rate) %>%
+  arrange(year, sector, rural)
+```
+
+
+# 6. Maps: County-level Dynamism for Metro and Non-metro
+
+Which variables are most interesting in the spatial context?
+
+```{r}
+y = 2022
+
+t6 = df_geo %>%
+  inner_join(df_st_cty %>% filter(year == y), by = "fips") %>%
+  shift_geometry()
+
+f = function(x, title) {
+  tm_shape(x) +
+  tm_polygons(
+    "net_job_creation_rate", 
+    midpoint = 0, 
+    breaks = c(-100, -25, -10, 0, 10, 25, 100),
+    palette = "PRGn",
+    border.alpha = 0.3,
+    title = title)
+}
+
+t6 %>%
+  f("all counties")
+
+t6 %>%
+  filter(!rural_2023) %>%
+  f("metro")
+
+t6 %>%
+  filter(rural_2023) %>%
+  f("non-metro")
+
+  
+```
+
+
+
+# --- Extras ---
+
 
 # Job creation and destruction
 
@@ -137,7 +518,7 @@ Rural employment is less dynamic: both job creation and destruction rates are be
 y0 = 2010
 y1 = 2019
 
-d <- df_main %>%
+d <- df_st_cty %>%
   filter(between(year, y0, y1)) %>%
   summarize(across(
     c(denom, job_creation, job_creation_births, job_creation_continuers, job_destruction, job_destruction_deaths, job_destruction_continuers),
@@ -198,7 +579,7 @@ Looking at un-weighted correlation between county establishment and employment g
 But if we weight counties by employment, rural effect becomes positive.
 
 ```{r}
-d <- df_main %>%
+d <- df_st_cty %>%
   filter(year %in% c(y0, y1)) %>%
   rename(est = estabs) %>%
   arrange(fips, year) %>%
