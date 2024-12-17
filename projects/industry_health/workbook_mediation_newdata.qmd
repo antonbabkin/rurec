@@ -338,6 +338,9 @@ data <- left_join (data, circu_new, by = "place")
 
 ```
 
+## community prosperity index
+
+
 
 # Summary Statistics
 
