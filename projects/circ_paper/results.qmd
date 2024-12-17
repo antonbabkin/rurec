@@ -947,9 +947,11 @@ objs <- ls()
 objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
 rm(list = objs_to_remove)
 
-for (circ_measure in params$circ_indicators){
-# abc = "retention"
-# for (circ_measure in abc){
+# here's where I've restricted the loop to only look up retention (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+# for (circ_measure in params$circ_indicators){
+abc = "retention"
+for (circ_measure in abc){
   spmodels= list()
   for (outcome in outcomes){
     formula <- paste(outcome, "~" , circ_measure, " * rural" )
@@ -1216,12 +1218,17 @@ objs <- ls()
 objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
 rm(list = objs_to_remove)
 
-for(definition in c("Mmn", "M", "C")){ 
+# I've further restricted this loop to only lookup "C" for the sake of time
+# uncomment/comment as desired
+#for(definition in c("Mmn", "M", "C")){ 
+for(definition in c("C")){ 
   df_reg <- Q2ar |> 
     rural_function(definition)
-for (circ_measure in params$circ_indicators){
-#  abc = "retention"
-#  for (circ_measure in abc) {
+# here's where I've restricted the loop to only look up retention (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+# for (circ_measure in params$circ_indicators){
+abc = "retention"
+for (circ_measure in abc) {
     spmodels= list()
     df_reg <- df_reg |> 
       mutate(circ = .data[[circ_measure]])
@@ -1487,9 +1494,11 @@ objs <- ls()
 objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
 rm(list = objs_to_remove)
 
-for (outcome in outcomes){
-#xyz = "wage_gr"
-#for (outcome in xyz){  
+# here's where I've restricted the loop to only look up wage gr (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+#for (outcome in outcomes){
+xyz = "wage_gr"
+for (outcome in xyz){  
   spmodels= list()
   for (circ_measure in params$circ_indicators){
 
@@ -1749,12 +1758,17 @@ objs <- ls()
 objs_to_remove <- objs[grepl("^spmodel_", objs) & sapply(objs, function(x) is.list(get(x)))]
 rm(list = objs_to_remove)
 
-for(definition in c("Mmn", "M", "C")){ 
+# I've further restricted this loop to only lookup "C" for the sake of time
+# uncomment/comment as desired
+#for(definition in c("Mmn", "M", "C")){ 
+for(definition in c("C")){ 
   df_reg <- Q2ar |> 
     rural_function(definition)
-  for (outcome in outcomes){
-  #xyz = "wage_gr"
-  #for (outcome in xyz) {
+# here's where I've restricted the loop to only look up wage gr (line below)
+# to unrestrict, uncomment the line below, and comment the following two lines
+  #for (outcome in outcomes){
+  xyz = "wage_gr"
+  for (outcome in xyz) {
     spmodels= list()
     for (circ_measure in params$circ_indicators){
       df_reg <- df_reg |> 
