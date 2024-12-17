@@ -338,9 +338,7 @@ data <- left_join (data, circu_new, by = "place")
 
 ```
 
-<<<<<<< HEAD
-## adding prosperity index
-
+## community prosperity index
 ```{r}
 
 # here I'm making the prosperity index
@@ -384,11 +382,7 @@ data = data %>%
 
 ```
 
-=======
-## community prosperity index
 
-
->>>>>>> 58dc4636e6493ffd703c20c501a7c0831c652850
 
 # Summary Statistics
 
@@ -407,12 +401,8 @@ summary_stats
 
 # Summary statistics for metro cases 
 summary_stats_metro = data %>%
-<<<<<<< HEAD
-   filter(metro_nonmetro == "metro") %>% 
-  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
-=======
    filter(three_metro == "metro") %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
@@ -423,8 +413,7 @@ summary_stats_metro
 # Summary statistics for small metro cases 
 summary_stats_smallmetro = data %>%
    filter(three_metro == "small_metro") %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
->>>>>>> 58dc4636e6493ffd703c20c501a7c0831c652850
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
@@ -435,13 +424,8 @@ summary_stats_metro
 
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
-<<<<<<< HEAD
-  filter(metro_nonmetro == "nonmetro") %>% 
-  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
-=======
   filter(three_metro == "nonmetro") %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
->>>>>>> 58dc4636e6493ffd703c20c501a7c0831c652850
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
@@ -468,9 +452,9 @@ write.xlsx(
 # Histograms
 
 ```{r}
-data %>% select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+data %>% select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
 
-data %>% select(prosperity, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
+data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
 
 
 ```
@@ -488,15 +472,10 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
 
  # Define the variables and titles
-<<<<<<< HEAD
 vars = c("paam", "retention", "autonomy", "prosperity", "pct_mfg", "pct_ag", 
-           "laborforce_part_rate", "age", "bach", "poverty_rate",    "income_rate", "logpop", "uninsured")
-=======
-vars = c("paam", "retention", "autonomy", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
->>>>>>> 58dc4636e6493ffd703c20c501a7c0831c652850
 
-titles = c("Premature\n Death", "Retention", "Autonomy", "Prosperity","%\n Manufacturing", 
+titles = c("Premature\n Death", "Retention", "Autonomy", "Prosperity", "%\n Manufacturing", 
            "%\n Agriculture", 
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
@@ -731,7 +710,7 @@ ggplot(nonmetro_data, aes(prosperity, paam)) +
 ```{r}
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% 
-  drop_na(paam, ypll75, retention, autonomy, prosperity, emp_to_va, emp_to_output, va_to_output)
+  drop_na(paam, ypll75, retention, autonomy, emp_to_va, emp_to_output, va_to_output)
 
 
 nb <- poly2nb(df_map, queen=TRUE)
@@ -871,6 +850,46 @@ title(main = "LISA, Prosperity")
 ```{r}
 mi1 = df_map %>% drop_na(c(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention = (retention - mean(retention, na.rm=TRUE))/sd(retention, na.rm=TRUE), autonomy = (autonomy - mean(autonomy, na.rm=TRUE))/sd(autonomy, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
 
+
+# here I'm making the prosperity index
+# in the prior chunk, we z-score the variables
+
+
+# first, we define the prosperity concept
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+# next, run confirmatory factor analysis
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+# extracting factor results
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+# adding loading (correlations) for each indictor
+# using these to build weighted average of prosperity
+mi1 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
 
 ```
 
