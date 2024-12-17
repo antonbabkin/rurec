@@ -45,6 +45,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
  # install.packages("lavaanPlot")
 #install.packages("ggthemes")
 # install.packages("sesem")
+#install.packages("openxlsx")
 
 
 library(vtable)
@@ -85,6 +86,8 @@ library(ggeffects)
 library(patchwork)
 library(ggthemes)
 library(sesem)
+library(openxlsx)
+
 
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
@@ -265,6 +268,15 @@ data = data %>%
 mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
        logpop = log(population))
 
+data <- data %>%
+  mutate(
+    three_metro = case_when(
+      ruc_code %in% c(1, 2) ~ "metro",
+      ruc_code == 3 ~ "small_metro",
+      ruc_code >= 4 ~ "nonmetro")
+  )
+  
+
 ind_struct<- ih_dp$call_industry_structure(2012)
 
 data<- left_join (data, ind_struct, by = "place")
@@ -322,12 +334,16 @@ circu_new <- arrow::read_parquet("data/place_io/outsupdem/2012_det_cbp_imp.pq") 
 data <- left_join (data, circu_new, by = "place")
 
 
+
+
 ```
 
 
 # Summary Statistics
 
 ```{r}
+
+library(openxlsx)
 
 ##summary statistics- global
 summary_stats = data %>% 
@@ -340,7 +356,18 @@ summary_stats
 
 # Summary statistics for metro cases 
 summary_stats_metro = data %>%
-   filter(metro_nonmetro == "metro") %>% 
+   filter(three_metro == "metro") %>% 
+  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+# Summary statistics for small metro cases 
+summary_stats_smallmetro = data %>%
+   filter(three_metro == "small_metro") %>% 
   select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
@@ -352,7 +379,7 @@ summary_stats_metro
 
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
-  filter(metro_nonmetro == "nonmetro") %>% 
+  filter(three_metro == "nonmetro") %>% 
   select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
@@ -360,6 +387,18 @@ summary_stats_nonmetro = data %>%
   relocate(variable, n, mean, median, min, max)  
 summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
 summary_stats_nonmetro
+
+# Write all summary statistics to Excel
+write.xlsx(
+  list(
+    "Global Summary" = summary_stats,
+    "Metro Summary" = summary_stats_metro,
+    "Small Metro Summary" = summary_stats_smallmetro,
+    "Nonmetro Summary" = summary_stats_nonmetro
+  ),
+  file = "IH1_summary_statistics.xlsx",
+  overwrite = TRUE
+)
 
 
 
@@ -380,7 +419,7 @@ data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logp
 #paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
 
 # Define the number of colors you want from the "rocket" palette
-num_colors <- 2  # Adjust the number of colors as needed
+num_colors <- 3  # Adjust the number of colors as needed
 
 # Create a vector of colors from the "rocket" palette excluding yellow
 my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
@@ -389,7 +428,7 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
  # Define the variables and titles
 vars = c("paam", "retention", "autonomy", "pct_mfg", "pct_ag", 
-           "laborforce_part_rate", "age", "bach", "poverty_rate",    "income_rate", "logpop", "uninsured")
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
 titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", 
            "%\n Agriculture", 
@@ -398,7 +437,7 @@ titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing",
            "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
 # Function to create density plots
-create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) {
+create_density_plots <- function(data, vars, three_metro, my_colors, titles) {
   plots <- list()  
   
   # Loop through the variable names
@@ -406,10 +445,10 @@ create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) 
     var <- vars[i]          
     title <- titles[i]     
     
-    plot <- ggplot(data, aes_string(x = var, group = metro_nonmetro, 
-                                     color = paste0("as.factor(", metro_nonmetro, ")"))) +
+    plot <- ggplot(data, aes_string(x = var, group = three_metro, 
+                                     color = paste0("as.factor(", three_metro, ")"))) +
       geom_density() +
-      scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+      scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
       labs(title = title,   
            x = var,        
            y = "Density") +
@@ -423,7 +462,7 @@ create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) 
 
 
 # Call the function
-density_plots <- create_density_plots(data, vars, "metro_nonmetro", my_colors, titles)
+density_plots <- create_density_plots(data, vars, "three_metro", my_colors, titles)
 
 for (plot in density_plots) {
   print(plot)
@@ -914,6 +953,20 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pc
 summary(sr2a)
 
 ```
+### part 2b- Industry + Trade + Controls > PAAM
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+```
+
 
 
 ### part 3 - full model
@@ -1051,7 +1104,18 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + autonomy + p
 summary(sr2a)
 
 ```
+### part 2b - industry + trade + controls > paam
 
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+```
 
 ### part 3 - full model
 
@@ -1182,6 +1246,19 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + autonomy + p
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
+
+```
+
+### part 2b - industry + trade + controls > paam 
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
 
 ```
 
