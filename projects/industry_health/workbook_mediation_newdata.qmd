@@ -418,8 +418,8 @@ summary_stats_smallmetro = data %>%
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
-summary_stats_metro = as.data.frame(summary_stats_metro)  
-summary_stats_metro  
+summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
+summary_stats_smallmetro  
 
 
 # Summary statistics for nonmetro cases 
@@ -610,7 +610,7 @@ ggplot(data, aes(autonomy, retention)) +
         y = "Retention")
 
 
-# Filter the data to include only "nmetro" cases
+# Filter the data to include only "metro" cases
 metro_data <- subset(data, metro_nonmetro == "metro")
 
 ggplot(metro_data, aes(retention, paam)) +
@@ -1147,35 +1147,38 @@ plot(st_geometry(Q2ar),
 # # library(writexl)
 # 
 # ## Tidy results
-# tidy_sr1a <- tidy(sr1a)
-# tidy_sr1b <- tidy(sr1b)
-# tidy_sr2a <- tidy(sr2a)
-# tidy_sr3a <- tidy(sr3a)
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
 # 
 # 
 # 
 # # Identify each model
 # 
-# tidy_sr1a$model <- "Retention-Industry"
-# tidy_sr1b$model <- "Autonomy-Industry"
-# tidy_sr2a$model <- "Trade-Industry-Prosperity"
-# tidy_sr3a$model <- "FULL"
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
 # 
 # 
-# # # Combine results into single DF
-# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
 # 
 # 
 # # Create a list of data frames to be written to different sheets -->
-# results_list <- list(
-#   "Retention-Industry" = tidy_sr1a,
-#   "Autonomy-Industry" = tidy_sr1b,
-#   "Trade-Industry-Prosperity" = tidy_sr2a,
-#   "FULL" = tidy_sr3a
-# )
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+    "Trade-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
 
 # Write the list of data frames to an Excel file -->
-  #write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
+  write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
 
 
 ```
@@ -1292,35 +1295,38 @@ summary(sr3a)
 # 
 # 
 # ## Tidy results
-# tidy_sr1a <- tidy(sr1a)
-# tidy_sr1b <- tidy(sr1b)
-# tidy_sr2a <- tidy(sr2a)
-# tidy_sr3a <- tidy(sr3a)
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
 # 
 # 
 # 
 # # Identify each model
 # 
-# tidy_sr1a$model <- "Retention-Industry"
-# tidy_sr1b$model <- "Autonomy-Industry"
-# tidy_sr2a$model <- "Trade-Industry-Prosperity"
-# tidy_sr3a$model <- "FULL"
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
 # 
-# 
-# # # Combine results into single DF
-# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# # 
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
 # 
 # 
 # # Create a list of data frames to be written to different sheets -->
-# results_list <- list(
-#   "Retention-Industry" = tidy_sr1a,
-#   "Autonomy-Industry" = tidy_sr1b,
-#   "Trade-Industry-Prosperity" = tidy_sr2a,
-#   "FULL" = tidy_sr3a
-# )
-# 
-# # Write the list of data frames to an Excel file -->
-#   #write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+  "Trade-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
 
 
 ```
@@ -1437,35 +1443,38 @@ summary(sr3a)
 # 
 # 
 # ## Tidy results
-# tidy_sr1a <- tidy(sr1a)
-# tidy_sr1b <- tidy(sr1b)
-# tidy_sr2a <- tidy(sr2a)
-# tidy_sr3a <- tidy(sr3a)
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
 # 
 # 
 # 
 # # Identify each model
 # 
-# tidy_sr1a$model <- "Retention-Industry"
-# tidy_sr1b$model <- "Autonomy-Industry"
-# tidy_sr2a$model <- "Trade-Industry-Prosperity"
-# tidy_sr3a$model <- "FULL"
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "Autonomy-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
 # 
 # 
-# # # Combine results into single DF
-# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
 # 
 # 
 # # Create a list of data frames to be written to different sheets -->
-# results_list <- list(
-#   "Retention-Industry" = tidy_sr1a,
-#   "Autonomy-Industry" = tidy_sr1b,
-#   "Trade-Industry-Prosperity" = tidy_sr2a,
-#   "FULL" = tidy_sr3a
-# )
-# 
-# # Write the list of data frames to an Excel file -->
-#   #write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "Autonomy-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+    "Trade-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
 
 
 ```
