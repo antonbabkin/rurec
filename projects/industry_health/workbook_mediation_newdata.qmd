@@ -45,6 +45,7 @@ source("R/basic_utilities.R", local = (util <- new.env()))
  # install.packages("lavaanPlot")
 #install.packages("ggthemes")
 # install.packages("sesem")
+#install.packages("openxlsx")
 
 
 library(vtable)
@@ -85,6 +86,8 @@ library(ggeffects)
 library(patchwork)
 library(ggthemes)
 library(sesem)
+library(openxlsx)
+
 
 # chunk behavior 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
@@ -265,6 +268,15 @@ data = data %>%
 mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
        logpop = log(population))
 
+data <- data %>%
+  mutate(
+    three_metro = case_when(
+      ruc_code %in% c(1, 2) ~ "metro",
+      ruc_code == 3 ~ "small_metro",
+      ruc_code >= 4 ~ "nonmetro")
+  )
+  
+
 ind_struct<- ih_dp$call_industry_structure(2012)
 
 data<- left_join (data, ind_struct, by = "place")
@@ -322,16 +334,65 @@ circu_new <- arrow::read_parquet("data/place_io/outsupdem/2012_det_cbp_imp.pq") 
 data <- left_join (data, circu_new, by = "place")
 
 
+
+
 ```
+
+## community prosperity index
+```{r}
+
+# here I'm making the prosperity index
+# in the prior chunk, we z-score the variables
+# first, we define the prosperity concept
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+# next, run confirmatory factor analysis
+factor1 <- cfa(m1a, data=data,std.lv=TRUE)
+summary(factor1)
+
+# extracting factor results
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+
+# adding loading (correlations) for each indictor
+# using these to build weighted average of prosperity
+data = data %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+```
+
 
 
 # Summary Statistics
 
 ```{r}
 
+library(openxlsx)
+
 ##summary statistics- global
 summary_stats = data %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
@@ -340,8 +401,19 @@ summary_stats
 
 # Summary statistics for metro cases 
 summary_stats_metro = data %>%
-   filter(metro_nonmetro == "metro") %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
+   filter(three_metro == "metro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+# Summary statistics for small metro cases 
+summary_stats_smallmetro = data %>%
+   filter(three_metro == "small_metro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
@@ -352,14 +424,26 @@ summary_stats_metro
 
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
-  filter(metro_nonmetro == "nonmetro") %>% 
-  select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, 
+  filter(three_metro == "nonmetro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
 summary_stats_nonmetro
+
+# Write all summary statistics to Excel
+write.xlsx(
+  list(
+    "Global Summary" = summary_stats,
+    "Metro Summary" = summary_stats_metro,
+    "Small Metro Summary" = summary_stats_smallmetro,
+    "Nonmetro Summary" = summary_stats_nonmetro
+  ),
+  file = "IH1_summary_statistics.xlsx",
+  overwrite = TRUE
+)
 
 
 
@@ -368,7 +452,7 @@ summary_stats_nonmetro
 # Histograms
 
 ```{r}
-data %>% select(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+data %>% select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
 
 data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
 
@@ -380,7 +464,7 @@ data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logp
 #paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
 
 # Define the number of colors you want from the "rocket" palette
-num_colors <- 2  # Adjust the number of colors as needed
+num_colors <- 3  # Adjust the number of colors as needed
 
 # Create a vector of colors from the "rocket" palette excluding yellow
 my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
@@ -388,17 +472,17 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
 
  # Define the variables and titles
-vars = c("paam", "retention", "autonomy", "pct_mfg", "pct_ag", 
-           "laborforce_part_rate", "age", "bach", "poverty_rate",    "income_rate", "logpop", "uninsured")
+vars = c("paam", "retention", "autonomy", "prosperity", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
-titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", 
+titles = c("Premature\n Death", "Retention", "Autonomy", "Prosperity", "%\n Manufacturing", 
            "%\n Agriculture", 
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
            "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
 # Function to create density plots
-create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) {
+create_density_plots <- function(data, vars, three_metro, my_colors, titles) {
   plots <- list()  
   
   # Loop through the variable names
@@ -406,10 +490,10 @@ create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) 
     var <- vars[i]          
     title <- titles[i]     
     
-    plot <- ggplot(data, aes_string(x = var, group = metro_nonmetro, 
-                                     color = paste0("as.factor(", metro_nonmetro, ")"))) +
+    plot <- ggplot(data, aes_string(x = var, group = three_metro, 
+                                     color = paste0("as.factor(", three_metro, ")"))) +
       geom_density() +
-      scale_color_manual(name = "Metro/Non-Metro", values = my_colors) +
+      scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
       labs(title = title,   
            x = var,        
            y = "Density") +
@@ -423,7 +507,7 @@ create_density_plots <- function(data, vars, metro_nonmetro, my_colors, titles) 
 
 
 # Call the function
-density_plots <- create_density_plots(data, vars, "metro_nonmetro", my_colors, titles)
+density_plots <- create_density_plots(data, vars, "three_metro", my_colors, titles)
 
 for (plot in density_plots) {
   print(plot)
@@ -442,9 +526,9 @@ df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 #install.packages("RColorBrewer")
 # library(RColorBrewer)
  
- vars = list("paam", "retention", "autonomy", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
+ vars = list("paam", "retention", "autonomy", "prosperity", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
  
- titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
+ titles = c("Premature\n Death", "Retention", "Autonomy", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
  
 for (i in seq_along(vars)) {
   v = vars[[i]]
@@ -544,12 +628,28 @@ ggplot(metro_data, aes(autonomy, paam)) +
         y = "Premature Age Adjusted Mortality")
 
 ##scatter plot of retention and autonomy (2012)
+ggplot(metro_data, aes(retention, prosperity)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Prosperity (2012)",
+        x = "Retention",
+        y = "Prosperity")
+
+##scatter plot of retention and autonomy (2012)
 ggplot(metro_data, aes(autonomy, retention)) +
   geom_point() +
    geom_smooth(method = "lm") +
-   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Prosperity (2012)",
         x = "Autonomy",
-        y = "Retention")
+        y = "Prosperity")
+
+
+ggplot(data, aes(prosperity, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality")
 
 # Nonmetro plots
 # Filter the data to include only "nonmetro" cases
@@ -576,6 +676,29 @@ ggplot(nonmetro_data, aes(autonomy, retention)) +
    labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
         x = "Autonomy",
         y = "Retention")
+
+##scatter plot of retention and prosperity (2012)
+ggplot(nonmetro_data, aes(retention, prosperity)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Prosperity (2012)",
+        x = "Retention",
+        y = "Prosperity")
+
+##scatter plot of autonomy and prosperity (2012)
+ggplot(nonmetro_data, aes(autonomy, prosperity)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Prosperity (2012)",
+        x = "Autonomy",
+        y = "Prosperity")
+
+ggplot(nonmetro_data, aes(prosperity, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality")
 
 ```
 
@@ -683,6 +806,37 @@ plot(st_geometry(df_lisa),
      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
      border = "#333333", lwd=0.2)
 title(main = "LISA, Autonomy")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+##Prosperity
+###moran global prosperity 
+
+```{r}
+moran.test(df_map$prosperity,lw, zero.policy=TRUE)
+
+```
+
+
+###lisa prosperity
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['prosperity'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Prosperity")
 
 
 # Create the legend separately
@@ -914,6 +1068,20 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + autonomy + pc
 summary(sr2a)
 
 ```
+### part 2b- Industry + Trade + Controls > PAAM
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+```
+
 
 
 ### part 3 - full model
@@ -972,39 +1140,39 @@ plot(st_geometry(Q2ar),
 
  #### print results  -->
 # Write OLS retention & autonomy results to excel file  -->
-
-install.packages("broom")
-install.packages("writexl")
-library(broom)
-library(writexl)
-
-## Tidy results
-tidy_sr1a <- tidy(sr1a)
-tidy_sr1b <- tidy(sr1b)
-tidy_sr2a <- tidy(sr2a)
-tidy_sr3a <- tidy(sr3a)
-
-
-
-# Identify each model
-
-tidy_sr1a$model <- "Retention-Industry"
-tidy_sr1b$model <- "Autonomy-Industry"
-tidy_sr2a$model <- "Trade-Industry-Prosperity"
-tidy_sr3a$model <- "FULL"
-
-
-# # Combine results into single DF
-# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
-
-
-# Create a list of data frames to be written to different sheets -->
-results_list <- list(
-  "Retention-Industry" = tidy_sr1a,
-  "Autonomy-Industry" = tidy_sr1b,
-  "Trade-Industry-Prosperity" = tidy_sr2a,
-  "FULL" = tidy_sr3a
-)
+# 
+# # install.packages("broom")
+# # install.packages("writexl")
+# # library(broom)
+# # library(writexl)
+# 
+# ## Tidy results
+# tidy_sr1a <- tidy(sr1a)
+# tidy_sr1b <- tidy(sr1b)
+# tidy_sr2a <- tidy(sr2a)
+# tidy_sr3a <- tidy(sr3a)
+# 
+# 
+# 
+# # Identify each model
+# 
+# tidy_sr1a$model <- "Retention-Industry"
+# tidy_sr1b$model <- "Autonomy-Industry"
+# tidy_sr2a$model <- "Trade-Industry-Prosperity"
+# tidy_sr3a$model <- "FULL"
+# 
+# 
+# # # Combine results into single DF
+# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# 
+# 
+# # Create a list of data frames to be written to different sheets -->
+# results_list <- list(
+#   "Retention-Industry" = tidy_sr1a,
+#   "Autonomy-Industry" = tidy_sr1b,
+#   "Trade-Industry-Prosperity" = tidy_sr2a,
+#   "FULL" = tidy_sr3a
+# )
 
 # Write the list of data frames to an Excel file -->
   #write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
@@ -1051,7 +1219,18 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + autonomy + p
 summary(sr2a)
 
 ```
+### part 2b - industry + trade + controls > paam
 
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+```
 
 ### part 3 - full model
 
@@ -1108,40 +1287,40 @@ summary(sr3a)
 
 ```{r}
 
- #### print results  -->
-# Write OLS retention & autonomy results to excel file  -->
-
-
-## Tidy results
-tidy_sr1a <- tidy(sr1a)
-tidy_sr1b <- tidy(sr1b)
-tidy_sr2a <- tidy(sr2a)
-tidy_sr3a <- tidy(sr3a)
-
-
-
-# Identify each model
-
-tidy_sr1a$model <- "Retention-Industry"
-tidy_sr1b$model <- "Autonomy-Industry"
-tidy_sr2a$model <- "Trade-Industry-Prosperity"
-tidy_sr3a$model <- "FULL"
-
-
-# # Combine results into single DF
-# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
-
-
-# Create a list of data frames to be written to different sheets -->
-results_list <- list(
-  "Retention-Industry" = tidy_sr1a,
-  "Autonomy-Industry" = tidy_sr1b,
-  "Trade-Industry-Prosperity" = tidy_sr2a,
-  "FULL" = tidy_sr3a
-)
-
-# Write the list of data frames to an Excel file -->
-  #write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+#  #### print results  -->
+# # Write OLS retention & autonomy results to excel file  -->
+# 
+# 
+# ## Tidy results
+# tidy_sr1a <- tidy(sr1a)
+# tidy_sr1b <- tidy(sr1b)
+# tidy_sr2a <- tidy(sr2a)
+# tidy_sr3a <- tidy(sr3a)
+# 
+# 
+# 
+# # Identify each model
+# 
+# tidy_sr1a$model <- "Retention-Industry"
+# tidy_sr1b$model <- "Autonomy-Industry"
+# tidy_sr2a$model <- "Trade-Industry-Prosperity"
+# tidy_sr3a$model <- "FULL"
+# 
+# 
+# # # Combine results into single DF
+# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# 
+# 
+# # Create a list of data frames to be written to different sheets -->
+# results_list <- list(
+#   "Retention-Industry" = tidy_sr1a,
+#   "Autonomy-Industry" = tidy_sr1b,
+#   "Trade-Industry-Prosperity" = tidy_sr2a,
+#   "FULL" = tidy_sr3a
+# )
+# 
+# # Write the list of data frames to an Excel file -->
+#   #write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
 
 
 ```
@@ -1182,6 +1361,19 @@ sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + autonomy + p
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
+
+```
+
+### part 2b - industry + trade + controls > paam 
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + autonomy + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
 
 ```
 
@@ -1240,40 +1432,40 @@ summary(sr3a)
 
 ```{r}
 
- #### print results  -->
-# Write model results to excel file in separate sheets  -->
-
-
-## Tidy results
-tidy_sr1a <- tidy(sr1a)
-tidy_sr1b <- tidy(sr1b)
-tidy_sr2a <- tidy(sr2a)
-tidy_sr3a <- tidy(sr3a)
-
-
-
-# Identify each model
-
-tidy_sr1a$model <- "Retention-Industry"
-tidy_sr1b$model <- "Autonomy-Industry"
-tidy_sr2a$model <- "Trade-Industry-Prosperity"
-tidy_sr3a$model <- "FULL"
-
-
-# # Combine results into single DF
-# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
-
-
-# Create a list of data frames to be written to different sheets -->
-results_list <- list(
-  "Retention-Industry" = tidy_sr1a,
-  "Autonomy-Industry" = tidy_sr1b,
-  "Trade-Industry-Prosperity" = tidy_sr2a,
-  "FULL" = tidy_sr3a
-)
-
-# Write the list of data frames to an Excel file -->
-  #write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+#  #### print results  -->
+# # Write model results to excel file in separate sheets  -->
+# 
+# 
+# ## Tidy results
+# tidy_sr1a <- tidy(sr1a)
+# tidy_sr1b <- tidy(sr1b)
+# tidy_sr2a <- tidy(sr2a)
+# tidy_sr3a <- tidy(sr3a)
+# 
+# 
+# 
+# # Identify each model
+# 
+# tidy_sr1a$model <- "Retention-Industry"
+# tidy_sr1b$model <- "Autonomy-Industry"
+# tidy_sr2a$model <- "Trade-Industry-Prosperity"
+# tidy_sr3a$model <- "FULL"
+# 
+# 
+# # # Combine results into single DF
+# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr3a)
+# 
+# 
+# # Create a list of data frames to be written to different sheets -->
+# results_list <- list(
+#   "Retention-Industry" = tidy_sr1a,
+#   "Autonomy-Industry" = tidy_sr1b,
+#   "Trade-Industry-Prosperity" = tidy_sr2a,
+#   "FULL" = tidy_sr3a
+# )
+# 
+# # Write the list of data frames to an Excel file -->
+#   #write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
 
 
 ```
