@@ -1141,10 +1141,10 @@ plot(st_geometry(Q2ar),
  #### print results  -->
 # Write OLS retention & autonomy results to excel file  -->
 # 
-# # install.packages("broom")
-# # install.packages("writexl")
-# # library(broom)
-# # library(writexl)
+install.packages("broom")
+install.packages("writexl")
+library(broom)
+library(writexl)
 # 
 # ## Tidy results
 tidy_sr1a <- tidy(sr1a)
