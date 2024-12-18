@@ -710,7 +710,7 @@ ggplot(nonmetro_data, aes(prosperity, paam)) +
 ```{r}
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% 
-  drop_na(paam, ypll75, retention, autonomy, emp_to_va, emp_to_output, va_to_output)
+  drop_na(paam, ypll75, retention, autonomy, emp_to_va, emp_to_output, va_to_output, prosperity)
 
 
 nb <- poly2nb(df_map, queen=TRUE)
