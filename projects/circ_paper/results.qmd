@@ -38,7 +38,9 @@ source("R/geography.R", local = (geography <- new.env()))
 source("R/place_io.R", local = (place_io <- new.env()))
 source("R/circularity.R", local = (circularity <- new.env()))
 source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
 
+source("projects/circ_paper/dataprep.R", local = (dataprep = new.env()))
 ```
 
 # Analysis parameters
@@ -126,18 +128,53 @@ df_busdata <- inner_join(df_busdata$end, df_busdata$base, by = "place", suffix =
 
 # CBSA data for metro/non-metro definitions
 df_cbsa <- geography$pubdata$get_cbsa_delin_df(params$cbsa_year)%>%
-  select(STATE_CODE, COUNTY_CODE, METRO_MICRO) 
+  select(STATE_CODE, COUNTY_CODE, METRO_MICRO)
+
+# county population
+df_population <- pubdatapy$opath$population %>%
+  read_parquet() %>%
+  filter(year == 2012, cty != "000") %>%
+  mutate(place = paste0(st, cty), log_pop = log10(pop)) %>%
+  select(place, pop, log_pop)
+
+# GDP sector shares
+df_sector <- dataprep$gdp_by_sector() %>%
+  filter(sector != "tot") %>%
+  pivot_wider(id_cols = place, names_from = sector, names_prefix = "sh_", values_from = share)
 
 
 df_main <- df_geo %>%
   right_join(df_circ, "place") %>%
   left_join(df_busdata, "place") %>% 
-  left_join(df_cbsa, by = join_by(STATE_CODE, COUNTY_CODE)) %>%
+  left_join(df_cbsa, join_by(STATE_CODE, COUNTY_CODE)) %>%
+  left_join(df_population, "place") %>%
+  left_join(df_sector, "place") %>%
   mutate(cbsa_rural_category = if_else(METRO_MICRO == "metro", FALSE, TRUE, missing = TRUE))
 
 #df_main %>% head()
 ```
 
+
+## Define rural
+
+```{r, message=FALSE}
+
+rural_function <- function(df, rural_definition) {
+  
+  df$METRO_MICRO <- replace_na(df$METRO_MICRO, "non-core")
+
+  if(rural_definition=="Mmn"){
+    df |> mutate(rural = if_else(is.na(METRO_MICRO), "non-core", METRO_MICRO))
+  } else if(rural_definition == "M"){
+    df |> mutate(rural = if_else(METRO_MICRO == "metro", "metro", "non-metro"))
+  } else if(rural_definition == "C"){
+    df |> mutate(rural = if_else(METRO_MICRO == "metro" | METRO_MICRO == "micro", "core", "non-core"))
+  }
+}
+
+df_main <- df_main |> 
+  rural_function(rural_definition)
+```
 
 
 ## county-year panel for time trend plots
@@ -329,7 +366,16 @@ print("MAKE A TABLE OF SPATIAL ANALYTSIS STATS")
 
 ```{r}
 
-print("INCORPORATE STAGE 0")
+ms <- list()
+for (circi in params$circ_indicators) {
+  d <- df_main %>%
+    st_drop_geometry() %>%
+    mutate(circ = .data[[circi]])
+  ms[[circi]] <- lm(paste(circi, "~ log_pop + sh_afm + sh_mfg + sh_tr + sh_svc + sh_gov"), data = d) %>%
+    summary()
+}
+
+huxreg(ms, statistics = c("nobs", "r.squared"))
 
 ```
 
@@ -398,26 +444,6 @@ p
 
 
 # Urban-Rural Analysis
-
-## Define rural
-
-```{r, message=FALSE}
-
-rural_function <- function(df, rural_definition) {
-  
-  df$METRO_MICRO <- replace_na(df$METRO_MICRO, "non-core")
-
-  if(rural_definition=="Mmn"){
-    df |> mutate(rural = if_else(is.na(METRO_MICRO), "non-core", METRO_MICRO))
-  } else if(rural_definition == "M"){
-    df |> mutate(rural = if_else(METRO_MICRO == "metro", "metro", "non-metro"))
-  } else if(rural_definition == "C"){
-    df |> mutate(rural = if_else(METRO_MICRO == "metro" | METRO_MICRO == "micro", "core", "non-core"))
-  }
-}
-
-df_main <- df_main |> rural_function(rural_definition)
-```
 
 ## Descriptives table
 
@@ -772,6 +798,40 @@ for (circ_measure in params$circ_indicators){
 
 results_tables$retention
 ```
+### control for size and industry
+
+```{r}
+results_tables<-list()
+
+for (circ_measure in params$circ_indicators){
+  models= list()
+  for (outcome in outcomes){
+    formula <- paste(outcome, "~" , circ_measure, " * rural + log_pop + sh_afm + sh_mfg + sh_tr + sh_svc + sh_gov" )
+    model_name = gsub("_gr", " growth rate", outcome)  
+    models[[model_name]] <- lm(formula, data = df_main)
+    # names(models[[model_name]]$coefficients) <- c("constant", 
+    #                                               gsub("_", " ", circ_measure),
+    #                                               levels(as.factor(df_main$rural))[-1], 
+    #                                               paste0(gsub("_", " ", circ_measure), " X ", levels(as.factor(df_main$rural))[-1]))
+  }
+
+  results_tables[[circ_measure]]<-huxreg(models, 
+                                         number_format = 3, 
+                                         bold_signif = .05,
+                                         statistics = c("N" ="nobs")
+                                         ) |> 
+                                  set_italic(final(1),1)
+}
+
+results_tables$retention
+```
+
+```{r}
+df_main %>%
+  ggplot() +
+  geom_point(aes(log_pop, retention))
+```
+
 
 ### Comparing rural category
 
