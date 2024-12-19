@@ -341,6 +341,14 @@ data <- left_join (data, circu_new, by = "place")
 ## community prosperity index
 ```{r}
 
+# Column to delete
+column_to_delete <- "prosperity"
+
+if (column_to_delete %in% colnames(data)) {
+  data <- data %>%
+    select(-all_of(column_to_delete))
+}
+
 # here I'm making the prosperity index
 # in the prior chunk, we z-score the variables
 # first, we define the prosperity concept
