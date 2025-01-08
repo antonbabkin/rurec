@@ -271,9 +271,18 @@ mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
 data <- data %>%
   mutate(
     three_metro = case_when(
-      ruc_code %in% c(1, 2) ~ "metro",
+        ruc_code %in% c(1, 2) ~ "metro",
       ruc_code == 3 ~ "small_metro",
       ruc_code >= 4 ~ "nonmetro")
+  )
+
+data = data %>% 
+  mutate(
+    four_metro = case_when(
+      ruc_code %in% c(1, 2) ~ "large_metro",
+      ruc_code == 3 ~ "small_metro",
+      ruc_code %in% c(4, 5) ~ "large_nonmetro",
+      ruc_code >= 6 ~ "small_nonmetro")
   )
   
 
@@ -392,7 +401,7 @@ data = data %>%
 
 
 
-# Summary Statistics
+# Summary Statistics- three regimes
 
 ```{r}
 
@@ -449,13 +458,90 @@ write.xlsx(
     "Small Metro Summary" = summary_stats_smallmetro,
     "Nonmetro Summary" = summary_stats_nonmetro
   ),
-  file = "IH1_summary_statistics.xlsx",
+  file = "IH1_summary_statistics_3R.xlsx",
   overwrite = TRUE
 )
 
 
 
 ```
+# Summary Statistics- four regimes
+
+```{r}
+
+library(openxlsx)
+
+##summary statistics- global
+summary_stats = data %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+summary_stats
+
+
+# Summary statistics for large metro cases 
+summary_stats_metro = data %>%
+   filter(four_metro == "large_metro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+# Summary statistics for small metro cases 
+summary_stats_smallmetro = data %>%
+   filter(four_metro == "small_metro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
+summary_stats_smallmetro  
+
+
+# Summary statistics for nonmetro cases 
+summary_stats_nonmetro = data %>%
+  filter(four_metro == "large-nonmetro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
+summary_stats_nonmetro
+
+# Summary statistics for nonmetro cases 
+summary_stats_smallnonmetro = data %>%
+  filter(four_metro == "small_nonmetro") %>% 
+  select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_smallnonmetro = as.data.frame(summary_stats_smallnonmetro)  
+summary_stats_smallnonmetro
+
+# Write all summary statistics to Excel
+write.xlsx(
+  list(
+    "Global Summary" = summary_stats,
+    "Metro Summary" = summary_stats_metro,
+    "Small Metro Summary" = summary_stats_smallmetro,
+    "Nonmetro Summary" = summary_stats_nonmetro, 
+    "Small Nonmetro Summary" = summary_stats_smallnonmetro
+  ),
+  file = "IH1_summary_statistics_4R.xlsx",
+  overwrite = TRUE
+)
+
+
+
+```
+
 
 # Histograms
 
@@ -466,7 +552,7 @@ data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logp
 
 
 ```
-# Density plots
+# Density plots- three regimes
 
 ```{r}
 #paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
@@ -522,6 +608,61 @@ for (plot in density_plots) {
 }
 ```
 
+# Density plots- four regimes
+
+```{r}
+#paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 4  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+
+
+ # Define the variables and titles
+vars = c("paam", "retention", "autonomy", "prosperity", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
+
+titles = c("Premature\n Death", "Retention", "Autonomy", "Prosperity", "%\n Manufacturing", 
+           "%\n Agriculture", 
+           "Labor \nForce\n Participation Rate", "% \nOver 65", 
+           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
+           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+
+# Function to create density plots
+create_density_plots <- function(data, vars, four_metro, my_colors, titles) {
+  plots <- list()  
+  
+  # Loop through the variable names
+  for (i in seq_along(vars)) {
+    var <- vars[i]          
+    title <- titles[i]     
+    
+    plot <- ggplot(data, aes_string(x = var, group = four_metro, 
+                                     color = paste0("as.factor(", four_metro, ")"))) +
+      geom_density() +
+      scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
+      labs(title = title,   
+           x = var,        
+           y = "Density") +
+      theme_minimal()  
+    
+    plots[[var]] <- plot  
+  }
+  
+  return(plots)  
+}
+
+
+# Call the function
+density_plots <- create_density_plots(data, vars, "four_metro", my_colors, titles)
+
+for (plot in density_plots) {
+  print(plot)
+}
+```
 
 # Maps
 
@@ -857,12 +998,20 @@ title(main = "LISA, Prosperity")
 # Models
 ```{r}
 
+# Column to delete
+column_to_delete <- "prosperity"
+
+if (column_to_delete %in% colnames(df_map)) {
+  df_map <- df_map %>%
+    select(-all_of(column_to_delete))
+}
+
+
 mi1 = df_map %>% drop_na(c(paam, retention, autonomy, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention = (retention - mean(retention, na.rm=TRUE))/sd(retention, na.rm=TRUE), autonomy = (autonomy - mean(autonomy, na.rm=TRUE))/sd(autonomy, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
 
 
 # here I'm making the prosperity index
 # in the prior chunk, we z-score the variables
-
 
 
 # first, we define the prosperity concept
