@@ -20,7 +20,9 @@ ipath <- list(
 )
 
 opath <- list(
-  naics_code_ = "data/pubdatapy/naics/code/{year}.pq"
+  naics_code_ = "data/pubdatapy/naics/code/{year}.pq",
+  population = "data/pubdata/population/population.pq",
+  price_index = "data/pubdata/bea_nipa/price_index.pq"
 )
 
 clear_outputs <- function() {
@@ -39,6 +41,8 @@ pymod$init <- function() {
   library(reticulate)
   use_condaenv("rurec")
   pymod$naics <- import("rurec.pubdata.naics")
+  pymod$population <- import("rurec.pubdata.population")
+  pymod$bea_nipa <- import("rurec.pubdata.bea_nipa")
   pymod$initialized <- TRUE
 }
 
@@ -52,14 +56,38 @@ build_naics <- function(overwrite = FALSE) {
   
   # 2-6 digit NAICS code structure
   for (year in seq(2002L, 2022L, 5L)) {
-    p <- glue(opath$naics_code_)
-    if (file.exists(p) && !overwrite) {
-      log_info("file already exists {p}")
+    cache_path <- glue(opath$naics_code_)
+    if (file.exists(cache_path) && !overwrite) {
+      log_info("file already exists {cache_path}")
     } else {
       x <- pymod$naics$get_df(year = year, kind = "code") %>%
         rename_with(str_to_lower)
-      arrow::write_parquet(x, util$mkdir(p))
-      log_info("saved to cache {p}")
+      arrow::write_parquet(x, util$mkdir(cache_path))
+      log_info("saved to cache {cache_path}")
     }
   }
 }
+
+
+# Annual county population estimates
+build_population <- function() {
+  if (!file.exists(opath$population)) {
+    pymod$init()
+    pymod$population$get_df()
+  }
+}
+
+
+# BEA price indexes from NIPA
+build_price_index <- function() {
+  cache_path <- opath$price_index
+  if (!file.exists(cache_path)) {
+    pymod$init()
+    pymod$bea_nipa$get_price_index_df() %>%
+      rownames_to_column("year") %>%
+      mutate(year = as.integer(year)) %>%
+      arrow::write_parquet(util$mkdir(cache_path))
+  }
+}
+
+

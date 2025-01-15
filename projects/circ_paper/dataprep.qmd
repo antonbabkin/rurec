@@ -1,0 +1,68 @@
+---
+title: "Circularity paper data"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    embed-resources: true
+    code-fold: true
+---
+
+
+```{r}
+library(tidyverse)
+
+ggplot2::theme_set(ggplot2::theme_minimal())
+
+source("projects/circ_paper/dataprep.R", local = (dataprep = new.env()))
+```
+
+# GDP sector shares
+
+From BEA Regional Accounts - County GDP by industry table (CAGDP2).
+
+## suppression
+
+```{r}
+x = pubdata::bea_reg_get("2022_cagdp2") %>%
+  filter(year == 2012) %>%
+  select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
+  filter(!(value_f %in% c("(NA)")))
+
+x1 = x %>%
+  filter(!str_ends(geo_fips, "000")) %>%
+  filter(ind_desc == "All industry total")
+x2 = x %>%
+  filter(!str_ends(geo_fips, "000")) %>%
+  filter(ind_code %in% c("11,21", "42,44-45", "22,48-49", "31-33,51", "23", "52,53", "54,55,56", "61,62", "71,72", "81", "92")) %>%
+  summarize(value_det = sum(value, na.rm = TRUE), .by = "geo_fips")
+x3 = left_join(x1, x2, by = "geo_fips") %>%
+  mutate(pct_covered = 100 * value_det / value)
+
+x3 %>%
+  arrange(pct_covered) %>%
+  mutate(i = 1:nrow(.)) %>%
+  ggplot() +
+  geom_line(aes(i, pct_covered)) +
+  labs(title = "% of county GDP in suppressed sectors") +
+  ylab(NULL) +
+  xlab("<<<< highest suppression <<<<   COUNTIES   >>>> no suppression >>>>")
+
+```
+
+## distribution of sector shares
+
+```{r, fig.width=8, fig.height=6}
+x = dataprep$gdp_by_sector()
+
+x %>%
+  filter(sector != "tot") %>%
+  ggplot() +
+  geom_histogram(aes(share * 100), bins = 30) +
+  facet_wrap("sector_desc") +
+  labs(title = "Distribution of sector activity across counties") +
+  xlab("Sector's % share in county GDP") +
+  ylab("Number of counties")
+```
+
+
