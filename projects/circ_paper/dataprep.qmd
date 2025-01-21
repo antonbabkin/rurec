@@ -21,48 +21,306 @@ source("projects/circ_paper/dataprep.R", local = (dataprep = new.env()))
 
 From BEA Regional Accounts - County GDP by industry table (CAGDP2).
 
-## suppression
+## Industry classification
+
+```
+line_code	industry	ind_desc
+1		All industry total
+2		Private industries
+3	11	Agriculture, forestry, fishing and hunting
+6	21	Mining, quarrying, and oil and gas extraction
+10	22	Utilities
+11	23	Construction
+12	31-33	Manufacturing
+13	321,327-339	Durable goods manufacturing
+25	311-316,322-326	Nondurable goods manufacturing
+34	42	Wholesale trade
+35	44-45	Retail trade
+36	48-49	Transportation and warehousing
+45	51	Information
+50	52,53	Finance, insurance, real estate, rental, and leasing
+51	52	Finance and insurance
+56	53	Real estate and rental and leasing
+59	54,55,56	Professional and business services
+60	54	Professional, scientific, and technical services
+64	55	Management of companies and enterprises
+65	56	Administrative and support and waste management and remediation services
+68	61,62	Educational services, health care, and social assistance
+69	61	Educational services
+70	62	Health care and social assistance
+75	71,72	Arts, entertainment, recreation, accommodation, and food services
+76	71	Arts, entertainment, and recreation
+79	72	Accommodation and food services
+82	81	Other services (except government and government enterprises)
+83	92	Government and government enterprises
+87	11,21	Natural resources and mining
+88	42,44-45	Trade
+89	22,48-49	Transportation and utilities
+90	31-33,51	Manufacturing and information
+91		Private goods-producing industries
+92		Private services-providing industries
+```
 
 ```{r}
-x = pubdata::bea_reg_get("2022_cagdp2") %>%
+line_code_sums = list(
+  "tot" = c("1", "2", "83"),
+  "priv" = c("2", "91", "92"),
+  "good" = c("91", "87", "11", "12"),
+  "11,21" = c("87", "3", "6"),
+  "31-33" = c("12", "13", "25"),
+  "srvc" = c("92", "89", "88", "45", "50", "59", "68", "75", "82"),
+  "22,48-49" = c("89", "10", "36"),
+  "42,44-45" = c("88", "34", "35"),
+  "52,53" = c("50", "51", "56"),
+  "54,55,56" = c("59", "60", "64", "65"),
+  "61,62" = c("68", "69", "70"),
+  "71,72" = c("75", "76", "79"),
+  "31-33,51" = c("90", "12", "45")
+)
+
+df_nation =
+  pubdata::bea_reg_get("2022_cagdp2") %>%
   filter(year == 2012) %>%
   select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
-  filter(!(value_f %in% c("(NA)")))
+  mutate(line_code = as.character(line_code)) %>%
+  filter(geo_fips == "00000")
 
-x1 = x %>%
-  filter(!str_ends(geo_fips, "000")) %>%
-  filter(ind_desc == "All industry total")
-x2 = x %>%
-  filter(!str_ends(geo_fips, "000")) %>%
-  filter(ind_code %in% c("11,21", "42,44-45", "22,48-49", "31-33,51", "23", "52,53", "54,55,56", "61,62", "71,72", "81", "92")) %>%
-  summarize(value_det = sum(value, na.rm = TRUE), .by = "geo_fips")
-x3 = left_join(x1, x2, by = "geo_fips") %>%
-  mutate(pct_covered = 100 * value_det / value)
 
-x3 %>%
-  arrange(pct_covered) %>%
-  mutate(i = 1:nrow(.)) %>%
-  ggplot() +
-  geom_line(aes(i, pct_covered)) +
-  labs(title = "% of county GDP in suppressed sectors") +
-  ylab(NULL) +
-  xlab("<<<< highest suppression <<<<   COUNTIES   >>>> no suppression >>>>")
+line_code_sums %>%
+  map(\(lc) {
+    x = df_nation %>%
+      column_to_rownames("line_code") %>%
+      select(ind_code, ind_desc, value)
+    x = x[lc, ]
+    tot = lc[1]
+    x[-1, "pct"] = 100 * x[-1, "value"] / x[1, "value"]
+    x[1, "pct"] = sum(x[-1, "pct"])
+    x
+  })
 
 ```
 
-## distribution of sector shares
+
+
+# descriptives
+
+```{r}
+df_stcty =
+  pubdata::bea_reg_get("2022_cagdp2") %>%
+  filter(year == 2012) %>%
+  select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
+  mutate(
+    geo_st = str_sub(geo_fips, 1, 2),
+    geo = case_when(
+      geo_fips == "00000" ~ "nat",
+      as.numeric(geo_st) %in% 91:98 ~ "reg",
+      str_sub(geo_fips, 3, 5) == "000" ~ "st",
+      .default = "cty"),
+    line_code = as.character(line_code)
+  ) %>%
+  filter(geo %in% c("st", "cty"))
+
+df_stcty %>%
+  count(geo, value_f)
+```
+
+
 
 ```{r, fig.width=8, fig.height=6}
 x = dataprep$gdp_by_sector()
 
 x %>%
   filter(sector != "tot") %>%
+  mutate(suppressed = factor(suppressed, c(TRUE, FALSE))) %>%
   ggplot() +
-  geom_histogram(aes(share * 100), bins = 30) +
+  geom_histogram(aes(share * 100, fill = suppressed), bins = 30) +
   facet_wrap("sector_desc") +
   labs(title = "Distribution of sector activity across counties") +
   xlab("Sector's % share in county GDP") +
-  ylab("Number of counties")
+  ylab("Number of counties") +
+  theme(legend.position = "inside", legend.position.inside = c(0.8, 0.2))
+
+
 ```
 
+
+
+# County-industry GDP imputation
+
+DOES NOT WORK. Left for archival purposes.
+
+This is an unsuccessful attempt to impute suppressed values using a simple proportional rule:
+Cell's value is proportional to county and industry share in the sum of suppressed cells in a single state-sector group.
+The algorithm leads to unfeasible negative values after the first step.
+
+```{r}
+f_reldif = function(x, y) {
+  abs(x - y) * 2 / (x + y)
+}
+
+df_stcty =
+  pubdata::bea_reg_get("2022_cagdp2") %>%
+  filter(year == 2012) %>%
+  select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
+  mutate(
+    geo_st = str_sub(geo_fips, 1, 2),
+    geo = case_when(
+      geo_fips == "00000" ~ "nat",
+      as.numeric(geo_st) %in% 91:98 ~ "reg",
+      str_sub(geo_fips, 3, 5) == "000" ~ "st",
+      .default = "cty"),
+    line_code = as.character(line_code)
+  ) %>%
+  filter(geo %in% c("st", "cty"))
+
+df_stcty %>%
+  filter(geo == "st", line_code == "1")
+
+# delaware
+df_stcty %>%
+  filter(geo_st == "10")
+
+```
+
+
+## step 1: top level industry group
+
+This works, and the algorithm seems to be implemented correctly.
+Imputed values are then used as totals for the next iteration step.
+
+```{r}
+df_stcty_imp = df_stcty
+
+codes = line_code_sums[["priv"]]
+
+df_imp = df_stcty_imp %>%
+  filter(line_code %in% codes) %>%
+  mutate(ind = if_else(line_code == codes[1], "top", "sub")) %>%
+  # sums in missing cells from industry adding-up condition
+  mutate(
+    ind_tot = sum(if_else(ind == "top", value, 0), na.rm = TRUE),
+    ind_notna_sum = sum(if_else(ind == "sub", value, 0), na.rm = TRUE), 
+    ind_na_sum = ind_tot - ind_notna_sum,
+    .by = "geo_fips"
+  ) %>%
+  # sums in missing cells from geographic adding-up condition
+  mutate(
+    geo_tot = sum(if_else(geo == "st", value, 0), na.rm = TRUE),
+    geo_notna_sum = sum(if_else(geo == "cty", value, 0), na.rm = TRUE),
+    geo_na_sum = geo_tot - geo_notna_sum,
+    .by = c("geo_st", "line_code")
+  ) %>%
+  filter(value_f == "(D)") %>%
+  select(geo_st, geo_fips, line_code, geo_na_sum, ind_na_sum) %>%
+  # total in state-sector missing cells, sum of geographic totals
+  mutate(
+    na_tot = sum(geo_na_sum),
+    .by = "geo_fips"
+  ) %>%
+  # total in state-sector missing cells, sum of industry totals
+  mutate(
+    na_tot_ind = sum(ind_na_sum),
+    .by = c("geo_st", "line_code")
+  ) %>%
+  # check: sum across industries must equal sum across counties
+  mutate(
+    check1 = f_reldif(na_tot, na_tot_ind),
+    .by = "geo_st"
+  ) %>%
+  # proportional imputation
+  mutate(value_imp = geo_na_sum * ind_na_sum / na_tot) %>%
+  # check: sum of imputed values equals total in state-sector missing cells
+  mutate(
+    imp_sum = sum(value_imp),
+    check2 = f_reldif(imp_sum, na_tot),
+    .by = "geo_st"
+  )
+
+stopifnot(all(df_imp$check1 < 1e-5))
+stopifnot(all(df_imp$check2 < 1e-5))
+
+df_stcty_imp1 = df_stcty_imp %>%
+  left_join(select(df_imp, geo_fips, line_code, value_imp), by = c("geo_fips", "line_code")) %>%
+  mutate(
+    value_f = if_else(is.na(value) & !is.na(value_imp), paste0("IMP-", codes[1]), value_f),
+    value = if_else(is.na(value) & !is.na(value_imp), value_imp, value)
+  ) %>%
+  select(!value_imp)
+
+
+```
+
+## step 2: level below top
+
+Then there is a problem.
+Imputed higher level industry values from step 1 are sometimes smaller than the sum of underlying parts, leading to negative calculations of suppressed sums.
+Thus, the iterative approach of going down the classification hierarchy will not work, all constraints should be solved for simultaneously.
+
+```{r}
+codes = line_code_sums[["good"]]
+
+df_imp = df_stcty_imp1 %>%
+  filter(line_code %in% codes) %>%
+  mutate(ind = if_else(line_code == codes[1], "top", "sub")) %>%
+  # sums in missing cells from industry adding-up condition
+  mutate(
+    ind_tot = sum(if_else(ind == "top", value, 0), na.rm = TRUE),
+    ind_notna_sum = sum(if_else(ind == "sub", value, 0), na.rm = TRUE), 
+    ind_na_sum = ind_tot - ind_notna_sum,
+    .by = "geo_fips"
+  ) %>%
+  # sums in missing cells from geographic adding-up condition
+  mutate(
+    geo_tot = sum(if_else(geo == "st", value, 0), na.rm = TRUE),
+    geo_notna_sum = sum(if_else(geo == "cty", value, 0), na.rm = TRUE),
+    geo_na_sum = geo_tot - geo_notna_sum,
+    .by = c("geo_st", "line_code")
+  ) %>%
+  filter(value_f == "(D)") %>%
+  select(geo_st, geo_fips, line_code, geo_na_sum, ind_na_sum) %>%
+  # total in state-sector missing cells, sum of geographic totals
+  mutate(
+    na_tot = sum(geo_na_sum),
+    .by = "geo_fips"
+  ) %>%
+  # total in state-sector missing cells, sum of industry totals
+  mutate(
+    na_tot_ind = sum(ind_na_sum),
+    .by = c("geo_st", "line_code")
+  ) %>%
+  # check: sum across industries must equal sum across counties
+  mutate(
+    check1 = f_reldif(na_tot, na_tot_ind),
+    .by = "geo_st"
+  ) %>%
+  # proportional imputation
+  mutate(value_imp = geo_na_sum * ind_na_sum / na_tot) %>%
+  # check: sum of imputed values equals total in state-sector missing cells
+  mutate(
+    imp_sum = sum(value_imp),
+    check2 = f_reldif(imp_sum, na_tot),
+    .by = "geo_st"
+  )
+
+stopifnot(all(df_imp$check1 < 1e-5))
+stopifnot(all(df_imp$check2 < 1e-5))
+
+df_stcty_imp2 = df_stcty_imp1 %>%
+  left_join(select(df_imp, geo_fips, line_code, value_imp), by = c("geo_fips", "line_code")) %>%
+  mutate(
+    value_f = if_else(is.na(value) & !is.na(value_imp), paste0("IMP-", codes[1]), value_f),
+    value = if_else(is.na(value) & !is.na(value_imp), value_imp, value)
+  ) %>%
+  select(!value_imp)
+
+df_imp %>%
+  filter(check1 > 1e-5)
+
+df_stcty_imp2 %>%
+  filter(value < 0)
+
+df_stcty_imp2 %>%
+  filter(geo_fips == "01033")
+
+```
 

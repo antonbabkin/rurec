@@ -91,9 +91,10 @@ params = list(
   base_year = 2010,
   end_year = 2019,
   outcome_vars = c("establishment_gr", "employment_gr", "payroll_gr", "wage_gr"),
-  control_vars = c("log_pop", "sh_afm", "sh_mfg", "sh_tr", "sh_svc", "sh_gov"),
+  control_vars = c("log_pop", "sh_ag", "sh_mine", "sh_mfg", "sh_fire", "sh_prof"),
+  control_sup_vars = c("sup_ag", "sup_mine", "sup_mfg", "sup_fire", "sup_prof"),
   rural = "m",
-  spreg = FALSE # estimate spatial regression models (slow)
+  spreg = TRUE # estimate spatial regression models (slow)
 )
 
 # Rural Definitions
@@ -192,9 +193,15 @@ df_population <- pubdatapy$opath$population %>%
   select(place, pop, log_pop)
 
 # GDP sector shares
-df_sector <- dataprep$gdp_by_sector() %>%
+df_sector <-
+  dataprep$gdp_by_sector() %>%
   filter(sector != "tot") %>%
-  pivot_wider(id_cols = place, names_from = sector, names_prefix = "sh_", values_from = share)
+  {inner_join(
+    pivot_wider(., id_cols = place, names_from = sector, names_prefix = "sh_", values_from = share),
+    pivot_wider(., id_cols = place, names_from = sector, names_prefix = "sup_", values_from = suppressed),
+    by = "place"
+  )}
+  
 
 # full cross-sectional dataframe 
 df_full <- df_geo %>%
@@ -216,7 +223,7 @@ df_full[["rural"]] <- df_full[[paste0("rural_", params$rural)]]
 # Main analytical dataframe: all variables non-missing
 df_main <- df_full %>%
   st_drop_geometry() %>%
-  select(place, starts_with("rural"), all_of(c(params$outcome_vars, params$circ_indicators, params$control_vars))) %>%
+  select(place, starts_with("rural"), all_of(c(params$outcome_vars, params$circ_indicators, params$control_vars, params$control_sup_vars))) %>%
   drop_na()
 
 df_full[["smp_main"]] <- (df_full$place %in% df_main$place)
@@ -399,7 +406,6 @@ Maps show spatial clustering.
 ```{r}
 # maps for all 8 circularity indicators
 
-
 df_full %>% 
   shift_geometry() %>% {(
   for (circ_measure in params$circ_indicators) {(
@@ -467,25 +473,65 @@ c(params$circ_indicators, params$outcome_vars, params$control_vars) %>%
 
 ## Correlates of Circularity
 
-- County population and industry shares are highly statistically significant predictors of circularity indicators.
 - Bigger counties have higher circularity and more imports than exports.
-- Industry shares:
-  - TODO after data revision
+- Industry shares are highly statistically significant predictors of circularity indicators.
+- Industry effects are difficult to interpret, because each has both demand and supply effects on circularity calculation.
+But this exercise justifies including industry shares as controls in the main analysis.
+
 
 ```{r}
-params$circ_indicators %>%
-  set_names(sub("_", " ", .)) %>%
-  map(\(x) {
-    f = as.formula(paste(x, "~ log_pop + sh_afm + sh_mfg + sh_tr + sh_svc + sh_gov"))
-    lm_robust(f, data = df_main)
-    }) %>%
+result_regcirc = expand_grid(
+  circularity = params$circ_indicators,
+  sup = c(FALSE, TRUE)
+) %>%
+  pmap(function(...) {
+    row = list(...)
+    f = paste0(
+      row$circularity,
+      " ~ ",
+      paste(params$control_vars, collapse = " + "),
+      if (row$sup) paste(c("", params$control_sup_vars), collapse = " + ") else ""
+    )
+    m = lm_robust(as.formula(f), data = df_main)
+    # return single-row table with specs, formula and model object
+    tibble(..., formula = f, model = list(m))
+  }) %>%
+  bind_rows()
+
+result_regcirc %>%
+  filter(!sup) %>%
+  pull(model, name = circularity) %>%
   huxreg(statistics = c(N = "nobs", R2 = "r.squared"))
+
+```
+
+### suppression controls
+
+- Suppression indicators sometimes have significant effect, in the same direction as the share.
+This is expected as suppressed counties have positive shares.
+- Share coefficients do not differ significantly with or without suppression controls.
+
+
+```{r}
+result_regcirc %>%
+  filter(circularity %in% c("production_capacity", "trade_capacity", "retention")) %>%
+  pull(model, name = circularity) %>%
+  huxreg(statistics = c(N = "nobs", R2 = "r.squared"))
+
+result_regcirc %>%
+  filter(circularity %in% c("production_dependency", "trade_dependency", "autonomy")) %>%
+  pull(model, name = circularity) %>%
+  huxreg(statistics = c(N = "nobs", R2 = "r.squared"))
+
+result_regcirc %>%
+  filter(circularity %in% c("trade_balance", "trade_openness")) %>%
+  pull(model, name = circularity) %>%
+  huxreg(statistics = c(N = "nobs", R2 = "r.squared"))
+  
 ```
 
 
-
 ## Correlations
-
 
 - Share of intermediates is negatively correlated with est, emp and pay growth.
   - As outputs (production capacity) and as inputs (production dependency).
@@ -851,7 +897,7 @@ df_main %>%
 
 result_reg =
   # create a table of estimation specification combinations
-  expand.grid(
+  expand_grid(
     outcome = params$outcome_vars,
     circularity = params$circ_indicators,
     rurality = c(FALSE, TRUE),
@@ -922,9 +968,26 @@ result_regcoef %>% head()
 
 ## Circularity coefs
 
+In the full model with population and industry controls:
+
+- Retention and autonomy are the most significant coefficients out of all circularity indicators.
+- Retention and autonomy have positive effect on all outcomes
+  - Only insignificant is autonomy for employment growth, still positive.
+  - No significant difference between magnitude of the effect in rural vs urban areas.
+- Trade capacity, dependency and openness, when significant, have the same direction of the effect as retention and autonomy (more circularity = more growth).
+- Trade balance is insignificant for all outcomes.
+- Production capacity (share of intermediates in output) is negative, but almost never significant.
+- Production dependency (share of intermediates in input) has negative effect on establishment growth in urban, but positive effect on wage growth in rural.
+
+Models without controls have a lot more significance for circularity coefficients.
+Notably, the effect of retention and autonomy on wage growth is negative as seen in pairwise correlations above.
+
+
 ### with controls
 
 ```{r}
+
+r = list()
 for (var_out in params$outcome_vars) {
   x = list()
   for (var_circ in params$circ_indicators) {
@@ -935,19 +998,23 @@ for (var_out in params$outcome_vars) {
     class(x1) = "modelsummary_list"
     x[[sub("_", " ", var_circ)]] = x1
   }
-  msummary(x, output = "huxtable", stars = TRUE) %>%
-    set_caption(var_out) %>%
-    print()
-
+  r[[var_out]] = msummary(x, output = "huxtable", stars = TRUE) %>%
+    set_caption(var_out)
 }
+
+r$establishment_gr
+r$employment_gr
+r$payroll_gr
+r$wage_gr
+
 ```
 
 
 ### without controls
 
-
-
 ```{r}
+
+r = list()
 for (var_out in params$outcome_vars) {
   x = list()
   for (var_circ in params$circ_indicators) {
@@ -958,11 +1025,15 @@ for (var_out in params$outcome_vars) {
     class(x1) = "modelsummary_list"
     x[[sub("_", " ", var_circ)]] = x1
   }
-  msummary(x, output = "huxtable", stars = TRUE) %>%
-    set_caption(var_out) %>%
-    print()
-
+  r[[var_out]] = msummary(x, output = "huxtable", stars = TRUE) %>%
+    set_caption(var_out)
 }
+
+r$establishment_gr
+r$employment_gr
+r$payroll_gr
+r$wage_gr
+
 ```
 
 
@@ -970,13 +1041,13 @@ for (var_out in params$outcome_vars) {
 
 ### controls
 
-This will be shown later across all models, but this example illustrates the significant effect that population and industry share controls have on results.
-With controls, retention effect on employment growth become insignificant, and effect on wage growth changes from negative to positive.
+This example illustrates the significant effect that population and industry share controls have on results.
+With controls, retention effect on employment growth becomes weaker, while effect on wage growth changes from negative to positive.
 
 
 ```{r}
 x = result_reg %>%
-  filter(outcome %in% c("employment_gr", "wage_gr"), circularity == "retention") %>%
+  filter(outcome %in% c("employment_gr", "wage_gr"), circularity == "retention", !rurality) %>%
   arrange_ord(outcome = "asis", rurality = "asis", controls = "asis") %>%
   pull(model, name = outcome)
 
@@ -1004,7 +1075,7 @@ x %>%
 
 ### circularity by outcome
 
-For reference. See coefficient tables below.
+For reference.
 
 ```{r}
 for (circ_var in params$circ_indicators) {
@@ -1021,11 +1092,13 @@ for (circ_var in params$circ_indicators) {
 
 ### outcome by circularity
 
-For reference. See coefficient tables below.
+For reference.
 
 ```{r}
+r = list()
 for (v_out in params$outcome_vars) {
-  result_reg %>%
+  r[[v_out]] = 
+    result_reg %>%
     filter(rurality, controls, outcome == v_out) %>%
     pull(model, name = circularity) %>%
     map(function(m) {
@@ -1036,10 +1109,45 @@ for (v_out in params$outcome_vars) {
     }) %>%
     huxreg(coefs = c("(Intercept)", "non-metro", "circularity", "circularity:non-metro", params$control_vars),
            statistics = c(N = "nobs", R2 = "r.squared")) %>%
-    set_caption(paste("Outcome: ", v_out)) %>%
-    print()
+    set_caption(paste("Outcome: ", v_out))
 }
 
+r$establishment_gr
+r$employment_gr
+r$payroll_gr
+r$wage_gr
+
+
+```
+
+## Industry share suppression
+
+Including suppression controls in the regressions does not meaningfully affect main coefficient estimates.
+
+```{r}
+x1 = result_reg %>%
+  filter(rurality, controls)
+
+x2 = x1 %>%
+  select(!model) %>%
+  pmap(function(formula, ...) {
+    f = paste(formula, paste(c("", params$control_sup_vars), collapse = " + "))
+    m = lm_robust(as.formula(f), data = df_main)
+    tibble(formula = f, ..., model = list(m))
+  }) %>%
+  bind_rows()
+
+result_regsup =
+  bind_rows(
+    list(`FALSE` = x1, `TRUE` = x2),
+    .id = "sup")
+
+result_regsup %>%
+  arrange_ord(outcome = "asis", sup = c(FALSE, TRUE)) %>%
+  # choose which models to show
+  filter(circularity == "retention") %>%
+  pull(model, name = outcome) %>%
+  huxreg(statistics = c(N = "nobs", R2 = "r.squared"))
 ```
 
 
@@ -1109,6 +1217,8 @@ if (params$spreg) {
 
 ## Rural definitions
 
+For reference.
+
 
 ```{r}
 #| output: false
@@ -1121,7 +1231,9 @@ result_rureg = expand.grid(
 ) %>%
   pmap(function(...) {
     row = list(...)
-    f = paste0(row$outcome, " ~ ", row$circularity, " * rural_", row$rural_def, " + log_pop + sh_afm + sh_mfg + sh_tr + sh_svc + sh_gov")
+    f = paste0(
+      row$outcome, " ~ ", row$circularity, " * rural_", row$rural_def, 
+      paste(c("", params$control_vars), collapse = " + "))
     m = lm_robust(as.formula(f), data = df_main)
     tibble(..., formula = f, model = list(m))
   }) %>%
@@ -1245,6 +1357,7 @@ for (v_bin in c("production_capacity", "production_dependency")) {
 
 ```
 
+
 ## regressions
 
 
@@ -1271,7 +1384,7 @@ result_intreg = expand_grid(
       " ~ ",
       row$circularity,
       if (row$interact) paste0(" * ", row$share_var) else "",
-      " + log_pop + log_pop + sh_afm + sh_mfg + sh_tr + sh_svc + sh_gov"
+      paste(c("", params$control_vars), collapse = " + ")
     )
     m = lm_robust(as.formula(f), data = df_main)
     tibble(..., formula = f, model = list(m))
@@ -1283,15 +1396,21 @@ result_intreg$model[[1]] %>% huxreg()
 
 
 ```{r}
+r = list()
 for (v_circ in c("trade_capacity", "retention", "trade_dependency", "autonomy")) {
-  result_intreg %>%
+  r[[v_circ]] =
+    result_intreg %>%
     filter(circularity == v_circ) %>%
     arrange_ord(outcome = "asis", interact = c(FALSE, TRUE)) %>%
     pull(model, name = outcome) %>%
     huxreg(statistics = c(N = "nobs", R2 = "r.squared"), omit_coefs = c("(Intercept)", params$control_vars)) %>%
-    set_caption(paste("Circularity variable:", v_circ)) %>%
-    print()
+    set_caption(paste("Circularity variable:", v_circ))
 }
+
+r$trade_capacity
+r$retention
+r$trade_dependency
+r$autonomy
 ```
 
 
