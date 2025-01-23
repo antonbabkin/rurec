@@ -1,0 +1,50 @@
+---
+title: "Circularity Shiny Dashboard - data preparation"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(arrow)
+library(tigris)
+library(sf)
+
+options(tigris_use_cache = TRUE)
+
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/circularity.R", local = (circularity <- new.env()))
+
+```
+
+
+```{r}
+
+df_osd = 
+  place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  mutate(
+    sec_code = str_sub(com_code, 1, 2),
+    sec_code = ordered(
+      case_match(
+        sec_code,
+        c("11", "21") ~ "AFM",
+        c("31", "32", "33") ~ "MFG",
+        c("52", "53") ~ "FIRE",
+        c("54", "55", "56") ~ "PROF",
+        .default = "OTHER"),
+      levels = c("AFM", "MFG", "FIRE", "PROF", "OTHER")
+  )) %>%
+  summarize(across(c(output, supply, demand), sum), .by = c("place", "sec_code")) %>%
+  pivot_longer(c(output, supply, demand))
+
+df_cir = circularity$circularity_indicators(2012, "cbp_imp")
+df_cir =
+  counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  rename_with(tolower) %>%
+  select(place = geoid, name) %>%
+  inner_join(df_cir, by = "place")
+
+saveRDS(list(osd = df_osd, cir = df_cir), "projects/circ_dash/circ_shiny.rds")
+
+```
+
+
