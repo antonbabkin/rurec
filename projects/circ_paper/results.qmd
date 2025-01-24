@@ -111,12 +111,22 @@ params = list(
 if (FALSE) {
 
   source("R/basic_utilities.R", local = (util <- new.env()))
-    
-  ipath = c(pubdatapy$opath, geography$opath, place_io$opath, cbp$opath)
+  
+  # list of all specific data files used in the code
+  ipath = c(
+    pubdatapy$opath$price_index,
+    pubdatapy$opath$population,
+    glue(geography$opath$county_, year = params$shapefile_year, scale = "20m", geometry = TRUE),
+    glue(geography$opath$state_, scale = "20m", geometry = FALSE),
+    glue(geography$opath$cbsa_delin_, year = params$cbsa_year),
+    glue(place_io$opath$outsupdem_, year = params$circularity_year, ilevel = "det", bus_data = params$circularity_data),
+    glue(cbp$opath$cbp_, geo = "county", year = params$base_year:params$end_year, imputed = FALSE)
+  )
+  
   # create zip file with cache
-  # util$zip_pack("tmp/cache_circ_paper_results_v250115.zip", ipath)
+  # util$zip_pack("tmp/cache_circ_paper_results_v250123.zip", ipath)
   # unpack cache from zip file
-  # util$zip_unpack("tmp/cache_circ_paper_results_v250115.zip", overwrite = TRUE)
+  # util$zip_unpack("tmp/cache_circ_paper_results_v250123.zip", overwrite = TRUE)
 }
 ```
 
@@ -125,7 +135,7 @@ if (FALSE) {
 
 ```{r}
 
-df_geo <- geography$call_geog(params$shapefile_year) %>%
+df_geo <- geography$call_geog(params$shapefile_year, scale = "20m") %>%
   rename_with(tolower)
 
 
@@ -156,7 +166,7 @@ df_busdata <- list()
 for (period in c("base", "end")) {
   year <- params[[paste0(period, "_year")]]
   df_busdata[[period]] <- cbp$opath$cbp_ %>%
-    glue(geo = "county", cbp_scale = "county", imputed = FALSE) %>%
+    glue(geo = "county", year = year, imputed = FALSE) %>%
     open_dataset() %>%
     filter(naics == "") %>%
     select(est, emp, ap, place) %>%
