@@ -79,7 +79,7 @@ line_code_sums = list(
 )
 
 df_nation =
-  pubdata::bea_reg_get("2022_cagdp2") %>%
+  pubdata::get("bea_reg", "2022_cagdp2") %>%
   filter(year == 2012) %>%
   select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
   mutate(line_code = as.character(line_code)) %>%
@@ -106,7 +106,7 @@ line_code_sums %>%
 
 ```{r}
 df_stcty =
-  pubdata::bea_reg_get("2022_cagdp2") %>%
+  pubdata::get("bea_reg", "2022_cagdp2") %>%
   filter(year == 2012) %>%
   select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
   mutate(
@@ -159,7 +159,7 @@ f_reldif = function(x, y) {
 }
 
 df_stcty =
-  pubdata::bea_reg_get("2022_cagdp2") %>%
+  pubdata::get("bea_reg", "2022_cagdp2") %>%
   filter(year == 2012) %>%
   select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
   mutate(

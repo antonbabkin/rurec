@@ -30,21 +30,21 @@ param <- list(
 ```{r}
 #| output: false
 
-df_bds_met <- pubdata::bds_get("2022_met") %>%
+df_bds_met <- pubdata::get("bds", "2022_met") %>%
   mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
 
-df_bds_met_eac <- pubdata::bds_get("2022_met_eac") %>%
+df_bds_met_eac <- pubdata::get("bds", "2022_met_eac") %>%
   mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
 
-df_bds_met_ezc <- pubdata::bds_get("2022_met_ezc") %>%
+df_bds_met_ezc <- pubdata::get("bds", "2022_met_ezc") %>%
   mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
 
-df_bds_met_sec <- pubdata::bds_get("2022_met_sec") %>%
+df_bds_met_sec <- pubdata::get("bds", "2022_met_sec") %>%
   mutate(rural = case_match(metro, "M" ~ "metro", "N" ~ "non-metro"))
 
-df_ruc_2003 <- pubdata::ers_rural_get("ruc_2003")
+df_ruc_2003 <- pubdata::get("ers_rural", "ruc_2003")
 
-df_ruc_2023 <- pubdata::ers_rural_get("ruc_2023") %>%
+df_ruc_2023 <- pubdata::get("ers_rural", "ruc_2023") %>%
   mutate(name = case_match(
     attribute,
     "Population_2020" ~ "population_2020",
@@ -54,7 +54,7 @@ df_ruc_2023 <- pubdata::ers_rural_get("ruc_2023") %>%
   pivot_wider(id_cols = c("fips", "state", "county_name")) %>%
   mutate(across(c(population_2020, ruc_code_2023), as.numeric))
 
-df_bds_st_cty <- pubdata::bds_get("2022_st_cty")
+df_bds_st_cty <- pubdata::get("bds", "2022_st_cty")
 
 df_st_cty <- df_bds_st_cty %>%
   mutate(fips = paste0(st, cty), .before = "st") %>%
@@ -638,4 +638,11 @@ lm("emp_gr ~ churn * rural_2023", data = d, weights = d$emp_denom) %>%
 We can use by age tables to generate survival rates of differet business cohorts over time, including COVID years.
 Tables by metro/non-metro include detailed age groups with 1-year age bins up to age 5.
 Are survival rates are higher in rural?
+
+```{r}
+x = pubdata::get("bds", "2022_met_ea")
+x %>%
+  filter(metro == "M") %>%
+  pivot_wider(id_cols = year, names_from = eage, values_from = estabs)
+```
 

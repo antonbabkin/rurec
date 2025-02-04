@@ -19,15 +19,15 @@ To align concordance with sector-level tables, we combine codes in the concordan
 Commodity only: Scrap, used and secondhand goods; Noncomparable imports and rest-of-the-world adjustment.
 
 ```{r}
-tab_com <- pubdata::bea_io_get("2022_sup_sec_2012") %>%
+tab_com <- pubdata::get("bea_io", "2022_su_sup_sec_2012") %>%
   filter(core_matrix) %>%
   select(code = row_code, commodity = row_name) %>%
   distinct()
-tab_ind <- pubdata::bea_io_get("2022_sup_sec_2012") %>%
+tab_ind <- pubdata::get("bea_io", "2022_su_sup_sec_2012") %>%
   filter(core_matrix) %>%
   select(code = col_code, industry = col_name) %>%
   distinct()
-conc <- pubdata::bea_io_get("2022_naics") %>%
+conc <- pubdata::get("bea_io", "2022_naics") %>%
   filter(is.na(summary)) %>%
   select(code = sector, concordance = title)
 x <- full_join(tab_com, tab_ind, "code") %>%
@@ -53,6 +53,7 @@ x1 <- full_join(tab_com, tab_ind, "code") %>%
 # # after combination: everything matches
 x1 %>% filter(is.na(commodity) | is.na(industry) | is.na(concordance))
 
+
 ```
 
 
@@ -63,15 +64,15 @@ Only discrepancy is in "Used" and "Other" commodities that are not in industry.
 
 
 ```{r}
-tab_com <- pubdata::bea_io_get("2022_sup_sum_2012") %>%
+tab_com <- pubdata::get("bea_io", "2022_su_sup_sum_2012") %>%
   filter(core_matrix) %>%
   select(code = row_code, commodity = row_name) %>%
   distinct()
-tab_ind <- pubdata::bea_io_get("2022_sup_sum_2012") %>%
+tab_ind <- pubdata::get("bea_io", "2022_su_sup_sum_2012") %>%
   filter(core_matrix) %>%
   select(code = col_code, industry = col_name) %>%
   distinct()
-conc <- pubdata::bea_io_get("2022_naics") %>%
+conc <- pubdata::get("bea_io", "2022_naics") %>%
   filter(!is.na(summary), is.na(u_summary)) %>%
   select(code = summary, concordance = title)
 x <- full_join(tab_com, tab_ind, "code") %>%
@@ -90,15 +91,15 @@ Industry only: Secondary smelting and alloying of aluminum; Federal electric uti
 
 
 ```{r}
-tab_com <- pubdata::bea_io_get("2022_sup_det_2012") %>%
+tab_com <- pubdata::get("bea_io", "2022_su_sup_det_2012") %>%
   filter(core_matrix) %>%
   select(code = row_code, commodity = row_name) %>%
   distinct()
-tab_ind <- pubdata::bea_io_get("2022_sup_det_2012") %>%
+tab_ind <- pubdata::get("bea_io", "2022_su_sup_det_2012") %>%
   filter(core_matrix) %>%
   select(code = col_code, industry = col_name) %>%
   distinct()
-conc <- pubdata::bea_io_get("2022_naics") %>%
+conc <- pubdata::get("bea_io", "2022_naics") %>%
   filter(!is.na(detail)) %>%
   select(code = detail, concordance = title)
 x <- full_join(tab_com, tab_ind, "code") %>%
@@ -121,7 +122,7 @@ We combine these codes both in concordances and in I-O tables.
 
 ```{r}
 # show NAICS duplicates
-pubdata::bea_io_get("2022_naics") %>%
+pubdata::get("bea_io", "2022_naics") %>%
   filter(!is.na(naics), n() > 1, .by = naics)
 
 ```
@@ -135,15 +136,15 @@ bea_io$concordance()
 # Import
 
 ```{r}
-pubdata::bea_io_get("2022_imp_det_2012") %>% head()
+pubdata::get("bea_io", "2022_imp-bef_det_2012") %>% head()
 
 ```
 
 
 
 ```{r}
-import_table <- pubdata::bea_io_get("2022_imp_det_2012")
-use_table <- pubdata::bea_io_get("2022_use_det_2012")
+import_table <- pubdata::get("bea_io", "2022_imp-bef_det_2012")
+use_table <- pubdata::get("bea_io", "2022_mu_use-bef-pro_det_2012")
 
 df <- full_join(
   import_table %>%
@@ -193,30 +194,24 @@ for (r in 1:30) {
     labs(title = xtitle, x = NULL, y = NULL)
 }
 
-p <- patchwork::wrap_plots(ps[1:10], ncol = 2)
-ps[[1]]
-```
-
-```{r}
 for (p in ps) {
   print(p)
 }
 ```
 
 
-## Intermediate vs consumer use.
+## Intermediate vs consumer use
 
-334300	Audio and video equipment manufacturing
 
 ```{r}
-import_table <- pubdata::bea_io_get("2022_imp_det_2012")
-use_table <- pubdata::bea_io_get("2022_use_det_2012")
+import_table <- pubdata::get("bea_io", "2022_imp-bef_det_2012")
+use_table <- pubdata::get("bea_io", "2022_mu_use-bef-pro_det_2012")
 
 df <- full_join(
-  use_table %>% 
-    filter(col_name %in% c("Total Intermediate", "Total use of products")) %>%
+  use_table %>%
+    filter(col_name %in% c("Total Intermediate", "Total Commodity Output")) %>%
     pivot_wider(id_cols = c("row_code", "row_name"), names_from = col_name) %>%
-    rename(comcode = row_code, comname = row_name, use_int = `Total Intermediate`, use_tot = `Total use of products`) %>%
+    rename(comcode = row_code, comname = row_name, use_int = `Total Intermediate`, use_tot = `Total Commodity Output`) %>%
     mutate(use_int_sh = use_int / abs(use_tot)),
   import_table %>%
     filter(col_name %in% c("Imports of goods and services", "Total Intermediate")) %>%
@@ -229,8 +224,7 @@ df <- full_join(
 # fishing for a good example
 df %>%
   mutate(across(c(imp_int_sh, use_int_sh), \(x) round(x, 4))) %>%
-  filter((imp_int_sh < 0.3 | imp_int_sh > 0.7), between(use_int_sh, 0.4, 0.6)) %>%
-  View()
+  filter((imp_int_sh < 0.3 | imp_int_sh > 0.7), between(use_int_sh, 0.4, 0.6))
 
 df %>%
   mutate(across(c(imp_int_sh, use_int_sh), \(x) round(x, 4))) %>%

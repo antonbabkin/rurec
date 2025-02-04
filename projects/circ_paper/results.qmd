@@ -1183,6 +1183,7 @@ if (params$spreg) {
   result_spreg$model[[1]] %>% summary()
 }
 
+
 ```
 
 

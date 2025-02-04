@@ -180,7 +180,7 @@ concordance <- function() {
   cache_path <- glue(opath$concordance)
   if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  x0 <- pubdata::bea_io_get(glue("{bea_rev}_naics"))
+  x0 <- pubdata::get("bea_io", glue("{bea_rev}_naics"))
   
   # de-uppercase sector titles and add column that indicates industry level
   x1 <- x0 %>%
@@ -228,12 +228,8 @@ concordance <- function() {
       mutate(naics6 = if_else(is.na(code_6), naics6, code_6)) %>%
       select(!code_6)
   }
-  # this process reveals invalid naics codes, created during list expansion in pubdata
-  # until pubdata fixes this, here is a solution
-  # remove rows where naics6 was not created: naics was not found in lookup table, so it is not valid
-  # also remove temporary columns
+  # remove temporary columns
   x3 <- x3 %>%
-    filter(is.na(naics) | !is.na(naics6)) %>%
     select(!c(code_2, code_3, code_4, code_5))
   
   # tests
@@ -274,7 +270,7 @@ use_table <- function(year, ilevel = c("det", "sum", "sec")) {
   cache_path <- glue(opath$use_table_)
   if (!is.null(x <- cache$read(cache_path))) return(x)
 
-  df <- pubdata::bea_io_get(glue("{bea_rev}_su_use_{ilevel}_{year}")) %>%
+  df <- pubdata::get("bea_io", glue("{bea_rev}_su_use_{ilevel}_{year}")) %>%
     aggregate_ind_codes(ilevel)
   
   cache$write(df, cache_path)
@@ -290,7 +286,7 @@ supply_table <- function(year, ilevel = c("det", "sum", "sec")) {
   cache_path <- glue(opath$supply_table_)
   if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  df <- pubdata::bea_io_get(glue("{bea_rev}_su_sup_{ilevel}_{year}")) %>%
+  df <- pubdata::get("bea_io", glue("{bea_rev}_su_sup_{ilevel}_{year}")) %>%
     aggregate_ind_codes(ilevel)
   
   cache$write(df, cache_path)
@@ -311,7 +307,7 @@ domuse_table <- function(year, ilevel = c("det", "sum", "sec")) {
   cache_path <- glue(opath$domuse_table_)
   if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  use <- pubdata::bea_io_get(glue("{bea_rev}_mu_use-bef-pro_{ilevel}_{year}")) %>%
+  use <- pubdata::get("bea_io", glue("{bea_rev}_mu_use-bef-pro_{ilevel}_{year}")) %>%
     mutate(
       col_code = case_when(
         col_name == "Total Intermediate" ~ "T001",
@@ -321,7 +317,7 @@ domuse_table <- function(year, ilevel = c("det", "sum", "sec")) {
       )
     ) %>%
     aggregate_ind_codes(ilevel)
-  imp <- pubdata::bea_io_get(glue("{bea_rev}_imp-bef_{ilevel}_{year}")) %>%
+  imp <- pubdata::get("bea_io", glue("{bea_rev}_imp-bef_{ilevel}_{year}")) %>%
     aggregate_ind_codes(ilevel)
   
   # verify consistency of table dimensions
@@ -375,7 +371,7 @@ make_table <- function(year, ilevel = c("det", "sum", "sec")) {
   cache_path <- glue(opath$make_table_)
   if (!is.null(x <- cache$read(cache_path))) return(x)
   
-  df <- pubdata::bea_io_get(glue("{bea_rev}_mu_mak-bef_{ilevel}_{year}")) %>%
+  df <- pubdata::get("bea_io", glue("{bea_rev}_mu_mak-bef_{ilevel}_{year}")) %>%
     mutate(
       row_code = case_when(
         row_name == "Total Commodity Output" ~ "T007",

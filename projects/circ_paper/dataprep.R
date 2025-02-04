@@ -5,7 +5,7 @@ library(tidyverse)
 gdp_by_sector <- function() {
 
   x = 
-    pubdata::bea_reg_get("2022_cagdp2") %>%
+    pubdata::get("bea_reg", "2022_cagdp2") %>%
     filter(year == 2012) %>%
     select(geo_fips, geo_name, line_code, ind_code, ind_desc, value, value_f) %>%
     mutate(
