@@ -3,19 +3,80 @@ title: "Circularity Shiny Dashboard - data preparation"
 format: html
 ---
 
+# top
+
 ```{r}
+library(glue)
 library(tidyverse)
 library(arrow)
 library(tigris)
 library(sf)
+library(assertr)
 
 options(tigris_use_cache = TRUE)
 
 source("R/place_io.R", local = (place_io <- new.env()))
 source("R/circularity.R", local = (circularity <- new.env()))
+source("R/dataprep_cbp.R", local = (cbp <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+
+
+# pubdatapy$build_price_index()
+df_price_idx = pubdatapy$opath$price_index %>%
+  read_parquet() %>%
+  arrange(year) %>%
+  mutate(price_idx = gdp_price_index / last(gdp_price_index)) %>%
+  select(year, price_idx)
+
+deflate_price = function(year, x) {
+  data.frame(year, x) %>%
+    left_join(df_price_idx, "year") %>%
+    mutate(y = x / price_idx) %>%
+    pull(y)
+}
+
+
+data <- list()
 
 ```
 
+
+# Debugging shims
+
+```{r}
+input <- list(
+  circularity = "retention",
+  outcome = "emp",
+  highlight = "non-metro"
+)
+selected_sate <- \() "55"
+selected_county <- \() "55025"
+
+```
+
+
+# Geography
+
+```{r}
+
+df_shape_st <- sf::st_read("/vsizip/data/raw/geo/cb_2013_us_state_20m.zip") %>%
+  rename_with(tolower)
+df_shape_cty = counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  rename_with(tolower)
+
+data$shp_st <- df_shape_st %>%
+  select(geoid)
+
+data$st_names <- df_shape_st %>%
+  pull(name, name = "geoid")
+
+
+  
+```
+
+
+# out-sup-dem, circ
 
 ```{r}
 
@@ -38,13 +99,171 @@ df_osd =
 
 df_cir = circularity$circularity_indicators(2012, "cbp_imp")
 df_cir =
-  counties(cb = TRUE, resolution = "20m", year = 2013) %>%
-  rename_with(tolower) %>%
+  df_shape_cty %>%
   select(place = geoid, name) %>%
   inner_join(df_cir, by = "place")
 
-saveRDS(list(osd = df_osd, cir = df_cir), "projects/circ_dash/circ_shiny.rds")
+# data$osd = df_osd
+data$cir = df_cir
 
 ```
 
+
+# outcomes
+
+
+
+
+```{r}
+years <- c(2010, 2019)
+
+df_bus <-
+  years %>%
+  set_names() %>%
+  map(\(y) {
+    cbp$opath$cbp_ %>%
+      glue(geo = "county", year = y, imputed = FALSE) %>%
+      open_dataset() %>%
+      filter(naics == "") %>%
+      select(place, est, emp, pay = ap) %>%
+      collect()
+  }) %>%
+  bind_rows(.id = "year") %>%
+  mutate(year = as.numeric(year)) %>%
+  # only keep counties without suppression
+  filter(n() == 2, min(emp) > 0, .by = "place") %>%
+  mutate(pay = deflate_price(year, pay))
+
+# state aggregates
+df_bus <- df_bus %>%
+  mutate(place = paste0(str_sub(place, 1, 2), "000")) %>%
+  summarize(across(c(est, emp, pay), sum), .by = c(year, place)) %>%
+  bind_rows(df_bus)
+
+# national aggregate
+df_bus <- df_bus %>%
+  mutate(place = "00000") %>%
+  summarize(across(c(est, emp, pay), sum), .by = c(year, place)) %>%
+  bind_rows(df_bus)
+
+
+df_bus_gr <-
+  df_bus %>%
+  arrange(place, year) %>%
+  mutate(
+    across(c(est, emp, pay), \(x) 2 * (x - lag(x)) / (x + lag(x)), .names = "{.col}_gr"),
+    across(c(est, emp, pay), \(x) (x + lag(x)) / 2),
+    .by = "place"
+  ) %>%
+  filter(year == years[2]) %>%
+  select(!year)
+
+df_cbsa <-
+  geography$pubdata$get_cbsa_delin_df(2013) %>%
+  rename_with(tolower) %>%
+  select(state_code, county_code, metro_micro) %>%
+  mutate(place = paste0(state_code, county_code))
+
+  
+df_scat <-
+  df_bus_gr %>%
+  inner_join(df_cir, "place") %>%
+  mutate(st = str_sub(place, 1, 2)) %>%
+  left_join(df_cbsa, by = "place") %>%
+  mutate(metro = case_match(metro_micro, "metro" ~ TRUE, .default = FALSE))
+
+data$scat = df_scat
+
+df_scat
+```
+
+
+
+
+```{r}
+input <- list(
+  circularity = "retention",
+  outcome = "emp",
+  highlight = "metro"
+)
+selected_state <- \() "55"
+selected_county <- \() "55025"
+
+outc_var = "emp"
+
+
+df_scat %>%
+  filter(st == "55") %>%
+  ggplot() +
+  geom_point(aes(.data[[circ_var]], .data[[paste0(outc_var, "_gr")]], size = .data[[outc_var]], color = metro)) +
+  scale_color_manual(values = c("black", "gray"))
+
+
+
+
+```
+
+# data table
+
+```{r}
+
+df_cir1 <- df_cir %>%
+  st_drop_geometry() %>%
+  select(place, retention, autonomy) %>%
+  drop_na()
+
+# state aggregates
+df_cir1 <- df_cir1 %>%
+  mutate(place = paste0(str_sub(place, 1, 2), "000")) %>%
+  summarize(across(c(retention, autonomy), mean), .by = place) %>%
+  bind_rows(df_cir1)
+
+# national aggregate
+df_cir1 <- df_cir1 %>%
+  mutate(place = "00000") %>%
+  summarize(across(c(retention, autonomy), mean), .by = place) %>%
+  bind_rows(df_cir1)
+
+x1 <- df_shape_st %>%
+  st_drop_geometry() %>%
+  mutate(place = paste0(statefp, "000")) %>%
+  select(place, name, st = statefp, abbr = stusps)
+
+x2 <- counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  st_drop_geometry() %>%
+  rename_with(tolower) %>%
+  select(place = geoid, name, st = statefp) %>%
+  left_join(select(x1, st, abbr), by = "st") %>%
+  mutate(name = paste0(name, ", ", abbr))
+
+x3 <- bind_rows(
+    tibble(place = "00000", name = "United States"),
+    x1,
+    x2
+  ) %>%
+  select(place, name)
+
+
+
+data$table <-
+  df_bus_gr %>%
+  left_join(df_cir1, by = "place") %>%
+  left_join(x3, by = "place") %>%
+  select(place, name, retention, autonomy, est, est_gr, emp, emp_gr, pay, pay_gr)
+
+
+data$table
+
+```
+
+
+
+
+
+# Save data to disk
+
+```{r}
+saveRDS(data, "projects/circ_dash/circ_shiny.rds")
+
+```
 
