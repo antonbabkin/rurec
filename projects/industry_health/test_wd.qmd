@@ -1,0 +1,3109 @@
+---
+title: "Industry-Health"
+editor: source
+format:
+  html:
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code_download: yes
+params:
+  geography_year: 2013
+  focus_county: "55025"
+  map_imped_show: false
+  map_imped_shape: "gaus" # prox, power, expo, gau, hyper, bisquare
+  map_imped_param: 500 # scale parameter of the impedance function
+  econ_dynam_data: TRUE
+  basic_geog_feature: TRUE
+---
+
+# setup
+
+```{r include = FALSE}
+
+
+
+source("projects/industry_health/dataprep.R", local = (ih_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/basic_utilities.R", local = (util <- new.env()))
+
+# install.packages("vtable")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("ggplot2")
+# install.packages("stringr")
+# install.packages("spdep")
+#install.packages("tidycensus")
+# install.packages("tigris")
+# install.packages("viridis")
+# install.packages("cowplot")
+# install.packages("estimatr")
+# install.packages("huxtable")
+# #install.packages("margins")
+# install.packages(c("lmtest", "sandwich"))
+# install.packages("spatialreg")
+ # install.packages("gridExtra")
+ # install.packages("rgeoda") 
+ # install.packages("spgwr")
+ # install.packages("lavaan")
+ # install.packages("lavaanPlot")
+#install.packages("ggthemes")
+
+
+
+library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+library(cowplot)
+library(lmtest)
+library(sandwich)
+library(estimatr)
+library(huxtable)
+#library(margins)
+library(spatialreg)
+library(logger)
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+library(estimatr)
+library(Hmisc)
+library(rstatix)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+library(gridExtra)
+library(tidycensus) 
+library(rgeoda) 
+library(spgwr)
+library(lavaan)
+library(lavaanPlot)
+library(ggeffects)
+library(patchwork)
+library(ggthemes)
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(WARN)
+
+
+
+##Load Hard Coded Data Sets 
+
+##Median Age of County 2012
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_030E"
+                   ),
+                   year = 2012) %>%
+  select("place"=GEOID, "age"=estimate)
+
+##pct over 65
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_028E"
+                   ),
+                   year = 2012) %>%
+  mutate(age = estimate/100) %>%
+  select("place"=GEOID, age)
+
+
+##pct over 65
+bach = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S1501_C02_012E"
+                   ),
+                   year = 2012) %>%
+  mutate(bach = estimate/100) %>%
+  select("place"=GEOID, bach)
+
+
+
+
+##ERS County Typologies 
+
+ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypologyCodes.csv?v=8831.8") %>%
+  mutate(place = sprintf("%05d", FIPStxt)) %>%
+  select(place, "ers_ag"=Farming_2015_Update, "ers_mine"=Mining_2015.Update, "ers_mfg"=Manufacturing_2015_Update, "ers_gov"=Government_2015_Update, "ers_rec"=Recreation_2015_Update, "ers_nonsp"=Nonspecialized_2015_Update)
+
+
+
+# ##Industry Structure
+# 
+# industry = get_acs(geography = "county",
+#                    survey = "acs5",
+#                    variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
+#                                         ,"DP03_0035E","DP03_0036E","DP03_0037E"
+#                                         ,"DP03_0038E","DP03_0039E","DP03_0040E"
+#                                         ,"DP03_0041E","DP03_0042E","DP03_0043E"
+#                                         ,"DP03_0044E","DP03_0045E"
+#                    ),
+#                    year = 2012) %>%
+#   select("place"=GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
+#   select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
+
+
+# unzip datapacks
+# util$zip_unpack("tmp/datapack_bea_io_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_cbp_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_infogroup_county_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_agcen_v240709.zip", overwrite = TRUE)
+
+```
+
+```{r}
+
+# # not working
+# abc = ih_dp$call_agcensus12()
+
+agc_clean = read.delim2("data/projects/industry_health/jobs/qs.census2012.txt") #import ag census
+jobs_clean <- read_delim("data/projects/industry_health/jobs/cbp12co.txt") #import cbp
+
+agwork = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "LABOR, HIRED, GE 150 DAYS - NUMBER OF WORKERS" & DOMAIN_DESC == "TOTAL") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agwork = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agwork)
+
+
+agops = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "OPERATORS, (ALL) - NUMBER OF OPERATORS") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agops = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agops)
+
+agc = agwork %>%
+  left_join(y=agops, by="place") %>%
+  mutate(agwork = ifelse(is.na(agwork), 0, agwork), agops = ifelse(is.na(agops), 0, agwork), ag_emp = agwork + agops) %>%
+  select(place, ag_emp)
+
+jobs = jobs_clean %>%
+  filter(naics != "------") %>%
+  mutate(naicsfilt = substr(naics,3,3), place = str_c(fipstate,"",fipscty)) %>%
+  filter(naicsfilt == "-") %>%
+  mutate(naics = str_c("n","",substr(naics,1,2))) %>%
+  select(place, naics, emp) %>%
+  pivot_wider(names_from = naics, values_from = emp)
+
+jobs_temp = jobs_clean %>%
+  filter(naics == "------") %>%
+  mutate(place = str_c(fipstate,"",fipscty)) %>%
+  select(place, "cbp.tot"=emp)
+
+jobs = jobs %>%
+  left_join(y=jobs_temp, by="place") %>%
+  replace(is.na(.), 0) %>%
+  mutate(cbp.no.ag = cbp.tot - n11, n_fire = n52 + n53, n_edmed = n61 + n62, n_prof = n54 + n55) %>%
+  select(place, cbp.no.ag, "n_mine"=n22, "n_mfg"=n31, n_fire, n_edmed, n_prof) %>%
+  left_join(y=agc, by="place") %>%
+  mutate(totemp = cbp.no.ag + ag_emp, pct_ag = ag_emp/totemp, pct_mine = n_mine/totemp, pct_mfg = n_mfg/totemp, pct_fire = n_fire/totemp, pct_edmed = n_edmed/totemp, pct_prof = n_prof/totemp) %>%
+  select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed) %>%
+  mutate(pct_edmed = ifelse(pct_edmed == "Inf", NA, pct_edmed), pct_fire = ifelse(pct_fire == "Inf", NA, pct_fire))
+
+jobs2 = jobs_clean %>%
+  mutate(n2d = substr(naics,1,2)) %>%
+  mutate(filt3 = substr(naics,4,6)) %>%
+  filter(n2d == "31"|n2d == "32"|n2d == "33") %>%
+  filter(filt3 == "///") %>%
+  mutate(durable = ifelse(n2d < 33, "nondurable", "durable"), durable = ifelse((naics == "321///" | naics == "327///"), "durable", durable), place = str_c(fipstate,"",fipscty)) %>%
+  group_by(place, durable) %>%
+  dplyr::summarize(emp = sum(emp)) %>%
+  pivot_wider(names_from = durable, values_from = emp)
+
+jobs = jobs %>%
+  left_join(y=jobs2, by="place") %>%
+  mutate(pct_durable = durable/jobs, pct_nondurable = nondurable/jobs) %>%
+  select(-durable, -nondurable)
+
+```
+
+# data
+
+```{r include = FALSE}
+chr<-ih_dp$call_chr(2017) 
+
+pop<-ih_dp$call_population(2012) 
+
+data<- left_join (chr, pop, by = "place")
+
+laborforce_part_rate<-ih_dp$call_laborforce_rate(2012)
+
+data<- left_join (data, laborforce_part_rate, by = "place")
+
+unempr<-ih_dp$call_unemp_rate(2012) 
+
+data<- left_join (data, unempr, by = "place")
+
+incr<-ih_dp$call_income_rate(2012)
+
+data<- left_join (data, incr, by = "place")
+
+povr<-ih_dp$call_poverty_rate(2012) 
+
+data<- left_join (data, povr, by = "place")
+
+# edur<-ih_dp$call_highschool_attainment_rate(2012) 
+
+rucc<- ih_dp$call_ruc (2013) %>% 
+  rename(place = fips)  
+
+
+data<- left_join (data, rucc, by = "place")
+
+data = data %>% 
+mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
+       logpop = log(population))
+
+ind_struct<- ih_dp$call_industry_structure(2012)
+
+data<- left_join (data, ind_struct, by = "place")
+
+data<- left_join (data, age, by = "place")
+
+data<- left_join (data, ers, by = "place")
+
+data<- left_join (data, jobs, by = "place")
+
+data<- left_join (data, bach, by = "place")
+
+# circularity_import <- circularity$get_circularity()
+# 
+# 
+# YR = 2012
+# circu = circularity_import %>%  
+#   filter(year == YR & ilevel == "det" & bus_data == "cbp_imp") %>%
+#   select(place, retention, autonomy, excess_supply, intermediate_supply, excess_demand, intermediate_demand)
+  
+
+# data<- left_join (data, circu, by = "place")
+
+print(data)
+
+
+
+```
+
+## 7/9/24 circularity
+
+```{r}
+#circu <- ih_dp$call_circularity(2012, bus_data = "infogroup", ilevel = "det") %>%
+circu <- ih_dp$call_circularity(2012, bus_data = "cbp_imp", ilevel = "det") %>%
+  select(place, retention_calc = retention, autonomy_calc = autonomy)
+data <- left_join (data, circu, by = "place")
+```
+
+##construct alternate retention and autonomy
+
+```{r}
+
+# data <- data %>%
+#   mutate(retention_calc = 1 - (excess_supply / intermediate_supply),
+#          autonomy_calc = 1 - (excess_demand / intermediate_demand))
+# 
+# print(data)
+
+#write.csv(data, file = "IH_data.csv")
+
+```
+
+
+
+#summary statistics
+
+```{r}
+
+##summary statistics
+summary_stats = data %>% select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  get_summary_stats(, type = "common") %>% relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+summary_stats
+
+
+# 
+# 
+# retention_ones <- mean(data$retention == 1, na.rm = TRUE) * 100
+# autonomy_ones <- mean(data$autonomy == 1, na.rm = TRUE) * 100
+# 
+# print(retention_ones)
+# print(autonomy_ones)
+
+```
+
+#histograms
+
+```{r}
+data %>% select(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+
+data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
+
+
+```
+
+#maps
+
+```{r}
+
+# creating function to streamline creation of maps
+
+ipath <- list(
+  geo_county_ = glue(geo$opath$county_, year = "{year}", scale = "20m", geometry = TRUE),
+  geo_state = glue(geo$opath$state_, scale = "20m", geometry = "{geometry}")
+)
+
+ipath
+call_geo <- function() {
+  df <- geo$call_geog(params$geography_year) |>
+    rename_with(str_to_lower)
+  d <- geo$pubdata$get_state_df(FALSE) |>
+    rename_with(str_to_lower) |>
+    select(code, contiguous, bea_region_name) |>
+    rename(state_code = code)
+  df <- left_join(df, d, "state_code")
+  df
+}
+df_map = data 
+df = call_geo()
+df_map <- left_join(df, df_map, by = "place")
+
+# write.csv(df_map, file = "IH_spatial.csv")
+
+
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% shift_geometry()
+
+#install.packages("RColorBrewer")
+# library(RColorBrewer)
+ 
+ vars = list("paam", "retention_calc", "autonomy_calc", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured")
+ 
+ titles = c("Premature\n Death", "Retention", "Autonomy", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65")
+ 
+for (i in seq_along(vars)) {
+  v = vars[[i]]
+  legend_title = titles[i]
+
+ mdn = median(df_map[[v]], na.rm = TRUE)
+
+ tmap_mode("plot")
+ output = df_map %>%
+   tm_shape() +
+  tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
+               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_legend(title = legend_title, title.fontface = 2)
+
+print(output)
+
+ }
+ 
+ output = df_map %>%
+   tm_shape() +
+  tm_polygons(col = "pct_mine", n = 4, border.alpha = 0.1, style = "jenks", id = "pct_mine",
+               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+  tm_layout( legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+  tm_legend(title = "% \n Mining", title.fontface = 2)
+
+print(output)
+ 
+
+
+```
+
+```{r}
+
+# creating maps
+ # map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = FALSE)
+# map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
+# map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+# map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+# map(val = df_map$emp_to_va, title = "Employee Share of Value Added", rev_scale = FALSE)
+# map(val = df_map$emp_to_output, title = "Employee Share of Output", rev_scale = FALSE)
+# map(val = df_map$va_to_output, title = "Value Added Share of Output", rev_scale = FALSE)
+
+
+
+
+```
+
+
+#scatterplots
+
+```{r}
+
+# Full data regressions
+
+ggplot(data, aes(retention_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(data, aes(autonomy_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Autonomy",
+        y = "Premature Age Adjusted Mortality")
+
+##scatter plot of retention and autonomy (2012)
+ggplot(data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
+
+
+# Filter the data to include only "nmetro" cases
+metro_data <- subset(data, metro_nonmetro == "metro")
+
+ggplot(metro_data, aes(retention_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(metro_data, aes(autonomy_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Autonomy",
+        y = "Premature Age Adjusted Mortality")
+
+##scatter plot of retention and autonomy (2012)
+ggplot(metro_data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
+
+# Nonmetro plots
+# Filter the data to include only "nonmetro" cases
+nonmetro_data <- subset(data, metro_nonmetro == "nonmetro")
+
+ggplot(nonmetro_data, aes(retention_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(nonmetro_data, aes(autonomy_calc, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Autonomy",
+        y = "Premature Age Adjusted Mortality")
+
+##scatter plot of retention and autonomy (2012)
+ggplot(nonmetro_data, aes(autonomy_calc, retention_calc)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Autonomy (2012) and \n Retention (2012)",
+        x = "Autonomy",
+        y = "Retention")
+
+```
+
+
+
+
+#exploratory spatial data analysis
+
+```{r}
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% 
+  drop_na(paam, ypll75, retention_calc, autonomy_calc, emp_to_va, emp_to_output, va_to_output)
+
+
+nb <- poly2nb(df_map, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+
+
+```
+
+##PAAM
+###moran global paam 
+
+```{r}
+moran.test(df_map$paam,lw, zero.policy=TRUE)
+
+```
+
+
+###lisa paam
+```{r}
+df_lisa<- df_map %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['paam'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+##Retention
+###moran global retention 
+
+```{r}
+moran.test(df_map$retention_calc,lw, zero.policy=TRUE)
+
+```
+
+
+###lisa retention
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['retention_calc'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Retention")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+##Autonomy
+###moran global autonomy 
+
+```{r}
+moran.test(df_map$autonomy_calc,lw, zero.policy=TRUE)
+
+```
+
+
+###lisa autonomy
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['autonomy_calc'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Autonomy")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+# Clean models (no interact)
+```{r}
+mi1 = df_map %>% drop_na(c(paam, retention_calc, autonomy_calc, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention_calc = (retention_calc - mean(retention_calc, na.rm=TRUE))/sd(retention_calc, na.rm=TRUE), autonomy_calc = (autonomy_calc - mean(autonomy_calc, na.rm=TRUE))/sd(autonomy_calc, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
+
+```
+
+## OLS
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+ols1a1 = lm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+ols1a2 = lm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols1a1)
+summary(ols1a2)
+
+
+```
+####1a.) industry> paam
+
+```{r}
+
+ols1a3 = lm(data = mi1, paam ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+
+
+summary(ols1a3)
+
+
+
+```
+
+
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+
+ols2a1 = lm(data = mi1,  paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a1)
+
+```
+
+
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+#### print results 
+Write OLS retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "OLS_regression_results.xlsx")
+
+
+```
+
+
+
+### retention only
+#### 1.) industry > trade
+```{r}
+ols2a1 = lm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ retention_calc + pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+ols1a2 = lm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+## Sp Error
+
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols1a1 = errorsarlm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+ols1a2 = errorsarlm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a1)
+summary(ols1a2)
+```
+#### 1a.) industry > paam
+
+```{r}
+
+
+ols1a3 = errorsarlm(data = mi1, paam ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a3)
+
+```
+
+
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+
+ols2a1 = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+
+
+```
+
+
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+
+
+temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var)
+temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name))
+
+viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %>% rename("var"="name") %>%
+  filter(var != "X.Intercept.")
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+#### compare SpError to SLX
+
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+summary(slx_import)
+
+
+
+```
+
+
+#### print results 
+Write SE retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "SE_regression_results.xlsx")
+
+
+```
+
+
+
+### retention only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols2a1 = errorsarlm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ retention_calc + pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols1a2 = errorsarlm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+
+## Regime - metro/non
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+sr2a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_mfg + pct_ag + laborforce_part_rate + pct_mine + age + bach + poverty_rate + income_rate + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+```
+
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols1a1 = errorsarlm(data = sr_data, retention_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+ols1a2 = errorsarlm(data = sr_data, autonomy_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols1a1)
+summary(ols1a2)
+```
+#### 1a.) industry > paam 
+
+```{r}
+
+ols1a3 = errorsarlm(data = sr_data, paam ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+
+summary(ols1a3)
+
+
+```
+
+
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+#### 2a.) industry + trade > paam 
+
+```{r}
+
+ols2a1 = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+
+
+```
+
+
+
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+
+temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+
+
+viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+#### print results 
+Write regime retention & autonomy results to excel file 
+
+```{r}
+
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+
+# Tidy the results of each model
+tidy_ols1 <- tidy(ols1a1)
+tidy_ols2 <- tidy(ols1a2)
+tidy_ols3 <- tidy(ols1a3)
+tidy_ols4 <- tidy(ols2a)
+tidy_ols5 <- tidy(ols2a1)
+tidy_ols6 <- tidy(ols3a)
+
+
+# Add a column to identify the model
+
+tidy_ols1$model <- "Retention-Industry"
+tidy_ols2$model <- "Autonomy-Industry"
+tidy_ols3$model <- "PAAM-Industry"
+tidy_ols4$model <- "Prosp-Trade-Industry"
+tidy_ols5$model <- "PAAM-Trade-Industry"
+tidy_ols6$model <- "FULL"
+
+# Combine the tidy results into a single data frame
+tidy_results <- bind_rows(tidy_ols1, tidy_ols2, tidy_ols3, tidy_ols4, tidy_ols5, tidy_ols6)
+
+
+# Create a list of data frames to be written to different sheets
+results_list <- list(
+"Retention-Industry" = tidy_ols1,
+"Autonomy-Industry" = tidy_ols2,
+"PAAM-Industry" = tidy_ols3,
+"Prosp-Trade-Industry" = tidy_ols4,
+"PAAM-Trade-Industry" = tidy_ols5, 
+"FULL" = tidy_ols6
+)
+
+# Write the list of data frames to an Excel file
+write_xlsx(results_list, path = "SR_regression_results.xlsx")
+
+
+```
+
+
+
+
+
+### retention only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols2a1 = errorsarlm(data = sr_data, retention_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention_calc + pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols1a2 = errorsarlm(data = sr_data, autonomy_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(autonomy_calc + pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+## Structural equation (no interact)
+### retention & autonomy
+#### 1.) aspatial, no residual covariances
+```{r}
+
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+
+
+
+```
+
+
+#### 2.) aspatial, residual covariances
+```{r}
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+```
+
+
+##### 2a.) spatial autocorrelation
+
+```{r}
+
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+mi1_spa = mi2
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi2) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi1_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro"))
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi1_spa2 <- cbind(mi1_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi1_spa2$r_paam
+
+w <- queen_weights(mi1_spa2)
+nb <- poly2nb(mi1_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi1_spa2$r_paam,lw, zero.policy=TRUE)
+
+```
+
+
+#### 3.) SLX, no residual covariances
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+mi3 = mi1 %>%
+  mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc, 
+         lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine, 
+         lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate, 
+         lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach, 
+         lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate, 
+         lag.logpop = slx_import$model$lag.logpop, lag.metro = slx_import$model$lag.metro, 
+         lag.uninsured = slx_import$model$lag.uninsured
+         )
+
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+
+
+
+```
+
+
+
+
+#### 4.) SLX, residual covariances
+```{r}
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+##### 4a.) sp autocorrelation
+
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi3_spa = mi3 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+model5_spa <- '
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ prosperity
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ prosperity
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit_spa <- sem(model5_spa, data = mi3_spa) 
+summary(model5.fit_spa, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5_spa, data=mi3_spa)
+
+sem_pvy = lavPredictY(fit, ynames = c("paam"),
+                 xnames = c("logpop", "retention_calc", "autonomy_calc", "uninsured", "age", "prosperity", "pct_mfg", "pct_ag", "pct_mine", "metro", "lag.pct_mfg", "lag.pct_ag", "lag.pct_mine", "lag.retention_calc", "lag.autonomy_calc","lag.logpop", "lag.laborforce_part_rate","lag.poverty_rate","lag.bach","lag.income_rate", "lag.age", "lag.metro","lag.uninsured"))
+
+
+
+
+
+sem_pvy2 = as.data.frame(sem_pvy)
+sem_pvy3 = sem_pvy2$paam
+
+mi3_spa2 <- cbind(mi3_spa, sem_pvy) %>%
+  mutate(r_paam = paam - paam.1)
+
+temp = mi3_spa2$r_paam
+
+w <- queen_weights(mi3_spa2)
+nb <- poly2nb(mi3_spa2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(mi3_spa2$r_paam,lw, zero.policy=TRUE)
+
+```
+
+
+
+
+# Clean models (interact)
+## OLS
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+ols1a1 = lm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+ols1a2 = lm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols1a1)
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+### retention only
+#### 1.) industry > trade
+```{r}
+ols2a1 = lm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+ols1a2 = lm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+
+ols2a = lm(data = mi2, prosperity ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+ols3a = lm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+## Sp Error
+
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols1a1 = errorsarlm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+ols1a2 = errorsarlm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a1)
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+### retention only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols2a1 = errorsarlm(data = mi1, retention_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols1a2 = errorsarlm(data = mi1, autonomy_calc ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = mi2, prosperity ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+ols3a = errorsarlm(data = mi1, paam ~ autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured,
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+
+## Regime - metro/non
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+sr2a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_mfg + pct_ag + laborforce_part_rate + pct_mine + age + bach + poverty_rate + income_rate + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+```
+
+### retention & autonomy
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols1a1 = errorsarlm(data = sr_data, retention_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+ols1a2 = errorsarlm(data = sr_data, autonomy_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols1a1)
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+### retention only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols2a1 = errorsarlm(data = sr_data, retention_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a1)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention_calc + pct_ag + pct_mine + pct_mfg + retention_calc*pct_ag + retention_calc*pct_mine + retention_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+
+### autonomy only
+#### 1.) industry > trade
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols1a2 = errorsarlm(data = sr_data, autonomy_calc ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols1a2)
+```
+
+#### 2.) industry + trade > prosperity
+```{r}
+
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+mi2 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+nb <- poly2nb(mi2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi2 %>% mutate(sr = metro_nonmetro)
+
+ols2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + logpop + metro),
+                  lw, zero.policy = TRUE)
+
+summary(ols2a)
+```
+
+#### 3.) full
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(autonomy_calc + pct_ag + pct_mine + pct_mfg + autonomy_calc*pct_ag + autonomy_calc*pct_mine + autonomy_calc*pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(ols3a)
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, aggregate LQI")
+legend('bottomleft', legend = lisa_labels, fill = lisa_colors)
+```
+
+
+## Structural equation (interact)
+### retention & autonomy
+#### 1.) aspatial, no residual covariances
+```{r}
+
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi1)
+
+
+
+```
+
+
+#### 2.) aspatial, residual covariances
+```{r}
+model5 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine + age + metro + uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+  
+'
+
+model5.fit <- sem(model5, data = mi1) 
+summary(model5.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model5, data=mi2)
+```
+
+
+#### 3.) SLX, no residual covariances
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+slx_import = lmSLX(data = mi1, paam ~ retention_calc + autonomy_calc + pct_ag + pct_mine + pct_mfg + laborforce_part_rate + age + bach + poverty_rate + income_rate + logpop + metro + uninsured, lw, zero.policy=TRUE)
+
+mi3 = mi1 %>%
+  mutate(lag.retention_calc = slx_import$model$lag.retention_calc, lag.autonomy_calc = slx_import$model$lag.autonomy_calc, 
+         lag.pct_ag = slx_import$model$lag.pct_ag, lag.pct_mine = slx_import$model$lag.pct_mine, 
+         lag.pct_mfg = slx_import$model$lag.pct_mfg, lag.laborforce_part_rate = slx_import$model$lag.laborforce_part_rate, 
+         lag.age = slx_import$model$lag.age, lag.bach = slx_import$model$lag.bach, 
+         lag.poverty_rate = slx_import$model$lag.poverty_rate, lag.income_rate = slx_import$model$lag.income_rate, 
+         lag.logpop = slx_import$model$lag.logpop, lag.metro = slx_import$model$lag.metro, 
+         lag.uninsured = slx_import$model$lag.uninsured
+         )
+
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+
+
+
+```
+
+
+
+
+#### 4.) SLX, residual covariances
+```{r}
+model6 <- '
+  prosperity2 =~ laborforce_part_rate + poverty_rate + bach + income_rate
+
+  retention_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  autonomy_calc ~ pct_mfg + pct_ag + pct_mine + lag.pct_mfg + lag.pct_ag + lag.pct_mine
+  prosperity2 ~ pct_mfg + pct_ag + pct_mine + a*retention_calc + autonomy_calc + logpop + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop
+  paam ~ logpop + b*prosperity2 + pct_mfg + pct_ag + pct_mine + c*retention_calc + autonomy_calc + retention_calc:pct_mfg + retention_calc:pct_ag + retention_calc:pct_mine + autonomy_calc:pct_mfg + autonomy_calc:pct_ag + autonomy_calc:pct_mine  + age + metro + uninsured + lag.pct_mfg + lag.pct_ag + lag.pct_mine + lag.retention_calc + lag.autonomy_calc + lag.logpop + lag.laborforce_part_rate + lag.poverty_rate + lag.bach + lag.income_rate + lag.age + lag.metro + lag.uninsured
+  
+  # indirect (a*b)
+  ab := a*b
+  
+  # total
+  total := c + (a*b)
+  
+   
+  metro ~~ poverty_rate
+  metro ~~ bach
+  metro ~~ income_rate
+  metro ~~ pct_mfg
+  metro ~~ pct_ag
+  metro ~~ pct_mine
+  metro ~~ retention_calc
+  metro ~~ autonomy_calc
+  metro ~~ logpop
+  metro ~~ age
+  metro ~~ uninsured
+  logpop ~~ poverty_rate
+  logpop ~~ bach
+  logpop ~~ income_rate
+  logpop ~~ pct_mfg
+  logpop ~~ pct_ag
+  logpop ~~ pct_mine
+  logpop ~~ retention_calc
+  logpop ~~ autonomy_calc
+  logpop ~~ age
+  logpop ~~ uninsured
+  retention_calc ~~ autonomy_calc
+  
+'
+
+model6.fit <- sem(model6, data = mi3) 
+summary(model6.fit, rsq = TRUE, fit.measures = TRUE, standardized = TRUE) 
+
+fit <- cfa(model6, data=mi3)
+
+
+```
+
+
+
+
+
+# Output viz
+
+```{r, fig.width=10}
+
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
+
+
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-0.4, 0.53) +
+  geom_hline(yintercept = 0) +
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
+
+plot1
+
+```
+
+
+```{r, fig.width=10}
+
+viz = rbind(viz_agg, viz_regime) %>% mutate(rurality = ifelse(rurality=="agg","all",rurality), var = factor(var, levels = c('retention_calc', 'autonomy_calc', 'pct_ag', 'pct_mine', 'pct_mfg', 'laborforce_part_rate', 'bach', 'poverty_rate', 'income_rate', 'age', 'metro', 'uninsured')), rurality = factor(rurality, levels = c('nonmetro', 'metro', 'all'))) %>%
+  drop_na(var)
+
+
+plot1 = ggplot(viz) +
+  geom_errorbar( aes(x=var, ymin=coef-(se*1.96), ymax=coef+(se*1.96), color=rurality), width=0.4, stat="identity", position = position_dodge(-.7), alpha=1.0, size=1.5) +
+  ylim(-1.3, 1.9) +
+  geom_hline(yintercept = 0) +
+  # ggtitle("Retention") +
+  ylab("Coefficents (standardized)") +
+  xlab("Independent variables") +
+  theme(axis.title.y = element_text(size = 10), axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), plot.title = element_text(size = 10, face = "bold"), legend.position="bottom", plot.subtitle = element_text(size = 10)) +
+  theme_pander() +
+  scale_color_manual(values = c("#88CCEE", "#117733", "#332288")) 
+
+plot1
+
+```
+
+
+
+
+
+
+
