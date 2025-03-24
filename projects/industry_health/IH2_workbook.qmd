@@ -87,6 +87,7 @@ library(patchwork)
 library(ggthemes)
 library(sesem)
 library(openxlsx)
+library(plm)
 
 
 # chunk behavior 
@@ -299,6 +300,81 @@ chetty = chetty %>%
 
 ```
 
+```{r}
+### overriding prior calc of ROG by grouping asian with white
+pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind, pop_white)
+
+mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
+xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
+  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
+  dplyr::select(CZ, FIPS)
+
+mobile25 = mobile25_clean %>%
+  filter(cohort == "1992") %>%
+  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
+  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
+  mutate(CZ = sprintf("%05d",CZ)) %>%
+  left_join(y=xwalk, by="CZ") %>%
+  left_join(pop, by="FIPS") %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+
+temp = mobile25 %>%
+  dplyr::select(FIPS, "rate_aian"=aian, "rate_black"=black, "rate_hisp"=hisp, pct_black, "pct_aian"=pct_ind, pct_hisp) %>%
+  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+  separate_wider_delim(var, "_", names = c("var", "race")) %>%
+  pivot_wider(names_from = var, values_from = val) %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(rrm_nw = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+
+temp2 = mobile25 %>%
+  dplyr::select(FIPS, "rate_asian"=asian, "rate_white"=white, pct_white, pct_asian) %>%
+  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+  separate_wider_delim(var, "_", names = c("var", "race")) %>%
+  pivot_wider(names_from = var, values_from = val) %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(rrm_white = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+
+chetty = mobile25 %>%
+  dplyr::select(FIPS, pop) %>%
+  left_join(y=temp, by="FIPS") %>% 
+  left_join(y=temp2, by="FIPS") %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  mutate(rrm_gap = rrm_white-rrm_nw, state = substr(FIPS, 1,2)) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
+
+alt_chetty = mobile25 %>%
+  mutate(state = substr(FIPS, 1,2)) %>%
+  drop_na(pop) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_aian = weighted.mean(x=aian, w=pop, na.rm=TRUE),
+                   rrm_asian = weighted.mean(x=asian, w=pop, na.rm=TRUE),
+                   rrm_black = weighted.mean(x=black, w=pop, na.rm=TRUE),
+                   rrm_hisp = weighted.mean(x=hisp, w=pop, na.rm=TRUE),
+                   rrm_white = weighted.mean(x=white, w=pop, na.rm=TRUE)) %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .))
+
+chetty = chetty %>%
+  left_join(y=alt_chetty, by="state")
+```
+
+##Racial composition
+```{r}
+
+rcomp = mobile25 %>%
+  dplyr::select("place"=FIPS, pct_white, pct_black, pct_asian, pct_hisp, pct_ind)
+
+
+```
+
+
+
 
 # data joins
 
@@ -374,6 +450,7 @@ data$state<- substr(data$place, 1, 2)
 #join chetty data with data
 
 data <-left_join (data, chetty, by = "state")
+data <-left_join (data, rcomp, by = "place")
 
 # Convert 'state' to a factor for fixed effects
 data$state_fe <- as.factor(data$state)
@@ -1154,11 +1231,14 @@ mi1 = mi1 %>%
 
 ```{r}
 ols1a1 = lm(data = mi1, retention ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
-ols1a2 = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
-ols1a2_FE = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro)
+ols1a2 = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
+ols1a2_FE = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
 
 summary(ols1a1)
 summary(ols1a2)
+summary(ols1a2_FE)
+
+ols1a2_FE = plm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
 summary(ols1a2_FE)
 
 
@@ -1167,14 +1247,18 @@ summary(ols1a2_FE)
 ### part 2 -(No Int) industry + trade > prosperity 
 
 ```{r}
-ols2a = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro)
+ols2a = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
 
 summary(ols2a)
 ```
 
 ### part 2- No Int + FE industry + trade > prosperity
 ```{r}
-ols2a_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro)
+ols2a_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2a_FE)
+
+ols2a_FE = plm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
 
 summary(ols2a_FE)
 ```
@@ -1182,14 +1266,18 @@ summary(ols2a_FE)
 
 ### part 2 -(Int) industry + trade > prosperity 
 ```{r}
-ols2ai = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro)
+ols2ai = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
 
 summary(ols2ai)
 ```
 
 ### part 2 -(Int + FE) industry + trade > prosperity 
 ```{r}
-ols2ai_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro)
+ols2ai_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2ai_FE)
+
+ols2ai_FE = plm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
 
 summary(ols2ai_FE)
 ```
@@ -1212,7 +1300,7 @@ anova(ols2ai_FE, ols2a_FE)
 
 ```{r}
 
-ols3a = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured)
+ols3a = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
 
 summary(ols3a)
 
@@ -1226,7 +1314,11 @@ summary(ols3a)
 
 ```{r}
 
-ols3a_FE = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured)
+ols3a_FE = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3a_FE)
+
+ols3a_FE = plm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
 
 summary(ols3a_FE)
 
@@ -1239,7 +1331,7 @@ summary(ols3a_FE)
 
 ```{r}
 
-ols3ai = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity +  age + logpop + uninsured)
+ols3ai = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity +  age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
 
 summary(ols3ai)
 
@@ -1250,7 +1342,11 @@ summary(ols3ai)
 
 ```{r}
 
-ols3ai_FE = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured)
+ols3ai_FE = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3ai_FE)
+
+ols3ai_FE = plm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
 
 summary(ols3ai_FE)
 
@@ -1369,7 +1465,7 @@ lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 SE1a1 = errorsarlm(data = mi1, retention ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
                   lw, zero.policy = TRUE)
-SE1a2 = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+SE1a2 = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind,
                   lw, zero.policy = TRUE)
 
 # SE1a2_FE = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro,
@@ -1378,6 +1474,7 @@ SE1a2 = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + 
 
 summary(SE1a1)
 summary(SE1a2)
+
 
 ```
 
@@ -1389,7 +1486,7 @@ nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 ## not interaction
-SE2a = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop,
+SE2a = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind,
                   lw, zero.policy = TRUE)
 
 summary(SE2a)
@@ -1399,7 +1496,7 @@ nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
-SE2ai = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop,
+SE2ai = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind,
                   lw, zero.policy = TRUE)
 
 summary(SE2ai)
@@ -1420,7 +1517,7 @@ anova(SE2ai, SE2a)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-SE3a = errorsarlm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured,
+SE3a = errorsarlm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind,
                   lw, zero.policy = TRUE)
 
 summary(SE3a)
@@ -1434,7 +1531,7 @@ viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %
   filter(var != "X.Intercept.")
 
 
-SE3ai = errorsarlm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured,
+SE3ai = errorsarlm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind,
                   lw, zero.policy = TRUE)
 
 summary(SE3ai)
@@ -1546,7 +1643,7 @@ sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
 
 sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
-sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop),
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind),
                   lw, zero.policy = TRUE)
 summary(sr1a)
 summary(sr1b)
@@ -1560,13 +1657,13 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap  + pct_ag + pct_mine + pct_mfg + logpop),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind  + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
 
 
-sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2ai)
@@ -1586,13 +1683,13 @@ anova(sr2ai, sr2a)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2b)
 
 
-sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2bi)
@@ -1611,12 +1708,12 @@ anova(sr2bi, sr2b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3a)
 
-sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3ai)
@@ -1773,7 +1870,7 @@ sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
 
 sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
-sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro),
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind),
                   lw, zero.policy = TRUE)
 summary(sr1a)
 summary(sr1b)
@@ -1789,12 +1886,12 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
 
-sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2ai)
@@ -1813,12 +1910,12 @@ anova(sr2ai, sr2a)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2b)
 
-sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2bi)
@@ -1838,20 +1935,27 @@ anova(sr2bi, sr2b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3a)
 
 
 
-sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3ai)
 
 
 ```
+
+
+```{r}
+# abc = ggpredict(ols3a, terms = c("retention", "pct_black"))
+# ggpredict(sr3a, terms = c("retention")) %>% plot()
+```
+
 
 
 #### ANOVA
@@ -1999,7 +2103,7 @@ sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
 
 sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
-sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind),
                   lw, zero.policy = TRUE)
 summary(sr1a)
 summary(sr1b)
@@ -2013,12 +2117,12 @@ summary(sr1b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap +  pct_ag + pct_mine + pct_mfg + logpop),
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind +  pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2a)
 
-sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
                   lw, zero.policy = TRUE)
 
 summary(sr2ai)
@@ -2040,12 +2144,12 @@ waldtest(sr2ai, sr2a)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2b)
 
-sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr2bi)
@@ -2069,13 +2173,13 @@ waldtest(sr2bi, sr2b)
 nb <- poly2nb(mi1, queen=TRUE)
 lw <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap +  pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind +  pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3a)
 
 
-sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw, zero.policy = TRUE)
 
 summary(sr3ai)
@@ -2340,6 +2444,96 @@ plot2<- ggplot(results, aes(x = estimate, y = term, color = significance)) +
 plot2
 
 ```
+
+
+
+
+# margin plots
+
+clayton's notes:
+okay, so I think I figured out to do something similar to margin plots manually. What I'm doing is extracting the predicted (fitted) values from our models, reading in other data, and plotting fitted values as our Y axis and a number of X vars as our X axis and colors.
+
+First example here, I am creating a new dataframe for testing purposes, running an OLS model "testols", and then extracting and combining with the new dataframe, and finally using the "prepackaged" ggpredict command to plot margins plot.
+
+```{r}
+testdata = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+testols = lm(data = testdata, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind + metro)
+
+cca = as.data.frame(testols$fitted.values) %>%
+  rename("fitted"=1)
+cca2a = as.data.frame(testols$model$paam) %>%
+  rename("paam"=1)
+cca2b = as.data.frame(testols$model$retention) %>%
+  rename("retention"=1)
+
+cca3 = cbind(cca, cca2a, cca2b) %>%
+  left_join(y=testdata, by=c("paam","retention"))
+ggpredict(testols, terms = c("retention", "metro")) |> plot()
+
+
+
+```
+
+
+Let us now compare this to me manually plotting the fitted values using ggplot. Decently similar, but not exactly the same (from what I can tell).
+
+```{r}
+ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+
+```
+
+
+Okay, now I can apply this same process for our spatial regime models
+
+```{r}
+
+cca = as.data.frame(sr3a$fitted.values) %>%
+  rename("fitted"=1)
+cca2a = as.data.frame(sr3a$y) %>%
+  rename("paam"=1)
+cca2b = as.data.frame(sr3a$X) %>%
+  rename("cca1"=3, "cca2"=4) %>%
+  mutate(retention = cca1 + cca2) %>%
+  dplyr::select(retention)
+temp = sr_data %>%
+  st_drop_geometry()
+cca3 = cbind(cca, cca2a, cca2b) %>%
+  left_join(y=temp, by=c("paam","retention"))
+  
+ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+
+
+```
+
+
+
+Okay, and you can see here that I can customize colors, and switch around the desired plot features. I didn't play around with plotting by more than 2 features simultaneously, but it is doable.
+
+```{r}
+ggplot(cca3, aes(y = fitted, x = retention, color = sr)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = FALSE) +
+  scale_color_manual(values = c("#8576AC", "#83A396")) +  # Apply custom colors
+  theme_minimal() +
+  labs(color = "metro status")  # Optional, to label the color scale
+
+ggplot(cca3, aes(y = fitted, x = retention, color = rrm_gap)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = FALSE) +
+  scale_color_gradient2(low = "#351c75", mid = "white", high = "#04442A", midpoint = median(cca3$rrm_gap)) +
+  theme_minimal() +
+  labs(color = "RRM Gap")  # optional, to label the color scale
+
+```
+
+
+
+
 
 
 
