@@ -2322,6 +2322,102 @@ results_list <- list(
 # 
 ```
 
+####partition by retention
+
+here, we are setting "below mean" as the threshhold for high/low
+
+```{r}
+
+### so this one is partitioning dataset into high/low retention
+
+lowret = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA))))) %>% 
+  filter(retention <= 0)
+
+
+nb <- poly2nb(lowret, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret)
+
+sr3airet = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet)
+
+
+### so this one is making retention a dummy (high/low)
+sr_data2 = sr_data %>% mutate(retention2 = ifelse(retention <= 0, 1, 0))
+
+nb <- poly2nb(sr_data2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret2)
+
+sr3airet2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + retention2*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet2)
+
+
+
+```
+
+here, we are doing it again but using -1 (1 standard deviation below mean and less)
+```{r}
+### so this one is partitioning dataset into high/low retention
+
+lowret = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA))))) %>% 
+  filter(retention <= -1)
+
+
+nb <- poly2nb(lowret, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret)
+
+sr3airet = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet)
+
+
+### so this one is making retention a dummy (high/low)
+sr_data2 = sr_data %>% mutate(retention2 = ifelse(retention <= -1, 1, 0))
+
+nb <- poly2nb(sr_data2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret2)
+
+sr3airet2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + retention2*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet2)
+
+```
+
+
+
 ###Coefficient Plot1
 
 ```{r}
