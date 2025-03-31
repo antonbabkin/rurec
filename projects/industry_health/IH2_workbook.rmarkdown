@@ -1,0 +1,2944 @@
+---
+title: "Industry-Health"
+editor: source
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    self-contained: true
+    page-layout: full
+    code-fold: true
+    code-tools: true
+---
+
+
+
+
+# setup
+
+
+
+```{r include = FALSE}
+
+
+
+source("projects/industry_health/dataprep.R", local = (ih_dp <- new.env()))
+source("datasets/circularity/circularity.R", local = (circularity <- new.env()))
+source("R/geography.R", local = (geo <- new.env()))
+source("R/basic_utilities.R", local = (util <- new.env()))
+
+# install.packages("vtable")
+# install.packages("dplyr")
+# install.packages("tidyverse")
+# install.packages("ggplot2")
+# install.packages("stringr")
+# install.packages("spdep")
+#install.packages("tidycensus")
+# install.packages("tigris")
+# install.packages("viridis")
+# install.packages("cowplot")
+# install.packages("estimatr")
+# install.packages("huxtable")
+# #install.packages("margins")
+# install.packages(c("lmtest", "sandwich"))
+# install.packages("spatialreg")
+ # install.packages("gridExtra")
+ # install.packages("rgeoda") 
+ # install.packages("spgwr")
+ # install.packages("lavaan")
+ # install.packages("lavaanPlot")
+#install.packages("ggthemes")
+# install.packages("sesem")
+#install.packages("openxlsx")
+
+
+library(vtable)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(spdep)
+library(tidycensus)
+library(tigris)
+library(viridis)
+library(cowplot)
+library(lmtest)
+library(sandwich)
+library(estimatr)
+library(huxtable)
+#library(margins)
+library(spatialreg)
+library(logger)
+library(moments)
+library(PerformanceAnalytics)
+library(correlation)
+library(estimatr)
+library(Hmisc)
+library(rstatix)
+library(glue)
+library(sf)
+library(units)
+library(leaflet)
+library(htmltools)
+library(tmap)
+library(gridExtra)
+library(tidycensus) 
+library(rgeoda) 
+library(spgwr)
+library(lavaan)
+library(lavaanPlot)
+library(ggeffects)
+library(patchwork)
+library(ggthemes)
+library(sesem)
+library(openxlsx)
+library(plm)
+
+
+# chunk behavior 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+# nonscientific notation
+options(scipen=999)
+
+# log output 
+log_threshold(WARN)
+```
+
+
+
+#Load data
+
+
+```{r}
+##Load Hard Coded Data Sets 
+
+##Median Age of County 2012
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_030E"
+                   ),
+                   year = 2012) %>%
+  select("place"=GEOID, "age"=estimate)
+
+##pct over 65
+age = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S0101_C01_028E"
+                   ),
+                   year = 2012) %>%
+  mutate(age = estimate/100) %>%
+  select("place"=GEOID, age)
+
+
+##% College degree or more
+bach = get_acs(geography = "county",
+                   survey = "acs5",
+                   variables = c("S1501_C02_012E"
+                   ),
+                   year = 2012) %>%
+  mutate(bach = estimate/100) %>%
+  select("place"=GEOID, bach)
+
+
+
+
+##ERS County Typologies 
+
+#TO DO: ERS call not working. Replace with local file. 
+#Temp file call for Sara= "C:/Users/saraa/OneDrive - UW-Madison/USDA Research/ERS Files for Research/2015CountyTypologyCodes.csv"
+
+
+#ers = read.csv("https://www.ers.usda.gov/webdocs/DataFiles/48652/2015CountyTypologyCodes.csv?v=8831.8") %>%
+  
+ers = read.csv("data/2015CountyTypologyCodes.csv") %>%
+  mutate(place = sprintf("%05d", FIPStxt)) %>%
+  select(place, "ers_ag"=Farming_2015_Update, "ers_mine"=Mining_2015.Update, "ers_mfg"=Manufacturing_2015_Update, "ers_gov"=Government_2015_Update, "ers_rec"=Recreation_2015_Update, "ers_nonsp"=Nonspecialized_2015_Update)
+
+
+
+# ##Industry Structure
+# 
+# industry = get_acs(geography = "county",
+#                    survey = "acs5",
+#                    variables = c("DP03_0032E","DP03_0033E","DP03_0034E"
+#                                         ,"DP03_0035E","DP03_0036E","DP03_0037E"
+#                                         ,"DP03_0038E","DP03_0039E","DP03_0040E"
+#                                         ,"DP03_0041E","DP03_0042E","DP03_0043E"
+#                                         ,"DP03_0044E","DP03_0045E"
+#                    ),
+#                    year = 2012) %>%
+#   select("place"=GEOID, variable, estimate) %>%
+#   pivot_wider(names_from = variable, values_from = estimate) %>%
+#   mutate(pct_afm = DP03_0033/DP03_0032, pct_mfg = DP03_0034/DP03_0032, pct_fire = DP03_0039/DP03_0032, pct_edmed = DP03_0041/DP03_0032, pct_rec = DP03_0042/DP03_0032, pct_gov = DP03_0044/DP03_0032) %>%
+#   select(place, pct_afm, pct_mfg, pct_fire, pct_edmed, pct_rec, pct_gov)
+
+
+# unzip datapacks
+# util$zip_unpack("tmp/datapack_bea_io_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_cbp_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_infogroup_county_v240709.zip", overwrite = TRUE)
+# util$zip_unpack("tmp/datapack_agcen_v240709.zip", overwrite = TRUE)
+
+```
+
+```{r}
+
+# # not working
+# abc = ih_dp$call_agcensus12()
+
+# https://www.nass.usda.gov/datasets/qs.census2012.txt.gz
+agc_clean = read.delim2("data/projects/industry_health/jobs/qs.census2012.txt") #import ag census
+# https://www2.census.gov/programs-surveys/cbp/datasets/2012/cbp12co.zip
+jobs_clean <- read_delim("data/projects/industry_health/jobs/cbp12co.txt") #import cbp
+
+agwork = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "LABOR, HIRED, GE 150 DAYS - NUMBER OF WORKERS" & DOMAIN_DESC == "TOTAL") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agwork = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agwork)
+
+
+agops = agc_clean %>%
+  filter(AGG_LEVEL_DESC == "COUNTY" & SHORT_DESC == "OPERATORS, (ALL) - NUMBER OF OPERATORS") %>%
+  mutate(place = str_c(sprintf("%02d",STATE_FIPS_CODE),"",sprintf("%03d",COUNTY_CODE)), agops = as.numeric(gsub(",","",VALUE))) %>%
+  select(place, agops)
+
+agc = agwork %>%
+  left_join(y=agops, by="place") %>%
+  mutate(agwork = ifelse(is.na(agwork), 0, agwork), agops = ifelse(is.na(agops), 0, agwork), ag_emp = agwork + agops) %>%
+  select(place, ag_emp)
+
+jobs = jobs_clean %>%
+  filter(naics != "------") %>%
+  mutate(naicsfilt = substr(naics,3,3), place = str_c(fipstate,"",fipscty)) %>%
+  filter(naicsfilt == "-") %>%
+  mutate(naics = str_c("n","",substr(naics,1,2))) %>%
+  select(place, naics, emp) %>%
+  pivot_wider(names_from = naics, values_from = emp)
+
+jobs_temp = jobs_clean %>%
+  filter(naics == "------") %>%
+  mutate(place = str_c(fipstate,"",fipscty)) %>%
+  select(place, "cbp.tot"=emp)
+
+jobs = jobs %>%
+  left_join(y=jobs_temp, by="place") %>%
+  replace(is.na(.), 0) %>%
+  mutate(cbp.no.ag = cbp.tot - n11, n_fire = n52 + n53, n_edmed = n61 + n62, n_prof = n54 + n55) %>%
+  select(place, cbp.no.ag, "n_mine"=n22, "n_mfg"=n31, n_fire, n_edmed, n_prof) %>%
+  left_join(y=agc, by="place") %>%
+  mutate(totemp = cbp.no.ag + ag_emp, pct_ag = ag_emp/totemp, pct_mine = n_mine/totemp, pct_mfg = n_mfg/totemp, pct_fire = n_fire/totemp, pct_edmed = n_edmed/totemp, pct_prof = n_prof/totemp) %>%
+  select(place, "jobs"=totemp, pct_ag, pct_mine, pct_mfg, pct_fire, pct_prof, pct_edmed) %>%
+  mutate(pct_edmed = ifelse(pct_edmed == "Inf", NA, pct_edmed), pct_fire = ifelse(pct_fire == "Inf", NA, pct_fire))
+
+jobs2 = jobs_clean %>%
+  mutate(n2d = substr(naics,1,2)) %>%
+  mutate(filt3 = substr(naics,4,6)) %>%
+  filter(n2d == "31"|n2d == "32"|n2d == "33") %>%
+  filter(filt3 == "///") %>%
+  mutate(durable = ifelse(n2d < 33, "nondurable", "durable"), durable = ifelse((naics == "321///" | naics == "327///"), "durable", durable), place = str_c(fipstate,"",fipscty)) %>%
+  group_by(place, durable) %>%
+  dplyr::summarize(emp = sum(emp)) %>%
+  pivot_wider(names_from = durable, values_from = emp)
+
+jobs = jobs %>%
+  left_join(y=jobs2, by="place") %>%
+  mutate(pct_durable = durable/jobs, pct_nondurable = nondurable/jobs) %>%
+  select(-durable, -nondurable)
+
+```
+
+
+
+#Racial Opportunity gap
+
+
+
+```{r}
+
+#TO DO: Update file paths
+
+pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind)
+
+mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
+xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
+  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
+  dplyr::select(CZ, FIPS)
+
+mobile25 = mobile25_clean %>%
+  filter(cohort == "1992") %>%
+  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
+  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
+  mutate(CZ = sprintf("%05d",CZ)) %>%
+  left_join(y=xwalk, by="CZ") %>%
+  left_join(pop, by="FIPS") %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot)
+
+temp = mobile25 %>%
+  dplyr::select(FIPS, "rate_aian"=aian, "rate_asian"=asian, "rate_black"=black, "rate_hisp"=hisp, pct_black, pct_asian, "pct_aian"=pct_ind, pct_hisp) %>%
+  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+  separate_wider_delim(var, "_", names = c("var", "race")) %>%
+  pivot_wider(names_from = var, values_from = val) %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(rrm_nw = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+
+chetty = mobile25 %>%
+  dplyr::select(FIPS, pop, rrm_white="white") %>%
+  left_join(y=temp, by="FIPS") %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  mutate(rrm_gap = rrm_white-rrm_nw, state = substr(FIPS, 1,2)) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
+
+alt_chetty = mobile25 %>%
+  mutate(state = substr(FIPS, 1,2)) %>%
+  drop_na(pop) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_aian = weighted.mean(x=aian, w=pop, na.rm=TRUE),
+                   rrm_asian = weighted.mean(x=asian, w=pop, na.rm=TRUE),
+                   rrm_black = weighted.mean(x=black, w=pop, na.rm=TRUE),
+                   rrm_hisp = weighted.mean(x=hisp, w=pop, na.rm=TRUE),
+                   rrm_white = weighted.mean(x=white, w=pop, na.rm=TRUE)) %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .))
+
+chetty = chetty %>%
+  left_join(y=alt_chetty, by="state")
+
+
+```
+
+```{r}
+### overriding prior calc of ROG by grouping asian with white
+pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind, pop_white)
+
+mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
+xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
+  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
+  dplyr::select(CZ, FIPS)
+
+mobile25 = mobile25_clean %>%
+  filter(cohort == "1992") %>%
+  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
+  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
+  mutate(CZ = sprintf("%05d",CZ)) %>%
+  left_join(y=xwalk, by="CZ") %>%
+  left_join(pop, by="FIPS") %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+
+temp = mobile25 %>%
+  dplyr::select(FIPS, "rate_aian"=aian, "rate_black"=black, "rate_hisp"=hisp, pct_black, "pct_aian"=pct_ind, pct_hisp) %>%
+  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+  separate_wider_delim(var, "_", names = c("var", "race")) %>%
+  pivot_wider(names_from = var, values_from = val) %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(rrm_nw = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+
+temp2 = mobile25 %>%
+  dplyr::select(FIPS, "rate_asian"=asian, "rate_white"=white, pct_white, pct_asian) %>%
+  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+  separate_wider_delim(var, "_", names = c("var", "race")) %>%
+  pivot_wider(names_from = var, values_from = val) %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(rrm_white = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+
+chetty = mobile25 %>%
+  dplyr::select(FIPS, pop) %>%
+  left_join(y=temp, by="FIPS") %>% 
+  left_join(y=temp2, by="FIPS") %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  mutate(rrm_gap = rrm_white-rrm_nw, state = substr(FIPS, 1,2)) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
+
+alt_chetty = mobile25 %>%
+  mutate(state = substr(FIPS, 1,2)) %>%
+  drop_na(pop) %>%
+  group_by(state) %>%
+  dplyr::summarize(rrm_aian = weighted.mean(x=aian, w=pop, na.rm=TRUE),
+                   rrm_asian = weighted.mean(x=asian, w=pop, na.rm=TRUE),
+                   rrm_black = weighted.mean(x=black, w=pop, na.rm=TRUE),
+                   rrm_hisp = weighted.mean(x=hisp, w=pop, na.rm=TRUE),
+                   rrm_white = weighted.mean(x=white, w=pop, na.rm=TRUE)) %>% 
+  mutate_all(~ifelse(is.nan(.), NA, .))
+
+chetty = chetty %>%
+  left_join(y=alt_chetty, by="state")
+```
+
+
+
+##Racial composition
+
+
+```{r}
+
+rcomp = mobile25 %>%
+  dplyr::select("place"=FIPS, pct_white, pct_black, pct_asian, pct_hisp, pct_ind)
+
+
+```
+
+
+
+
+
+
+# data joins
+
+
+
+```{r include = FALSE}
+chr<-ih_dp$call_chr(2017) 
+
+pop<-ih_dp$call_population(2012) 
+
+data<- left_join (chr, pop, by = "place")
+
+laborforce_part_rate<-ih_dp$call_laborforce_rate(2012)
+
+data<- left_join (data, laborforce_part_rate, by = "place")
+
+unempr<-ih_dp$call_unemp_rate(2012) 
+
+data<- left_join (data, unempr, by = "place")
+
+incr<-ih_dp$call_income_rate(2012)
+
+data<- left_join (data, incr, by = "place")
+
+povr<-ih_dp$call_poverty_rate(2012) 
+
+data<- left_join (data, povr, by = "place")
+
+# edur<-ih_dp$call_highschool_attainment_rate(2012) 
+
+rucc<- ih_dp$call_ruc (2013) %>% 
+  rename(place = fips)  
+
+
+data<- left_join (data, rucc, by = "place")
+
+data = data %>% 
+mutate(metro_nonmetro = if_else(data$ruc_code < 4, "metro", "nonmetro"),
+       logpop = log(population))
+
+data <- data %>%
+  mutate(
+    three_metro = case_when(
+        ruc_code %in% c(1, 2) ~ "metro",
+      ruc_code == 3 ~ "small_metro",
+      ruc_code >= 4 ~ "nonmetro")
+  )
+
+data = data %>% 
+  mutate(
+    four_metro = case_when(
+      ruc_code %in% c(1, 2) ~ "large_metro",
+      ruc_code == 3 ~ "small_metro",
+      ruc_code %in% c(4, 5) ~ "large_nonmetro",
+      ruc_code >= 6 ~ "small_nonmetro")
+  )
+  
+
+ind_struct<- ih_dp$call_industry_structure(2012)
+
+data<- left_join (data, ind_struct, by = "place")
+
+data<- left_join (data, age, by = "place")
+
+data<- left_join (data, ers, by = "place")
+
+data<- left_join (data, jobs, by = "place")
+
+data<- left_join (data, bach, by = "place")
+
+#create state code
+
+data$state<- substr(data$place, 1, 2)
+
+#join chetty data with data
+
+data <-left_join (data, chetty, by = "state")
+data <-left_join (data, rcomp, by = "place")
+
+# Convert 'state' to a factor for fixed effects
+data$state_fe <- as.factor(data$state)
+
+print(data)
+
+
+
+# circularity_import <- circularity$get_circularity()
+# 
+# 
+# YR = 2012
+# circu = circularity_import %>%  
+#   filter(year == YR & ilevel == "det" & bus_data == "cbp_imp") %>%
+#   select(place, retention, autonomy, excess_supply, intermediate_supply, excess_demand, intermediate_demand)
+  
+
+# data<- left_join (data, circu, by = "place")
+
+```
+
+
+
+## 7/9/24 circularity
+
+Commented code is to use infogroup data in sensitivity analysis
+
+
+
+```{r}
+#circu <- ih_dp$call_circularity(2012, bus_data = "infogroup", ilevel = "det") %>%
+# circu <- ih_dp$call_circularity(2012, bus_data = "cbp_imp", ilevel = "det") %>%
+#   select(place, retention = retention, autonomy = autonomy)
+
+circu_new <- arrow::read_parquet("data/place_io/outsupdem/2012_det_cbp_imp.pq")  %>%
+  mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply)) %>%
+  dplyr::summarize(across(output:exdem, sum), .by = "place") %>%
+  mutate(
+    production_capacity = supply / output,
+    trade_capacity = exsup / output,
+    retention = 1 - exsup / supply,
+    production_dependency = demand / output,
+    trade_dependency = exdem / output,
+    autonomy = 1 - exdem / demand,
+    trade_balance = (exsup - exdem) / output,
+    trade_openness = (exsup + exdem) / output,
+    method = "after"
+  ) %>%
+  select(place, retention = retention, autonomy = autonomy)
+
+data <- left_join (data, circu_new, by = "place")
+
+
+
+
+```
+
+
+
+## community prosperity index
+
+
+```{r}
+
+# Column to delete
+column_to_delete <- "prosperity"
+
+if (column_to_delete %in% colnames(data)) {
+  data <- data %>%
+    select(-all_of(column_to_delete))
+}
+
+# here I'm making the prosperity index
+# in the prior chunk, we z-score the variables
+# first, we define the prosperity concept
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+# next, run confirmatory factor analysis
+factor1 <- cfa(m1a, data=data,std.lv=TRUE)
+summary(factor1)
+
+# extracting factor results
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+
+# adding loading (correlations) for each indictor
+# using these to build weighted average of prosperity
+data = data %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+```
+
+
+
+
+
+# Summary Statistics- three regimes
+
+
+
+```{r}
+
+library(openxlsx)
+
+##summary statistics- global
+summary_stats = data %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+summary_stats
+
+
+# Summary statistics for metro cases 
+summary_stats_metro = data %>%
+   filter(three_metro == "metro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+# Summary statistics for small metro cases 
+summary_stats_smallmetro = data %>%
+   filter(three_metro == "small_metro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
+summary_stats_smallmetro  
+
+
+# Summary statistics for nonmetro cases 
+summary_stats_nonmetro = data %>%
+  filter(three_metro == "nonmetro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
+summary_stats_nonmetro
+
+# Write all summary statistics to Excel
+write.xlsx(
+  list(
+    "Global Summary" = summary_stats,
+    "Metro Summary" = summary_stats_metro,
+    "Small Metro Summary" = summary_stats_smallmetro,
+    "Nonmetro Summary" = summary_stats_nonmetro
+  ),
+  file = "IH1_summary_statistics_3R.xlsx",
+  overwrite = TRUE
+)
+
+
+
+```
+
+
+# Summary Statistics- four regimes
+
+
+
+```{r}
+
+library(openxlsx)
+
+##summary statistics- global
+summary_stats = data %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  get_summary_stats(, type = "common") %>% 
+  relocate(variable, n, mean, median, min, max)
+summary_stats = as.data.frame(summary_stats)
+summary_stats
+
+
+# Summary statistics for large metro cases 
+summary_stats_metro = data %>%
+   filter(four_metro == "large_metro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_metro = as.data.frame(summary_stats_metro)  
+summary_stats_metro  
+
+# Summary statistics for small metro cases 
+summary_stats_smallmetro = data %>%
+   filter(four_metro == "small_metro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
+summary_stats_smallmetro  
+
+
+# Summary statistics for nonmetro cases 
+summary_stats_nonmetro = data %>%
+  filter(four_metro == "large_nonmetro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
+summary_stats_nonmetro
+
+# Summary statistics for nonmetro cases 
+summary_stats_smallnonmetro = data %>%
+  filter(four_metro == "small_nonmetro") %>% 
+  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
+         logpop, uninsured) %>%
+  get_summary_stats(type = "common") %>%  
+  relocate(variable, n, mean, median, min, max)  
+summary_stats_smallnonmetro = as.data.frame(summary_stats_smallnonmetro)  
+summary_stats_smallnonmetro
+
+# Write all summary statistics to Excel
+write.xlsx(
+  list(
+    "Global Summary" = summary_stats,
+    "Metro Summary" = summary_stats_metro,
+    "Small Metro Summary" = summary_stats_smallmetro,
+    "Nonmetro Summary" = summary_stats_nonmetro, 
+    "Small Nonmetro Summary" = summary_stats_smallnonmetro
+  ),
+  file = "IH1_summary_statistics_4R.xlsx",
+  overwrite = TRUE
+)
+
+
+
+```
+
+
+
+
+# Histograms
+
+
+
+```{r}
+data %>% select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+
+data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
+
+
+```
+
+
+# Density plots- three regimes
+
+
+
+```{r}
+#paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 3  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+
+
+ # Define the variables and titles
+vars = c("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
+
+titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
+           "%\n Agriculture", 
+           "Labor \nForce\n Participation Rate", "% \nOver 65", 
+           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
+           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+
+# Function to create density plots
+create_density_plots <- function(data, vars, three_metro, my_colors, titles) {
+  plots <- list()  
+  
+  # Loop through the variable names
+  for (i in seq_along(vars)) {
+    var <- vars[i]          
+    title <- titles[i]     
+    
+    plot <- ggplot(data, aes_string(x = var, group = three_metro, 
+                                     color = paste0("as.factor(", three_metro, ")"))) +
+      geom_density() +
+      scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
+      labs(title = title,   
+           x = var,        
+           y = "Density") +
+      theme_minimal()  
+    
+    plots[[var]] <- plot  
+  }
+  
+  return(plots)  
+}
+
+
+# Call the function
+density_plots <- create_density_plots(data, vars, "three_metro", my_colors, titles)
+
+for (plot in density_plots) {
+  print(plot)
+}
+```
+
+
+
+# Density plots- four regimes
+
+
+
+```{r}
+#paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
+
+# Define the number of colors you want from the "rocket" palette
+num_colors <- 4  # Adjust the number of colors as needed
+
+# Create a vector of colors from the "rocket" palette excluding yellow
+my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
+
+
+
+ # Define the variables and titles
+vars = c("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
+
+titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
+           "%\n Agriculture", 
+           "Labor \nForce\n Participation Rate", "% \nOver 65", 
+           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
+           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+
+# Function to create density plots
+create_density_plots <- function(data, vars, four_metro, my_colors, titles) {
+  plots <- list()  
+  
+  # Loop through the variable names
+  for (i in seq_along(vars)) {
+    var <- vars[i]          
+    title <- titles[i]     
+    
+    plot <- ggplot(data, aes_string(x = var, group = four_metro, 
+                                     color = paste0("as.factor(", four_metro, ")"))) +
+      geom_density() +
+      scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
+      labs(title = title,   
+           x = var,        
+           y = "Density") +
+      theme_minimal()  
+    
+    plots[[var]] <- plot  
+  }
+  
+  return(plots)  
+}
+
+
+# Call the function
+density_plots <- create_density_plots(data, vars, "four_metro", my_colors, titles)
+
+for (plot in density_plots) {
+  print(plot)
+}
+```
+
+
+
+# Maps
+
+
+
+```{r}
+
+
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% shift_geometry()
+
+#install.packages("RColorBrewer")
+# library(RColorBrewer)
+ 
+ vars = list("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
+ 
+ titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
+ 
+for (i in seq_along(vars)) {
+  v = vars[[i]]
+  legend_title = titles[i]
+
+ mdn = median(df_map[[v]], na.rm = TRUE)
+
+ tmap_mode("plot")
+ output = df_map %>%
+   tm_shape() +
+  tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
+               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+    tm_legend(title = legend_title, title.fontface = 2)
+
+print(output)
+
+ }
+ 
+ output = df_map %>%
+   tm_shape() +
+  tm_polygons(col = "pct_mine", n = 4, border.alpha = 0.1, style = "jenks", id = "pct_mine",
+               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+  tm_layout( legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+  tm_legend(title = "% \n Mining", title.fontface = 2)
+
+print(output)
+ 
+
+
+```
+
+```{r}
+
+# creating maps
+ # map(val = df_map$paam, title = "Premature Age Adjusted Mortality", rev_scale = FALSE)
+# map(val = df_map$ypll75, title = "Years of Potential Life Lost before 75", rev_scale = FALSE)
+# map(val = df_map$retention, title = "Retention", rev_scale = FALSE)
+# map(val = df_map$autonomy, title = "Autonomy", rev_scale = FALSE)
+# map(val = df_map$emp_to_va, title = "Employee Share of Value Added", rev_scale = FALSE)
+# map(val = df_map$emp_to_output, title = "Employee Share of Output", rev_scale = FALSE)
+# map(val = df_map$va_to_output, title = "Value Added Share of Output", rev_scale = FALSE)
+
+
+
+
+```
+
+
+
+
+# Scatterplots
+ToDO:: create metro/nonmetro scatter plots
+ToDO: scatter plots for prosperity measures
+
+
+
+```{r}
+
+# Full data regressions
+
+ggplot(data, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(data, aes(retention, paam, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality", 
+        color = "Racial Opportunity Gap")
+
+ggplot(data, aes(prosperity, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(data, aes(prosperity, paam, color = rrm_gap)) +
+  geom_point() +
+    scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012)\n and Premature Age Adjusted Mortality (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality", 
+        color = "Racial Opportunity Gap")
+
+
+# Filter the data to include only "metro" cases
+metro_data <- subset(data, metro_nonmetro == "metro")
+
+ggplot(metro_data, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(metro_data, aes(retention, paam, color = rrm_gap)) +
+  geom_point() +
+     scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with Racial Opportunity Gap and \n Premature Age Adjusted Mortality for Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality",
+        color = "Racial Opportunity Gap")
+
+
+
+ggplot(metro_data, aes(prosperity, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality (2013-2015) for Metro",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(metro_data, aes(prosperity, paam, color = rrm_gap)) +
+  geom_point() +
+    scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012)\n and Premature Age Adjusted Mortality (2013-2015) for Metro",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality", 
+        color = "Racial Opportunity Gap")
+
+# Nonmetro plots
+# Filter the data to include only "nonmetro" cases
+nonmetro_data <- subset(data, metro_nonmetro == "nonmetro")
+
+ggplot(nonmetro_data, aes(retention, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(nonmetro_data, aes(retention, paam, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with Racial Opportunity Gap and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality", 
+        color = "Racial Opportunity Gap")
+
+
+##scatter plot of retention and prosperity (2012)
+ggplot(nonmetro_data, aes(retention, prosperity)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Prosperity (2012) for Non-Metro",
+        x = "Retention",
+        y = "Prosperity")
+
+ggplot(nonmetro_data, aes(retention, prosperity, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with Racial Opportunity Gap and \n Prosperity for Non-Metro",
+        x = "Retention",
+        y = "Prosperity", 
+        color = "Racial Opportunity Gap")
+
+
+ggplot(nonmetro_data, aes(prosperity, paam)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality")
+
+ggplot(nonmetro_data, aes(prosperity, paam, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity with Racial Opportunity Gap and \n Premature Age Adjusted Mortality for Non-Metro",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality", 
+        color = "Racial Opportunity Gap")
+
+```
+
+
+
+
+
+
+# ESDA
+
+
+
+```{r}
+map = ih_dp$call_geog(2012)
+df_map <- left_join(map, data, by = "place") %>% 
+  drop_na(paam, retention, rrm_gap, prosperity, state_fe)
+
+
+nb <- poly2nb(df_map, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+
+
+```
+
+
+
+##PAAM
+###moran global paam 
+
+
+
+```{r}
+moran.test(df_map$paam,lw, zero.policy=TRUE)
+
+```
+
+
+
+
+###lisa paam
+
+
+```{r}
+df_lisa<- df_map %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['paam'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+
+
+##Retention
+###moran global retention 
+
+
+
+```{r}
+moran.test(df_map$retention,lw, zero.policy=TRUE)
+
+```
+
+
+
+
+###lisa retention
+
+
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['retention'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Retention")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+
+
+##Racial Opportunity Gap
+###moran global ROG 
+
+
+
+```{r}
+
+#rrm_gap
+
+moran.test(df_map$rrm_gap,lw, zero.policy=TRUE)
+
+```
+
+
+
+
+###lisa ROG
+
+
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+
+
+##Prosperity
+###moran global prosperity 
+
+
+
+```{r}
+moran.test(df_map$prosperity,lw, zero.policy=TRUE)
+
+```
+
+
+
+
+###lisa prosperity
+
+
+```{r}
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['prosperity'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Prosperity")
+
+
+# Create the legend separately
+
+# legend_labels <- c("Not significant", "High-High", "Low-Low", "High-Low", "Low-High")
+# legend_colors <- unlist(lisa_colors)
+# legend("bottomleft", border = "#eeeeee")
+```
+
+
+
+# Models
+
+
+```{r}
+
+# Column to delete
+column_to_delete <- "prosperity"
+
+if (column_to_delete %in% colnames(df_map)) {
+  df_map <- df_map %>%
+    select(-all_of(column_to_delete))
+}
+
+
+mi1 = df_map %>% drop_na(c(paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured, state_fe)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention = (retention - mean(retention, na.rm=TRUE))/sd(retention, na.rm=TRUE), rrm_gap = (rrm_gap - mean(rrm_gap, na.rm=TRUE))/sd(rrm_gap, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE))
+
+
+# here I'm making the prosperity index
+# in the prior chunk, we z-score the variables
+
+
+# first, we define the prosperity concept
+m1a  <- ' prosperity  =~ laborforce_part_rate + bach + poverty_rate + income_rate'
+
+# next, run confirmatory factor analysis
+factor1 <- cfa(m1a, data=mi1,std.lv=TRUE)
+summary(factor1)
+
+# extracting factor results
+PE <- parameterEstimates(factor1) %>%
+  filter(lhs == "prosperity")
+
+loading.laborforce_part_rate = PE %>%
+  filter(rhs == "laborforce_part_rate") %>%
+  select(est)
+loading.laborforce_part_rate = loading.laborforce_part_rate$est
+
+loading.bach = PE %>%
+  filter(rhs == "bach") %>%
+  select(est)
+loading.bach = loading.bach$est
+
+loading.poverty_rate = PE %>%
+  filter(rhs == "poverty_rate") %>%
+  select(est)
+loading.poverty_rate = loading.poverty_rate$est
+
+loading.income_rate = PE %>%
+  filter(rhs == "income_rate") %>%
+  select(est)
+loading.income_rate = loading.income_rate$est
+
+# adding loading (correlations) for each indictor
+# using these to build weighted average of prosperity
+mi1 = mi1 %>%
+  mutate(prosperity = ((laborforce_part_rate*loading.laborforce_part_rate)+(income_rate*loading.income_rate)+(poverty_rate*loading.poverty_rate)+(bach*loading.bach))/4, prosperity = (prosperity-mean(prosperity, na.rm=TRUE))/sd(prosperity, na.rm=TRUE))
+
+```
+
+
+
+
+## OLS
+
+### part 1 - industry > trade, industry > structural racism
+
+
+
+```{r}
+ols1a1 = lm(data = mi1, retention ~ pct_ag + pct_mine + pct_mfg + logpop + metro)
+ols1a2 = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
+ols1a2_FE = lm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols1a1)
+summary(ols1a2)
+summary(ols1a2_FE)
+
+ols1a2_FE = plm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
+summary(ols1a2_FE)
+
+
+```
+
+
+
+### part 2 -(No Int) industry + trade > prosperity 
+
+
+
+```{r}
+ols2a = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2a)
+```
+
+
+
+### part 2- No Int + FE industry + trade > prosperity
+
+
+```{r}
+ols2a_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2a_FE)
+
+ols2a_FE = plm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
+
+summary(ols2a_FE)
+```
+
+
+
+
+### part 2 -(Int) industry + trade > prosperity 
+
+
+```{r}
+ols2ai = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2ai)
+```
+
+
+
+### part 2 -(Int + FE) industry + trade > prosperity 
+
+
+```{r}
+ols2ai_FE = lm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro + pct_black + pct_hisp + pct_ind)
+
+summary(ols2ai_FE)
+
+ols2ai_FE = plm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
+
+summary(ols2ai_FE)
+```
+
+
+
+
+#### Part 2- ANOVA
+
+
+
+```{r}
+anova(ols2ai, ols2a)
+```
+
+
+
+
+#### Part 2 FE- ANOVA 
+
+
+
+```{r}
+anova(ols2ai_FE, ols2a_FE)
+```
+
+
+
+### part 3 - (No Int) full model
+
+
+
+```{r}
+
+ols3a = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3a)
+
+
+
+```
+
+
+
+
+
+### part 3 - (No Int + FE) full model
+
+
+
+```{r}
+
+ols3a_FE = lm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3a_FE)
+
+ols3a_FE = plm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
+
+summary(ols3a_FE)
+
+
+
+```
+
+
+
+
+### part 3 - (INT) full model
+
+
+
+```{r}
+
+ols3ai = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity +  age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3ai)
+
+
+
+```
+
+
+### part 3 - (INT + FE) full model
+
+
+
+```{r}
+
+ols3ai_FE = lm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind)
+
+summary(ols3ai_FE)
+
+ols3ai_FE = plm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + state_fe + age + logpop + uninsured + pct_black + pct_hisp + pct_ind, index = c("STATE"), model = "within")
+
+summary(ols3ai_FE)
+
+
+
+```
+
+
+
+
+#### Part 3- ANOVA
+
+
+```{r}
+anova(ols3ai, ols3a)
+```
+
+```{r}
+anova(ols3ai_FE, ols3a_FE)
+```
+
+
+
+
+#### Part 3 OLS interaction plot
+
+
+
+```{r}
+# Generate predicted values for different levels of rrm_gap
+interaction_plot <- ggpredict(ols3ai, terms = c("retention", "rrm_gap"))
+
+# Plot the interaction
+ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(title = "Interaction Effect of Retention and rrm_gap on Premature Mortality",
+       x = "Retention",
+       y = "Predicted Premature Mortality",
+       color = "rrm_gap Level") +
+  theme_minimal()
+
+
+```
+
+```{r}
+# Generate predicted values for different levels of rrm_gap
+interaction_plot <- ggpredict(ols3ai_FE, terms = c("retention", "rrm_gap"))
+
+# Plot the interaction
+ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
+  geom_line(size = 1.2) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+  labs(title = "Interaction Effect of Retention and rrm_gap on Premature Mortality",
+       x = "Retention",
+       y = "Predicted Premature Mortality",
+       color = "rrm_gap Level") +
+  theme_minimal()
+
+
+```
+
+
+
+### sp auto
+
+
+
+
+```{r}
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3ai$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+```
+
+```{r}
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = ols3ai_FE$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+```
+
+
+
+## Spatial Error
+
+### part 1 - industry > trade
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# library(car)
+# vif(lm(rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro, data = mi1))
+
+# mi1$rrm_gap_demeaned <- ave(mi1$rrm_gap, mi1$state_fe, FUN = function(x) x - mean(x))
+
+SE1a1 = errorsarlm(data = mi1, retention ~ pct_ag + pct_mine + pct_mfg + logpop + metro,
+                  lw, zero.policy = TRUE)
+SE1a2 = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind,
+                  lw, zero.policy = TRUE)
+
+# SE1a2_FE = errorsarlm(data = mi1, rrm_gap ~ pct_ag + pct_mine + pct_mfg + state_fe + logpop + metro,
+#                   lw, zero.policy = TRUE)
+
+
+summary(SE1a1)
+summary(SE1a2)
+
+
+```
+
+
+
+
+### part 2 - industry + trade > prosperity
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+## not interaction
+SE2a = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind,
+                  lw, zero.policy = TRUE)
+
+summary(SE2a)
+
+## interaction
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+SE2ai = errorsarlm(data = mi1, prosperity ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind,
+                  lw, zero.policy = TRUE)
+
+summary(SE2ai)
+```
+
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(SE2ai, SE2a)
+```
+
+
+
+
+### part 3 - full model
+
+
+
+
+```{r}
+
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+SE3a = errorsarlm(data = mi1, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind,
+                  lw, zero.policy = TRUE)
+
+summary(SE3a)
+
+
+
+temp1 = data.frame(as.list(SE3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var)
+temp2 = data.frame(as.list(SE3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name))
+
+viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %>% rename("var"="name") %>%
+  filter(var != "X.Intercept.")
+
+
+SE3ai = errorsarlm(data = mi1, paam ~ retention + rrm_gap + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind,
+                  lw, zero.policy = TRUE)
+
+summary(SE3ai)
+
+
+
+temp1 = data.frame(as.list(SE3ai$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var)
+temp2 = data.frame(as.list(SE3ai$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name))
+
+viz_agg = temp1 %>% left_join(y=temp2, by="name") %>% mutate(rurality = "agg") %>% rename("var"="name") %>%
+  filter(var != "X.Intercept.")
+
+
+
+```
+
+
+####ANOVA
+
+
+```{r}
+anova(SE3ai, SE3a)
+```
+
+
+
+
+####Interaction Plot
+#### Part 3 OLS interaction plot
+
+
+
+```{r}
+# # Generate predicted values for different levels of rrm_gap
+# interaction_plot <- ggpredict(ols3ai, terms = c("retention", "rrm_gap"))
+# 
+# # Plot the interaction
+# ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
+#   geom_line(size = 1.2) +
+#   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+#   labs(title = "Interaction Effect of Retention and rrm_gap on Premature Mortality",
+#        x = "Retention",
+#        y = "Predicted Premature Mortality",
+#        color = "rrm_gap Level") +
+#   theme_minimal()
+
+
+# Generate predicted values from the spatial error model
+mi1$predicted_paam <- predict(SE3ai)  # Replace ols3ai with your actual model object
+
+# Create the interaction plot
+ggplot(mi1, aes(x = retention, y = predicted_paam, color = rrm_gap)) +
+  geom_point(alpha = 0.5) +  # Scatterplot of predicted values
+  geom_smooth(method = "lm", se = TRUE) +  # Add trend line
+  labs(title = "Interaction Effect of Retention and rrm_gap\n on Predicted Premature Mortality",
+       x = "Retention",
+       y = "Predicted Premature Mortality",
+       color = "rrm_gap Level") +
+  theme_minimal()
+
+
+```
+
+
+
+### sp auto
+
+
+
+```{r}
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = SE3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = SE3ai$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+```
+
+
+
+## 2 Regime- metro/non
+
+### part 1 - industry > trade
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr/(pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind),
+                  lw, zero.policy = TRUE)
+summary(sr1a)
+summary(sr1b)
+
+
+```
+
+
+
+
+### part 2 - industry + trade > prosperity
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind  + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2a)
+
+
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + retention*rrm_gap + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2ai)
+
+```
+
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2ai, sr2a)
+```
+
+
+
+### part 2b- Industry + Trade + Controls > PAAM
+
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2bi)
+
+```
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2bi, sr2b)
+```
+
+
+
+
+### part 3 - full model
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3a)
+
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3ai)
+
+```
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr3ai, sr3a)
+```
+
+
+
+
+### sp auto
+
+
+
+```{r}
+
+sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap +retention*rrm_gap + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+
+temp1 = data.frame(as.list(sr3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+temp2 = data.frame(as.list(sr3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+
+
+viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+
+
+# global and local autocorrelation
+Q2ar = mi1
+Q2ar$r = sr3a$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+Q2ar = Q2ar %>%
+  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+plot(st_geometry(Q2ar),
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+     border = "#333333", lwd=0.2)
+
+```
+
+
+
+###Print Results to Excel
+
+
+
+```{r}
+
+ #### print results  -->
+# Write OLS retention & autonomy results to excel file  -->
+#
+# install.packages("broom")
+# install.packages("writexl")
+library(broom)
+library(writexl)
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "RRG-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
+#
+#
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "RRG-Industry" = tidy_sr1b,
+  "Trade-Industry-Prosperity" = tidy_sr2a,
+    "Trade-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
+
+
+   #### print interaction results  -->
+# Write OLS retention and rrm_gap results to excel file  -->
+#
+
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2ai <- tidy(sr2ai)
+tidy_sr2bi <- tidy(sr2bi)
+tidy_sr3ai <- tidy(sr3ai)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry_int"
+tidy_sr1b$model <- "RRG-Industry_int"
+tidy_sr2ai$model <- "Trade-Industry-Prosperity_int"
+tidy_sr2bi$model <- "Trade-Industry-PAAM_int"
+tidy_sr3ai$model <- "FULL_int"
+#
+#
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry_int" = tidy_sr1a,
+  "RRG-Industry_int" = tidy_sr1b,
+  "Trade-Industry-Prosperity_int" = tidy_sr2ai,
+    "Trade-Industry-PAAM_int" = tidy_sr2bi,
+  "FULL_int" = tidy_sr3ai
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural1_int.xlsx")
+
+```
+
+
+
+
+## 3 Regime - 1-2/3/4-9
+
+### part 1 - industry > trade
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+
+
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr2/(pct_ag + pct_mine + pct_mfg + logpop + metro + pct_black + pct_hisp + pct_ind),
+                  lw, zero.policy = TRUE)
+summary(sr1a)
+summary(sr1b)
+
+
+
+
+```
+
+
+
+
+### part 2 - industry + trade > prosperity
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2a)
+
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2ai)
+
+```
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2ai, sr2a)
+```
+
+
+
+
+### part 2b - industry + trade + controls > paam
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2bi)
+
+```
+
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2bi, sr2b)
+```
+
+
+
+
+### part 3 - full model
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3a)
+
+
+
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3ai)
+
+
+```
+
+```{r}
+# abc = ggpredict(ols3a, terms = c("retention", "pct_black"))
+# ggpredict(sr3a, terms = c("retention")) %>% plot()
+```
+
+
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr3ai, sr3a)
+```
+
+
+
+### sp auto
+
+
+
+```{r}
+
+# sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+# 
+# sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr2/(retention + autonomy + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# 
+# temp1 = data.frame(as.list(sr3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# 
+# 
+# viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = ols3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+
+```
+
+
+
+###Print Results to Excel
+
+
+
+
+```{r}
+
+#  #### print results  -->
+# # Write OLS retention & autonomy results to excel file  -->
+#
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "RRG-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
+#
+# #
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "RRG-Industry" = tidy_sr1b,
+  "Trade-SR-Industry-Prosperity" = tidy_sr2a,
+  "Trade-SR-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural2.xlsx")
+
+
+#  #### print interaction results  -->
+# # Write OLS retention & rrm_gap results to excel file  -->
+#
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2ai <- tidy(sr2ai)
+tidy_sr2b9 <- tidy(sr2bi)
+tidy_sr3a9 <- tidy(sr3ai)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry_int"
+tidy_sr1b$model <- "RRG-Industry_int"
+tidy_sr2ai$model <- "Trade-Industry-Prosperity_int"
+tidy_sr2bi$model <- "Trade-Industry-PAAM_int"
+tidy_sr3ai$model <- "FULL_int"
+#
+# #
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry_int" = tidy_sr1a,
+  "RRG-Industry_int" = tidy_sr1b,
+  "Trade-SR-Industry-Prosperity_int" = tidy_sr2ai,
+  "Trade-SR-Industry-PAAM_int" = tidy_sr2bi,
+  "FULL_int" = tidy_sr3ai
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural2_int.xlsx")
+
+
+
+```
+
+
+
+## 4 Regime - 1-2/3/4-5/6-9
+
+### part 1 - industry > trade
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+sr_data = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+
+sr1a = errorsarlm(data = sr_data, retention ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+sr1b = errorsarlm(data = sr_data, rrm_gap ~ 0 + sr3/(pct_ag + pct_mine + pct_mfg + logpop + pct_black + pct_hisp + pct_ind),
+                  lw, zero.policy = TRUE)
+summary(sr1a)
+summary(sr1b)
+
+
+```
+
+
+
+
+### part 2 - industry + trade > prosperity
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2a = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind +  pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2a)
+
+sr2ai = errorsarlm(data = sr_data, prosperity ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_ag + pct_mine + pct_mfg + logpop),
+                  lw, zero.policy = TRUE)
+
+summary(sr2ai)
+
+```
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2ai, sr2a)
+
+# Wald test for interaction term in spatial error model
+waldtest(sr2ai, sr2a)
+
+```
+
+
+
+### part 2b - industry + trade + controls > paam 
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr2b = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2b)
+
+sr2bi = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr2bi)
+
+```
+
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr2bi, sr2b)
+
+
+# Wald test for interaction term in spatial error model
+waldtest(sr2bi, sr2b)
+
+```
+
+
+
+### part 3 - full model
+
+
+
+```{r}
+nb <- poly2nb(mi1, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind +  pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3a)
+
+
+sr3ai = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3ai)
+
+```
+
+
+
+#### ANOVA
+
+
+```{r}
+anova(sr3ai, sr3a)
+
+
+# Wald test for interaction term in spatial error model
+waldtest(sr3ai, sr3a)
+
+
+```
+
+
+
+### sp auto
+
+
+
+```{r}
+# 
+# sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+# 
+# ols3a = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + autonomy + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# 
+# temp1 = data.frame(as.list(ols3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# temp2 = data.frame(as.list(ols3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# 
+# 
+# viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = ols3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+
+```
+
+
+
+
+
+
+###Print Results to Excel
+
+
+
+```{r}
+
+#  #### print results  -->
+# # Write model results to excel file in separate sheets  -->
+#
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2a <- tidy(sr2a)
+tidy_sr2b <- tidy(sr2b)
+tidy_sr3a <- tidy(sr3a)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry"
+tidy_sr1b$model <- "RRG-Industry"
+tidy_sr2a$model <- "Trade-Industry-Prosperity"
+tidy_sr2b$model <- "Trade-Industry-PAAM"
+tidy_sr3a$model <- "FULL"
+#
+#
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry" = tidy_sr1a,
+  "RRG-Industry" = tidy_sr1b,
+  "Trade-SR-Industry-Prosperity" = tidy_sr2a,
+    "Trade-SR-Industry-PAAM" = tidy_sr2b,
+  "FULL" = tidy_sr3a
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural3.xlsx")
+  
+  
+#  #### print interaction results  -->
+# # Write model results to excel file in separate sheets  -->
+#
+#
+# ## Tidy results
+tidy_sr1a <- tidy(sr1a)
+tidy_sr1b <- tidy(sr1b)
+tidy_sr2ai <- tidy(sr2ai)
+tidy_sr2bi <- tidy(sr2bi)
+tidy_sr3ai <- tidy(sr3ai)
+#
+#
+#
+# # Identify each model
+#
+tidy_sr1a$model <- "Retention-Industry_int"
+tidy_sr1b$model <- "RRG-Industry_int"
+tidy_sr2ai$model <- "Trade-Industry-Prosperity_int"
+tidy_sr2bi$model <- "Trade-Industry-PAAM_int"
+tidy_sr3ai$model <- "FULL_int"
+#
+#
+# # # # Combine results into single DF
+# tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+#
+#
+# # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+  "Retention-Industry_int" = tidy_sr1a,
+  "RRG-Industry_int" = tidy_sr1b,
+  "Trade-SR-Industry-Prosperity_int" = tidy_sr2ai,
+    "Trade-SR-Industry-PAAM_int" = tidy_sr2bi,
+  "FULL_int" = tidy_sr3ai
+)
+
+# Write the list of data frames to an Excel file -->
+  write_xlsx(results_list, path = "SR_regression_results-rural3_int.xlsx")
+  
+# 
+# 
+```
+
+
+
+####partition by retention
+
+here, we are setting "below mean" as the threshhold for high/low
+
+
+
+```{r}
+
+### so this one is partitioning dataset into high/low retention
+
+lowret = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA))))) %>% 
+  filter(retention <= 0)
+
+
+nb <- poly2nb(lowret, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret)
+
+sr3airet = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet)
+
+
+### so this one is making retention a dummy (high/low)
+sr_data2 = sr_data %>% mutate(retention2 = ifelse(retention <= 0, 1, 0))
+
+nb <- poly2nb(sr_data2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret2)
+
+sr3airet2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + retention2*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet2)
+
+
+
+```
+
+
+
+here, we are doing it again but using -1 (1 standard deviation below mean and less)
+
+
+```{r}
+### so this one is partitioning dataset into high/low retention
+
+lowret = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA))))) %>% 
+  filter(retention <= -1)
+
+
+nb <- poly2nb(lowret, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret)
+
+sr3airet = errorsarlm(data = lowret, paam ~ 0 + sr/(rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet)
+
+
+### so this one is making retention a dummy (high/low)
+sr_data2 = sr_data %>% mutate(retention2 = ifelse(retention <= -1, 1, 0))
+
+nb <- poly2nb(sr_data2, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+sr3aret2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3aret2)
+
+sr3airet2 = errorsarlm(data = sr_data2, paam ~ 0 + sr/(rrm_gap + retention2 + retention2*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
+
+summary(sr3airet2)
+
+```
+
+
+
+
+
+###Coefficient Plot1
+
+
+
+```{r}
+
+# Extract model estimates from spatialR4
+sr3ai_results <- tidy(sr3ai, conf.int = TRUE)
+
+
+# Filter only relevant terms (accounting for prefixes)
+results <- sr3ai_results %>%
+  filter(grepl("retention|rrm_gap|prosperity", term)) %>%  
+  rename(
+    Variable = term,
+    Estimate = estimate,
+    CI_Lower = conf.low,
+    CI_Upper = conf.high
+  )
+
+# Assign Regime labels based on prefixes in 'term'
+results <- results %>%
+  mutate(Regime = case_when(
+    grepl("large\\.metro", Variable) ~ "Large Metro",
+    grepl("large\\.nonmetro", Variable) ~ "Large Nonmetro",
+    grepl("small\\.metro", Variable) ~ "Small Metro",
+    grepl("small\\.nonmetro", Variable) ~ "Small Nonmetro",
+    TRUE ~ "Other"
+  ))
+
+# Clean variable names for plotting
+results$Variable <- gsub("sr3large\\.metro:|sr3large\\.nonmetro:|sr3small\\.metro:|sr3small\\.nonmetro:", "", results$Variable)
+
+# Ensure data exists before plotting
+if (nrow(results) > 0) {
+plot1<- ggplot(results, aes(x = Estimate, y = Variable, color = Regime)) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), height = 0.2) +
+  facet_wrap(~Regime) +
+  theme_minimal() +
+  labs(title = "Association of Premature Mortality with Retention,/n Racial Opportunity Gap, and Prosperity",
+       x = "Premature Mortality",
+       y = "Variable") +
+  theme(legend.position = "bottom")
+} else {
+  print("No matching terms found in spatialR4 model output.")
+}
+
+
+
+# Create coefficient plot
+plot1<- ggplot(results, aes(x = Estimate, y = Variable, color = Regime)) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = CI_Lower, xmax = CI_Upper), height = 0.2) +
+  facet_wrap(~Regime) +
+  theme_minimal() +
+  labs(title = "Association of Premature Mortality with Retention,\n Racial Opportunity Gap, and Prosperity",
+       x = "Premature Mortality",
+       y = "Variable") +
+  theme(legend.position = "bottom")
+
+plot1
+
+
+```
+
+
+
+###Another Coefficient Plot2
+
+
+```{r}
+
+
+# Extract coefficients from spatial error model
+results <- tidy(sr3ai, conf.int = TRUE)
+
+# Print available term names to verify correct filtering
+print("Unique terms in model output:")
+print(unique(results$term))
+
+# Filter relevant terms using grepl to match regime-specific naming
+results <- results %>%
+  filter(grepl("retention|rrm_gap|prosperity", term)) %>%
+  mutate(significance = ifelse(p.value < 0.05, "Significant", "Not Significant"))
+
+# Extract regime from term name (assuming terms follow "sr3{regime}:{variable}" pattern)
+results <- results %>%
+  mutate(
+    Regime = case_when(
+      grepl("sr3large\\.metro", term) ~ "Large Metro",
+      grepl("sr3small\\.metro", term) ~ "Small Metro",
+      grepl("sr3large\\.nonmetro", term) ~ "Large Nonmetro",
+      grepl("sr3small\\.nonmetro", term) ~ "Small Nonmetro",
+      TRUE ~ "Overall"
+    )
+  )
+
+# Ensure Regime is a factor to control order in plots
+results$Regime <- factor(results$Regime, levels = c("Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro"))
+
+# Clean variable names for clarity
+results$term <- gsub("sr3large\\.metro:|sr3small\\.metro:|sr3large\\.nonmetro:|sr3small\\.nonmetro:", "", results$term)
+
+# Ensure no empty rows remain after filtering
+results <- results %>% filter(!is.na(estimate))
+
+# Stop execution if no valid data remains
+if (nrow(results) == 0) {
+  stop("Error: No matching terms found in model output. Check term names.")
+}
+
+# Create coefficient plots faceted by Regime (2x2 grid layout)
+plot2<- ggplot(results, aes(x = estimate, y = term, color = significance)) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  facet_wrap(~Regime, ncol = 2, scales = "free_y") +  # Creates a 2x2 grid, allowing different term sets
+  theme_minimal() +
+  scale_color_manual(values = c("Significant" = "Orange", "Not Significant" = "gray")) +
+  labs(title = "Effects of Retention, ROG, and Interaction on Premature Mortality",
+       x = "Premature Age-Adjusted Mortality",
+       y = "Variable",
+       color = "Significance") +
+  theme(legend.position = "bottom")
+
+plot2
+
+```
+
+
+
+
+
+
+# margin plots
+
+clayton's notes:
+okay, so I think I figured out to do something similar to margin plots manually. What I'm doing is extracting the predicted (fitted) values from our models, reading in other data, and plotting fitted values as our Y axis and a number of X vars as our X axis and colors.
+
+First example here, I am creating a new dataframe for testing purposes, running an OLS model "testols", and then extracting and combining with the new dataframe, and finally using the "prepackaged" ggpredict command to plot margins plot.
+
+
+
+```{r}
+testdata = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+testols = lm(data = testdata, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind + metro)
+
+cca = as.data.frame(testols$fitted.values) %>%
+  rename("fitted"=1)
+cca2a = as.data.frame(testols$model$paam) %>%
+  rename("paam"=1)
+cca2b = as.data.frame(testols$model$retention) %>%
+  rename("retention"=1)
+
+cca3 = cbind(cca, cca2a, cca2b) %>%
+  left_join(y=testdata, by=c("paam","retention"))
+ggpredict(testols, terms = c("retention", "metro")) |> plot()
+
+
+
+```
+
+
+
+
+Let us now compare this to me manually plotting the fitted values using ggplot. Decently similar, but not exactly the same (from what I can tell).
+
+
+
+```{r}
+ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+
+```
+
+
+
+
+Okay, now I can apply this same process for our spatial regime models
+
+
+
+```{r}
+
+cca = as.data.frame(sr3a$fitted.values) %>%
+  rename("fitted"=1)
+cca2a = as.data.frame(sr3a$y) %>%
+  rename("paam"=1)
+cca2b = as.data.frame(sr3a$X) %>%
+  rename("cca1"=3, "cca2"=4) %>%
+  mutate(retention = cca1 + cca2) %>%
+  dplyr::select(retention)
+temp = sr_data %>%
+  st_drop_geometry()
+cca3 = cbind(cca, cca2a, cca2b) %>%
+  left_join(y=temp, by=c("paam","retention"))
+  
+ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+
+
+```
+
+
+
+
+
+Okay, and you can see here that I can customize colors, and switch around the desired plot features. I didn't play around with plotting by more than 2 features simultaneously, but it is doable.
+
+
+
+```{r}
+ggplot(cca3, aes(y = fitted, x = retention, color = sr)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = FALSE) +
+  scale_color_manual(values = c("#8576AC", "#83A396")) +  # Apply custom colors
+  theme_minimal() +
+  labs(color = "metro status")  # Optional, to label the color scale
+
+ggplot(cca3, aes(y = fitted, x = retention, color = rrm_gap)) +
+  geom_point() +
+  stat_smooth(method = "lm", se = FALSE) +
+  scale_color_gradient2(low = "#351c75", mid = "white", high = "#04442A", midpoint = median(cca3$rrm_gap)) +
+  theme_minimal() +
+  labs(color = "RRM Gap")  # optional, to label the color scale
+
+```
+
