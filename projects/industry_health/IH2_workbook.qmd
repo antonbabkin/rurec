@@ -1293,7 +1293,7 @@ anova(ols2ai, ols2a)
 #### Part 2 FE- ANOVA 
 
 ```{r}
-anova(ols2ai_FE, ols2a_FE)
+# anova(ols2ai_FE, ols2a_FE)
 ```
 
 ### part 3 - (No Int) full model
@@ -1357,11 +1357,11 @@ summary(ols3ai_FE)
 
 #### Part 3- ANOVA
 ```{r}
-anova(ols3ai, ols3a)
-```
-
-```{r}
-anova(ols3ai_FE, ols3a_FE)
+# anova(ols3ai, ols3a)
+# ```
+# 
+# ```{r}
+# anova(ols3ai_FE, ols3a_FE)
 ```
 
 
@@ -1387,18 +1387,18 @@ ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
 
 
 ```{r}
-# Generate predicted values for different levels of rrm_gap
-interaction_plot <- ggpredict(ols3ai_FE, terms = c("retention", "rrm_gap"))
-
-# Plot the interaction
-ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
-  geom_line(size = 1.2) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
-  labs(title = "Interaction Effect of Retention and rrm_gap on Premature Mortality",
-       x = "Retention",
-       y = "Predicted Premature Mortality",
-       color = "rrm_gap Level") +
-  theme_minimal()
+# # Generate predicted values for different levels of rrm_gap
+# interaction_plot <- ggpredict(ols3ai_FE, terms = c("retention", "rrm_gap"))
+# 
+# # Plot the interaction
+# ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
+#   geom_line(size = 1.2) +
+#   geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.2) +
+#   labs(title = "Interaction Effect of Retention and rrm_gap on Premature Mortality",
+#        x = "Retention",
+#        y = "Predicted Premature Mortality",
+#        color = "rrm_gap Level") +
+#   theme_minimal()
 
 
 ```
@@ -1408,23 +1408,23 @@ ggplot(interaction_plot, aes(x = x, y = predicted, color = group)) +
 
 ```{r}
 
-# global and local autocorrelation
-Q2ar = mi1
-Q2ar$r = ols3ai$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar), 
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
-     border = "#333333", lwd=0.2)
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = ols3ai$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar), 
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+#      border = "#333333", lwd=0.2)
 ```
 
 
@@ -1432,22 +1432,22 @@ plot(st_geometry(Q2ar),
 ```{r}
 
 # global and local autocorrelation
-Q2ar = mi1
-Q2ar$r = ols3ai_FE$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar), 
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
-     border = "#333333", lwd=0.2)
+# Q2ar = mi1
+# Q2ar$r = ols3ai_FE$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar), 
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+#      border = "#333333", lwd=0.2)
 ```
 
 ## Spatial Error
@@ -1571,18 +1571,18 @@ anova(SE3ai, SE3a)
 #   theme_minimal()
 
 
-# Generate predicted values from the spatial error model
-mi1$predicted_paam <- predict(SE3ai)  # Replace ols3ai with your actual model object
-
-# Create the interaction plot
-ggplot(mi1, aes(x = retention, y = predicted_paam, color = rrm_gap)) +
-  geom_point(alpha = 0.5) +  # Scatterplot of predicted values
-  geom_smooth(method = "lm", se = TRUE) +  # Add trend line
-  labs(title = "Interaction Effect of Retention and rrm_gap\n on Predicted Premature Mortality",
-       x = "Retention",
-       y = "Predicted Premature Mortality",
-       color = "rrm_gap Level") +
-  theme_minimal()
+# # Generate predicted values from the spatial error model
+# mi1$predicted_paam <- predict(SE3ai)  # Replace ols3ai with your actual model object
+# 
+# # Create the interaction plot
+# ggplot(mi1, aes(x = retention, y = predicted_paam, color = rrm_gap)) +
+#   geom_point(alpha = 0.5) +  # Scatterplot of predicted values
+#   geom_smooth(method = "lm", se = TRUE) +  # Add trend line
+#   labs(title = "Interaction Effect of Retention and rrm_gap\n on Predicted Premature Mortality",
+#        x = "Retention",
+#        y = "Predicted Premature Mortality",
+#        color = "rrm_gap Level") +
+#   theme_minimal()
 
 
 ```
@@ -1590,42 +1590,42 @@ ggplot(mi1, aes(x = retention, y = predicted_paam, color = rrm_gap)) +
 ### sp auto
 
 ```{r}
-# global and local autocorrelation
-Q2ar = mi1
-Q2ar$r = SE3a$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar),
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
-     border = "#333333", lwd=0.2)
-
-
-# global and local autocorrelation
-Q2ar = mi1
-Q2ar$r = SE3ai$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar),
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
-     border = "#333333", lwd=0.2)
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = SE3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = SE3ai$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
 ```
 
 ## 2 Regime- metro/non
@@ -1730,36 +1730,36 @@ anova(sr3ai, sr3a)
 
 ```{r}
 
-sr_data = mi1 %>% mutate(sr = metro_nonmetro)
-
-sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap +retention*rrm_gap + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
-                  lw, zero.policy = TRUE)
-
-
-temp1 = data.frame(as.list(sr3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
-temp2 = data.frame(as.list(sr3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
-
-
-viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
-
-
-# global and local autocorrelation
-Q2ar = mi1
-Q2ar$r = sr3a$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar),
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
-     border = "#333333", lwd=0.2)
+# sr_data = mi1 %>% mutate(sr = metro_nonmetro)
+# 
+# sr3a = errorsarlm(data = sr_data, paam ~ 0 + sr/(retention + rrm_gap +retention*rrm_gap + pct_ag + pct_mine + pct_mfg + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# 
+# temp1 = data.frame(as.list(sr3a$coefficients)) %>% mutate(var = "coef") %>% pivot_longer(cols=!var, names_to = "name", values_to = "coef") %>% select(-var) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# temp2 = data.frame(as.list(sr3a$rest.se)) %>% mutate(var = "se") %>% pivot_longer(cols=!var, names_to = "name", values_to = "se") %>% select(-var) %>% mutate(name = gsub('I.x...lambda...WX.', '', name), name = ifelse(name == ".Intercept.", "X.Intercept.", name)) %>% filter(name != "srmetro" & name != "srnonmetro") %>% mutate(rurality = substr(name, 1, 5), name = gsub('srmetro.', '', name), name = gsub('srnonmetro.', '', name), rurality = ifelse(rurality == "srmet", "metro", "nonmetro"))
+# 
+# 
+# viz_regime = temp1 %>% left_join(y=temp2, by=c("name","rurality")) %>% rename("var"="name")
+# 
+# 
+# # global and local autocorrelation
+# Q2ar = mi1
+# Q2ar$r = sr3a$resid
+# nb <- poly2nb(Q2ar, queen=TRUE)
+# lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+# lw$weights[5]
+# moran.test(Q2ar$r,lw, zero.policy=TRUE)
+# w <- queen_weights(Q2ar)
+# lisa <- local_moran(w, Q2ar['r'])
+# lisa_colors <- lisa_colors(lisa)
+# lisa_labels <- lisa_labels(lisa)
+# lisa_clusters <- lisa_clusters(lisa)
+# Q2ar = Q2ar %>%
+#   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
+# plot(st_geometry(Q2ar),
+#      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
+#      border = "#333333", lwd=0.2)
 
 ```
 
@@ -2530,7 +2530,7 @@ plot2<- ggplot(results, aes(x = estimate, y = term, color = significance)) +
   geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
   facet_wrap(~Regime, ncol = 2, scales = "free_y") +  # Creates a 2x2 grid, allowing different term sets
   theme_minimal() +
-  scale_color_manual(values = c("Significant" = "Orange", "Not Significant" = "gray")) +
+  scale_color_manual(values = c("Significant" = "#8b0037ff", "Not Significant" = "gray")) +
   labs(title = "Effects of Retention, ROG, and Interaction on Premature Mortality",
        x = "Premature Age-Adjusted Mortality",
        y = "Variable",
