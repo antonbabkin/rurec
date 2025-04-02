@@ -854,14 +854,14 @@ for (plot in density_plots) {
 
 paam_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
                     aes(x = paam, group = four_metro, color = as.factor(four_metro))) +
-  geom_density(linewidth = 1.2) +
+  geom_density(linewidth = .75) +
   scale_color_manual(
     name = "Rural-Urban Gradient",
     values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
                "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
-  labs(title = "Premature Mortality Rate", x = "Premature Age-Adjusted Mortality", y = "Density") +
+  labs(title = "", x = "Premature Age-Adjusted Mortality", y = "Density") +
   theme_minimal() +
   theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
         legend.position = "left",
@@ -880,7 +880,7 @@ retention_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
                "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
-  labs(title = "Economic Resource Retention", x = "Retention", y = "Density") +
+  labs(title = "", x = "Retention", y = "Density") +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
@@ -901,7 +901,7 @@ rog_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
                "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
-  labs(title = "Racial Opportunity Gap", x = "ROG", y = "Density") +
+  labs(title = "", x = "ROG", y = "Density") +
   theme_minimal() +
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
@@ -996,7 +996,7 @@ paam_map <- df_map %>%
   tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
       palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
       title = "Deaths <75 \nper 100,000") +
-      tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+      # tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"),  legend.title.size = 1.0, frame = FALSE)
 
 print(paam_map)
@@ -1011,7 +1011,7 @@ retention_map <- df_map %>%
   tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
                            palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
                            title = "Intermediate \nRetention\n Rate") +
-  tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
+  # tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
             legend.title.size = 1.0, frame = FALSE)
 
@@ -1026,7 +1026,7 @@ rog_map <- df_map %>%
   tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
                            palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
                            title = "Rank-rank \nmobility gap") +
-  tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+  # tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
             legend.title.size = 1.0, frame = FALSE)
 
@@ -2849,7 +2849,7 @@ plot2 <- ggplot(results, aes(x = estimate, y = term, color = significance)) +
   theme_minimal() +
   scale_color_manual(values = c("Significant (p < .05)" = "#8b0037ff", "Not Significant" = "gray")) +
   labs(
-    title = "Retention, ROG, and \nInteraction on Premature Mortality",
+    # title = "Retention, ROG, and \nInteraction on Premature Mortality",
     x = "Premature Age-Adjusted Mortality",
     y = "Variable",
     color = "Significance"
