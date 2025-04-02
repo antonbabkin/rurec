@@ -782,7 +782,7 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 vars = c("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
-titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
+titles = c("Premature Mortality Rate", "Economic Resource Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
            "%\n Agriculture", 
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
@@ -812,13 +812,106 @@ create_density_plots <- function(data, vars, four_metro, my_colors, titles) {
   return(plots)  
 }
 
-
 # Call the function
 density_plots <- create_density_plots(data, vars, "four_metro", my_colors, titles)
 
 for (plot in density_plots) {
   print(plot)
 }
+
+
+
+# #For Presentation loop
+# # Function
+# create_density_plots2 <- function(data, vars, four_metro, titles) {
+#   plots <- list()
+#   for (i in seq_along(vars)) {
+#     plots[[vars[i]]] <- ggplot(data[!is.na(data[[four_metro]]), ],
+#                                aes_string(x = vars[i], group = four_metro, color = paste0("as.factor(", four_metro, ")"))) +
+#       geom_density() +
+#       scale_color_manual(
+#         name = "Rural-Urban Gradient",
+#         values = c("large_metro" = "#8A1B47", "large_nonmetro" = "#885C6E", 
+#                    "small_metro" = "#888888", "small_nonmetro" = "#1A1A1A"),
+#         labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
+#       ) +
+#       labs(title = titles[i], x = vars[i], y = "Density") +
+#       theme_minimal() +
+#       theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+#             legend.position = "left", "center")
+#   }
+#   return(plots)
+# }
+# 
+# # Call and print
+# density_plots2 <- create_density_plots2(data, vars, "four_metro", titles)
+# for (p in density_plots2) print(p)
+
+
+#For presentation (single variables of interest)
+#PAAM Plot
+
+
+paam_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
+                    aes(x = paam, group = four_metro, color = as.factor(four_metro))) +
+  geom_density(linewidth = 1.2) +
+  scale_color_manual(
+    name = "Rural-Urban Gradient",
+    values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
+               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+    labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
+  ) +
+  labs(title = "Premature Mortality Rate", x = "Premature Age-Adjusted Mortality", y = "Density") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        legend.position = "left",
+        plot.margin = margin(t = 20, r = 10, b = 30, l = 10))
+
+print(paam_plot)
+
+
+#Retention plot
+retention_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
+                    aes(x = retention, group = four_metro, color = as.factor(four_metro))) +
+  geom_density(linewidth = .75) +  
+  scale_color_manual(
+    name = "Rural-Urban Gradient",
+    values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
+               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+    labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
+  ) +
+  labs(title = "Economic Resource Retention", x = "Retention", y = "Density") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    legend.position = "left",
+    plot.margin = margin(t = 20, r = 10, b = 20, l = 20)
+  )
+
+print(retention_plot)
+
+#ROG plot
+#Retention plot
+rog_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
+                    aes(x = rrm_gap, group = four_metro, color = as.factor(four_metro))) +
+  geom_density(linewidth = .75) +  
+  scale_color_manual(
+    name = "Rural-Urban Gradient",
+    values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
+               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+    labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
+  ) +
+  labs(title = "Racial Opportunity Gap", x = "ROG", y = "Density") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    legend.position = "left",
+    plot.margin = margin(t = 20, r = 10, b = 20, l = 20)
+  )
+
+print(rog_plot)
+
+
 ```
 
 # Maps
@@ -829,12 +922,15 @@ for (plot in density_plots) {
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 
-#install.packages("RColorBrewer")
+# install.packages("RColorBrewer")
 # library(RColorBrewer)
+
+my_palette <- colorRampPalette(c("#8A1B47", "#888888ff"))(6)
+  print(my_palette)
  
  vars = list("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
  
- titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
+ titles = c("Premature\n Mortality", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
  
 for (i in seq_along(vars)) {
   v = vars[[i]]
@@ -863,7 +959,184 @@ print(output)
   tm_legend(title = "% \n Mining", title.fontface = 2)
 
 print(output)
- 
+
+#red color scheme
+# for (i in seq_along(vars)) {
+#   v = vars[[i]]
+#   legend_title = titles[i]
+# 
+#  mdn = median(df_map[[v]], na.rm = TRUE)
+# 
+#  tmap_mode("plot")
+#  output = df_map %>%
+#    tm_shape() +
+#   tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
+#                palette = c("#888888","#88727B", "#885C6E", "#885C6E", "#894661","#8A1B47")) +
+#    tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
+#     tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+#     tm_legend(title = legend_title, title.fontface = 2)
+# 
+# print(output)
+# 
+#  }
+
+#Maps for presenting
+
+#library(sf)
+
+#blue-red color scheme
+tmap_mode("plot")
+
+# fix paam title
+title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+                  label = "Premature Mortality Rate", crs = st_crs(df_map))
+
+# Generate paam map
+paam_map <- df_map %>%
+  tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
+      palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+      title = "Deaths <75 \nper 100,000") +
+      tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"),  legend.title.size = 1.0, frame = FALSE)
+
+print(paam_map)
+
+
+# fix Retention title
+title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+                  label = "Economic Resource Retention", crs = st_crs(df_map))
+
+# Generate retention map
+retention_map <- df_map %>%
+  tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
+                           palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
+                           title = "Intermediate \nRetention\n Rate") +
+  tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
+  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+            legend.title.size = 1.0, frame = FALSE)
+
+print(retention_map)
+
+# fix ROG title
+title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+                  label = "Racial Opportunity Gap", crs = st_crs(df_map))
+
+# Generate ROG map
+rog_map <- df_map %>%
+  tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
+                           palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
+                           title = "Rank-rank \nmobility gap") +
+  tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+            legend.title.size = 1.0, frame = FALSE)
+
+print(rog_map)
+
+
+
+
+# #red-grey color scheme
+# # Get map bounds to place the title
+# bbox <- st_bbox(df_map)
+# 
+# tmap_mode("plot")
+# 
+# # fix paam title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Premature Mortality Rate", crs = st_crs(df_map))
+# 
+# # Generate paam map
+# paam_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(paam_map)
+# 
+# # fix retention title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Economic Resource Retention Rate", crs = st_crs(df_map))
+# 
+# # Generate retention map
+# retention_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(retention_map)
+# 
+# # fix ROG title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
+# 
+# # Generate ROG map
+# rog_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(rog_map)
+# 
+# 
+# #green-blue color scheme
+# # Get map bounds to place the title
+# bbox <- st_bbox(df_map)
+# 
+# tmap_mode("plot")
+# 
+# # fix paam title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Premature Mortality Rate", crs = st_crs(df_map))
+# 
+# # Generate paam map
+# paam_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(paam_map)
+# 
+# # fix retention title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Economic Resource Retention Rate", crs = st_crs(df_map))
+# 
+# # Generate retention map
+# retention_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(retention_map)
+# 
+# # fix ROG title
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
+# 
+# # Generate ROG map
+# rog_map <- df_map %>%
+#   tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
+#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
+#                            title = "") +
+#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
+#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
+#             legend.title.size = 1.0, frame = FALSE)
+# 
+# print(rog_map)
 
 
 ```
@@ -2486,21 +2759,68 @@ plot1
 ```{r}
 
 
+# # Extract coefficients from spatial error model
+# results <- tidy(sr3ai, conf.int = TRUE)
+# 
+# # Print available term names to verify correct filtering
+# print("Unique terms in model output:")
+# print(unique(results$term))
+# 
+# # Filter relevant terms using grepl to match regime-specific naming
+# results <- results %>%
+#   filter(grepl("retention|rrm_gap|prosperity", term)) %>%
+#   mutate(significance = ifelse(p.value < 0.05, "Significant", "Not Significant"))
+# 
+# # Extract regime from term name (assuming terms follow "sr3{regime}:{variable}" pattern)
+# results <- results %>%
+#   mutate(
+#     Regime = case_when(
+#       grepl("sr3large\\.metro", term) ~ "Large Metro",
+#       grepl("sr3small\\.metro", term) ~ "Small Metro",
+#       grepl("sr3large\\.nonmetro", term) ~ "Large Nonmetro",
+#       grepl("sr3small\\.nonmetro", term) ~ "Small Nonmetro",
+#       TRUE ~ "Overall"
+#     )
+#   )
+# 
+# # Ensure Regime is a factor to control order in plots
+# results$Regime <- factor(results$Regime, levels = c("Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro"))
+# 
+# # Clean variable names for clarity
+# results$term <- gsub("sr3large\\.metro:|sr3small\\.metro:|sr3large\\.nonmetro:|sr3small\\.nonmetro:", "", results$term)
+# 
+# # Ensure no empty rows remain after filtering
+# results <- results %>% filter(!is.na(estimate))
+# 
+# # Stop execution if no valid data remains
+# if (nrow(results) == 0) {
+#   stop("Error: No matching terms found in model output. Check term names.")
+# }
+# 
+# # Create coefficient plots faceted by Regime (2x2 grid layout)
+# plot2<- ggplot(results, aes(x = estimate, y = term, color = significance)) +
+#   geom_point(size = 3) +
+#   geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+#   facet_wrap(~Regime, ncol = 2, scales = "free_y") +  # Creates a 2x2 grid, allowing different term sets
+#   theme_minimal() +
+#   scale_color_manual(values = c("Significant" = "#8b0037ff", "Not Significant" = "gray")) +
+#   labs(title = "Effects of Retention, ROG, and Interaction on Premature Mortality",
+#        x = "Premature Age-Adjusted Mortality",
+#        y = "Variable",
+#        color = "Significance") +
+#   theme(legend.position = "bottom")
+# 
+# plot2
+
+
 # Extract coefficients from spatial error model
 results <- tidy(sr3ai, conf.int = TRUE)
 
-# Print available term names to verify correct filtering
-print("Unique terms in model output:")
-print(unique(results$term))
-
-# Filter relevant terms using grepl to match regime-specific naming
+# Filter terms and flag significance
 results <- results %>%
-  filter(grepl("retention|rrm_gap|prosperity", term)) %>%
-  mutate(significance = ifelse(p.value < 0.05, "Significant", "Not Significant"))
-
-# Extract regime from term name (assuming terms follow "sr3{regime}:{variable}" pattern)
-results <- results %>%
+  filter(grepl("retention|rrm_gap", term), !grepl("prosperity", term)) %>%
   mutate(
+    significance = ifelse(p.value < 0.05, "Significant (p < .05)", "Not Significant"),
     Regime = case_when(
       grepl("sr3large\\.metro", term) ~ "Large Metro",
       grepl("sr3small\\.metro", term) ~ "Small Metro",
@@ -2510,34 +2830,41 @@ results <- results %>%
     )
   )
 
-# Ensure Regime is a factor to control order in plots
+# Clean and relabel terms
+results$term <- gsub("sr3large\\.metro:|sr3small\\.metro:|sr3large\\.nonmetro:|sr3small\\.nonmetro:", "", results$term)
+results$term <- recode(results$term,
+                       "retention" = "Retention",
+                       "rrm_gap" = "ROG",
+                       "retention:rrm_gap" = "Retention:ROG")
+
+# Set factor order for top-to-bottom display
+results$term <- factor(results$term, levels = rev(c("Retention", "ROG", "Retention:ROG")))
 results$Regime <- factor(results$Regime, levels = c("Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro"))
 
-# Clean variable names for clarity
-results$term <- gsub("sr3large\\.metro:|sr3small\\.metro:|sr3large\\.nonmetro:|sr3small\\.nonmetro:", "", results$term)
-
-# Ensure no empty rows remain after filtering
-results <- results %>% filter(!is.na(estimate))
-
-# Stop execution if no valid data remains
-if (nrow(results) == 0) {
-  stop("Error: No matching terms found in model output. Check term names.")
-}
-
-# Create coefficient plots faceted by Regime (2x2 grid layout)
-plot2<- ggplot(results, aes(x = estimate, y = term, color = significance)) +
+# Create plot
+plot2 <- ggplot(results, aes(x = estimate, y = term, color = significance)) +
   geom_point(size = 3) +
   geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
-  facet_wrap(~Regime, ncol = 2, scales = "free_y") +  # Creates a 2x2 grid, allowing different term sets
+  facet_wrap(~Regime, ncol = 2, scales = "free_y") +
   theme_minimal() +
-  scale_color_manual(values = c("Significant" = "#8b0037ff", "Not Significant" = "gray")) +
-  labs(title = "Effects of Retention, ROG, and Interaction on Premature Mortality",
-       x = "Premature Age-Adjusted Mortality",
-       y = "Variable",
-       color = "Significance") +
-  theme(legend.position = "bottom")
+  scale_color_manual(values = c("Significant (p < .05)" = "#8b0037ff", "Not Significant" = "gray")) +
+  labs(
+    title = "Retention, ROG, and \nInteraction on Premature Mortality",
+    x = "Premature Age-Adjusted Mortality",
+    y = "Variable",
+    color = "Significance"
+  ) +
+  theme(
+    legend.position = "bottom",
+    plot.margin = margin(t = 10, r = 30, b = 10, l = 20),   
+  axis.title.x = element_text(margin = margin(t = 15)),
+  axis.title.y = element_text(margin = margin(r = 15)),
+  plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+  )
 
 plot2
+
+
 
 ```
 
