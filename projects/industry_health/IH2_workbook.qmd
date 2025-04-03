@@ -858,14 +858,18 @@ paam_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
   scale_color_manual(
     name = "Rural-Urban Gradient",
     values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
-               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+               "small_metro" = "#d5303e", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
   labs(title = "", x = "Premature Age-Adjusted Mortality", y = "Density") +
   theme_minimal() +
-  theme(plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
-        legend.position = "left",
-        plot.margin = margin(t = 20, r = 10, b = 30, l = 10))
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    legend.position = "left",
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.margin = margin(t = 20, r = 10, b = 30, l = 10)
+  )
 
 print(paam_plot)
 
@@ -877,7 +881,7 @@ retention_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
   scale_color_manual(
     name = "Rural-Urban Gradient",
     values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
-               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+               "small_metro" = "#d5303e", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
   labs(title = "", x = "Retention", y = "Density") +
@@ -885,7 +889,9 @@ retention_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
     legend.position = "left",
-    plot.margin = margin(t = 20, r = 10, b = 20, l = 20)
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.margin = margin(t = 20, r = 10, b = 30, l = 10)
   )
 
 print(retention_plot)
@@ -898,7 +904,7 @@ rog_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
   scale_color_manual(
     name = "Rural-Urban Gradient",
     values = c("large_metro" = "#f4b6b6", "large_nonmetro" = "#2c7fb8", 
-               "small_metro" = "#8A1B47", "small_nonmetro" = "#08306B"),
+               "small_metro" = "#d5303e", "small_nonmetro" = "#08306B"),
     labels = c("Large Metro", "Large Nonmetro", "Small Metro", "Small Nonmetro")
   ) +
   labs(title = "", x = "ROG", y = "Density") +
@@ -906,7 +912,9 @@ rog_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
   theme(
     plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
     legend.position = "left",
-    plot.margin = margin(t = 20, r = 10, b = 20, l = 20)
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10),
+    plot.margin = margin(t = 20, r = 10, b = 30, l = 10)
   )
 
 print(rog_plot)
@@ -999,7 +1007,7 @@ paam_map <- df_map %>%
   tm_shape() +
   tm_polygons(
     col = "paam", style = "quantile", n = 4, border.alpha = 0.1,
-    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
     title = "Deaths <75 \nper 100,000",
     showNA = FALSE  
   ) +
@@ -1030,7 +1038,7 @@ retention_map <- df_map %>%
   tm_shape() +
   tm_polygons(
     col = "retention", style = "quantile", n = 4, border.alpha = 0.1,
-    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
     title = "Intermediate \nRetention \nRate",
     legend.format = list(digits = 2, scientific = FALSE),
     showNA = FALSE 
