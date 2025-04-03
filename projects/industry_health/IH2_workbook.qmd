@@ -1071,7 +1071,7 @@ rog_map <- df_map %>%
   tm_polygons(
     col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1,
     palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
-    title = "Rank-rank /nmobility gap",
+    title = "Rank-rank \nmobility gap",
     legend.format = list(digits = 2, scientific = FALSE),
     showNA = FALSE 
   ) +
@@ -1079,7 +1079,7 @@ rog_map <- df_map %>%
     type = "fill", 
     labels = paste0("Missing (n = ", n_na, ")"), 
     col = "gray",
-    group = "Rank-rank /nmobility gap"
+    group = "Rank-rank \nmobility gap"
   ) +
   tm_layout(
     inner.margins = c(0.01, 0.25, 0.01, 0.01),
