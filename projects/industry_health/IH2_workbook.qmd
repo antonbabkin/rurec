@@ -2844,25 +2844,25 @@ okay, so I think I figured out to do something similar to margin plots manually.
 First example here, I am creating a new dataframe for testing purposes, running an OLS model "testols", and then extracting and combining with the new dataframe, and finally using the "prepackaged" ggpredict command to plot margins plot.
 
 ```{r}
-testdata = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
-        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
-sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
-       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
-       ifelse((rucc >= 6), "small.nonmetro", NA)))))
-
-testols = lm(data = testdata, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind + metro)
-
-cca = as.data.frame(testols$fitted.values) %>%
-  rename("fitted"=1)
-cca2a = as.data.frame(testols$model$paam) %>%
-  rename("paam"=1)
-cca2b = as.data.frame(testols$model$retention) %>%
-  rename("retention"=1)
-
-cca3 = cbind(cca, cca2a, cca2b) %>%
-  left_join(y=testdata, by=c("paam","retention"))
-ggpredict(testols, terms = c("retention", "metro")) |> plot()
-
+# testdata = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+#         ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+# sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+#        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+#        ifelse((rucc >= 6), "small.nonmetro", NA)))))
+# 
+# testols = lm(data = testdata, paam ~ retention + rrm_gap + pct_ag + pct_mine + pct_mfg + prosperity + age + logpop + uninsured + pct_black + pct_hisp + pct_ind + metro)
+# 
+# cca = as.data.frame(testols$fitted.values) %>%
+#   rename("fitted"=1)
+# cca2a = as.data.frame(testols$model$paam) %>%
+#   rename("paam"=1)
+# cca2b = as.data.frame(testols$model$retention) %>%
+#   rename("retention"=1)
+# 
+# cca3 = cbind(cca, cca2a, cca2b) %>%
+#   left_join(y=testdata, by=c("paam","retention"))
+# ggpredict(testols, terms = c("retention", "metro")) |> plot()
+# 
 
 
 ```
@@ -2871,7 +2871,7 @@ ggpredict(testols, terms = c("retention", "metro")) |> plot()
 Let us now compare this to me manually plotting the fitted values using ggplot. Decently similar, but not exactly the same (from what I can tell).
 
 ```{r}
-ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+# ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
 
 ```
 
@@ -2879,21 +2879,21 @@ ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method=
 Okay, now I can apply this same process for our spatial regime models
 
 ```{r}
-
-cca = as.data.frame(sr3a$fitted.values) %>%
-  rename("fitted"=1)
-cca2a = as.data.frame(sr3a$y) %>%
-  rename("paam"=1)
-cca2b = as.data.frame(sr3a$X) %>%
-  rename("cca1"=3, "cca2"=4) %>%
-  mutate(retention = cca1 + cca2) %>%
-  dplyr::select(retention)
-temp = sr_data %>%
-  st_drop_geometry()
-cca3 = cbind(cca, cca2a, cca2b) %>%
-  left_join(y=temp, by=c("paam","retention"))
-  
-ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+# 
+# cca = as.data.frame(sr3a$fitted.values) %>%
+#   rename("fitted"=1)
+# cca2a = as.data.frame(sr3a$y) %>%
+#   rename("paam"=1)
+# cca2b = as.data.frame(sr3a$X) %>%
+#   rename("cca1"=3, "cca2"=4) %>%
+#   mutate(retention = cca1 + cca2) %>%
+#   dplyr::select(retention)
+# temp = sr_data %>%
+#   st_drop_geometry()
+# cca3 = cbind(cca, cca2a, cca2b) %>%
+#   left_join(y=temp, by=c("paam","retention"))
+#   
+# ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
 
 
 ```
@@ -2903,27 +2903,82 @@ ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method=
 Okay, and you can see here that I can customize colors, and switch around the desired plot features. I didn't play around with plotting by more than 2 features simultaneously, but it is doable.
 
 ```{r}
-ggplot(cca3, aes(y = fitted, x = retention, color = sr)) +
-  geom_point() +
-  stat_smooth(method = "lm", se = FALSE) +
-  scale_color_manual(values = c("#8576AC", "#83A396")) +  # Apply custom colors
-  theme_minimal() +
-  labs(color = "metro status")  # Optional, to label the color scale
-
-ggplot(cca3, aes(y = fitted, x = retention, color = rrm_gap)) +
-  geom_point() +
-  stat_smooth(method = "lm", se = FALSE) +
-  scale_color_gradient2(low = "#351c75", mid = "white", high = "#04442A", midpoint = median(cca3$rrm_gap)) +
-  theme_minimal() +
-  labs(color = "RRM Gap")  # optional, to label the color scale
+# ggplot(cca3, aes(y = fitted, x = retention, color = sr)) +
+#   geom_point() +
+#   stat_smooth(method = "lm", se = FALSE) +
+#   scale_color_manual(values = c("#8576AC", "#83A396")) +  # Apply custom colors
+#   theme_minimal() +
+#   labs(color = "metro status")  # Optional, to label the color scale
+# 
+# ggplot(cca3, aes(y = fitted, x = retention, color = rrm_gap)) +
+#   geom_point() +
+#   stat_smooth(method = "lm", se = FALSE) +
+#   scale_color_gradient2(low = "#351c75", mid = "white", high = "#04442A", midpoint = median(cca3$rrm_gap)) +
+#   theme_minimal() +
+#   labs(color = "RRM Gap")  # optional, to label the color scale
 
 ```
 
 
 
+## revised code
+
+```{r}
+
+sr_data_temp = mi1 %>% mutate(rucc = as.numeric(ruc_code), sr = metro_nonmetro, sr2 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+        ifelse((rucc == 3), "small.metro",                                       ifelse((rucc >= 4), "nonmetro", NA))),
+sr3 = ifelse((rucc == 1 | rucc == 2), "large.metro",
+       ifelse((rucc == 3), "small.metro",                                       ifelse((rucc == 4 | rucc == 5), "large.nonmetro",
+       ifelse((rucc >= 6), "small.nonmetro", NA)))))
+
+nb <- poly2nb(sr_data_temp, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+# sr3a_margins = errorsarlm(data = sr_data, paam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind +  pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw, zero.policy = TRUE)
+# 
+# summary(sr3a_margins)
 
 
+sr3ai_margins = errorsarlm(data = sr_data_temp, paam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw, zero.policy = TRUE)
 
+summary(sr3ai_margins)
+```
+
+
+```{r}
+cca = as.data.frame(sr3ai_margins$fitted.values) %>%
+  rename("fitted"=1)
+cca2a = as.data.frame(sr3ai_margins$y) %>%
+  rename("paam"=1)
+cca2b = as.data.frame(sr3ai_margins$X) %>%
+  rename("cca1"=53, "cca2"=54, "cca3"=55, "cca4"=56) %>%
+  mutate(retentionint = cca1 + cca2 + cca3 + cca4) %>%
+  dplyr::select(retentionint)
+temp = sr_data_temp %>%
+  st_drop_geometry() %>%
+  mutate(retentionint = retention*rrm_gap)
+cca3 = cbind(cca, cca2a, cca2b) %>%
+  left_join(y=temp, by=c("paam","retentionint"))
+  
+
+ggplot(cca3,aes(y=fitted,x=retention,color=sr))+geom_point()+stat_smooth(method="lm",se=FALSE)
+```
+
+
+```{r}
+cca4 = cca3
+cca4$sr3 <- factor(cca3$sr3, levels = c("large.metro", "small.metro", "large.nonmetro", "small.nonmetro"))
+
+ggplot(cca4, aes(y = fitted, x = retentionint, color = sr3)) +
+  geom_point(aes(shape = factor(sr3)), size = 1.5) +  # Reduce point size by adjusting 'size'
+  stat_smooth(method = "lm", size = 1.5, se = FALSE) +
+  scale_color_manual(values = c("#ea9999","#990000","#9fc5e8", "#073763")) +  # Apply custom colors
+  scale_shape_manual(values = c(16, 16, 17, 17)) +  # 16 = circle (dot), 17 = triangle
+  theme_minimal() +
+  labs(color = "metro status", shape = "metro status", y = "fitted values (PAAM, standardized)", x = "retention x ROG interaction (both standardized)")  # Optional, to label the shape legend
+```
 
 
 
