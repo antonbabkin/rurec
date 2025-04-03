@@ -922,6 +922,8 @@ print(rog_plot)
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 
+sum(is.na(df_map$retention))
+
 # install.packages("RColorBrewer")
 # library(RColorBrewer)
 
@@ -987,48 +989,98 @@ print(output)
 #blue-red color scheme
 tmap_mode("plot")
 
-# fix paam title
+# fix paam title (if using)
 title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
                   label = "Premature Mortality Rate", crs = st_crs(df_map))
 
-# Generate paam map
+n_na <- sum(is.na(df_map$paam)) #determine NA value
+
 paam_map <- df_map %>%
-  tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
-      palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
-      title = "Deaths <75 \nper 100,000") +
-      # tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"),  legend.title.size = 1.0, frame = FALSE)
+  tm_shape() +
+  tm_polygons(
+    col = "paam", style = "quantile", n = 4, border.alpha = 0.1,
+    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+    title = "Deaths <75 \nper 100,000",
+    showNA = FALSE  
+  ) +
+  tm_add_legend( #manually add NA value
+    type = "fill", 
+    labels = paste0("Missing (n = ", n_na, ")"), 
+    col = "gray",
+    group = "Deaths <75 \nper 100,000"
+  ) +
+  tm_layout(
+    inner.margins = c(0.01, 0.25, 0.01, 0.01),
+    outer.margins = c(0.01, 0.01, 0.01, 0.01),
+    legend.position = c("left", "center"),
+    legend.title.size = 1.2,
+    legend.text.size = 1.0,
+    frame = FALSE
+  )
 
 print(paam_map)
 
 
-# fix Retention title
+# fix Retention title (if using)
 title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
                   label = "Economic Resource Retention", crs = st_crs(df_map))
+n_na <- sum(is.na(df_map$retention))
 
-# Generate retention map
 retention_map <- df_map %>%
-  tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
-                           palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
-                           title = "Intermediate \nRetention\n Rate") +
-  # tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
-  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-            legend.title.size = 1.0, frame = FALSE)
+  tm_shape() +
+  tm_polygons(
+    col = "retention", style = "quantile", n = 4, border.alpha = 0.1,
+    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+    title = "Intermediate \nRetention \nRate",
+    legend.format = list(digits = 2, scientific = FALSE),
+    showNA = FALSE 
+  ) +
+  tm_add_legend( #Manually add NA values
+    type = "fill", 
+    labels = paste0("Missing (n = ", n_na, ")"), 
+    col = "gray",
+    group = "Intermediate \nRetention \nRate"
+  ) +
+  tm_layout(
+    inner.margins = c(0.01, 0.25, 0.01, 0.01),
+    outer.margins = c(0.01, 0.01, 0.01, 0.01),
+    legend.position = c("left", "center"),
+    legend.title.size = 1.2,
+    legend.text.size = 1.0,
+    frame = FALSE
+  )
 
 print(retention_map)
 
-# fix ROG title
+# fix ROG title (if using)
 title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
 
-# Generate ROG map
+n_na <- sum(is.na(df_map$rrm_gap))
+
 rog_map <- df_map %>%
-  tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
-                           palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8","#f4b6b6", "#d5303e", "#8A1B47"), 
-                           title = "Rank-rank \nmobility gap") +
-  # tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-  tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-            legend.title.size = 1.0, frame = FALSE)
+  tm_shape() +
+  tm_polygons(
+    col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1,
+    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+    title = "Rank-rank /nmobility gap",
+    legend.format = list(digits = 2, scientific = FALSE),
+    showNA = FALSE 
+  ) +
+  tm_add_legend( #Manually add NA values
+    type = "fill", 
+    labels = paste0("Missing (n = ", n_na, ")"), 
+    col = "gray",
+    group = "Rank-rank /nmobility gap"
+  ) +
+  tm_layout(
+    inner.margins = c(0.01, 0.25, 0.01, 0.01),
+    outer.margins = c(0.01, 0.01, 0.01, 0.01),
+    legend.position = c("left", "center"),
+    legend.title.size = 1.2,
+    legend.text.size = 1.0,
+    frame = FALSE
+  )
 
 print(rog_map)
 
@@ -1036,107 +1088,12 @@ print(rog_map)
 
 
 # #red-grey color scheme
-# # Get map bounds to place the title
-# bbox <- st_bbox(df_map)
-# 
-# tmap_mode("plot")
-# 
-# # fix paam title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Premature Mortality Rate", crs = st_crs(df_map))
-# 
-# # Generate paam map
-# paam_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(paam_map)
-# 
-# # fix retention title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Economic Resource Retention Rate", crs = st_crs(df_map))
-# 
-# # Generate retention map
-# retention_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(retention_map)
-# 
-# # fix ROG title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
-# 
-# # Generate ROG map
-# rog_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(rog_map)
-# 
-# 
+# palette = c("#888888", "#88727B", "#885C6E", "#885C6E", "#894661", "#8A1B47"), 
+
 # #green-blue color scheme
-# # Get map bounds to place the title
-# bbox <- st_bbox(df_map)
-# 
-# tmap_mode("plot")
-# 
-# # fix paam title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Premature Mortality Rate", crs = st_crs(df_map))
-# 
-# # Generate paam map
-# paam_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "paam", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(paam_map)
-# 
-# # fix retention title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Economic Resource Retention Rate", crs = st_crs(df_map))
-# 
-# # Generate retention map
-# retention_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "retention", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.1, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(retention_map)
-# 
-# # fix ROG title
-# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-#                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
-# 
-# # Generate ROG map
-# rog_map <- df_map %>%
-#   tm_shape() + tm_polygons(col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1, 
-#                            palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"), 
-#                            title = "") +
-#   tm_shape(title_sf) + tm_text("label", size = 1.2, fontface = "bold", just = "center") +
-#   tm_layout(outer.margins = c(0.01, 0.01, 0.01, 0.01), legend.position = c("left", "center"), 
-#             legend.title.size = 1.0, frame = FALSE)
-# 
-# print(rog_map)
+ #palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac"),
+
+
 
 
 ```
