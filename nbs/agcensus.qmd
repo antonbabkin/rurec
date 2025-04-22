@@ -1,0 +1,306 @@
+---
+title: "Census of Agriculture imputation"
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+---
+
+# top
+
+```{r}
+library(tidyverse)
+library(arrow)
+```
+
+# raw data
+
+```{r}
+
+agcensus_dataset <- function(year) {
+  Sys.getenv("PUBDATAPY_DIR") %>%
+    file.path("agcensus/agcensus.parquet", year, "part.pq") %>%
+    open_dataset() %>%
+    rename_with(str_to_lower)
+}
+
+
+```
+
+
+## suppression flags
+
+```
+The following abbreviations and symbols are used throughout the tables: 
+- 	Represents zero. 
+(D) 	Withheld to avoid disclosing data for individual farms. 
+(H) 	Coefficient of variation is greater than or equal to 99.95 percent or the 
+standard error is greater than or equal to 99.95 percent of mean. 
+(IC) 	Independent city. 
+(L) 	Coefficient of variation is less than 0.05 percent or the standard error 
+is less than 0.05 percent of the mean. 
+(NA) 	Not available. 
+(X) 	Not applicable. 
+(Z) 	Less than half of the unit shown.
+```
+
+## search
+
+```{r}
+agcensus_dataset(2012)
+
+agcensus_dataset(2012) %>%
+  filter(str_detect(short_desc, "COMMO.*OPER.*SALE")) %>%
+  distinct(short_desc) %>%
+  collect()
+
+agcensus_dataset(2012) %>%
+  distinct(agg_level_desc) %>%
+  collect()
+```
+
+
+
+# filtered data
+
+```{r}
+
+farm_sales <- function() {
+  year <- 2012
+  
+  renames <- tribble(
+    ~name,            ~short_desc,
+    "nsale_tot",      "COMMODITY TOTALS - OPERATIONS WITH SALES",
+    "nsale_crop",     "CROP TOTALS - OPERATIONS WITH SALES",
+    "nsale_anim",     "ANIMAL TOTALS, INCL PRODUCTS - OPERATIONS WITH SALES",
+    "sale_tot",       "COMMODITY TOTALS - SALES, MEASURED IN $",
+    "sale_crop",      "CROP TOTALS - SALES, MEASURED IN $",
+    "sale_anim",      "ANIMAL TOTALS, INCL PRODUCTS - SALES, MEASURED IN $",
+  )
+  
+  agcensus_dataset(year) %>%
+    filter(agg_level_desc %in% c("NATIONAL", "STATE", "COUNTY"), domain_desc == "TOTAL", short_desc %in% renames$short_desc) %>%
+    mutate(stcty = paste0(state_fips_code, if_else(is.na(county_code), "000", county_code))) %>%
+    select(state_alpha, county_name, stcty, short_desc, value, value_f) %>%
+    collect() %>%
+    left_join(renames, "short_desc") %>%
+    separate_wider_delim(name, delim = "_", names = c("measure", "commodity"), cols_remove = FALSE) %>%
+    mutate(value = if_else(measure == "sale", value / 1000, value)) %>%
+    arrange(stcty)
+}
+
+
+```
+
+
+## never missing at state level
+
+```{r}
+x1 <- farm_sales() %>%
+  filter(is.na(county_name)) %>%
+  pivot_wider(id_cols = c(state_alpha, stcty))
+
+x1[apply(is.na(x1), 1, any), ]
+
+x1
+```
+
+## how many counties are missing by state and measure?
+
+```{r}
+
+
+df_na_summary <- inner_join(
+  # state sales
+  farm_sales() %>%
+    filter(state_alpha != "US", is.na(county_name), measure == "sale") %>%
+    select(state_alpha, commodity, sale_st = value),
+  # number of reporting counties in state
+  farm_sales() %>%
+    filter(state_alpha != "US", !is.na(county_name), name == "nsale_tot") %>%
+    summarize(n_st = n(), .by = "state_alpha"),
+  by = "state_alpha"
+) %>%
+  inner_join(
+    farm_sales() %>%
+      filter(state_alpha != "US", !is.na(county_name), measure == "sale") %>%
+      summarize(
+        n_cty = sum(!is.na(value)),
+        sale_cty = sum(value, na.rm = TRUE),
+        .by = c(state_alpha, commodity)
+      ),
+    by = c("state_alpha", "commodity")
+  ) %>%
+  mutate(n_pct = 100 * n_cty / n_st,
+         sale_pct = 100 * sale_cty / sale_st)
+
+df_na_summary
+
+```
+
+### examples to try
+
+
+```{r}
+df_na_summary %>% filter(state_alpha == "DE")
+
+df_na_summary %>%
+  filter(state_alpha %in% (df_na_summary %>% filter(commodity == "tot", n_st == n_cty) %>% pull(state_alpha))) %>%
+  mutate(avg_pct = mean(n_pct), .by = "state_alpha") %>%
+  arrange(avg_pct, commodity)
+```
+
+
+
+# Imputation algorithm
+
+
+## step 1: isolate single problem
+
+
+```{r}
+df_1 <- farm_sales() %>%
+  # filter(state_alpha == "DE") %>%
+  filter(state_alpha == "AZ") %>%
+  select(sp_id = stcty, co_id = commodity, measure, value) %>%
+  mutate(sp_par = str_ends(sp_id, "000"), co_par = (co_id == "tot"), var = paste0(sp_id, "_", co_id))
+
+df_1
+```
+
+
+## step 2: remove known child values from parent totals
+
+
+```{r}
+df_2 <- df_1 %>%
+  filter(measure == "sale") %>%
+  # unallocated balance within each spatial child unit
+  mutate(
+    sp_tot = first(if_else(co_par, value, NA), na_rm = TRUE),
+    sp_sum = sum(if_else(!co_par, value, NA), na.rm = TRUE),
+    sp_bal = sp_tot - sp_sum,
+    .by = sp_id
+  ) %>%
+  # unallocated balance within each commodity child unit
+  mutate(
+    co_tot = first(if_else(sp_par, value, NA), na_rm = TRUE),
+    co_sum = sum(if_else(!sp_par, value, NA), na.rm = TRUE),
+    co_bal = co_tot - co_sum,
+    .by = co_id
+  ) %>%
+  # missing values to impute
+  filter(is.na(value)) %>%
+  select(var, sp_id, co_id, sp_bal, co_bal)
+
+df_2
+
+df_2 %>%
+  mutate(sp_bal = paste0("sp=", sp_bal), co_bal = paste0("co=", co_bal)) %>%
+  pivot_wider(id_cols = sp_bal, names_from = co_bal, values_from = var)
+```
+
+
+## step 3: QP problem
+
+
+```{r}
+
+# variables
+var_sol <- df_2 %>% pull(var)
+var_slk <- c(
+  paste0("slk_", df_2 %>% distinct(sp_id) %>% pull()),
+  paste0("slk_", df_2 %>% distinct(co_id) %>% pull())
+)
+
+# objective fn
+## priors
+prior <- df_1 %>%
+  filter(measure == "nsale") %>%
+  select(sp_id, co_id, n = value) %>%
+  right_join(df_2, by = c("sp_id", "co_id")) %>%
+  mutate(pri = n / sum(n) * co_bal, .by = co_id) %>%
+  pull(pri, name = var)
+prior <- prior[var_sol]
+dvec <- c(1 / prior, rep(0, length(var_slk)))
+names(dvec) <- c(var_sol, var_slk)
+Dmat <- diag(c(1 / prior, rep(1, length(var_slk))))
+rownames(Dmat) <- colnames(Dmat) <- names(dvec)
+
+# constraints: spatial
+A_sp <- df_2 %>%
+  pivot_wider(id_cols = var, names_from = sp_id, values_from = sp_id) %>%
+  column_to_rownames("var") %>%
+  as.matrix() %>%
+  {!is.na(.)} %>%
+  `storage.mode<-`("integer")
+b_sp <- df_2 %>%
+  distinct(sp_id, .keep_all = TRUE) %>%
+  pull(sp_bal, name = sp_id)
+
+# constraints: commodity
+A_co <- df_2 %>%
+  pivot_wider(id_cols = var, names_from = co_id, values_from = co_id) %>%
+  column_to_rownames("var") %>%
+  as.matrix() %>%
+  {!is.na(.)} %>%
+  `storage.mode<-`("integer")
+b_co <- df_2 %>%
+  distinct(co_id, .keep_all = TRUE) %>%
+  pull(co_bal, name = co_id)
+
+bvec <- c(b_sp, b_co)
+Amat <- cbind(A_sp, A_co)
+Amat <- Amat[var_sol, ]
+
+# constraints: add slack
+## verify alignment
+stopifnot(all(paste0("slk_", colnames(Amat)) == var_slk))
+A_slk <- diag(nrow = ncol(Amat), ncol = ncol(Amat))
+rownames(A_slk) <- var_slk
+Amat <- rbind(Amat, A_slk)
+
+# constraints: non-negativity
+Amat <- rbind(
+  diag(1, nrow = length(var_sol), ncol = length(var_sol)),
+  matrix(0, nrow = length(var_slk), ncol = length(var_sol))
+) %>%
+  `colnames<-`(paste0(var_sol, "_gt0")) %>%
+  cbind(Amat, .)
+bvec <- c(bvec, rep(0, length(var_sol)))
+
+cat("---- dvec\n")
+dvec[1:length(var_sol)]
+cat("---- Amat/bvec equality\n")
+rbind(Amat, bvec)
+
+sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = length(var_slk))
+
+sol_slk <- sol$solution[length(var_sol) + 1:length(var_slk)]
+names(sol_slk) <- var_slk
+cat("---- Slack\n")
+sol_slk
+
+
+cat("---- Prior\n")
+prior %>%
+  as_tibble(rownames = "name") %>%
+  separate_wider_delim(name, "_", names = c("stcty", "name")) %>%
+  pivot_wider(id_cols = "stcty") %>%
+  column_to_rownames("stcty") %>%
+  as.matrix() %>%
+  round()
+
+cat("---- Solution\n")
+tibble(name = var_sol, value = sol$solution[1:length(var_sol)]) %>%
+  separate_wider_delim(name, "_", names = c("stcty", "name")) %>%
+  pivot_wider(id_cols = "stcty") %>%
+  column_to_rownames("stcty") %>%
+  as.matrix() %>%
+  round()
+```
+
+
