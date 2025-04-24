@@ -227,7 +227,7 @@ prior <- df_1 %>%
 prior <- prior[var_sol]
 dvec <- c(1 / prior, rep(0, length(var_slk)))
 names(dvec) <- c(var_sol, var_slk)
-Dmat <- diag(c(1 / prior, rep(1, length(var_slk))))
+Dmat <- diag(c(1 / prior**2, rep(1, length(var_slk))))
 rownames(Dmat) <- colnames(Dmat) <- names(dvec)
 
 # constraints: spatial
@@ -277,9 +277,9 @@ dvec[1:length(var_sol)]
 cat("---- Amat/bvec equality\n")
 rbind(Amat, bvec)
 
-sol <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = length(var_slk))
+sol_qp <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = length(var_slk))
 
-sol_slk <- sol$solution[length(var_sol) + 1:length(var_slk)]
+sol_slk <- sol_qp$solution[length(var_sol) + 1:length(var_slk)]
 names(sol_slk) <- var_slk
 cat("---- Slack\n")
 sol_slk
@@ -295,7 +295,7 @@ prior %>%
   round()
 
 cat("---- Solution\n")
-tibble(name = var_sol, value = sol$solution[1:length(var_sol)]) %>%
+tibble(name = var_sol, value = sol_qp$solution[1:length(var_sol)]) %>%
   separate_wider_delim(name, "_", names = c("stcty", "name")) %>%
   pivot_wider(id_cols = "stcty") %>%
   column_to_rownames("stcty") %>%
@@ -303,4 +303,197 @@ tibble(name = var_sol, value = sol$solution[1:length(var_sol)]) %>%
   round()
 ```
 
+
+# Non-QP solvers
+
+Allowing for non-quadratic penalty functions.
+No slack variables.
+
+
+```{r}
+nx = length(var_sol)
+nc = length(var_slk)
+
+# same as QP, without the slack
+fn_qp <- function(x) {
+  (0.5 * x %*% Dmat[1:nx, 1:nx] %*% x - dvec[1:nx] %*% x)[1]
+}
+
+# same as QP 
+fn_qp1 <- function(x) {
+  sum(((x - prior) / prior) ** 2)
+}
+
+# midpoint quadratic deviation
+fn_mid <- function(x) {
+  dif <- (x - prior) / (x + prior)
+  sum(dif ** 2)
+}
+
+# equality constrants: heq(x) = 0
+heq <- function(x) {
+  (t(Amat[1:nx, 1:nc]) %*% x - bvec[1:nc])[, 1]
+}
+
+prior
+fn_qp(prior)
+fn_qp1(prior)
+fn_mid(prior)
+heq(prior) %>% round()
+
+```
+
+## alabama
+
+Augmented Lagrangian Minimization (ALM) Algorithm.
+Sensitive to initial point, likely gets stuck in local optima.
+
+```{r}
+sol_alm_qp <- alabama::auglag(
+  par = prior,
+  fn = fn_qp,
+  hin = \(x) x,
+  heq = heq
+)
+
+sol_alm_qp1 <- alabama::auglag(
+  par = prior,
+  fn = fn1,
+  hin = \(x) x,
+  heq = heq
+)
+
+sol_alm_qp_x0 <- alabama::auglag(
+  par = sol_qp$solution[1:nx],
+  fn = fn_qp,
+  hin = \(x) x,
+  heq = heq
+)
+
+sol_alm_qp_p0 <- alabama::auglag(
+  par = rep(0, nx),
+  fn = fn_qp,
+  hin = \(x) x,
+  heq = heq
+)
+
+
+sol_alm_qp_p1 <- alabama::auglag(
+  par = prior / 3,
+  fn = fn_qp,
+  hin = \(x) x,
+  heq = heq
+)
+
+sol_alm_mid <- alabama::auglag(
+  par = prior,
+  fn = fn_mid,
+  hin = \(x) x,
+  heq = heq
+)
+
+
+sol_alm_mid_x0 <- alabama::auglag(
+  par = sol_qp$solution[1:nx],
+  fn = fn_mid,
+  hin = \(x) x,
+  heq = heq
+)
+
+
+```
+
+
+```{r}
+cbind(
+  prior,
+  qp = sol_qp$solution[1:nx],
+  alm_qp = sol_alm_qp$par,
+  alm_qp1 = sol_alm_qp1$par,
+  alm_qp_x0 = sol_alm_qp_x0$par,
+  alm_qp_p0 = sol_alm_qp_p1$par,
+  alm_qp_p1 = sol_alm_qp_p1$par,
+  alm_mid = sol_alm_mid$par,
+  alm_mid_x0 = sol_alm_mid_x0$par
+) %>% round(0)
+```
+
+
+## nloptr ISRES
+
+could not get to work: does not leave the starting point.
+
+```{r}
+upper <- df_2 %>%
+  mutate(value = pmin(sp_bal, co_bal)) %>%
+  pull(value, name = var)
+upper <- upper[var_sol]
+
+sol_isres <- nloptr::isres(
+  x0 = pmin(prior, upper),
+  fn = fn_mid,
+  lower = rep(0, nx),
+  upper = upper,
+  heq = heq
+)
+
+sol_isres$message
+
+heq(sol_isres$par)
+heq(pmin(prior, upper))
+
+```
+
+
+## DEoptimR
+
+Global optimum. Considerably slower than QP or ALM.
+
+
+```{r}
+upper <- df_2 %>%
+  mutate(value = pmin(sp_bal, co_bal)) %>%
+  pull(value, name = var)
+upper <- upper[var_sol]
+
+sol_jde_qp <- DEoptimR::JDEoptim(
+  lower = rep(0, nx),
+  upper = upper,
+  fn = fn_qp,
+  constr = heq,
+  meq = nc,
+  maxiter = 1e4
+)
+
+heq(sol_jde_qp$par)
+
+
+sol_jde_mid <- DEoptimR::JDEoptim(
+  lower = rep(0, nx),
+  upper = upper,
+  fn = fn_mid,
+  constr = heq,
+  meq = nc,
+  maxiter = 1e4
+)
+
+heq(sol_jde_mid$par)
+
+```
+
+
+
+```{r}
+cbind(
+  prior,
+  qp = sol_qp$solution[1:nx],
+  alm = sol_alm_qp$par,
+  jde = sol_jde$par,
+  jde2 = sol_jde2$par
+) %>% round(0)
+
+plot(sol_qp$solution[1:nx], sol_jde2$par)
+points(sol_qp$solution[1:nx], sol_alm_qp$par, pch = 3)
+lines(c(0, 1e6), c(0, 1e6))
+```
 
