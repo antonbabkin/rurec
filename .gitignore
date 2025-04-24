@@ -54,3 +54,6 @@ condor/*
 renv.lock
 renv/
 
+# RStudio connect config
+rsconnect/
+

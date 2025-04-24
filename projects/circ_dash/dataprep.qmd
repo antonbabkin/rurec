@@ -177,28 +177,50 @@ data$scat = df_scat
 df_scat
 ```
 
-
+# circ-growth scatterplot
 
 
 ```{r}
-input <- list(
-  circularity = "retention",
-  outcome = "emp",
-  highlight = "metro"
+gr_var = paste0(input$outcome, "_gr")
+pal <- switch(
+  input$highlight,
+  both = c("black", "black"),
+  metro = c("gray", "black"),
+  "non-metro" = c("black", "gray")
 )
-selected_state <- \() "55"
-selected_county <- \() "55025"
-
-outc_var = "emp"
 
 
-df_scat %>%
-  filter(st == "55") %>%
+p1 <- data$scat %>%
+  filter(st == "01") %>%
   ggplot() +
-  geom_point(aes(.data[[circ_var]], .data[[paste0(outc_var, "_gr")]], size = .data[[outc_var]], color = metro)) +
-  scale_color_manual(values = c("black", "gray"))
+  geom_point(aes(retention, emp_gr), color = "blue")
+
+p1 +
+  geom_point(aes(retention, emp_gr), color = "red", data = filter(data$scat, st == "55"))
+
+p1 + ggplot(data$scat)
 
 
+base_plot <- 
+  ggplot(data$scat, aes(.data[[input$circularity]], .data[[gr_var]])) +
+  geom_point(size = 0.3, alpha = 0.3) +
+  scale_y_continuous(labels = scales::label_percent(), limits = c(-0.5, 0.5))
+
+base_plot
+
+
+data$scat %>%
+  filter(st == selected_state()) %>%
+  ggplot() +
+  geom_point(aes(.data[[input$circularity]], .data[[gr_var]], size = .data[[input$outcome]], color = metro)) +
+  scale_color_manual(values = pal) +
+  geom_point(aes(.data[[input$circularity]], .data[[gr_var]], size = .data[[input$outcome]]),
+             color = "red", data = filter(data$scat, place == selected_county())) +
+  labs(title = paste0("Circularity and economic growth in ", data$st_names[selected_state()], ", 2010-2019")) +
+  ylab(paste(input$outcome, "growth")) + 
+  xlab(input$circularity) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  theme(legend.position = "none", aspect.ratio = 3/4)
 
 
 ```
@@ -266,4 +288,9 @@ data$table
 saveRDS(data, "projects/circ_dash/circ_shiny.rds")
 
 ```
+
+
+
+
+
 
