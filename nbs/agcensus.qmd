@@ -173,6 +173,7 @@ df_na_summary %>%
 
 # Imputation algorithm
 
+First experimental implementation with some of the constraints, but not all.
 
 ## step 1: isolate single problem
 
@@ -320,7 +321,7 @@ tibble(name = var_sol, value = sol_qp$solution[1:length(var_sol)]) %>%
 ```
 
 
-# Non-QP solvers
+# Other solvers
 
 Allowing for non-quadratic penalty functions.
 No slack variables.
@@ -514,191 +515,118 @@ lines(c(0, 1e6), c(0, 1e6))
 ```
 
 
-# Apply to all states
+## OSQP
 
-
+Alternative quadratic solver.
+Code uses matrix forms prepared for the quadprog problem below.
 
 ```{r}
-impute_one <- function(df_1) {
-  
-  df_2 <- df_1 %>%
-    filter(measure == "sale") %>%
-    # unallocated balance within each spatial child unit
-    mutate(
-      sp_tot = first(if_else(co_par, value, NA), na_rm = TRUE),
-      sp_sum = sum(if_else(!co_par, value, NA), na.rm = TRUE),
-      sp_bal = sp_tot - sp_sum,
-      .by = sp_id
-    ) %>%
-    # unallocated balance within each commodity child unit
-    mutate(
-      co_tot = first(if_else(sp_par, value, NA), na_rm = TRUE),
-      co_sum = sum(if_else(!sp_par, value, NA), na.rm = TRUE),
-      co_bal = co_tot - co_sum,
-      .by = co_id
-    ) %>%
-    # missing values to impute
-    filter(is.na(value)) %>%
-    select(var, sp_id, co_id, sp_bal, co_bal)
-  
-  # variables
-  var_sol <- df_2 %>% pull(var)
-  var_slk <- c(
-    paste0("slk_", df_2 %>% distinct(sp_id) %>% pull()),
-    paste0("slk_", df_2 %>% distinct(co_id) %>% pull())
-  )
-  
-  # objective fn
-  ## priors
-  df_prior <- df_1 %>%
-    filter(measure == "nsale") %>%
-    select(sp_id, co_id, n = value) %>%
-    right_join(df_2, by = c("sp_id", "co_id")) %>%
-    mutate(pri = n / sum(n) * co_bal, .by = co_id)
-  prior <- df_prior %>%
-    pull(pri, name = var)
-  prior <- prior[var_sol]
-  dvec <- c(1 / prior, rep(0, length(var_slk)))
-  names(dvec) <- c(var_sol, var_slk)
-  Dmat <- diag(c(1 / prior**2, rep(1, length(var_slk))))
-  rownames(Dmat) <- colnames(Dmat) <- names(dvec)
-  
-  # constraints: spatial
-  A_sp <- df_2 %>%
-    pivot_wider(id_cols = var, names_from = sp_id, values_from = sp_id) %>%
-    column_to_rownames("var") %>%
-    as.matrix() %>%
-    {!is.na(.)} %>%
-    `storage.mode<-`("integer")
-  b_sp <- df_2 %>%
-    distinct(sp_id, .keep_all = TRUE) %>%
-    pull(sp_bal, name = sp_id)
-  
-  # constraints: commodity
-  A_co <- df_2 %>%
-    pivot_wider(id_cols = var, names_from = co_id, values_from = co_id) %>%
-    column_to_rownames("var") %>%
-    as.matrix() %>%
-    {!is.na(.)} %>%
-    `storage.mode<-`("integer")
-  b_co <- df_2 %>%
-    distinct(co_id, .keep_all = TRUE) %>%
-    pull(co_bal, name = co_id)
-  
-  bvec <- c(b_sp, b_co)
-  Amat <- cbind(A_sp, A_co)
-  Amat <- Amat[var_sol, ]
-  
-  # constraints: add slack
-  ## verify alignment
-  stopifnot(all(paste0("slk_", colnames(Amat)) == var_slk))
-  A_slk <- diag(nrow = ncol(Amat), ncol = ncol(Amat))
-  rownames(A_slk) <- var_slk
-  Amat <- rbind(Amat, A_slk)
-  
-  # constraints: non-negativity
-  Amat <- rbind(
-    diag(1, nrow = length(var_sol), ncol = length(var_sol)),
-    matrix(0, nrow = length(var_slk), ncol = length(var_sol))
-  ) %>%
-    `colnames<-`(paste0(var_sol, "_gt0")) %>%
-    cbind(Amat, .)
-  bvec <- c(bvec, rep(0, length(var_sol)))
-  
-  sol_qp <- quadprog::solve.QP(Dmat, dvec, Amat, bvec, meq = length(var_slk))
-  
-  sol_slk <- sol_qp$solution[length(var_sol) + 1:length(var_slk)]
-  names(sol_slk) <- var_slk
-  
-  
+lb <- ab$b
+ub <- ab$b
+ub[nc + 1:nv] <- Inf
+prob <- osqp::osqp(dmat, -dvec, ab$a, lb, ub)
+system.time({
+  sol_osqp <- prob$Solve()
+})
 
-  df_sol <- df_prior %>%
-    select(sp_id, co_id, var, prior = pri) %>%
-    inner_join(
-      tibble(var = var_sol, sol = sol_qp$solution[1:length(var_sol)]),
-      by = "var"
-    )
-  
-  list(
-    sol = sol_qp,
-    slk = sol_slk,
-    df = df_sol
-  )
-}
+solv_osqp <- sol_osqp$x[1:nv] %>%
+  `names<-`(nmv)
+sols_osqp <- sol_osqp$x[nv + 1:nc] %>%
+  `names<-`(nms)
+sols_osqp[sols_osqp > 5] %>% sort()
 
+df_src %>%
+  filter(id %in% nmv) %>%
+  pivot_wider(id_cols = id, names_from = measure) %>%
+  left_join(df_pri, "id") %>%
+  left_join(solv %>% as_tibble(rownames = "id") %>% rename(qp = value), "id") %>%
+  left_join(solv_osqp %>% as_tibble(rownames = "id") %>% rename(osqp = value), "id") %>%
+  mutate(across(where(is.numeric), round)) %>%
+  arrange(id)
+
+
+
+```
+
+## CVXR
+
+Convex problem solver.
+Can be used to allow non-quadratic penalty.
+Uses data created for the quadprog problem below.
+
+```{r}
+library(CVXR)
+
+
+df <- df_con %>%
+  filter(id %in% (gr_con %>% filter(component == 44) %>% pull(name)))
+d1 <- df %>%
+  mutate(a = if_else(id == id_par, -1, 1), id_conpar = paste(id_con, id_par, sep = ":")) %>%
+  pivot_wider(id_cols = c(id_conpar, value_bal), names_from = id, values_from = a, values_fill = 0)
+
+bvec <- d1 %>%
+  pull(value_bal, name = id_conpar)
+amat <- d1 %>%
+  select(!value_bal) %>%
+  column_to_rownames("id_conpar") %>%
+  as.matrix()
+ab <- slack_and_zero(amat, bvec)
+
+
+
+### objective function: D-mat and d-vec
+nv <- ncol(amat)
+nmv <- colnames(amat)
+nc <- nrow(amat)
+nmc <- rownames(amat)
+nms <- paste0("s_", nmc)
+
+pri <- df_pri %>%
+  pull(prior, name = id)
+pri <- pri[nmv]
+
+dvec <- c(1 / pri, rep(0, nc))
+names(dvec) <- c(nmv, nms)
+dmat <- diag(c(1 / pri**2, rep(1, nc))) %>%
+  `rownames<-`(names(dvec)) %>%
+  `colnames<-`(names(dvec))
+
+x <- Variable(nv, name = "x")
+s <- Variable(nc, name = "s")
+obj <- sum(((x - pri) / pri)^2) + sum(s^2)
+prob <- Problem(Minimize(obj), constraints = list(x >= 0, amat %*% x + s == bvec))
+res <- solve(prob)
+
+res
+xh <- res$getValue(x)[, 1]
+sh <- res$getValue(s)[, 1]
+objh <- sum(((xh - pri) / pri)^2) + sum(sh^2)
+conh <- amat %*% xh + sh - bvec
+
+df_src %>%
+  filter(id %in% nmv) %>%
+  pivot_wider(id_cols = id, names_from = measure) %>%
+  left_join(df_pri, "id") %>%
+  left_join(solv %>% as_tibble(rownames = "id") %>% rename(qp = value), "id") %>%
+  left_join(tibble(id = nmv, cvx = xh), "id") %>%
+  mutate(across(where(is.numeric), round)) %>%
+  arrange(id)
+
+# not the same!?
+objh
+res$getValue(obj)
 ```
 
 
 
-```{r}
-df_full <- farm_sales() %>%
-  filter(state_alpha != "US")
+# Complete set of constraints
 
-df_prep_impute <- df_full %>%
-  select(state_alpha, sp_id = stcty, co_id = commodity, measure, value) %>%
-  mutate(sp_par = str_ends(sp_id, "000"), co_par = (co_id == "tot"), var = paste0(sp_id, "_", co_id))
-
-states_with_known_totals <- df_prep_impute %>%
-  filter(measure == "sale", xor(sp_par, co_par)) %>%
-  summarize(known_tot = all(!is.na(value)), .by = state_alpha) %>%
-  filter(known_tot) %>%
-  pull(state_alpha)
-states_with_missing_values <- df_prep_impute %>%
-  filter(measure == "sale") %>%
-  summarize(mis = any(is.na(value)), .by = state_alpha) %>%
-  filter(mis) %>%
-  pull(state_alpha)
-states_to_impute <- base::intersect(states_with_missing_values, states_with_known_totals)
-
-df_imputations <- list()
-for (i_st in states_to_impute) {
-  print(i_st)
-  df_sol <- impute_one(df_prep_impute %>% filter(state_alpha == i_st))$df
-  df_imputations[[i_st]] <- df_sol
-}
-df_imputations <- df_imputations %>%
-  bind_rows(.id = "state_alpha") %>%
-  separate_wider_delim(var, "_", names = c("stcty", "name")) %>%
-  mutate(value_imp = round(sol), name = paste0("sale_", name)) %>%
-  select(stcty, name, value_imp)
-
-df_imputed <- df_full %>%
-  left_join(df_imputations, by = c("stcty", "name"))
-
-df_imputed
-```
-
-
-
-
-# complete problem
+New implementation for quadprog solver with all constraints.
 
 ## source data
 
 
 Variable identifier: `00_000_00_000_0000` = (state, county, crop/anim, commodity-2, commodity-3)
-
-
-```{r}
-agcensus_dataset(2012)
-
-agcensus_dataset(2012) %>%
-  filter(str_detect(short_desc, "FIELD .*OPER.*SALE")) %>%
-  distinct(short_desc) %>%
-  collect()
-
-agcensus_dataset(2012) %>%
-  distinct(agg_level_desc) %>%
-  collect()
-```
-
-```{r}
-agcensus_dataset(2012) %>%
-  filter(str_detect(short_desc, "GRAIN.*SALE.*")) %>%
-  filter(agg_level_desc %in% c("NATIONAL", "STATE", "COUNTY"), domain_desc == "TOTAL", state_fips_code == "10", is.na(county_code)) %>%
-  select(short_desc, value) %>%
-  collect()
-```
 
 
 ```{r}
@@ -807,8 +735,8 @@ farm_sales <- function() {
     relocate(starts_with("id_"), measure, value)
 }
 
-farm_sales()
-
+df_src <- farm_sales()
+df_src
 ```
 
 
@@ -826,26 +754,75 @@ farm_sales() %>%
 
 ```
 
+### % missing
 
 ```{r}
-farm_sales() %>%
-  filter(measure == "sale", id_sp2 == "000") %>%
-  summarize(n = n(), na = sum(is.na(value)), .by = id_sp1) %>%
-  arrange(desc(n), n)
-  
+#| rows.print: 100
+df_src %>%
+  filter(measure == "sale", lv_sp %in% c(0, 2)) %>%
+  summarize(n = n(), nna = sum(!is.na(value)), sale = sum(value, na.rm = TRUE), .by = c("commodity", "lv_sp")) %>%
+  pivot_wider(id_cols = commodity, names_from = lv_sp, values_from = c(n, nna, sale)) %>%
+  select(commodity, nat_n = n_2, nat_sale = sale_0, cty_n = nna_2, cty_sale = sale_2) %>%
+  mutate(
+    pct_na_n = round(1 - cty_n / nat_n, 3) * 100,
+    pct_na_sale = round(1 - cty_sale / nat_sale, 3) * 100
+  ) %>%
+  relocate(commodity, ends_with("_n"), ends_with("sale"))
 
 
 ```
 
 
 ```{r}
-x = farm_sales() %>%
-  filter(id_sp1 == "29", id_sp2 == "000")
-x %>%
-  filter(measure == "nsal") %>%
-  select(commodity, value, short_desc) %>% 
-  arrange(commodity)
+library(tmap)
+options(tigris_use_cache = TRUE)
+
+tigris::counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  filter(!(STATEFP %in% c("02", "15", "60", "66", "69", "72", "78"))) %>%
+  inner_join(
+    df_src %>% filter(measure == "nsal", commodity == "2a_3mi", lv_sp == 2),
+    join_by(STATEFP == id_sp1, COUNTYFP == id_sp2)
+  ) %>%
+  tm_shape() +
+  tm_polygons(
+    "value", 
+    fill.scale = tm_scale_intervals(
+      style = "quantile", 
+      label.format = scales::label_number(scale_cut = scales::cut_short_scale())
+    ),
+    fill.legend = tm_legend(
+      title = "",
+      orientation = "landscape",
+      frame = FALSE
+  )) +
+  tm_layout(frame = FALSE) +
+  tm_title("Milk: Farms")
+
+tigris::counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  filter(!(STATEFP %in% c("02", "15", "60", "66", "69", "72", "78"))) %>%
+  inner_join(
+    df_src %>% filter(measure == "sale", commodity == "2a_3mi", lv_sp == 2),
+    join_by(STATEFP == id_sp1, COUNTYFP == id_sp2)
+  ) %>%
+  mutate(value = value * 1000) %>%
+  tm_shape() +
+  tm_polygons(
+    "value", 
+    fill.scale = tm_scale_intervals(
+      style = "quantile", 
+      label.format = scales::label_currency(scale_cut = scales::cut_short_scale())
+    ),
+    fill.legend = tm_legend(
+      title = "",
+      orientation = "landscape",
+      frame = FALSE
+  )) +
+  tm_layout(frame = FALSE) +
+  tm_title("Milk: Sales")
+
 ```
+
+
 
 ### group constraints
 
@@ -853,6 +830,12 @@ Issue in 2012: national grains != sum(grain types), data error?
 Same imbalance number (2082) in the only state with missing data, Missoury (fips 29).
 
 ```{r}
+# total number of non-zero commodities and number of NAs
+farm_sales() %>%
+  filter(measure == "sale", id_sp2 == "000") %>%
+  summarize(n = n(), na = sum(is.na(value)), .by = id_sp1) %>%
+  arrange(desc(n), na)
+  
 df <- farm_sales() %>%
   # filter(measure == "sale", id_sp1 == "00") %>%
   filter(measure == "sale", id_sp1 == "12", id_sp2 == "000") %>%
@@ -883,11 +866,6 @@ df %>%
 
 TODO: review how zeroes are treated - there are no observations for them in the dataset
 
-
-```{r}
-df_src <- farm_sales()
-
-```
 
 ### constraints
 
@@ -968,23 +946,25 @@ We can use network analysis to identify connected components - sets of constrain
 
 ```{r}
 library(tidygraph)
-library(ggraph)
 
 gr_con <- tbl_graph(edges = select(df_con, id_par, id)) %>%
   mutate(component = group_components())
 
-gr_con %>%
-  as_tibble() %>%
+df_con <- df_con %>%
+  left_join(gr_con %>% as_tibble() %>% rename(id = name), "id")
+stopifnot(!any(is.na(df_con$component)))
+
+df_con %>%
   count(component) %>%
   arrange(n)
 
 ```
 
-##### viz
-
-Fishing for a nice subset for demonstration.
+viz
 
 ```{r}
+library(ggraph)
+
 x <- gr_con %>%
   filter(component == 44)
 x
@@ -1152,59 +1132,72 @@ slack_and_zero <- function(a, b) {
 ```
 
 
+
 ```{r}
-gr_con %>%
-  as_tibble() %>%
+solv <- c()
+sols <- c()
+df_stats <- tibble()
+
+comps <- df_con %>%
   count(component) %>%
-  arrange(n)
-```
+  arrange(n) %>%
+  pull(component)
 
+for (comp in comps) {
+  t0 <- Sys.time()
+  
+  # 39: example with NA parent constraints, includes "50_009_1c_5fr_1tre"
+  df <- df_con %>%
+    filter(id %in% (gr_con %>% filter(component == comp) %>% pull(name)))
+  df
+  d1 <- df %>%
+    mutate(a = if_else(id == id_par, -1, 1), id_conpar = paste(id_con, id_par, sep = ":")) %>%
+    pivot_wider(id_cols = c(id_conpar, value_bal), names_from = id, values_from = a, values_fill = 0)
+  
+  bvec <- d1 %>%
+    pull(value_bal, name = id_conpar)
+  amat <- d1 %>%
+    select(!value_bal) %>%
+    column_to_rownames("id_conpar") %>%
+    as.matrix()
+  
+  ab <- slack_and_zero(amat, bvec)
+  
+  ### objective function: D-mat and d-vec
+  nv <- ncol(amat)
+  nmv <- colnames(amat)
+  nc <- nrow(amat)
+  nmc <- rownames(amat)
+  nms <- paste0("s_", nmc)
+  
+  pri <- df_pri %>%
+    pull(prior, name = id)
+  pri <- pri[nmv]
+  
+  dvec <- c(1 / pri, rep(0, nc))
+  names(dvec) <- c(nmv, nms)
+  dmat <- diag(c(1 / pri**2, rep(1, nc))) %>%
+    `rownames<-`(names(dvec)) %>%
+    `colnames<-`(names(dvec))
+  
+  system.time({
+    sol <- quadprog::solve.QP(dmat, dvec, t(ab$a), ab$b, meq = nc)  
+  })
+  solv <- c(solv, sol$solution[1:nv] %>% `names<-`(nmv))
+  sols <- c(sols, sol$solution[nv + 1:nc] %>% `names<-`(nms))
 
-```{r}
-# 39: example with NA parent constraints, includes "50_009_1c_5fr_1tre"
-x <- gr_con %>%
-  filter(component == 1) %>%
-  pull(name)
-df <- df_con %>%
-  filter(id %in% x | id_par %in% x)
-df
-d1 <- df %>%
-  mutate(a = if_else(id == id_par, -1, 1), id_conpar = paste(id_con, id_par, sep = ":")) %>%
-  pivot_wider(id_cols = c(id_conpar, value_bal), names_from = id, values_from = a, values_fill = 0)
+  x <- c(
+    component = comp,
+    variables = nv,
+    constraints = nc,
+    iterations = sol$iterations,
+    # TODO: convert to seconds (longer times are in minutes)
+    time = Sys.time() - t0
+  )
+  df_stats <- bind_rows(df_stats, x)
+  print(x)
+}
 
-bvec <- d1 %>%
-  pull(value_bal, name = id_conpar)
-amat <- d1 %>%
-  select(!value_bal) %>%
-  column_to_rownames("id_conpar") %>%
-  as.matrix()
-
-ab <- slack_and_zero(amat, bvec)
-
-### objective function: D-mat and d-vec
-nv <- ncol(amat)
-nmv <- colnames(amat)
-nc <- nrow(amat)
-nmc <- rownames(amat)
-nms <- paste0("s_", nmc)
-
-pri <- df_pri %>%
-  pull(prior, name = id)
-pri <- pri[nmv]
-
-dvec <- c(1 / pri, rep(0, nc))
-names(dvec) <- c(nmv, nms)
-dmat <- diag(c(1 / pri**2, rep(1, nc))) %>%
-  `rownames<-`(names(dvec)) %>%
-  `colnames<-`(names(dvec))
-
-system.time({
-  sol <- quadprog::solve.QP(dmat, dvec, t(ab$a), ab$b, meq = nc)  
-})
-solv <- sol$solution[1:nv] %>%
-  `names<-`(nmv)
-sols <- sol$solution[nv + 1:nc] %>%
-  `names<-`(nms)
 
 ```
 
@@ -1212,44 +1205,60 @@ sols <- sol$solution[nv + 1:nc] %>%
 
 ### solution
 
-
 ```{r}
-
-df_src %>%
-  filter(id %in% nmv) %>%
+df_solv <- df_src %>%
   pivot_wider(id_cols = id, names_from = measure) %>%
   left_join(df_pri, "id") %>%
   left_join(solv %>% as_tibble(rownames = "id") %>% rename(sol = value), "id") %>%
-  mutate(across(where(is.numeric), round)) %>%
   arrange(id)
+
+df_sols <- df_con %>%
+  distinct(id_con, id_par) %>%
+  left_join(
+    sols %>% 
+      as_tibble(rownames = "id_slk") %>%
+      separate_wider_position(id_slk, c(2, id_con = 3, 1, id_par = 18)) %>%
+      rename(slk = value), 
+    c("id_con", "id_par")) %>%
+  arrange(id_par)
+
+# arrow::write_parquet(df_solv, "data/agcensus_imp_solv_2025-05-09.pq")
+# arrow::write_parquet(df_sols, "data/agcensus_imp_sols_2025-05-09.pq")
+
+quantile(df_sols$slk, c(0, 0.01, 0.05, 0.95, 0.99, 1))
+
+df_solv %>%
+  # mutate(across(where(is.numeric), round)) %>%
+  filter(is.na(sale)) %>%
+  select(!sale) %>%
+  mutate(prior = prior + 1, sol = sol + 1) %>%
+  ggplot() +
+  geom_point(aes(prior, sol)) +
+  scale_x_log10() + scale_y_log10()
+
+df_solv
+
 ```
 
-
-Slack. A handful of constraints are satisfied with significant slack.
+#### % missing
 
 ```{r}
-sols[sols > 5] %>% round(1) %>% sort()
-```
-
-
-Why zero sometimes? Because same variable is in multiple constraints, and relative deviations are balanced between them.
-
-```{r}
-
-df_src %>%
-  filter(str_detect(id, "50_009_1c_5fr_....")) %>%
-  pivot_wider(id_cols = id, names_from = measure)
-
-df_con %>%
-  filter(id == "50_009_1c_5fr_1tre")
-
-
-df_con %>%
-  filter(id == "01_001_2a_1po_0000") %>%
-  pull(id_par) %>%
-  {filter(df_con, id_par %in% .)} %>%
-  arrange(id_par, id)
+#| rows.print: 100
+df_solv %>%
+  mutate(imp = if_else(is.na(sale), sol, sale)) %>%
+  select(id, imp) %>%
+  inner_join(df_src %>% filter(measure == "sale"), "id") %>%
+  filter(lv_sp %in% c(0, 2)) %>%
+  summarize(raw = sum(value, na.rm = TRUE), imp = round(sum(imp)), .by = c("commodity", "lv_sp")) %>%
+  pivot_wider(id_cols = commodity, names_from = lv_sp, values_from = c(raw, imp)) %>%
+  select(commodity, nation = raw_0, cty_raw = raw_2, cty_imp = imp_2) %>%
+  mutate(pct_na_raw = round(1 - cty_raw / nation, 3) * 100, pct_na_imp = round(1 - cty_imp / nation, 3) * 100)
 
 ```
+
+
+
+
+
 
 
