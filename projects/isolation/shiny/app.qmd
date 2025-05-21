@@ -1,0 +1,178 @@
+---
+title: "isolation_def"
+format: html
+---
+
+```{r}
+
+library(tidyverse)
+library(leaflet)
+options(tigris_use_cache = TRUE)
+
+
+source("R/geography.R", local = (geography <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("projects/isolation/shiny/app_fns.R")
+
+selected_county <- \() "55025"
+input <- list(
+  normalized_flow = TRUE  
+)
+
+
+```
+
+
+```{r}
+year0 <- 1990
+year1 <- 2010
+
+data <- list()
+data$geo_st <- tigris::states(cb = TRUE, resolution = "20m") %>%
+  rename_with(tolower) %>%
+  select(st = statefp, st_abbr = stusps, st_name = name) %>%
+  mutate(contiguous = !(st %in% c("02", "15", "60", "66", "69", "72", "78")))
+
+data$geo <- tigris::counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  rename_with(tolower) %>%
+  select(st = statefp, cty = countyfp, place = geoid, cty_name = name) %>%
+  left_join(data$geo_st %>% st_drop_geometry(), "st") %>%
+  left_join(
+    geography$pubdata$get_cbsa_delin_df(2013) %>%
+      rename_with(tolower) %>%
+      mutate(place = paste0(state_code, county_code)) %>%
+      select(place, cbsa = metro_micro),
+    "place") %>%
+  mutate(cbsa = replace_na(cbsa, "nonco"))
+  
+data$time <- full_join(
+  pubdatapy$opath$population %>%
+    arrow::read_parquet() %>%
+    filter(st != "00", cty != "000") %>%
+    mutate(place = paste0(st, cty)) %>%
+    select(year, place, pop),
+  pubdata::get("bds", "2022_st_cty") %>%
+    mutate(place = paste0(st, cty)) %>%
+    select(year, place, est = estabs, emp),
+  c("year", "place"))
+
+data$prof <- left_join(
+  data$geo,
+  data$time %>%
+    filter(year %in% c(year0, year1)) %>%
+    arrange(place, year) %>%
+    filter(n() == 2, .by = "place") %>%
+    summarize(across(c(pop, est, emp), \(x) 2 * (last(x) - first(x)) / (last(x) + first(x)), .names = "{.col}_gr"), .by = "place"),
+  "place") %>%
+  left_join(
+    place_io$outsupdem(2012, "det", "cbp_imp") %>%
+      summarize(output = sum(output), .by = place),
+    "place"
+  )
+
+data$prof_show <- data$prof %>%
+  st_drop_geometry() %>%
+  select(place, cty_name, st_name, cbsa, pop_gr, emp_gr, est_gr, output) %>%
+  mutate(across(ends_with("_gr"), \(x) round(x, 4)))
+  
+x <- data$prof %>%
+  st_drop_geometry()
+data$flow <- trade_flows$call_trade_flows("all_industries", 2012, "det", "cbp_imp") %>%
+  as_tibble(rownames = "from") %>%
+  pivot_longer(!from, names_to = "to", values_to = "flow") %>%
+  filter(flow > 0) %>%
+  left_join(x %>% select(from = place, from_output = output), "from") %>%
+  left_join(x %>% select(to = place, to_output = output), "to") %>%
+  mutate(across(c(flow, from_output, to_output), \(x) x * 1000))
+
+saveRDS(data, "projects/isolation/shiny/app.rds")
+
+```
+
+```{r}
+data$flow %>%
+  summarize(flow = sum(flow), output = first(to_output), .by = to) %>%
+  mutate(fl = flow / output) %>%
+  skimr::skim(fl)
+
+```
+
+
+```{r}
+data$prof_show %>%
+  filter(place == selected_county()) %>%
+  `rownames<-`("val") %>%
+  t() %>%
+  as_tibble(rownames = "var")
+```
+
+
+
+
+```{r}
+
+
+
+pal = colorQuantile(palette = "RdYlBu", domain = NULL, n = 5, reverse = TRUE)
+quantileFormat <- function(type, cuts, p) {
+  n <- length(cuts)
+  cuts <- format(round(cuts, 3), trim = TRUE, scientific = FALSE)
+  paste(cuts[-n], "-", cuts[-1])
+}
+
+leaflet(data$prof) %>%
+  addProviderTiles(providers$Esri.WorldGrayCanvas) %>%
+  addPolygons(
+    color = ~pal(emp_gr), group = "emp_gr",
+    layerId = ~paste0("emp", place),
+    label = ~place,
+    popup = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~emp_gr, title = "emp_gr", labFormat = quantileFormat, group = "emp_gr", position = "bottomright") %>%
+  addPolygons(
+    color = ~pal(pop_gr), group = "pop_gr",
+    layerId = ~paste0("pop", place),
+    label = ~place,
+    popup = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~pop_gr, title = "pop_gr", labFormat = quantileFormat, group = "pop_gr", position = "bottomright") %>%
+  setView(lng = -95, lat = 38, zoom = 4) %>%
+  addLayersControl(overlayGroups = c("emp_gr", "pop_gr"))
+
+```
+
+```{r}
+
+
+tf_map("out", selected_county(), TRUE)
+
+```
+
+
+```{r}
+tm_shape(data$geo_st %>% filter(contiguous)) +
+  tm_polygons(col = "black", col_alpha = 0.3, fill = NULL) +
+  tm_shape(data$geo %>%
+    filter(contiguous) %>%
+    inner_join(
+      data$flow %>%
+        filter(to == selected_county()) %>%
+        add_row(from = selected_county(), flow = NA),
+      join_by(place == from)
+    )) +
+  tm_polygons(
+    col = NULL,
+    fill = "flow",
+    fill.scale = tm_scale_intervals(n = 5, style = "quantile", value.na = "green", label.na = "", label.format = scales::label_currency(scale_cut = scales::cut_short_scale()), values = "-hcl.reds3"),
+    fill.legend = tm_legend(title = "inflow", orientation = "landscape", frame = FALSE, width = 50)
+  )
+
+
+```
+
