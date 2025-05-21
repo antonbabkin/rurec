@@ -505,7 +505,7 @@ summary_stats_smallmetro
 
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
-  filter(four_metro == "large-nonmetro") %>% 
+  filter(four_metro == "large_nonmetro") %>% 
   select(paam, retention, autonomy, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%

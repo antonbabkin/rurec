@@ -1,0 +1,597 @@
+---
+title: "Mortality Decomposition Data"
+author: "Sara Peters"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#Set your working directory to where the mortality data is saved.
+
+setwd("C:/Users/saraa/OneDrive - UW-Madison/Mortality Data-CDC Wonder/IH2") 
+
+
+# Load necessary libraries
+library(readr)
+library(dplyr)
+library(purrr)
+library(stringr)
+library(tidyr)
+library(readxl)
+
+
+
+```
+
+## Industry Health 2 Race-Specific Mortality Data 
+
+##Define File Types and Functions
+
+```{r}
+
+# Define race suffixes instead of file types
+race_suffixes <- c("Black", "White", "AIAN", "API")  # Reflects your filenames
+file_types <- "AllCause"
+
+# RUCC data
+ruccdata <- read_excel("Rural.Urban.Continuum.Codes.1974.1983.1993.2003.2013.xls") %>%
+  select(FIPS, 
+         `Rural-Urban Continuum Code 1974`, 
+         `Rural-Urban Continuum Code 1983`, 
+         `Rural-Urban Continuum Code 1993`, 
+         `Rural-Urban Continuum Code 2003`, 
+         `Rural-Urban Continuum Code 2013`)
+
+# Extract Race Group from File name
+extract_race_group <- function(file_name) {
+  str_extract(file_name, "(Black|White|AIAN|API)(?=\\.txt$)")
+}
+
+# Main processing function
+process_region_files <- function(region, year_range, year) {
+  race_suffixes <- c("Black", "White", "AIAN", "API")
+  file_paths <- paste0(year_range, "-All/", year_range, "-", region, "-", file_types, "-", race_suffixes, ".txt")
+
+  for (file_path in file_paths) {
+    if (!file.exists(file_path)) next
+
+    df <- read_delim(file_path, delim = "\t", quote = '"', col_types = cols(.default = "c"), trim_ws = TRUE)
+
+    if ("Notes" %in% names(df)) {
+      metadata_row <- which(df$Notes == "---")[1]
+      if (!is.na(metadata_row)) {
+        df <- df[1:(metadata_row - 1), ]
+      }
+    }
+
+    df <- df %>%
+      mutate(
+        Deaths = as.numeric(na_if(as.character(Deaths), "Suppressed")),
+        Population = as.numeric(na_if(as.character(Population), "Suppressed")),
+        across(where(~ all(str_detect(., "^-?\\d+(\\.\\d+)?$"), na.rm = TRUE)), as.numeric)
+      )
+
+    race_group <- str_extract(file_path, "(Black|White|AIAN|API)")
+    df <- df %>% mutate(race_group = race_group)
+
+    df <- df %>% filter(rowSums(is.na(.)) != ncol(.))
+
+    name <- paste0(race_group, "-", region, "-", year)
+    if (exists(name, envir = .GlobalEnv)) {
+      existing_df <- get(name, envir = .GlobalEnv)
+      assign(name, bind_rows(existing_df, df), envir = .GlobalEnv)
+    } else {
+      assign(name, df, envir = .GlobalEnv)
+    }
+  }
+
+  message(paste("All dataframes for", region, "created successfully!"))
+}
+
+```
+
+
+##2013-2015
+
+
+###Define dynamic values
+```{r}
+# Define dynamic year values
+year_range <- "13-15"
+year <- "2013"
+
+
+
+```
+
+
+
+####East South Central
+
+```{r}
+
+# Define Regions
+regions <- c("AL-KY-MS-TN", "AL-KY", "MS-TN")
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+ESC_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add region labels
+ESC_combined_13 <- ESC_combined_13 %>%
+  mutate(
+    `Sub-Region` = "East-South-Central",
+    `Region` = "South",
+    `Year` = year
+  ) 
+
+
+```
+
+####West South Central 
+
+```{r}
+
+# Define regions
+regions <- c("AR-LA-OK", "TX")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+WSC_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+WSC_combined_13 <- WSC_combined_13 %>%
+  mutate(
+    `Sub-Region` = "West-South-Central",
+    `Region` = "South", 
+    `Year` = "2013"
+  ) 
+
+
+
+
+```
+
+####South Atlantic
+
+```{r}
+
+# Define regions
+regions <- c("DE-DC", "FL-GA-MD", "NC-SC", "VA-WV")
+
+
+## Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+SA_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+
+# Add new columns for Sub-Region and Region
+SA_combined_13 <- SA_combined_13 %>%
+  mutate(
+    `Sub-Region` = "South-Atlantic",
+    `Region` = "South", 
+    `Year` = "2013"
+  ) 
+
+
+```
+
+####New England
+
+```{r}
+
+# Define regions
+regions <- c("CT-ME-MA-NH-RI-VT")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+NewEngland_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+NewEngland_combined_13 <- NewEngland_combined_13 %>%
+  mutate(
+    `Sub-Region` = "New-England",
+    `Region` = "Northeast", 
+    `Year` = "2013"
+  )
+
+
+```
+
+
+
+
+####Middle Atlantic
+
+```{r}
+
+
+
+# Define regions
+regions <- c("NJ-NY-PA")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+MiddleAtlantic_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+MiddleAtlantic_combined_13 <- MiddleAtlantic_combined_13 %>%
+  mutate(
+    `Sub-Region` = "Middle-Atlantic",
+    `Region` = "Northeast", 
+    `Year` = "2013"
+  ) 
+
+
+```
+
+####East North Central
+```{r}
+
+# Define regions
+regions <- c("IL-IN-OH", "MI-WI")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+ENC_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+ENC_combined_13 <- ENC_combined_13 %>%
+  mutate(
+    `Sub-Region` = "East-North-Central",
+    `Region` = "MidWest", 
+    `Year` = "2013"
+  ) 
+
+
+```
+
+####West North Central
+
+```{r}
+
+# Define regions
+regions <- c("IA-MN-MO", "KS-NE-ND-SD")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+WNC_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+WNC_combined_13  <- WNC_combined_13 %>%
+  mutate(
+    `Sub-Region` = "West-North-Central",
+    `Region` = "MidWest", 
+    `Year` = "2013"
+  ) 
+
+
+
+```
+
+####Pacific
+
+```{r}
+
+# Define regions
+regions <- c("AK-CA-HI-OR-WA")
+
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+Pacific_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+Pacific_combined_13 <- Pacific_combined_13 %>%
+  mutate(
+    `Sub-Region` = "Pacific",
+    `Region` = "West", 
+    `Year` = "2013"
+  ) 
+
+
+
+```
+
+####Mountain
+
+```{r}
+
+# Define regions
+regions <- c("ID-MT-NV-WY", "AZ-CO-NM-UT")
+
+
+# Process and bind
+lapply(regions, process_region_files, year_range = year_range, year = year)
+
+df_names <- unlist(lapply(regions, function(r) {
+  paste0(race_suffixes, "-", r, "-", year)
+})) %>% as.vector()
+
+Mountain_combined_13 <- bind_rows(
+  mget(df_names, ifnotfound = as.list(rep(list(NULL), length(df_names)))),
+  .id = "Source"
+)
+
+# Add new columns for Sub-Region and Region
+Mountain_combined_13 <- Mountain_combined_13 %>%
+  mutate(
+    `Sub-Region` = "Mountain",
+    `Region` = "West", 
+    `Year` = "2013"
+  ) 
+
+
+```
+
+####South
+
+```{r}
+
+#Combined Region
+# List of dynamically created dataframe names
+df_names <- c(
+   "SA_combined_13",
+  "ESC_combined_13",
+  "WSC_combined_13"
+)
+
+# Bind all dataframes together
+South_combined_13 <- bind_rows(mget(df_names), .id = "Source_SubRegion")
+
+
+
+
+```
+
+
+####Northeast
+
+```{r}
+#Combined Region
+# List of dynamically created dataframe names
+df_names <- c(
+   "NewEngland_combined_13",
+  "MiddleAtlantic_combined_13"
+)
+
+# Bind all dataframes together 
+Northeast_combined_13 <- bind_rows(mget(df_names), .id = "Source_SubRegion")
+
+
+```
+
+
+####Midwest
+
+```{r}
+
+#Combined Region MidWest
+# List of dynamically created dataframe names
+df_names <- c(
+   "ENC_combined_13",
+  "WNC_combined_13"
+)
+
+# Bind all dataframes together
+Midwest_combined_13 <- bind_rows(mget(df_names), .id = "Source_SubRegion")
+
+
+
+```
+
+
+####West
+
+```{r}
+
+#Combined Region West
+# List of dataframe names
+df_names <- c(
+   "Pacific_combined_13",
+  "Mountain_combined_13"
+)
+
+# Bind all dataframes together
+West_combined_13 <- bind_rows(mget(df_names), .id = "Source_SubRegion")
+
+
+
+```
+
+####All 2013-2015
+
+```{r}
+
+#Pooled 2013 Data
+# List of dataframe names
+df_names <- c(
+   "South_combined_13",
+  "Northeast_combined_13", 
+  "Midwest_combined_13",
+  "West_combined_13"
+)
+
+# Bind all dataframes together
+All_13_combined <- bind_rows(mget(df_names), .id = "Source_SubRegion")
+
+
+
+```
+
+
+####Validate Parsing
+```{r}
+# Define valid values
+valid_sex <- c("Female", "Male")  # If "Sex Code" contains different labels, update this list
+valid_race_group <- c("Black", "White", "AIAN", "API")
+
+# Find rows where "Sex Code" is not in the valid list
+invalid_sex <- All_13_combined %>%
+  mutate(row_number = row_number()) %>%
+  filter(!(Sex %in% valid_sex) & !is.na(Sex)) %>%
+  select(row_number, Sex)
+
+# Find rows where "Broad-Type" has unexpected values
+invalid_race_group <- All_13_combined %>%
+  mutate(row_number = row_number()) %>%
+  filter(!(race_group %in% valid_race_group) & !is.na(race_group)) %>%
+  select(row_number, race_group)
+
+# Print results or "No invalid values" message
+if (nrow(invalid_sex) == 0) {
+  cat("✅ No invalid values found in 'Sex Code' column.\n")
+} else {
+  cat("🔍 Invalid values in 'Sex Code' column:\n")
+  print(invalid_sex)
+}
+
+if (nrow(invalid_race_group) == 0) {
+  cat("✅ No invalid values found in 'Brace column.\n")
+} else {
+  cat("\n🔍 Invalid values in 'Race_Group' column:\n")
+  print(invalid_race_group)
+}
+
+
+```
+
+
+####Full File Clean up
+
+```{r}
+
+#Drop Total and remaining notes rows
+
+
+# Keep only rows where "Notes" is NA
+All_13_combined <- All_13_combined %>%
+  filter(is.na(Notes))
+
+non_na_notes <- All_13_combined %>%
+  filter(!is.na(Notes))
+
+# Print the number of non-NA rows
+cat("Number of rows where 'Notes' is NOT NA:", nrow(non_na_notes), "\n")
+
+# Print unique values in "Notes" (if any exist)
+if (nrow(non_na_notes) > 0) {
+  print(unique(non_na_notes$Notes))
+} else {
+  cat("All values in 'Notes' are NA.\n")
+}
+
+# Remove the "Notes" column if no values in Notes
+All_13_combined <- All_13_combined %>%
+  select(-Notes)
+
+
+#Create State Column and Rename County Code to FIPS Code
+
+# Separate "County" column into "County" and "State"
+All_13_combined <- All_13_combined %>%
+  separate(County, into = c("County", "State"), sep = ", ", remove = FALSE) %>% 
+  rename(FIPS = `County Code`)
+
+
+#Add RUCC Codes
+
+
+All_13_combined <- left_join(ruccdata, All_13_combined, by=c("FIPS"))
+
+##preparing rucc metro/nonmetro 
+All_13_combined = All_13_combined %>% 
+  mutate(metro_nonmetro_13 = if_else(`Rural-Urban Continuum Code 2013` < 4, 0, 1)) %>% 
+  mutate(rurality_13 = if_else(metro_nonmetro_13 == 0, "metro", "nonmetro"))
+
+## Recategorize "Hispanic-Latino"
+
+#Vector for hispanic origin values == "Hispanic Origin"; values == "Hispanic or Latino", "Not Hispanic or Latino", or "Not Stated"
+
+#Vector for racialized category == "race_group"; values == "AIAN", "API", "Black", "White"
+
+#can mutate "race_group" to NHBlack, etc., or use a combo of "Hispanic Origin" and "race_group" in sample selection. 
+
+#Will need to decide what to do about cases where Hispanic Origin is "Not Stated", exclude or assume not hispanic? 
+
+
+```
+##Get Current Popoulation Estimates 2013-2015
+
+
+#Calculate race-specific age-adjusted premature mortality for each county
+
+
+
