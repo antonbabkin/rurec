@@ -15,6 +15,10 @@ format:
 
 ```{r}
 library(tidyverse)
+library(ggridges)
+library(tidycensus)
+library(tigris)
+library(tmap)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
@@ -42,7 +46,7 @@ opath <- list(
 # pack all data files
 # util$zip_pack(ppath("data/datacache_2025-05-21.zip"), files = c(ipath, opath))
 # unpack
-# util$zip_unpack(ppath("data/datacache_2025-05-21.zip"))
+util$zip_unpack(ppath("data/datacache_2025-05-21.zip"))
 
 ```
 
@@ -84,12 +88,343 @@ df_tf %>% head()
 ```
 
 
+```{r}
+census_map <- get_acs(
+  geography = "county",
+  variables = "B01002_001",
+  year = 2019,
+  survey = "acs5",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  dplyr::select(place="GEOID")
+states  <- get_acs(
+  geography = "state",
+  variables = "B01002_001",
+  year = 2019,
+  survey = "acs5",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  dplyr::select(state="GEOID")
+
+```
+
+
 # Definitions of isolation
+
+### trade-weighted distance of each county
+the average distance that an import/export has to go to reach trading partner, weighted by volume ($) of trade with each of a county's partners
+e.g., if Marathon trades 25% with Portage (25 miles away) and 75% of exports and imports with Brown County (150 miles away), trade-weighted distance for Marathon County is 25%*25mi + 75%*150mi = 118.75.
 
 
 ```{r}
 
+flow_ex = df_tf %>% 
+  rename("focal"="from", "partner"="to")
+
+flow_im = df_tf %>% 
+  rename("focal"="to", "partner"="from")
+
+temp = df_dist %>% 
+  rename("focal"="to", "partner"="from")
+
+twd = rbind(flow_ex, flow_im) %>% 
+  group_by(focal, partner) %>% 
+  dplyr::summarize(flow = sum(flow, na.rm=TRUE)) %>% 
+  left_join(y=temp, by=c("focal","partner")) %>% 
+  group_by(focal) %>% 
+  dplyr::summarize(twd = weighted.mean(x=distance, w=flow, na.rm=TRUE)) %>% 
+  rename("place"="focal")
+
+
 ```
+
+### trade-weighted market share
+the average share of a focal county in each destination's total imports, weighted by the volume ($) of trade with each of a county's partners
+e.g., if Marathon exports 25% to Portage (imports from Marathon make up 60% of Portage's total import volume) and 75% of exports and imports with Brown County (imports from Marathon make up 5% of Brown's total import volume) for Marathon County, the trade-weighted market share for Marathon County is 25%*60% + 75%*5% = 18.75%.
+
+```{r}
+
+temp = df_tf %>% 
+  group_by(to) %>% 
+  dplyr::summarize(total_imports = sum(flow, na.rm=TRUE))
+
+mksh = df_tf %>% 
+  left_join(y=temp, by="to") %>% 
+  mutate(mksh = flow/total_imports) %>% 
+  group_by(from) %>% 
+  dplyr::summarize(mksh = weighted.mean(x=mksh, w=flow, na.rm=TRUE)) %>% 
+  rename("place"="from")
+
+```
+
+### local share of exports
+share of intermediate exports sent to destinations within n miles
+```{r}
+
+lsh = df_tf %>% 
+  left_join(y=df_dist, by=c("from","to")) %>% 
+  mutate(d50 = ifelse(distance < 50, 1, 0),
+         d100 = ifelse(distance < 100, 1, 0),
+         d200 = ifelse(distance < 200, 1, 0),
+         d400 = ifelse(distance < 400, 1, 0),
+         ) %>% 
+  group_by(from) %>% 
+  dplyr::summarize(lsh50 = weighted.mean(x=d50, w=flow, na.rm=TRUE),
+                   lsh100 = weighted.mean(x=d100, w=flow, na.rm=TRUE),
+                   lsh200 = weighted.mean(x=d200, w=flow, na.rm=TRUE),
+                   lsh400 = weighted.mean(x=d400, w=flow, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="from")
+
+```
+
+
+
+
+### trade capacity
+The importance of intermediate exports relative to the size of local economy
+i.e., intermediate exports/total output
+
+```{r}
+
+tc = df_circ %>% 
+  dplyr::select(place, trade_capacity)
+
+```
+
+
+## combine
+```{r}
+
+isolation = census_map %>%
+  left_join(y=tc, by="place") %>%
+  left_join(y=lsh, by="place") %>%
+  left_join(y=mksh, by="place") %>%
+  left_join(y=twd, by="place") %>% 
+  mutate(logtwd = log(twd))
+
+```
+
+
+# descriptives
+
+## univariate
+
+```{r}
+
+isolation %>%
+  st_drop_geometry() %>% 
+  pivot_longer(cols = !c(place), names_to = "var", values_to = "val") %>% 
+  group_by(var) %>%
+  summarise(
+    count = n(),
+    mean = mean(val, na.rm = TRUE),
+    sd = sd(val, na.rm = TRUE),
+    median = median(val, na.rm = TRUE),
+    p25 = quantile(val, 0.25, na.rm = TRUE),
+    p75 = quantile(val, 0.75, na.rm = TRUE),
+    min = min(val, na.rm = TRUE),
+    max = max(val, na.rm = TRUE)
+  )
+
+```
+
+
+```{r}
+
+ggplot(isolation, aes(x = twd)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance",
+    x = "twd",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = logtwd)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance (log)",
+    x = "twd",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = mksh)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Market Share",
+    x = "mksh",
+    y = "Density"
+  )
+
+ggplot(isolation, aes(x = trade_capacity)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade Capacity",
+    x = "trade_capacity",
+    y = "Density"
+  )
+
+temp <- isolation %>%
+  pivot_longer(cols = c(lsh50, lsh100, lsh200, lsh400),
+               names_to = "Distance",
+               values_to = "Value")
+temp$Distance <- factor(temp$Distance, levels = c("lsh400","lsh200","lsh100","lsh50"))
+
+
+ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
+  geom_density_ridges(scale = 1.2, alpha = 0.8, color = "white") +
+  scale_fill_viridis_d(option = "D", end = 0.8) +
+  theme_minimal() +
+  labs(title = "Share of intermediate exports sent within __ miles",
+       subtitle = "Distribution of US counties",
+       x = "Value",
+       y = "Distance") +
+  theme(legend.position = "none")
+
+
+```
+
+
+```{r}
+
+tmap_mode("view")
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "twd", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+# mx = median(isolation$mksh, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "mksh", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Trade-weighted market share", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$lsh200, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "lsh200", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Local share of exports, 200 miles", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+mx = median(isolation$trade_capacity, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "trade_capacity", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Trade capacity", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
+
+
+## bivariate
+```{r}
+cor.test(x=isolation$logtwd, y=isolation$mksh)
+# cor.test(x=isolation$logtwd, y=isolation$lsh100)
+cor.test(x=isolation$logtwd, y=isolation$lsh200)
+# cor.test(x=isolation$logtwd, y=isolation$lsh400)
+cor.test(x=isolation$logtwd, y=isolation$trade_capacity)
+
+# cor.test(x=isolation$mksh, y=isolation$lsh100)
+cor.test(x=isolation$mksh, y=isolation$lsh200)
+# cor.test(x=isolation$mksh, y=isolation$lsh400)
+cor.test(x=isolation$mksh, y=isolation$trade_capacity)
+
+# cor.test(x=isolation$trade_capacity, y=isolation$lsh100)
+cor.test(x=isolation$trade_capacity, y=isolation$lsh200)
+# cor.test(x=isolation$trade_capacity, y=isolation$lsh400)
+
+
+```
+
+### quadrants
+
+```{r}
+
+summarize_isolation_medians <- function(data = data, econ = iso_economic, geo = iso_geographic) {
+  # Convert string column names to symbols
+  econ_col <- sym(iso_economic)
+  geo_col  <- sym(iso_geographic)
+  
+data2 = data %>%
+    mutate(
+      md_econ = median(!!econ_col, na.rm = TRUE),
+      md_geo  = median(!!geo_col, na.rm = TRUE),
+      quad_econ = ifelse(!!econ_col >= md_econ, "high", "low"),
+      quad_geo = ifelse(!!geo_col >= md_geo, "high", "low"),
+      quad_combo = ifelse(quad_econ == "high" & quad_geo == "high", "High Econ/High Geo",
+                          ifelse(quad_econ == "high" & quad_geo == "low", "High Econ/Low Geo",
+                                 ifelse(quad_econ == "low" & quad_geo == "high", "Low Econ/High Geo",
+                                        ifelse(quad_econ == "low" & quad_geo == "low", "Low Econ/Low Geo", NA))))
+      
+    )
+
+quad_colors <- c(
+  "Low Econ/Low Geo"   = "#FFEEAD",
+  "High Econ/Low Geo"  = "#52BF90",
+  "Low Econ/High Geo"  = "#6FA8DC",
+  "High Econ/High Geo" = "#20124d"
+)
+
+# Map
+tm_shape(data2) + 
+  tm_polygons(
+    col = "quad_combo",
+    border.alpha = 0.0,
+    style = "cat",
+    palette = quad_colors
+  ) +
+  tm_layout(
+    title = "Geographic and Economic Isolation",
+    title.size = 2
+  ) +
+  tm_shape(states) + 
+  tm_borders(lwd = 0.6)
+ 
+}
+
+
+```
+
+Below, you are able to input variables in the economic isolation and geographic isolation categories. Listing:
+**economic**
+--> market share (mksh)
+--> trade capacity (trade_capacity)
+**geographic**
+--> trade-weighted distance (twd, logtwd)
+--> share of exports within (lsh50, lsh100, lsh200, lsh400)
+
+```{r}
+summarize_isolation_medians(data = isolation, econ="mksh", geo="logtwd")
+
+```
+
 
 
 
