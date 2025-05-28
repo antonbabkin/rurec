@@ -35,7 +35,8 @@ ppath <- function(...) {
 ipath <- list(
   dist = str_glue(geography$opath$dist_mat_, from = "center", year = 2013, cbsa = FALSE),
   outsupdem = str_glue(place_io$opath$outsupdem_, year = 2012, ilevel = "det", bus_data = "cbp_imp"),
-  tf = str_glue(trade_flows$opath$flows_, bus_data = "cbp_imp", ilevel = "det", year = 2012, ind_code = "all_industries")
+  tf = str_glue(trade_flows$opath$flows_, bus_data = "cbp_imp", ilevel = "det", year = 2012, ind_code = "all_industries"),
+  tf_com = str_glue(trade_flows$opath$flows_all_, bus_data = "cbp_imp", ilevel = "det", year = 2012)
 )
 
 # output data files
@@ -44,9 +45,9 @@ opath <- list(
 )
 
 # pack all data files
-# util$zip_pack(ppath("data/datacache_2025-05-21.zip"), files = c(ipath, opath))
+# util$zip_pack(ppath("data/datacache_2025-05-28.zip"), files = c(ipath, opath))
 # unpack
-util$zip_unpack(ppath("data/datacache_2025-05-21.zip"))
+# util$zip_unpack(ppath("data/datacache_2025-05-28.zip"))
 
 ```
 
@@ -80,10 +81,14 @@ df_tf <- readRDS(ipath$tf) %>%
   pivot_longer(!from, names_to = "to", values_to = "flow") %>%
   filter(flow > 0)
 
+# county-to-county trade flows by commodity
+df_tf_com <- arrow::read_parquet(ipath$tf_com)
+
 df_dist %>% head()
 df_outsupdem %>% head()
 df_circ %>% head()
 df_tf %>% head()
+df_tf_com %>% head()
 
 ```
 
@@ -182,6 +187,43 @@ lsh = df_tf %>%
 
 ```
 
+### Market power indicators
+
+#### National market shares
+
+Let $f(c, i, j)$ be trade flow in commodity $c$ from county $c$ to county $j$. County $i$ total supply is $s(c, i) = \sum_j f(c, i, j)$, and total demand is $d(c, i) = \sum_j f(c, j, i)$. Total national trade in commodity $c$ is $D(c) = S(c) = \sum_{ij}f(c,i,j)$.
+
+County $i$ has national supply market share of $m^s(c, i) = s(c, i) / S(c)$ and demand market share of $m^d(c, i) = d(c, i) / D(c)$. Higher market share means more bargaining power on either side of the trade.
+
+On the supply (export) side, a county $i$ is facing a set of buyers $j$, each with with their national demand share $m^d(c, j)$. Calculate exposure to buyer (demander) power as trade-weighted power of each trading partner as $p^d(c, i) = \sum_j m^d(c, j) \frac{f(c, i, j)}{s(c, i)}$. Similarly, on the demand (import) side, calculate exposure to seller (supplier) power as $p^s(c, i) = \sum_j m^s(c, j) \frac{f(c, j, i)}{d(c, i)}$.
+
+Finally, calculate aggregate county indicators weighing by commodity shares: $p^s(i) = \frac{\sum_c p^s(c, i) d(c, i)}{\sum_c d(c, i)}$ and $p^d(i) = \frac{\sum_c p^d(c, i) s(c, i)}{\sum_c s(c, i)}$.
+
+Intuitively, high $p^d(i)$ means that county $i$ is selling to trading partners with high market power and is thus in a weaker position when negotiating export contracts. High $p^s(i)$ means that county's suppliers have high market power and weaker position over import contracts. We hypothesize that facing a higher market power on either side of the trade puts a county in a disadvantaged position in the national supply chain structure and results metaphorical isolation or exclusion from trades that are more beneficial to local producers.
+
+#### Local market shares
+
+For every trade flow $f(c, i, j)$, calculate "balance of power" as
+
+$$
+b(c,i,j) = \frac{f(c,i,j)}{d(c,j)} - \frac{f(c,i,j)}{s(c,i)}
+$$
+
+For every positive trade flow, $-1 \lt b(c,i,j) \lt 1$. Negative balance means less selling power for $i$ and more buying power for $j$, and the other way around. $b \to 1$ means that the trade satisfies close to 100% of buyer's demand, but is only a small fraction of seller's supply, meaning that county $i$ has *monopoly* power over $j$. $b \to -1$ means that the trade is most of the seller's supply, while only a small fraction of buyer's demand, meaning that county $j$ has *monopsony* power over $i$.
+
+Weighted over all buyers and commodities, county $i$'s supply market power is
+
+$$
+b^s(i) = \frac{\sum_{cj} b(c,i,j) f(c,i,j)}{\sum_{cj}f(c,i,j)}
+$$
+
+and demand market power is
+
+$$
+b^s(i) = \frac{\sum_{cj} b(c,i,j) f(c,i,j)}{\sum_{cj}f(c,i,j)}
+$$
+
+High "balance of power" $b$ is the opposite to "exposure to high power" $p$, with analogous hypotheses regarding county's standing in national supply chains and implications for growth and prosperity.
 
 
 

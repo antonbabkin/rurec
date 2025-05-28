@@ -53,7 +53,8 @@ opath <- list(
   old_sup = "data/trade_flows/demsup/demand_commodity_det_2012_infogroup.rds",
   old_dem = "data/trade_flows/demsup/supply_commodity_det_2012_infogroup.rds",
   old_flows_ = "data/trade_flows/flows_commodity_det_2012_infogroup/{ind_code}.rds",
-  flows_ = "data/trade_flows/{bus_data}_{ilevel}_{year}/{ind_code}.rds"
+  flows_ = "data/trade_flows/{bus_data}_{ilevel}_{year}/{ind_code}.rds",
+  flows_all_ = "data/trade_flows/{bus_data}_{ilevel}_{year}.pq"
 )
 
 
@@ -87,14 +88,30 @@ call_industry_codes <- function() {
 call_traded_commodities <- function(year,
                                ilevel = c("det", "sum", "sec"),
                                bus_data = c("cbp_imp", "cbp_raw", "infogroup")) {
-  place_io$call_outsupdem(year, ilevel = ilevel, bus_data = bus_data) %>%
+  place_io$outsupdem(year, ilevel, bus_data) %>%
     mutate(exsup = pmax(supply - demand, 0),
            exdem = pmax(demand - supply, 0)) %>%
-    summarize(sup = sum(exsup), dem = sum(exsup), .by = "indcode") %>%
+    summarize(sup = sum(exsup), dem = sum(exsup), .by = com_code) %>%
     filter(sup > 0, dem > 0) %>%
-    pull(indcode)
+    pull(com_code)
 }
 
+#' Combine estimated flows into a single dataframe
+build_combined_df <- function(year, ilevel = c("det", "sum", "sec"), bus_data = c("cbp_imp", "cbp_raw", "infogroup")) {
+  com_codes <- call_traded_commodities(year, ilevel, bus_data)
+  df <- list()
+  for (com in com_codes) {
+    df[[com]] <- glue(opath$flows_, ind_code = com) %>%
+      read_cache() %>%
+      as_tibble(rownames = "from") %>%
+      pivot_longer(!from, names_to = "to", values_to = "flow") %>%
+      filter(flow > 0)
+  }
+  df <- bind_rows(df, .id = "com_code")
+  save_to <- glue(opath$flows_all_)
+  arrow::write_parquet(df, save_to)
+  logger::log_info("build_combined_df() saved to", save_to)
+}
 
 
 # LP algorithm ----
