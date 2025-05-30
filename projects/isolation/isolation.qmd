@@ -374,6 +374,40 @@ $$
 b(c,i,j) = \frac{f(c,i,j)}{d(c,j)} - \frac{f(c,i,j)}{s(c,i)}
 $$
 
+LMS step 1: calculate:
+a. commodity balance of power
+  clause 1. flow in df_tf_com table
+  clause 2. buyer demand NMS1b
+  clause 3. seller supply NMS1a
+  clause 4. clause1/clause2
+  clause 5. clause1/clause3
+
+
+```{r}
+
+# clause 2
+LMS1a2 = NMS1b %>% 
+  rename("buyer"="place")
+
+# clause 3
+LMS1a3 = NMS1a %>% 
+  rename("seller"="place")
+
+# clause 4
+LMS1a = df_tf_com %>% 
+  rename("buyer"="to", "seller"="from") %>% 
+  left_join(y=LMS1a2, by=c("buyer","com_code")) %>% 
+  mutate(across(everything(), ~ replace(., is.infinite(.), NA))) %>% 
+  mutate(LMS1a4 = flow/NMS1b) %>% 
+  left_join(y=LMS1a3, by=c("seller","com_code")) %>% 
+  mutate(across(everything(), ~ replace(., is.infinite(.), NA))) %>% 
+  mutate(LMS1a5 = flow/NMS1a,
+         LMS1a = LMS1a4 - LMS1a5)
+  
+```
+
+
+
 For every positive trade flow, $-1 \lt b(c,i,j) \lt 1$. Negative balance means less selling power for $i$ and more buying power for $j$, and the other way around. $b \to 1$ means that the trade satisfies close to 100% of buyer's demand, but is only a small fraction of seller's supply, meaning that county $i$ has *monopoly* power over $j$. $b \to -1$ means that the trade is most of the seller's supply, while only a small fraction of buyer's demand, meaning that county $j$ has *monopsony* power over $i$.
 
 Weighted over all buyers and commodities, county $i$'s supply market power is
@@ -387,6 +421,35 @@ and demand market power is
 $$
 b^s(i) = \frac{\sum_{cj} b(c,i,j) f(c,i,j)}{\sum_{cj}f(c,i,j)}
 $$
+```{r}
+
+LME2a1 = LMS1a %>% 
+  mutate(LME2a1 = LMS1a*flow) %>% 
+  group_by(seller) %>% 
+  dplyr::summarize(sLME2a1 = sum(LME2a1, na.rm=TRUE),
+                   sflow = sum(flow, na.rm=TRUE)
+                   ) %>% 
+  mutate(LME_supply = sLME2a1/sflow) %>% 
+  dplyr::select("place"=seller, LME_supply)
+
+LME2a2 = LMS1a %>% 
+  mutate(LME2a1 = LMS1a*flow) %>% 
+  group_by(buyer) %>% 
+  dplyr::summarize(sLME2a1 = sum(LME2a1, na.rm=TRUE),
+                   sflow = sum(flow, na.rm=TRUE)
+                   ) %>% 
+  mutate(LME_demand = sLME2a1/sflow) %>% 
+  dplyr::select("place"=buyer, LME_demand)
+
+LME = LME2a1 %>%
+  left_join(y=LME2a2, by="place")
+
+
+```
+
+
+
+
 
 High "balance of power" $b$ is the opposite to "exposure to high power" $p$, with analogous hypotheses regarding county's standing in national supply chains and implications for growth and prosperity.
 
