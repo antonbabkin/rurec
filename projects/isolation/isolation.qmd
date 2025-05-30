@@ -19,6 +19,7 @@ library(ggridges)
 library(tidycensus)
 library(tigris)
 library(tmap)
+library(ipumsr)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
@@ -47,7 +48,7 @@ opath <- list(
 # pack all data files
 # util$zip_pack(ppath("data/datacache_2025-05-28.zip"), files = c(ipath, opath))
 # unpack
-# util$zip_unpack(ppath("data/datacache_2025-05-28.zip"))
+util$zip_unpack(ppath("data/datacache_2025-05-28.zip"))
 
 ```
 
@@ -116,6 +117,7 @@ states  <- get_acs(
   dplyr::select(state="GEOID")
 
 ```
+
 
 
 # Definitions of isolation
@@ -193,13 +195,176 @@ lsh = df_tf %>%
 
 Let $f(c, i, j)$ be trade flow in commodity $c$ from county $c$ to county $j$. County $i$ total supply is $s(c, i) = \sum_j f(c, i, j)$, and total demand is $d(c, i) = \sum_j f(c, j, i)$. Total national trade in commodity $c$ is $D(c) = S(c) = \sum_{ij}f(c,i,j)$.
 
+NMS step 1: calculate:
+a. county total supply
+b. county total demand
+c. national total commodity trade
+
+```{r}
+
+NMS1a = df_outsupdem %>% 
+  dplyr::select(place, com_code, "NMS1a"=supply)
+
+NMS1b = df_outsupdem %>% 
+  dplyr::select(place, com_code, "NMS1b"=demand)
+
+NMS1c = df_outsupdem %>% 
+  group_by(com_code) %>% 
+  dplyr::summarize(supply = sum(supply, na.rm=TRUE),
+                   demand = sum(demand, na.rm=TRUE)
+                   ) %>% 
+  dplyr::select(com_code, "NMS1c"=supply)
+
+
+```
+
+
 County $i$ has national supply market share of $m^s(c, i) = s(c, i) / S(c)$ and demand market share of $m^d(c, i) = d(c, i) / D(c)$. Higher market share means more bargaining power on either side of the trade.
+
+NMS step 2: calculate:
+a. national supply market share
+b. national demand market share
+
+```{r}
+
+NMS2a = df_outsupdem %>% 
+  dplyr::select(place, com_code, supply) %>% 
+  left_join(y=NMS1c, by="com_code") %>% 
+  mutate(NMS2a = supply/NMS1c) %>% 
+  dplyr::select(place, com_code, NMS2a)
+
+NMS2b = df_outsupdem %>% 
+  dplyr::select(place, com_code, demand) %>% 
+  left_join(y=NMS1c, by="com_code") %>% 
+  mutate(NMS2b = demand/NMS1c) %>% 
+  dplyr::select(place, com_code, NMS2b)
+
+
+```
+
 
 On the supply (export) side, a county $i$ is facing a set of buyers $j$, each with with their national demand share $m^d(c, j)$. Calculate exposure to buyer (demander) power as trade-weighted power of each trading partner as $p^d(c, i) = \sum_j m^d(c, j) \frac{f(c, i, j)}{s(c, i)}$. Similarly, on the demand (import) side, calculate exposure to seller (supplier) power as $p^s(c, i) = \sum_j m^s(c, j) \frac{f(c, j, i)}{d(c, i)}$.
 
+NMS step 3: calculate:
+a. exposure to buyer (demander) power
+  clause 1. buyer NMS2b
+  clause 2. buyer's df_tf_com flow
+  clause 3. seller's NMS1a
+b. exposure to seller (supplier) power
+  clause 1. seller NMS2a
+  clause 2. seller's df_tf_com flow
+  clause 3. buyer's NMS1b
+
+```{r}
+
+# NMS3a = sum (demand market share of a seller's buyers *
+#                 buyer's commodity flow in df_tf_com / total buyer county demand)
+#        = sum (buyer NMS2b *
+#                 buyer's df_tf_com flow / seller NMS1a)
+#      sum ... so across each seller's buyers
+
+
+NMS3a1 = NMS2b %>% 
+  rename("buyer"="place", "NMS3a1"="NMS2b")
+NMS3a2 = df_tf_com %>% 
+  rename("buyer"="to", "NMS3a2"="flow")
+NMS3a3 = NMS1a %>% 
+  rename("seller"="place", "NMS3a3"="NMS1a")
+
+
+NMS3a = NMS3a2 %>% 
+  rename("seller"="from") %>% 
+  left_join(y=NMS3a3, by=c("com_code","seller")) %>% 
+  left_join(y=NMS3a1, by=c("com_code","buyer")) %>% 
+  mutate(NMS3a = NMS3a1*(NMS3a2/NMS3a3)) %>% 
+  group_by(seller, com_code) %>% 
+  dplyr::summarize(NMS3a = sum(NMS3a, na.rm=TRUE))
+
+#### NOTE: some of the NMS3a are above 1
+
+
+# NMS3a = sum (demand market share of a buyer's sellers *
+#                 seller's commodity flow in df_tf_com / total seller county supply)
+#        = sum (seller NMS2a *
+#                 seller's df_tf_com flow / buyer NMS1b)
+#      sum ... so across each buyer's sellers
+
+
+
+NMS3b1 = NMS2a %>% 
+  rename("seller"="place", "NMS3b1"="NMS2a")
+NMS3b2 = df_tf_com %>% 
+  rename("seller"="from", "NMS3b2"="flow")
+NMS3b3 = NMS1b %>% 
+  rename("buyer"="place", "NMS3b3"="NMS1b")
+
+
+NMS3b = NMS3b2 %>% 
+  rename("buyer"="to") %>% 
+  left_join(y=NMS3b3, by=c("com_code","buyer")) %>% 
+  left_join(y=NMS3b1, by=c("com_code","seller")) %>%
+  mutate(NMS3b = NMS3b1*(NMS3b2/NMS3b3)) %>% 
+  mutate(across(everything(), ~ replace(., is.infinite(.), NA))) %>% 
+  group_by(buyer, com_code) %>% 
+  dplyr::summarize(NMS3b = sum(NMS3b, na.rm=TRUE))
+
+
+```
+
+
+
+
+
 Finally, calculate aggregate county indicators weighing by commodity shares: $p^s(i) = \frac{\sum_c p^s(c, i) d(c, i)}{\sum_c d(c, i)}$ and $p^d(i) = \frac{\sum_c p^d(c, i) s(c, i)}{\sum_c s(c, i)}$.
 
+
+NMS step 4: calculate:
+a. aggregate national market shares (supplier) = sum(clause1*clause2)/sum(clause3)
+  clause 1. supply NMS3a
+  clause 2. demand NMS1b
+  clause 3. demand NMS1b
+b. aggregate national market shares (demander)
+  clause 1. demand NMS3b
+  clause 2. supply NMS1a
+  clause 3. supply NMS1a
+
+```{r}
+
+NMS4a = NMS3a %>% 
+  rename("place"="seller") %>% 
+  left_join(y=NMS1b, by=c("place", "com_code")) %>% 
+  group_by(place) %>% 
+  dplyr::summarize(NMS4a = sum(NMS3a*NMS1b)/sum(NMS1b))
+
+NMS4b = NMS3b %>% 
+  rename("place"="buyer") %>% 
+  left_join(y=NMS1a, by=c("place", "com_code")) %>% 
+  group_by(place) %>% 
+  dplyr::summarize(NMS4b = sum(NMS3b*NMS1a)/sum(NMS1a))
+
+NMS = NMS4a %>% 
+  left_join(y=NMS4b, by="place") %>% 
+  rename("NMS_supply"="NMS4a", "NMS_demand"="NMS4b")
+
+
+```
+
+
+
+
+
 Intuitively, high $p^d(i)$ means that county $i$ is selling to trading partners with high market power and is thus in a weaker position when negotiating export contracts. High $p^s(i)$ means that county's suppliers have high market power and weaker position over import contracts. We hypothesize that facing a higher market power on either side of the trade puts a county in a disadvantaged position in the national supply chain structure and results metaphorical isolation or exclusion from trades that are more beneficial to local producers.
+
+
+
+
+
+
+
+
+
+
+
 
 #### Local market shares
 
@@ -224,6 +389,10 @@ b^s(i) = \frac{\sum_{cj} b(c,i,j) f(c,i,j)}{\sum_{cj}f(c,i,j)}
 $$
 
 High "balance of power" $b$ is the opposite to "exposure to high power" $p$, with analogous hypotheses regarding county's standing in national supply chains and implications for growth and prosperity.
+
+
+
+
 
 
 
@@ -408,49 +577,48 @@ cor.test(x=isolation$trade_capacity, y=isolation$lsh200)
 ### quadrants
 
 ```{r}
-
-summarize_isolation_medians <- function(data = data, econ = iso_economic, geo = iso_geographic) {
+iso_quads <- function(data, econ, geo) {
   # Convert string column names to symbols
-  econ_col <- sym(iso_economic)
-  geo_col  <- sym(iso_geographic)
+  econ_col <- sym(econ)
+  geo_col  <- sym(geo)
   
-data2 = data %>%
+  data2 <- data %>%
     mutate(
       md_econ = median(!!econ_col, na.rm = TRUE),
       md_geo  = median(!!geo_col, na.rm = TRUE),
       quad_econ = ifelse(!!econ_col >= md_econ, "high", "low"),
       quad_geo = ifelse(!!geo_col >= md_geo, "high", "low"),
-      quad_combo = ifelse(quad_econ == "high" & quad_geo == "high", "High Econ/High Geo",
-                          ifelse(quad_econ == "high" & quad_geo == "low", "High Econ/Low Geo",
-                                 ifelse(quad_econ == "low" & quad_geo == "high", "Low Econ/High Geo",
-                                        ifelse(quad_econ == "low" & quad_geo == "low", "Low Econ/Low Geo", NA))))
-      
+      quad_combo = case_when(
+        quad_econ == "high" & quad_geo == "high" ~ "High Econ/High Geo",
+        quad_econ == "high" & quad_geo == "low"  ~ "High Econ/Low Geo",
+        quad_econ == "low" & quad_geo == "high"  ~ "Low Econ/High Geo",
+        quad_econ == "low" & quad_geo == "low"   ~ "Low Econ/Low Geo",
+        TRUE ~ NA_character_
+      )
     )
 
-quad_colors <- c(
-  "Low Econ/Low Geo"   = "#FFEEAD",
-  "High Econ/Low Geo"  = "#52BF90",
-  "Low Econ/High Geo"  = "#6FA8DC",
-  "High Econ/High Geo" = "#20124d"
-)
+  quad_colors <- c(
+    "Low Econ/Low Geo"   = "#FFEEAD",
+    "High Econ/Low Geo"  = "#52BF90",
+    "Low Econ/High Geo"  = "#6FA8DC",
+    "High Econ/High Geo" = "#20124d"
+  )
 
-# Map
-tm_shape(data2) + 
-  tm_polygons(
-    col = "quad_combo",
-    border.alpha = 0.0,
-    style = "cat",
-    palette = quad_colors
-  ) +
-  tm_layout(
-    title = "Geographic and Economic Isolation",
-    title.size = 2
-  ) +
-  tm_shape(states) + 
-  tm_borders(lwd = 0.6)
- 
+  # Map
+  tm_shape(data2) + 
+    tm_polygons(
+      col = "quad_combo",
+      border.alpha = 0.0,
+      style = "cat",
+      palette = quad_colors
+    ) +
+    tm_layout(
+      title = "Geographic and Economic Isolation",
+      title.size = 2
+    ) +
+    tm_shape(states) + 
+    tm_borders(lwd = 0.6)
 }
-
 
 ```
 
@@ -463,10 +631,155 @@ Below, you are able to input variables in the economic isolation and geographic 
 --> share of exports within (lsh50, lsh100, lsh200, lsh400)
 
 ```{r}
-summarize_isolation_medians(data = isolation, econ="mksh", geo="logtwd")
+iso_quads(data = isolation, econ="mksh", geo="logtwd")
 
 ```
 
+
+
+# extra materials (temp)
+
+```{r}
+
+ddi <- read_ipums_ddi("data/ipums/usa_00037.xml")
+pums_clean <- read_ipums_micro(ddi)
+
+```
+
+
+```{r}
+xwalk = read.csv("data/ipums/county_puma22.csv") %>%
+  filter(state != "State code") %>%
+  mutate(PUMA = str_c(state, puma22),
+         FIPS = county, pumapop = as.numeric(pop20)) %>%
+  dplyr::select(PUMA, FIPS, pumapop, afact)
+```
+
+
+```{r}
+
+spm = pums_clean %>% 
+  drop_na(SPMTHRESH) %>% 
+  filter(SPMTHRESH != 999999) %>% 
+  mutate(spm100 = ifelse(ADJGINC>1*SPMTHRESH, 0, 1),
+         spm150 = ifelse(ADJGINC>1.5*SPMTHRESH, 0, 1),
+         spm200 = ifelse(ADJGINC>2*SPMTHRESH, 0, 1),
+         PUMA = str_c(sprintf("%02d", STATEFIP),"",sprintf("%05d", PUMA))
+         ) %>% 
+  dplyr::select(HHWT, PUMA, SPMPOV, SPMTHRESH, spm100, spm150, spm200) %>% 
+  distinct() %>% 
+  group_by(PUMA) %>% 
+  dplyr::summarize(spm100 = weighted.mean(x=spm100, w=HHWT, na.rm=TRUE),
+                   spm150 = weighted.mean(x=spm150, w=HHWT, na.rm=TRUE),
+                   spm200 = weighted.mean(x=spm200, w=HHWT, na.rm=TRUE)
+                   )
+
+spm = xwalk %>%
+  left_join(y=spm, by="PUMA") %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(spm100 = weighted.mean(x=spm100, w=pumapop, na.rm=TRUE),
+                   spm150 = weighted.mean(x=spm150, w=pumapop, na.rm=TRUE),
+                   spm200 = weighted.mean(x=spm200, w=pumapop, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="FIPS")
+
+opm <- get_acs(
+  geography = "puma",
+  variables = c("S1702_C01_001E","S1702_C01_045E"),
+  year = 2023,
+  survey = "acs1"
+) %>% 
+  dplyr::select("PUMA"=GEOID, variable, estimate) %>% 
+  pivot_wider(names_from = variable, values_from = estimate) %>% 
+  mutate(opm150 = S1702_C01_045/S1702_C01_001) %>% 
+  dplyr::select(PUMA, opm150)
+
+opm = xwalk %>%
+  left_join(y=opm, by="PUMA") %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(opm150 = weighted.mean(x=opm150, w=pumapop, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="FIPS")
+
+pov = opm %>% 
+  left_join(y=spm, by="place") %>%
+  mutate(across(c(opm150, spm150), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "z_{.col}")) %>% 
+  mutate(diff = z_spm150-z_opm150) %>% 
+  mutate(state = substr(place, 1, 2)) %>% 
+  filter(state != "72")
+
+
+pov2 = census_map %>%
+  left_join(y=pov, by="place")
+
+```
+
+
+```{r}
+pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind) %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/pop, pct_asian = pop_asian/pop, pct_ind = pop_ind/pop, pct_hisp = pop_hisp/pop, pct_nhw = (pop-tot)/pop) %>% 
+  mutate(pct_nhw = ifelse(pct_nhw < 0, 0, pct_nhw)) %>% 
+  dplyr::select("place"=FIPS, pct_nhw, pct_black, pct_hisp, pct_asian, pct_ind, pop)
+```
+
+```{r}
+
+extra = pov2 %>% 
+  left_join(y=pop, by="place") %>% 
+  mutate(logpop = log(pop))
+
+```
+
+
+```{r}
+
+tmap_mode("view")
+mx = median(extra$opm150, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "opm150", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "OPM150", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("view")
+mx = median(extra$spm150, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "spm150", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "SPM150", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("view")
+mx = median(extra$diff, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "diff", midpoint = 0, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "diff", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
+
+
+
+```{r}
+
+summary(lm(data=extra, diff ~ pct_nhw + logpop))
+
+cor.test(x=extra$pct_nhw, y=extra$logpop)
+
+```
 
 
 
