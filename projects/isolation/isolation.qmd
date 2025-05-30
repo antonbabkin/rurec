@@ -97,6 +97,7 @@ df_tf_com %>% head()
 
 
 ```{r}
+
 census_map <- get_acs(
   geography = "county",
   variables = "B01002_001",
@@ -204,18 +205,16 @@ c. national total commodity trade
 
 ```{r}
 
-NMS1a = df_outsupdem %>% 
-  dplyr::select(place, com_code, "NMS1a"=exsup)
+NMS1a = df_tf_com %>%
+    rename(place = from) %>%
+    summarize(NMS1a = sum(flow), .by = c(place, com_code))
 
-NMS1b = df_outsupdem %>% 
-  dplyr::select(place, com_code, "NMS1b"=exdem)
+NMS1b =   df_tf_com %>%
+    rename(place = to) %>%
+    summarize(NMS1b = sum(flow), .by = c(place, com_code))
 
-NMS1c = df_outsupdem %>% 
-  group_by(com_code) %>% 
-  dplyr::summarize(exsup = sum(exsup, na.rm=TRUE),
-                   exdem = sum(exdem, na.rm=TRUE)
-                   ) %>% 
-  dplyr::select(com_code, "NMS1c"=exsup)
+NMS1c = df_tf_com %>%
+    summarize(NMS1c = sum(flow), .by = com_code)
 
 
 ```
@@ -229,18 +228,18 @@ b. national demand market share
 
 ```{r}
 
-NMS2a = df_outsupdem %>% 
-  dplyr::select(place, com_code, exsup) %>% 
+NMS2a = NMS1a %>% 
   left_join(y=NMS1c, by="com_code") %>% 
-  mutate(NMS2a = exsup/NMS1c) %>% 
+  mutate(NMS2a = NMS1a/NMS1c) %>% 
   dplyr::select(place, com_code, NMS2a)
 
-NMS2b = df_outsupdem %>% 
-  dplyr::select(place, com_code, exdem) %>% 
+NMS2b = NMS1b %>% 
   left_join(y=NMS1c, by="com_code") %>% 
-  mutate(NMS2b = exdem/NMS1c) %>% 
+  mutate(NMS2b = NMS1b/NMS1c) %>% 
   dplyr::select(place, com_code, NMS2b)
 
+NMS2a %>% group_by(com_code) %>% skimr::skim()
+NMS2b %>% group_by(com_code) %>% skimr::skim()
 
 ```
 
@@ -313,11 +312,24 @@ NMS3b = NMS3b2 %>%
 
 ```
 
+```{r}
+NMS3a %>% group_by(com_code) %>% skimr::skim()
+```
 
 
 
 
-Finally, calculate aggregate county indicators weighing by commodity shares: $p^s(i) = \frac{\sum_c p^s(c, i) d(c, i)}{\sum_c d(c, i)}$ and $p^d(i) = \frac{\sum_c p^d(c, i) s(c, i)}{\sum_c s(c, i)}$.
+Finally, calculate aggregate county indicators weighing by commodity shares: 
+
+$$
+p^s(i) = \frac{\sum_c p^s(c, i) d(c, i)}{\sum_c d(c, i)}
+$$
+
+and 
+
+$$
+p^d(i) = \frac{\sum_c p^d(c, i) s(c, i)}{\sum_c s(c, i)}
+$$
 
 
 NMS step 4: calculate:
@@ -334,20 +346,21 @@ b. aggregate national market shares (demander)
 
 NMS4a = NMS3a %>% 
   rename("place"="seller") %>% 
-  left_join(y=NMS1b, by=c("place", "com_code")) %>% 
+  left_join(y=NMS1a, by=c("place", "com_code")) %>% 
   group_by(place) %>% 
-  dplyr::summarize(NMS4a = sum(NMS3a*NMS1b)/sum(NMS1b))
+  dplyr::summarize(NMS4a = sum(NMS3a*NMS1a, na.rm = TRUE)/sum(NMS1a, na.rm = TRUE))
 
 NMS4b = NMS3b %>% 
   rename("place"="buyer") %>% 
-  left_join(y=NMS1a, by=c("place", "com_code")) %>% 
+  left_join(y=NMS1b, by=c("place", "com_code")) %>% 
   group_by(place) %>% 
-  dplyr::summarize(NMS4b = sum(NMS3b*NMS1a)/sum(NMS1a))
+  dplyr::summarize(NMS4b = sum(NMS3b*NMS1b, na.rm = TRUE)/sum(NMS1b, na.rm = TRUE))
 
 NMS = NMS4a %>% 
   left_join(y=NMS4b, by="place") %>% 
   rename("NMS_supply"="NMS4a", "NMS_demand"="NMS4b")
 
+NMS %>% skimr::skim()
 
 ```
 
@@ -356,10 +369,6 @@ NMS = NMS4a %>%
 
 
 Intuitively, high $p^d(i)$ means that county $i$ is selling to trading partners with high market power and is thus in a weaker position when negotiating export contracts. High $p^s(i)$ means that county's suppliers have high market power and weaker position over import contracts. We hypothesize that facing a higher market power on either side of the trade puts a county in a disadvantaged position in the national supply chain structure and results metaphorical isolation or exclusion from trades that are more beneficial to local producers.
-
-
-
-
 
 
 
@@ -405,12 +414,18 @@ LMS1a = df_tf_com %>%
   mutate(across(everything(), ~ replace(., is.infinite(.), NA))) %>% 
   mutate(LMS1a5 = flow/NMS1a,
          LMS1a = LMS1a4 - LMS1a5)
-  
+
+```
+
+```{r}
+LMS1a %>% group_by(com_code) %>% skimr::skim(LMS1a)
+
 ```
 
 
-
 For every positive trade flow, $-1 \lt b(c,i,j) \lt 1$. Negative balance means less selling power for $i$ and more buying power for $j$, and the other way around. $b \to 1$ means that the trade satisfies close to 100% of buyer's demand, but is only a small fraction of seller's supply, meaning that county $i$ has *monopoly* power over $j$. $b \to -1$ means that the trade is most of the seller's supply, while only a small fraction of buyer's demand, meaning that county $j$ has *monopsony* power over $i$.
+
+Positive is "seller's market", and negative is "buyer's market".
 
 Weighted over all buyers and commodities, county $i$'s supply market power is
 
@@ -421,8 +436,10 @@ $$
 and demand market power is
 
 $$
-b^s(i) = \frac{\sum_{cj} b(c,i,j) f(c,i,j)}{\sum_{cj}f(c,i,j)}
+b^d(i) = \frac{\sum_{cj} -b(c,j,i) f(c,j,i)}{\sum_{cj}f(c,j,i)}
 $$
+
+
 ```{r}
 
 LME2a1 = LMS1a %>% 
@@ -435,7 +452,7 @@ LME2a1 = LMS1a %>%
   dplyr::select("place"=seller, LME_supply)
 
 LME2a2 = LMS1a %>% 
-  mutate(LME2a1 = LMS1a*flow) %>% 
+  mutate(LME2a1 = -LMS1a*flow) %>% 
   group_by(buyer) %>% 
   dplyr::summarize(sLME2a1 = sum(LME2a1, na.rm=TRUE),
                    sflow = sum(flow, na.rm=TRUE)
@@ -446,6 +463,7 @@ LME2a2 = LMS1a %>%
 LME = LME2a1 %>%
   left_join(y=LME2a2, by="place")
 
+LME %>% skimr::skim()
 
 ```
 
@@ -480,13 +498,51 @@ isolation = census_map %>%
   left_join(y=tc, by="place") %>%
   left_join(y=lsh, by="place") %>%
   left_join(y=mksh, by="place") %>%
-  left_join(y=twd, by="place") %>% 
+  left_join(y=twd, by="place") %>%
+  left_join(y=NMS, by="place") %>%
   mutate(logtwd = log(twd))
 
 ```
 
 
 # descriptives
+
+## supply and demand map
+
+```{r}
+com = "334413"
+x <- df_outsupdem %>%
+  filter(com_code == com) %>%
+  mutate(netsup = supply - demand,
+         log_netsup = if_else(netsup > 0, log10(netsup), -log10(-netsup)))
+
+
+isolation %>%
+  left_join(x, "place") %>%
+  filter(is.finite(log_netsup)) %>%
+  tm_shape() +
+  tm_polygons(
+    title = com,
+    col = "log_netsup",
+    border.alpha = 0.0,
+    style = "cont",
+    midpoint = 0)
+
+# exposure to buyers market power
+NMS3a %>%
+  filter(com_code == com) %>%
+  ungroup() %>%
+  skimr::skim(NMS3a)
+
+# exposure to sellers market power
+NMS3b %>%
+  filter(com_code == com) %>%
+  ungroup() %>%
+  skimr::skim(NMS3b)
+
+```
+
+
 
 ## univariate
 
@@ -617,6 +673,28 @@ isolation %>%
   tm_borders(lwd=0.6)
 
 ```
+
+```{r}
+tmap_mode("plot")
+
+
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "NMS_supply", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "NMS_demand", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
+
 
 
 ## bivariate
