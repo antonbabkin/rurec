@@ -71,7 +71,9 @@ df_dist <- local({
 })
 
 # county-commodity output, supply and demand
-df_outsupdem <- arrow::read_parquet(ipath$outsupdem)
+df_outsupdem <- arrow::read_parquet(ipath$outsupdem) %>% 
+    mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply))
+
 
 # county circularity indicators, depends on outsupdem data file
 df_circ <- circularity$circularity_indicators(year = 2012, bus_data = "cbp_imp")
@@ -203,17 +205,17 @@ c. national total commodity trade
 ```{r}
 
 NMS1a = df_outsupdem %>% 
-  dplyr::select(place, com_code, "NMS1a"=supply)
+  dplyr::select(place, com_code, "NMS1a"=exsup)
 
 NMS1b = df_outsupdem %>% 
-  dplyr::select(place, com_code, "NMS1b"=demand)
+  dplyr::select(place, com_code, "NMS1b"=exdem)
 
 NMS1c = df_outsupdem %>% 
   group_by(com_code) %>% 
-  dplyr::summarize(supply = sum(supply, na.rm=TRUE),
-                   demand = sum(demand, na.rm=TRUE)
+  dplyr::summarize(exsup = sum(exsup, na.rm=TRUE),
+                   exdem = sum(exdem, na.rm=TRUE)
                    ) %>% 
-  dplyr::select(com_code, "NMS1c"=supply)
+  dplyr::select(com_code, "NMS1c"=exsup)
 
 
 ```
@@ -228,15 +230,15 @@ b. national demand market share
 ```{r}
 
 NMS2a = df_outsupdem %>% 
-  dplyr::select(place, com_code, supply) %>% 
+  dplyr::select(place, com_code, exsup) %>% 
   left_join(y=NMS1c, by="com_code") %>% 
-  mutate(NMS2a = supply/NMS1c) %>% 
+  mutate(NMS2a = exsup/NMS1c) %>% 
   dplyr::select(place, com_code, NMS2a)
 
 NMS2b = df_outsupdem %>% 
-  dplyr::select(place, com_code, demand) %>% 
+  dplyr::select(place, com_code, exdem) %>% 
   left_join(y=NMS1c, by="com_code") %>% 
-  mutate(NMS2b = demand/NMS1c) %>% 
+  mutate(NMS2b = exdem/NMS1c) %>% 
   dplyr::select(place, com_code, NMS2b)
 
 
