@@ -20,6 +20,8 @@ library(tidycensus)
 library(tigris)
 library(tmap)
 library(ipumsr)
+library(economiccomplexity)
+library(scales)
 
 source("R/basic_utilities.R", local = (util <- new.env()))
 source("R/geography.R", local = (geography <- new.env()))
@@ -141,12 +143,16 @@ flow_im = df_tf %>%
 temp = df_dist %>% 
   rename("focal"="to", "partner"="from")
 
-twd = rbind(flow_ex, flow_im) %>% 
-  group_by(focal, partner) %>% 
-  dplyr::summarize(flow = sum(flow, na.rm=TRUE)) %>% 
+twd_ex = flow_ex %>% 
   left_join(y=temp, by=c("focal","partner")) %>% 
   group_by(focal) %>% 
-  dplyr::summarize(twd = weighted.mean(x=distance, w=flow, na.rm=TRUE)) %>% 
+  dplyr::summarize(twd_ex = weighted.mean(x=distance, w=flow, na.rm=TRUE)) %>% 
+  rename("place"="focal")
+
+twd_im = flow_im %>% 
+  left_join(y=temp, by=c("focal","partner")) %>% 
+  group_by(focal) %>% 
+  dplyr::summarize(twd_im = weighted.mean(x=distance, w=flow, na.rm=TRUE)) %>% 
   rename("place"="focal")
 
 
@@ -175,7 +181,7 @@ mksh = df_tf %>%
 share of intermediate exports sent to destinations within n miles
 ```{r}
 
-lsh = df_tf %>% 
+lsh_ex = df_tf %>% 
   left_join(y=df_dist, by=c("from","to")) %>% 
   mutate(d50 = ifelse(distance < 50, 1, 0),
          d100 = ifelse(distance < 100, 1, 0),
@@ -183,12 +189,30 @@ lsh = df_tf %>%
          d400 = ifelse(distance < 400, 1, 0),
          ) %>% 
   group_by(from) %>% 
-  dplyr::summarize(lsh50 = weighted.mean(x=d50, w=flow, na.rm=TRUE),
-                   lsh100 = weighted.mean(x=d100, w=flow, na.rm=TRUE),
-                   lsh200 = weighted.mean(x=d200, w=flow, na.rm=TRUE),
-                   lsh400 = weighted.mean(x=d400, w=flow, na.rm=TRUE)
+  dplyr::summarize(lsh50_ex = weighted.mean(x=d50, w=flow, na.rm=TRUE),
+                   lsh100_ex = weighted.mean(x=d100, w=flow, na.rm=TRUE),
+                   lsh200_ex = weighted.mean(x=d200, w=flow, na.rm=TRUE),
+                   lsh400_ex = weighted.mean(x=d400, w=flow, na.rm=TRUE)
                    ) %>% 
   rename("place"="from")
+
+
+lsh_im = df_tf %>% 
+  left_join(y=df_dist, by=c("from","to")) %>% 
+  mutate(d50 = ifelse(distance < 50, 1, 0),
+         d100 = ifelse(distance < 100, 1, 0),
+         d200 = ifelse(distance < 200, 1, 0),
+         d400 = ifelse(distance < 400, 1, 0),
+         ) %>% 
+  group_by(to) %>% 
+  dplyr::summarize(lsh50_im = weighted.mean(x=d50, w=flow, na.rm=TRUE),
+                   lsh100_im = weighted.mean(x=d100, w=flow, na.rm=TRUE),
+                   lsh200_im = weighted.mean(x=d200, w=flow, na.rm=TRUE),
+                   lsh400_im = weighted.mean(x=d400, w=flow, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="to")
+
+
 
 ```
 
@@ -460,10 +484,10 @@ LME2a2 = LMS1a %>%
   mutate(LME_demand = sLME2a1/sflow) %>% 
   dplyr::select("place"=buyer, LME_demand)
 
-LME = LME2a1 %>%
+LMS = LME2a1 %>%
   left_join(y=LME2a2, by="place")
 
-LME %>% skimr::skim()
+LMS %>% skimr::skim()
 
 ```
 
@@ -490,17 +514,100 @@ tc = df_circ %>%
 
 ```
 
+### ubiquity
+```{r}
+# complexity_output = complexity_measures(
+#   balassa_index(data = df_outsupdem,
+#                 country = "place",
+#                 product = "com_code",
+#                 value = "supply", discrete = T)
+# )
+# 
+# complexity = data.frame(complexity_output$complexity_index_country) %>%
+#   tibble::rownames_to_column("place")
+# 
+# ubiquity_products = data.frame(complexity_output$complexity_index_product) %>%
+#   tibble::rownames_to_column("com_code")
+# 
+# ubiquity = df_outsupdem %>% 
+#   left_join(y=ubiquity_products, by="com_code") %>% 
+#   dplyr::select(place, com_code, supply, "ubiquity_products"=
+#                   complexity_output.complexity_index_product) %>% 
+#   group_by(place) %>% 
+#   dplyr::summarize(ubiquity = weighted.mean(x=ubiquity_products, w=supply, na.rm=TRUE)) %>% 
+#   mutate(ubiquity = 1-ifelse(ubiquity > 1, 1, ubiquity))
+#   
+```
+
+ubiquity of a county is the export-weighted average of product ubiquity
+
+ubiquity of a product is the number of counties with a revealed comparative advantage in a product (RCA) (i.e., a location quotient >= 1)
+(e.g., if 50 counties have a location quotient over 1 in textiles manufacturing, the industry holds a ubiquity score of 50)
+
+I then rescale the ubiquity counts to between 0 (unique) and 1 (ubiquitous)
+
+
+see for RCA definition (it's basically location quotient) https://atlas.hks.harvard.edu/glossary
+
+```{r}
+
+u1_local = df_circ %>% 
+  dplyr::select(place, "u1_local"=supply)
+u2_local = df_outsupdem %>% 
+  dplyr::select(place, com_code, "u2_local"=supply)
+
+u1_nat = df_circ %>% 
+  dplyr::select(supply) %>% 
+  dplyr::summarize(u1_nat = sum(supply, na.rm=TRUE))
+u1_nat = u1_nat$u1_nat
+u2_nat = df_outsupdem %>% 
+  dplyr::select(place, com_code, supply) %>% 
+  group_by(com_code) %>% 
+  dplyr::summarize(u2_nat = sum(supply, na.rm=TRUE))
+
+RCA = u2_local %>% 
+  left_join(y=u1_local, by="place") %>% 
+  left_join(y=u2_nat, by="com_code") %>% 
+  mutate(u1_nat = u1_nat) %>% 
+  mutate(local = u2_local/u1_local,
+         nat = u2_nat/u1_nat,
+         RCA_raw = local/nat,
+         RCA = ifelse(RCA_raw >=1, 1, 0))
+
+ubiquity_products = RCA %>%
+  group_by(com_code) %>% 
+  dplyr::summarize(ubiquity_products = sum(RCA, na.rm=TRUE))
+
+ubiquity = df_outsupdem %>%
+  left_join(y=ubiquity_products, by="com_code") %>%
+  dplyr::select(place, com_code, supply, ubiquity_products) %>% 
+  group_by(place) %>%
+  dplyr::summarize(ubiquity = weighted.mean(x=ubiquity_products, w=supply, na.rm=TRUE)) %>% 
+  mutate(ubiquity = scales::rescale(ubiquity))
+  
+```
+
+
+```{r}
+temp = ubiquity %>% mutate(ubiquity = ifelse(ubiquity > 1, 1, ubiquity))
+```
+
 
 ## combine
 ```{r}
-
 isolation = census_map %>%
   left_join(y=tc, by="place") %>%
-  left_join(y=lsh, by="place") %>%
-  left_join(y=mksh, by="place") %>%
-  left_join(y=twd, by="place") %>%
+  left_join(y=ubiquity, by="place") %>%
   left_join(y=NMS, by="place") %>%
-  mutate(logtwd = log(twd))
+  left_join(y=LMS, by="place") %>%
+  left_join(y=lsh_im, by="place") %>%
+  left_join(y=lsh_ex, by="place") %>%
+  left_join(y=twd_im, by="place") %>% 
+  left_join(y=twd_ex, by="place") %>% 
+  mutate(logtwd_im = log(twd_im),
+         logtwd_ex = log(twd_ex)
+         ) %>% 
+  rename("LMS_supply"="LME_supply","LMS_demand"="LME_demand")
 
 ```
 
@@ -568,27 +675,69 @@ isolation %>%
 
 ```{r}
 
-ggplot(isolation, aes(x = twd)) +
+ggplot(isolation, aes(x = twd_ex)) +
   geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
   theme_minimal() +
   labs(
-    title = "Density Plot of Trade-Weighted Distance",
+    title = "Density Plot of Trade-Weighted Distance of Exports",
     x = "twd",
     y = "Density"
   )
-ggplot(isolation, aes(x = logtwd)) +
+
+ggplot(isolation, aes(x = twd_im)) +
   geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
   theme_minimal() +
   labs(
-    title = "Density Plot of Trade-Weighted Distance (log)",
+    title = "Density Plot of Trade-Weighted Distance of Imports",
     x = "twd",
     y = "Density"
   )
-ggplot(isolation, aes(x = mksh)) +
+
+ggplot(isolation, aes(x = logtwd_ex)) +
   geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
   theme_minimal() +
   labs(
-    title = "Density Plot of Market Share",
+    title = "Density Plot of Trade-Weighted Distance of Exports (log)",
+    x = "twd",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = logtwd_im)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance of Imports (log)",
+    x = "twd",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = NMS_supply)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of National Market Share (Supply)",
+    x = "mksh",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = NMS_demand)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of  National Market Share (Demand)",
+    x = "mksh",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = LMS_supply)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of  Local Market Share (Supply)",
+    x = "mksh",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = LMS_demand)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of  Local Market Share (Demand)",
     x = "mksh",
     y = "Density"
   )
@@ -602,11 +751,20 @@ ggplot(isolation, aes(x = trade_capacity)) +
     y = "Density"
   )
 
+ggplot(isolation, aes(x = ubiquity)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Ubiquity",
+    x = "trade_capacity",
+    y = "Density"
+  )
+
 temp <- isolation %>%
-  pivot_longer(cols = c(lsh50, lsh100, lsh200, lsh400),
+  pivot_longer(cols = c(lsh50_ex, lsh100_ex, lsh200_ex, lsh400_ex),
                names_to = "Distance",
                values_to = "Value")
-temp$Distance <- factor(temp$Distance, levels = c("lsh400","lsh200","lsh100","lsh50"))
+temp$Distance <- factor(temp$Distance, levels = c("lsh400_ex","lsh200_ex","lsh100_ex","lsh50_ex"))
 
 
 ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
@@ -614,6 +772,24 @@ ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
   scale_fill_viridis_d(option = "D", end = 0.8) +
   theme_minimal() +
   labs(title = "Share of intermediate exports sent within __ miles",
+       subtitle = "Distribution of US counties",
+       x = "Value",
+       y = "Distance") +
+  theme(legend.position = "none")
+
+
+temp <- isolation %>%
+  pivot_longer(cols = c(lsh50_im, lsh100_im, lsh200_im, lsh400_im),
+               names_to = "Distance",
+               values_to = "Value")
+temp$Distance <- factor(temp$Distance, levels = c("lsh400_im","lsh200_im","lsh100_im","lsh50_im"))
+
+
+ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
+  geom_density_ridges(scale = 1.2, alpha = 0.8, color = "white") +
+  scale_fill_viridis_d(option = "D", end = 0.8) +
+  theme_minimal() +
+  labs(title = "Share of intermediate imports received from within __ miles",
        subtitle = "Distribution of US counties",
        x = "Value",
        y = "Distance") +
@@ -628,18 +804,36 @@ ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
 tmap_mode("view")
 isolation %>%
   tm_shape() + 
-  tm_polygons(col = "twd", border.alpha = 0.0, style = "cont", 
+  tm_polygons(col = "twd_ex", border.alpha = 0.0, style = "cont", 
               palette = c("white","#20124d")) +
-  tm_layout(title = "Average trade-weighted distance", title.size = 2) +
+  tm_layout(title = "Average trade-weighted distance of exports", title.size = 2) +
   tm_shape(states) + 
   tm_borders(lwd=0.6)
 
-mx = median(isolation$logtwd, na.rm=TRUE)
+tmap_mode("view")
 isolation %>%
   tm_shape() + 
-  tm_polygons(col = "logtwd", midpoint = mx, border.alpha = 0.0, style = "cont", 
+  tm_polygons(col = "twd_im", border.alpha = 0.0, style = "cont", 
               palette = c("white","#20124d")) +
-  tm_layout(title = "Average trade-weighted distance (log)", title.size = 2) +
+  tm_layout(title = "Average trade-weighted distance of imports", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd_ex, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_ex", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of exports (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd_im, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_im", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of imports (log)", title.size = 2) +
   tm_shape(states) + 
   tm_borders(lwd=0.6)
 
@@ -647,18 +841,54 @@ isolation %>%
 # mx = median(isolation$mksh, na.rm=TRUE)
 isolation %>%
   tm_shape() + 
-  tm_polygons(col = "mksh", border.alpha = 0.0, style = "cont", 
+  tm_polygons(col = "NMS_supply", border.alpha = 0.0, style = "cont", 
               palette = c("white","#20124d")) +
-  tm_layout(title = "Trade-weighted market share", title.size = 2) +
+  tm_layout(title = "Trade-weighted national market share (supply)", title.size = 2) +
   tm_shape(states) + 
   tm_borders(lwd=0.6)
 
-mx = median(isolation$lsh200, na.rm=TRUE)
+# mx = median(isolation$mksh, na.rm=TRUE)
 isolation %>%
   tm_shape() + 
-  tm_polygons(col = "lsh200", midpoint = mx, border.alpha = 0.0, style = "cont", 
+  tm_polygons(col = "NMS_demand", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Trade-weighted national market share (demand)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+# mx = median(isolation$mksh, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "LMS_supply", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Trade-weighted local market share (supply)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+# mx = median(isolation$mksh, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "LMS_demand", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Trade-weighted local market share (demand)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$lsh200_ex, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "lsh200_ex", midpoint = mx, border.alpha = 0.0, style = "cont", 
               palette = c("#6FA8DC","white","#20124d")) +
   tm_layout(title = "Local share of exports, 200 miles", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$lsh200_im, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "lsh200_im", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Local share of imports, 200 miles", title.size = 2) +
   tm_shape(states) + 
   tm_borders(lwd=0.6)
 
@@ -669,6 +899,15 @@ isolation %>%
   tm_polygons(col = "trade_capacity", midpoint = mx, border.alpha = 0.0, style = "cont", 
               palette = c("#6FA8DC","white","#20124d")) +
   tm_layout(title = "Trade capacity", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$ubiquity, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "ubiquity", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Ubiquity", title.size = 2) +
   tm_shape(states) + 
   tm_borders(lwd=0.6)
 
@@ -694,25 +933,70 @@ isolation %>%
   tm_borders(lwd=0.6)
 
 ```
+```{r}
+
+tmap_mode("plot")
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_ex", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("plot")
+
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_im", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
 
 
 
 ## bivariate
 ```{r}
-cor.test(x=isolation$logtwd, y=isolation$mksh)
-# cor.test(x=isolation$logtwd, y=isolation$lsh100)
-cor.test(x=isolation$logtwd, y=isolation$lsh200)
-# cor.test(x=isolation$logtwd, y=isolation$lsh400)
-cor.test(x=isolation$logtwd, y=isolation$trade_capacity)
+cor.test(x=isolation$logtwd_ex, y=isolation$logtwd_im)
+cor.test(x=isolation$logtwd_ex, y=isolation$NMS_supply)
+cor.test(x=isolation$logtwd_im, y=isolation$NMS_demand)
+cor.test(x=isolation$logtwd_ex, y=isolation$LMS_supply)
+cor.test(x=isolation$logtwd_im, y=isolation$LMS_demand)
+cor.test(x=isolation$logtwd_ex, y=isolation$lsh200_ex)
+cor.test(x=isolation$logtwd_ex, y=isolation$lsh200_im)
+cor.test(x=isolation$logtwd_ex, y=isolation$trade_capacity)
+cor.test(x=isolation$logtwd_im, y=isolation$trade_capacity)
+cor.test(x=isolation$logtwd_ex, y=isolation$ubiquity)
+cor.test(x=isolation$logtwd_im, y=isolation$ubiquity)
 
-# cor.test(x=isolation$mksh, y=isolation$lsh100)
-cor.test(x=isolation$mksh, y=isolation$lsh200)
-# cor.test(x=isolation$mksh, y=isolation$lsh400)
-cor.test(x=isolation$mksh, y=isolation$trade_capacity)
+cor.test(x=isolation$NMS_supply, y=isolation$NMS_demand)
+cor.test(x=isolation$NMS_supply, y=isolation$LMS_supply)
+cor.test(x=isolation$NMS_demand, y=isolation$LMS_demand)
+cor.test(x=isolation$NMS_supply, y=isolation$lsh200_ex)
+cor.test(x=isolation$NMS_demand, y=isolation$lsh200_im)
+cor.test(x=isolation$NMS_supply, y=isolation$trade_capacity)
+cor.test(x=isolation$NMS_demand, y=isolation$trade_capacity)
+cor.test(x=isolation$NMS_supply, y=isolation$ubiquity)
+cor.test(x=isolation$NMS_demand, y=isolation$ubiquity)
 
-# cor.test(x=isolation$trade_capacity, y=isolation$lsh100)
-cor.test(x=isolation$trade_capacity, y=isolation$lsh200)
-# cor.test(x=isolation$trade_capacity, y=isolation$lsh400)
+cor.test(x=isolation$LMS_supply, y=isolation$LMS_demand)
+cor.test(x=isolation$LMS_supply, y=isolation$lsh200_ex)
+cor.test(x=isolation$LMS_demand, y=isolation$lsh200_im)
+cor.test(x=isolation$LMS_supply, y=isolation$trade_capacity)
+cor.test(x=isolation$LMS_demand, y=isolation$trade_capacity)
+cor.test(x=isolation$LMS_supply, y=isolation$ubiquity)
+cor.test(x=isolation$LMS_demand, y=isolation$ubiquity)
+
+cor.test(x=isolation$lsh200_ex, y=isolation$lsh200_im)
+cor.test(x=isolation$lsh200_ex, y=isolation$trade_capacity)
+cor.test(x=isolation$lsh200_im, y=isolation$trade_capacity)
+cor.test(x=isolation$lsh200_ex, y=isolation$ubiquity)
+cor.test(x=isolation$lsh200_im, y=isolation$ubiquity)
+
+cor.test(x=isolation$trade_capacity, y=isolation$ubiquity)
+
+
 
 
 ```
@@ -774,9 +1058,56 @@ Below, you are able to input variables in the economic isolation and geographic 
 --> share of exports within (lsh50, lsh100, lsh200, lsh400)
 
 ```{r}
-iso_quads(data = isolation, econ="mksh", geo="logtwd")
+tmap_mode("view")
+
+iso_quads(data = isolation, econ="LMS_supply", geo="logtwd_ex")
 
 ```
+
+
+### scatter
+```{r}
+
+iso_scat <- function(data, econ, geo) {
+  ggplot(data, aes_string(x = econ, y = geo)) +
+    geom_point(color = "#52BF90", size = 2, alpha = 0.7) +
+    geom_smooth(method = "lm", color = "#20124d", se = FALSE, linetype = "dashed", size = 2) +
+    labs(x = econ, y = geo, title = paste("Scatterplot of", geo, "vs", econ)) +
+    theme_minimal()
+}
+
+```
+
+
+```{r}
+iso_scat(data = isolation, econ="LMS_supply", geo="logtwd_ex")
+
+```
+
+# multivariate
+
+```{r}
+
+temp = extra %>% st_drop_geometry()
+
+data2 = isolation %>% 
+  left_join(y=temp, by="place")
+  
+```
+
+
+```{r}
+
+summary(lm(data = data2, spm150 ~ lsh200_ex + ubiquity + trade_capacity + pct_nhw + logpop))
+summary(lm(data = data2, spm150 ~ LMS_demand + trade_capacity + pct_nhw + logpop))
+
+summary(lm(data = data2, spm150 ~ LMS_supply + ubiquity + trade_capacity + pct_nhw + logpop))
+summary(lm(data = data2, spm150 ~ LMS_demand + ubiquity + trade_capacity + pct_nhw + logpop))
+
+```
+
+
+
 
 
 
