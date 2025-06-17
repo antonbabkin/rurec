@@ -13,6 +13,240 @@ format:
 
 ```{r}
 library(tidyverse)
+library(tmap)
+loadNamespace("tigris")
+options(tigris_use_cache = TRUE)
+
+source("R/agcensus.R", local = (agcensus <- new.env()))
+
+
+```
+
+# Raw data
+
+```{r}
+df_raw <- agcensus$farm_sales()
+```
+
+
+### commodity hierarchy
+
+```{r}
+#| rows.print: 100
+df_raw %>%
+  filter(measure == "sale", lv_sp == 0) %>%
+  mutate(desc = str_sub(short_desc, 1, -24), value = value / 1000) %>%
+  arrange(id) %>%
+  select(lv_co, commodity, desc, value)
+```
+
+### % missing
+
+```{r}
+#| rows.print: 100
+df_raw %>%
+  filter(measure == "sale", lv_sp %in% c(0, 2)) %>%
+  summarize(n = n(), nna = sum(!is.na(value)), sale = sum(value / 1000, na.rm = TRUE), .by = c("commodity", "lv_sp")) %>%
+  pivot_wider(id_cols = commodity, names_from = lv_sp, values_from = c(n, nna, sale)) %>%
+  select(commodity, nat_n = n_2, nat_sale = sale_0, cty_n = nna_2, cty_sale = sale_2) %>%
+  mutate(
+    pct_na_n = round(1 - cty_n / nat_n, 3) * 100,
+    pct_na_sale = round(1 - cty_sale / nat_sale, 3) * 100
+  ) %>%
+  relocate(commodity, ends_with("_n"), ends_with("sale"))
+```
+
+### milk map
+
+
+```{r}
+
+tigris::counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  filter(!(STATEFP %in% c("02", "15", "60", "66", "69", "72", "78"))) %>%
+  inner_join(
+    df_raw %>% filter(measure == "nsal", commodity == "2a_3mi", lv_sp == 2),
+    join_by(STATEFP == id_sp1, COUNTYFP == id_sp2)
+  ) %>%
+  tm_shape() +
+  tm_polygons(
+    "value", 
+    fill.scale = tm_scale_intervals(
+      style = "quantile", 
+      label.format = scales::label_number(scale_cut = scales::cut_short_scale())
+    ),
+    fill.legend = tm_legend(
+      title = "",
+      orientation = "landscape",
+      frame = FALSE
+  )) +
+  tm_layout(frame = FALSE) +
+  tm_title("Milk: Farms")
+
+tigris::counties(cb = TRUE, resolution = "20m", year = 2013) %>%
+  filter(!(STATEFP %in% c("02", "15", "60", "66", "69", "72", "78"))) %>%
+  inner_join(
+    df_raw %>% filter(measure == "sale", commodity == "2a_3mi", lv_sp == 2),
+    join_by(STATEFP == id_sp1, COUNTYFP == id_sp2)
+  ) %>%
+  mutate(value = value * 1000) %>%
+  tm_shape() +
+  tm_polygons(
+    "value", 
+    fill.scale = tm_scale_intervals(
+      style = "quantile", 
+      label.format = scales::label_currency(scale_cut = scales::cut_short_scale())
+    ),
+    fill.legend = tm_legend(
+      title = "",
+      orientation = "landscape",
+      frame = FALSE
+  )) +
+  tm_layout(frame = FALSE) +
+  tm_title("Milk: Sales")
+
+```
+
+# Imputation algorithm
+
+## Raw source data
+
+```{r}
+df_raw <- agcensus$farm_sales()
+df_raw %>%
+  select(id_sp, id_co, measure, value, short_desc) %>%
+  head()
+```
+
+## Constraints
+
+```{r}
+df_con <- df_raw %>%
+  filter(measure == "sale") %>%
+  agcensus$constraints()
+df_con %>%
+  select(id_con, id_par, id, value_bal) %>%
+  head()
+```
+
+`id` identifies a variable to be imputed.
+`id_par` identifies a parent variable that children add up to.
+Thus each constraint is identified by the corresponding parent variable.
+`id_con` identifies constraint type - hierarchy and level.
+It distinguishes cases when a variable is a parent for two constrains of spatial and commodity hierarchy.
+
+```{r}
+df_con %>%
+  mutate(sid = paste(if_else(id == id_par, "-", "+"), id)) %>%
+  summarize(lhs = paste(sid, collapse = " "), rhs = first(value_bal), .by = c(id_con, id_par)) %>%
+  head()
+```
+
+Problem size: number of constraints and variables.
+
+```{r}
+df_con %>%
+  summarize(n_con = n_distinct(id_par), n_var = n_distinct(id))
+```
+
+
+Constraints can be grouped into subsets of equations sharing common variables.
+This allows to reduce problem size for easier computation.
+
+```{r}
+df_con %>%
+  summarize(n_con = n_distinct(id_par), n_var = n_distinct(id), .by = group) %>%
+  arrange(group)
+```
+
+
+## Priors
+
+Priors are based on geographic balances, proportional to number of farms in each child region with missing sales.
+This is based on an assumption that average sales per farm are the same across all child regions with missing values for a given commodity.
+
+Commodity balances could also be used, but they would rely on a seemingly stronger assumption that average sales per farm are the same for all child commodities with missing values for a given region.
+Additional issue is that multiple farm can produce multiple child commodities.
+This is not a problem for geographic balances, since each farm can only be in one child region.
+
+If state value is known, priors can be calculated as in national balances.
+If state value is missing, we can not apply same calculation, because unallocated balance is unknown.
+We can not use state prior from the national balances, because it could be less than sum of known child county values.
+Instead, we make another assumption that average sales per farm in missing counties is the same as average sales per farm in observed counties.
+
+Possibilities:
+- parent value known
+- parent value unknown, some children known
+- parent value unknown, children values unknown
+
+```{r}
+df_pri <- agcensus$priors(df_raw)
+df_pri %>%
+  select(id_sp, id_co, nsal, starts_with("prior"))
+```
+
+
+## Solution
+
+```{r}
+gr = 46
+d_con <- df_con %>% filter(group == gr)
+d_pri <- df_pri %>% filter(id %in% d_con$id)
+sol <- agcensus$solve_group(d_con, d_pri)
+cbind(sol$mats$amat, bvec = sol$mats$bvec, slack = sol$sols)
+d_pri %>%
+  left_join(sol$solv %>% as_tibble(rownames = "id"), "id") %>%
+  mutate(across(c(prior, value), \(x) round(x / 1000, 1))) %>%
+  select(id_sp, id_co, nsal, prior, sol = value) %>%
+  arrange(id_sp, id_co)
+
+```
+
+
+
+
+
+
+
+# BEA commodity classification
+
+Comparing total sales before and after imputation.
+
+```{r}
+source("R/dataprep_agcensus.R", local = (agcen <- new.env()))
+
+df <- full_join(
+  agcen$call_agoutput_old(2012, "county") %>%
+    pivot_longer(!place, names_to = "commodity", values_to = "old"),
+  agcen$call_agoutput(2012, "county") %>%
+    pivot_longer(!place, names_to = "commodity", values_to = "new"),
+  c("place", "commodity")
+)
+
+df %>%
+  summarize(across(c(old, new), sum), .by = "place") %>%
+  mutate(
+    new_old = if_else(is.na(old), Inf, new / old),
+    new_old_bin = cut(new_old, breaks = c(0, 0.5, 0.99, 1.01, 1.5, 100, Inf))
+  ) %>%
+  count(new_old_bin)
+  
+```
+
+
+# Future work
+
+- Impute years besides 2012.
+- Review solved slack variables.
+- Do a more systematic review of constraints feasibility.
+Some adding-up constraints were found to not hold in the raw data.
+This information can be included in the optimization problem to ease the pressure on slack variables.
+- Explore alternative solvers or penalty functions to avoid zero corner solutions.
+
+# ==== ARCHIVE ====
+
+
+```{r}
+library(tidyverse)
 library(arrow)
 
 
@@ -771,6 +1005,8 @@ df_src %>%
 
 
 ```
+
+### map
 
 
 ```{r}
