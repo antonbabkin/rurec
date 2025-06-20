@@ -128,7 +128,38 @@ distribute_to_feasible_counties <- function(values, counties, feasible_counties)
 
 # Output ----
 
-x <- cache$read("foobar")
+
+
+call_agoutput <- function(year, geo_level = c("county", "state", "national")) {
+  if (year != 2012) stop("Census of Agriculture was only imputed for 2012, use call_output_old() if you want other years without imputation")
+  ipath$agcensus_imp_2012 %>%
+    arrow::read_parquet() %>%
+    separate_wider_delim(id, "_", names_sep = "") %>%
+    mutate(place = paste0(id1, id2), commodity = paste(id3, id4, id5, sep = "_")) %>%
+    {switch(
+      geo_level,
+      national = filter(., place == "00000"),
+      state = filter(., place != "00000", id2 == "000"),
+      county = filter(., id2 != "000")
+    )} %>%
+    mutate(value = if_else(is.na(sale), sol, sale)) %>%
+    pivot_wider(id_cols = place, names_from = commodity, values_fill = 0) %>%
+    mutate(
+      "1111A0" = `1c_1gr_3soy`,
+      "1111B0" = `1c_1gr_0000` - `1c_1gr_3soy`,
+      "111200" = `1c_4ve_0000`,
+      "111300" = `1c_5fr_0000`,
+      "111400" = `1c_6ho_0000` + `1c_7tr_0000`,
+      "111900" = `1c_2to_0000` + `1c_3co_0000` + `1c_8ot_0000`,
+      "1121A0" = `2a_2ca_0000`,
+      "112120" = `2a_3mi_0000`,
+      "112300" = `2a_1po_0000`,
+      "112A00" = `2a_4hg_0000` + `2a_5sh_0000` + `2a_6hr_0000` + `2a_7aq_0000` + `2a_8ot_0000`
+    ) %>%
+    select(place, starts_with("11"))
+}
+
+
 
 #' County output by industry
 ind_output <- function(year,
