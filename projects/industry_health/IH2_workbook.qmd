@@ -85,7 +85,7 @@ library(lavaanPlot)
 library(ggeffects)
 library(patchwork)
 library(ggthemes)
-library(sesem)
+#library(sesem)
 library(openxlsx)
 library(plm)
 
@@ -283,16 +283,41 @@ chetty = mobile25 %>%
   group_by(state) %>%
   dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
 
-alt_chetty = mobile25 %>%
-  mutate(state = substr(FIPS, 1,2)) %>%
+#calcuate race-specific mobility and then race-specific mobility gaps, using white as reference for all non-white racial groups and the white national average for the group racialized white
+national_rrm_white <- mobile25 %>%
+  filter(!is.na(white), !is.na(pop)) %>%
+  dplyr::summarize(national_rrm_white = weighted.mean(white, w = pop)) %>%
+  pull(national_rrm_white)
+
+#same calculation for asian population for alt_rrm_gap_asian
+national_rrm_asian <- mobile25 %>%
+  filter(!is.na(asian), !is.na(pop)) %>%
+  dplyr::summarize(national_rrm_asian = weighted.mean(asian, w = pop)) %>%
+  pull(national_rrm_asian)
+
+# Modify alt_chetty to include race-specific ROGs
+alt_chetty <- mobile25 %>%
+  mutate(state = substr(FIPS, 1, 2)) %>%
   drop_na(pop) %>%
-  group_by(state) %>%
-  dplyr::summarize(rrm_aian = weighted.mean(x=aian, w=pop, na.rm=TRUE),
-                   rrm_asian = weighted.mean(x=asian, w=pop, na.rm=TRUE),
-                   rrm_black = weighted.mean(x=black, w=pop, na.rm=TRUE),
-                   rrm_hisp = weighted.mean(x=hisp, w=pop, na.rm=TRUE),
-                   rrm_white = weighted.mean(x=white, w=pop, na.rm=TRUE)) %>% 
-  mutate_all(~ifelse(is.nan(.), NA, .))
+  dplyr::group_by(state) %>%
+  dplyr::summarize(
+    rrm_aian  = weighted.mean(aian,  w = pop, na.rm = TRUE),
+    rrm_asian = weighted.mean(asian, w = pop, na.rm = TRUE),
+    rrm_black = weighted.mean(black, w = pop, na.rm = TRUE),
+    rrm_hisp  = weighted.mean(hisp,  w = pop, na.rm = TRUE),
+    rrm_white = weighted.mean(white, w = pop, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    rrm_gap_aian  = rrm_white - rrm_aian,
+    rrm_gap_asian = rrm_white - rrm_asian,
+    rrm_gap_black = rrm_white - rrm_black,
+    rrm_gap_hisp  = rrm_white - rrm_hisp,
+    rrm_gap_white = national_rrm_white - rrm_white, 
+    rrm_gap_asian_alt = national_rrm_asian - rrm_asian
+  )
+
+
 
 chetty = chetty %>%
   left_join(y=alt_chetty, by="state")
@@ -353,12 +378,22 @@ alt_chetty = mobile25 %>%
   mutate(state = substr(FIPS, 1,2)) %>%
   drop_na(pop) %>%
   group_by(state) %>%
-  dplyr::summarize(rrm_aian = weighted.mean(x=aian, w=pop, na.rm=TRUE),
-                   rrm_asian = weighted.mean(x=asian, w=pop, na.rm=TRUE),
-                   rrm_black = weighted.mean(x=black, w=pop, na.rm=TRUE),
-                   rrm_hisp = weighted.mean(x=hisp, w=pop, na.rm=TRUE),
-                   rrm_white = weighted.mean(x=white, w=pop, na.rm=TRUE)) %>% 
-  mutate_all(~ifelse(is.nan(.), NA, .))
+  dplyr::summarize(
+    rrm_aian  = weighted.mean(x = aian,  w = pop, na.rm = TRUE),
+    rrm_asian = weighted.mean(x = asian, w = pop, na.rm = TRUE),
+    rrm_black = weighted.mean(x = black, w = pop, na.rm = TRUE),
+    rrm_hisp  = weighted.mean(x = hisp,  w = pop, na.rm = TRUE),
+    rrm_white = weighted.mean(x = white, w = pop, na.rm = TRUE),
+    .groups = "drop"  
+  ) %>%
+  mutate(
+    rrm_gap_aian  = rrm_white - rrm_aian,
+    rrm_gap_asian = rrm_white - rrm_asian,
+    rrm_gap_black = rrm_white - rrm_black,
+    rrm_gap_hisp  = rrm_white - rrm_hisp,
+    rrm_gap_white = national_rrm_white - rrm_white, 
+    rrm_gap_asian_alt = national_rrm_asian - rrm_asian
+  )
 
 chetty = chetty %>%
   left_join(y=alt_chetty, by="state")
@@ -394,6 +429,30 @@ rpaam = rpaam %>%
          FIPS = sprintf("%05d", FIPS),
          racegr = Group) %>% 
   dplyr::select("place"=FIPS, racegr, rpaam, rpaam_orig, rpaam_top)
+
+
+rpaam_wide = rpaam %>% 
+  select (place, racegr, rpaam, rpaam_orig) %>% 
+  pivot_wider(
+    names_from = racegr, 
+    values_from = c(rpaam, rpaam_orig),
+    names_sep = "_"
+  )
+
+
+
+
+```
+
+
+#log paam for descriptives
+
+```{r}
+
+data <- data %>%
+  mutate(log_paam_des = log(1 + paam))
+
+#compare logged rpaam 
 
 
 ```
@@ -478,6 +537,8 @@ data <-left_join (data, rcomp, by = "place")
 
 # Convert 'state' to a factor for fixed effects
 data$state_fe <- as.factor(data$state)
+
+data <- left_join (data, rpaam_wide, by = "place")
 
 print(data)
 
@@ -590,7 +651,7 @@ library(openxlsx)
 
 ##summary statistics- global
 summary_stats = data %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
@@ -598,22 +659,18 @@ summary_stats
 
 
 # Summary statistics for metro cases 
-summary_stats_metro = data %>%
-   filter(three_metro == "metro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+summary_stats_lgmetro = data %>%
+   filter(three_metro == "large_metro") %>% 
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
-summary_stats_metro = as.data.frame(summary_stats_metro)  
-summary_stats_metro  
+summary_stats_lgmetro = as.data.frame(summary_stats_lgmetro)  
+summary_stats_lgmetro  
 
 # Summary statistics for small metro cases 
 summary_stats_smallmetro = data %>%
    filter(three_metro == "small_metro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
@@ -623,9 +680,7 @@ summary_stats_smallmetro
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
   filter(three_metro == "nonmetro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
@@ -654,7 +709,7 @@ library(openxlsx)
 
 ##summary statistics- global
 summary_stats = data %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White,retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
@@ -662,20 +717,20 @@ summary_stats
 
 
 # Summary statistics for large metro cases 
-summary_stats_metro = data %>%
+summary_stats_lgmetro = data %>%
    filter(four_metro == "large_metro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
-summary_stats_metro = as.data.frame(summary_stats_metro)  
-summary_stats_metro  
+summary_stats_lgmetro = as.data.frame(summary_stats_metro)  
+summary_stats_lgmetro  
 
 # Summary statistics for small metro cases 
 summary_stats_smallmetro = data %>%
    filter(four_metro == "small_metro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
+  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
          laborforce_part_rate, age, bach, poverty_rate, income_rate, 
          logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
@@ -727,16 +782,16 @@ write.xlsx(
 # Histograms
 
 ```{r}
-data %>% select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+data %>% select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
 
-data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
+# data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
 
 
 ```
 # Density plots- three regimes
 
 ```{r}
-#paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
+#paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, income_rate, bach
 
 # Define the number of colors you want from the "rocket" palette
 num_colors <- 3  # Adjust the number of colors as needed
@@ -747,39 +802,42 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
 
  # Define the variables and titles
-vars = c("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+vars = c("paam", "log_paam_des","rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
-titles = c("Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
+titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing",
            "%\n Agriculture", 
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
            "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
 # Function to create density plots
-create_density_plots <- function(data, vars, three_metro, my_colors, titles) {
-  plots <- list()  
+create_density_plots <- function(data, vars, group_var, my_colors, titles) {
+  plots <- list()
   
-  # Loop through the variable names
   for (i in seq_along(vars)) {
-    var <- vars[i]          
-    title <- titles[i]     
+    var <- vars[i]
+    title <- titles[i]
     
-    plot <- ggplot(data, aes_string(x = var, group = three_metro, 
-                                     color = paste0("as.factor(", three_metro, ")"))) +
+    plot <- ggplot(data, aes(
+      x = !!sym(var),
+      group = !!sym(group_var),
+      color = as.factor(!!sym(group_var))
+    )) +
       geom_density() +
       scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
-      labs(title = title,   
-           x = var,        
-           y = "Density") +
-      theme_minimal()  
+      labs(
+        title = title,
+        x = var,
+        y = "Density"
+      ) +
+      theme_minimal()
     
-    plots[[var]] <- plot  
+    plots[[var]] <- plot
   }
   
-  return(plots)  
+  return(plots)
 }
-
 
 # Call the function
 density_plots <- create_density_plots(data, vars, "three_metro", my_colors, titles)
@@ -800,40 +858,45 @@ num_colors <- 4  # Adjust the number of colors as needed
 # Create a vector of colors from the "rocket" palette excluding yellow
 my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
-
-
+#"log_paam_des",
  # Define the variables and titles
-vars = c("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+vars = c("paam", "rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap","rrm_gap_aian", "rrm_gap_asian", "rrm_gap_black", "rrm_gap_hisp", "rrm_gap_white", "rrm_gap_asian_alt", "prosperity", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
-titles = c("Premature Mortality Rate", "Economic Resource Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", 
+#"Log PAAM",
+
+titles = c("Total Premature\n Death",  "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "AIAN-White ROG", "API-White ROG", "Black-White ROG", "Latine-White ROG", "White-White OG", "API-API OG", "Prosperity", "%\n Manufacturing",
            "%\n Agriculture", 
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
            "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
 # Function to create density plots
-create_density_plots <- function(data, vars, four_metro, my_colors, titles) {
-  plots <- list()  
+create_density_plots <- function(data, vars, group_var, my_colors, titles) {
+  plots <- list()
   
-  # Loop through the variable names
   for (i in seq_along(vars)) {
-    var <- vars[i]          
-    title <- titles[i]     
+    var <- vars[i]
+    title <- titles[i]
     
-    plot <- ggplot(data, aes_string(x = var, group = four_metro, 
-                                     color = paste0("as.factor(", four_metro, ")"))) +
+    plot <- ggplot(data, aes(
+      x = !!sym(var),
+      group = !!sym(group_var),
+      color = as.factor(!!sym(group_var))
+    )) +
       geom_density() +
       scale_color_manual(name = "Rural-Urban Gradient", values = my_colors) +
-      labs(title = title,   
-           x = var,        
-           y = "Density") +
-      theme_minimal()  
+      labs(
+        title = title,
+        x = var,
+        y = "Density"
+      ) +
+      theme_minimal()
     
-    plots[[var]] <- plot  
+    plots[[var]] <- plot
   }
   
-  return(plots)  
+  return(plots)
 }
 
 # Call the function
@@ -877,7 +940,7 @@ for (plot in density_plots) {
 
 
 paam_plot <- ggplot(data[!is.na(data[["four_metro"]]), ],
-                    aes(x = paam, group = four_metro, color = as.factor(four_metro))) +
+                    aes(x = log_paam_des, group = four_metro, color = as.factor(four_metro))) +
   geom_density(linewidth = .75) +
   scale_color_manual(
     name = "Rural-Urban Gradient",
@@ -962,9 +1025,15 @@ sum(is.na(df_map$retention))
 my_palette <- colorRampPalette(c("#8A1B47", "#888888ff"))(6)
   print(my_palette)
  
- vars = list("paam", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", "pct_fire", "pct_edmed", "laborforce_part_rate", "age", "bach", "poverty_rate", "income_rate", "logpop", "uninsured", "metro_nonmetro")
- 
- titles = c("Race-specific Premature Mortality", "Premature\n Mortality", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "% FIRE", "% Edu and Med", "Labor \nForce\n Participation Rate", "% \nOver 65", "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65", "Metro & Nonmetro \n Counties")
+ # Define the variables and titles
+vars = c("paam", "log_paam_des","rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+           "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
+
+titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing",
+           "%\n Agriculture", 
+           "Labor \nForce\n Participation Rate", "% \nOver 65", 
+           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
+           "Log\n Population", "Uninsured \n Rate \nUnder 65")
  
 for (i in seq_along(vars)) {
   v = vars[[i]]
@@ -1162,6 +1231,64 @@ ggplot(data, aes(retention, paam)) +
         x = "Retention",
         y = "Premature Age Adjusted Mortality")
 
+ggplot(data, aes(retention, log_paam_des)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality-LOG (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-LOG")
+
+#set up to drop bottom coded values of rpaam_*
+rpaam_vars <- c("rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White")
+
+# Create a named vector of minimums
+min_vals <- sapply(rpaam_vars, function(var) {
+  min(data[[var]], na.rm = TRUE)
+})
+names(min_vals) <- rpaam_vars
+
+#rpaam x retention plots
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(retention, rpaam_AIAN)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention (2012) and \nPremature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – AIAN"
+  )
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(retention, rpaam_API)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality-API (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-API")
+
+ggplot(data %>% filter(rpaam_Black > min_vals["rpaam_Black"]), 
+       aes(retention, rpaam_Black)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality-Black (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-Black")
+
+ggplot(data %>% filter(rpaam_Latine > min_vals["rpaam_Latine"]), 
+       aes(retention, rpaam_Latine)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality-Latine (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-Latine")
+
+ggplot(data, aes(retention, rpaam_White)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention (2012) and \n Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-White")
+
 ggplot(data, aes(retention, paam, color = rrm_gap)) +
   geom_point() +
   scale_color_viridis_c() +
@@ -1171,12 +1298,158 @@ ggplot(data, aes(retention, paam, color = rrm_gap)) +
         y = "Premature Age Adjusted Mortality", 
         color = "Racial Opportunity Gap")
 
+##rpaam retention X rpaam codes colored by rrm_gap
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(retention, rpaam_AIAN, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – AIAN", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(retention, rpaam_API, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – API (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – API", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_Black > min_vals["rpaam_Black"]), 
+       aes(retention, rpaam_Black, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Black (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – Black", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_Black > min_vals["rpaam_Black"]), 
+       aes(retention, rpaam_Black, color = rrm_gap_black)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Black-White Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Black (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – Black", 
+    color = "Black-White Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_Latine > min_vals["rpaam_Latine"]), 
+       aes(retention, rpaam_Latine, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Latine (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – Latine", 
+    color = "Racial Opportunity Gap"
+  )
+
+ggplot(data %>% filter(rpaam_Latine > min_vals["rpaam_Latine"]), 
+       aes(retention, rpaam_Latine, color = rrm_gap_hisp)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Latine-White Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Latine (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – Latine", 
+    color = "Latine-White Racial Opportunity Gap"
+  )
+
+
+ggplot(data, aes(retention, rpaam_White, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-White", 
+        color = "Racial Opportunity Gap")
+
+ggplot(data, aes(retention, rpaam_White, color = rrm_gap_white)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Retention with White-White Opportunity Gap (2012) \n and Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Retention",
+        y = "Premature Age Adjusted Mortality-White", 
+        color = "White-White Opportunity Gap")
+
+#prosperity x paam
+
 ggplot(data, aes(prosperity, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality (2013-2015)",
         x = "Prosperity",
         y = "Premature Age Adjusted Mortality")
+
+
+#rpaam prosperty x paam scatter plots
+
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(prosperity, rpaam_AIAN)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity (2012) and \nPremature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – AIAN"
+  )
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(prosperity, rpaam_API)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality-API (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-API")
+
+ggplot(data %>% filter(rpaam_Black > min_vals["rpaam_Black"]), 
+       aes(prosperity, rpaam_Black)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality-Black (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-Black")
+
+ggplot(data %>% filter(rpaam_Latine > min_vals["rpaam_Latine"]), 
+       aes(prosperity, rpaam_Latine)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality-Latine (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-Latine")
+
+ggplot(data, aes(prosperity, rpaam_White)) +
+  geom_point() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity (2012) and \n Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-White")
+
+
+
+##prosperity, paam, rrm_gap
 
 ggplot(data, aes(prosperity, paam, color = rrm_gap)) +
   geom_point() +
@@ -1187,6 +1460,89 @@ ggplot(data, aes(prosperity, paam, color = rrm_gap)) +
         y = "Premature Age Adjusted Mortality", 
         color = "Racial Opportunity Gap")
 
+## prosperity, rpaam, rrm_gap
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(prosperity, rpaam_AIAN, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – AIAN", 
+    color = "Racial Opportunity Gap"
+  )
+
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(prosperity, rpaam_AIAN, color = rrm_aian)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – AIAN", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(prosperity, rpaam_API, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – API (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – API", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_Black > min_vals["rpaam_Black"]), 
+       aes(prosperity, rpaam_Black, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Black (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – Black", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data %>% filter(rpaam_Latine > min_vals["rpaam_Latine"]), 
+       aes(prosperity, rpaam_Latine, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – Latine (2013–2015)",
+    x = "Prosperity",
+    y = "Premature Age Adjusted Mortality – Latine", 
+    color = "Racial Opportunity Gap"
+  )
+
+
+ggplot(data, aes(prosperity, rpaam_White, color = rrm_gap)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity with Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-White", 
+        color = "Racial Opportunity Gap")
+
+ggplot(data, aes(prosperity, rpaam_White, color = rrm_gap_white)) +
+  geom_point() +
+  scale_color_viridis_c() +
+   geom_smooth(method = "lm") +
+   labs(title = "Scatter Plot of Prosperity with White-White Opportunity Gap (2012) \n and Premature Age Adjusted Mortality-White (2013-2015)",
+        x = "Prosperity",
+        y = "Premature Age Adjusted Mortality-White", 
+        color = "White-White Opportunity Gap")
+
 
 # Filter the data to include only "metro" cases
 metro_data <- subset(data, metro_nonmetro == "metro")
@@ -1195,7 +1551,7 @@ ggplot(metro_data, aes(retention, paam)) +
   geom_point() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Retention and \n Premature Age Adjusted Mortality for Metro",
-        x = "Retention",
+        x = "Prosperity",
         y = "Premature Age Adjusted Mortality")
 
 ggplot(metro_data, aes(retention, paam, color = rrm_gap)) +
@@ -1203,7 +1559,7 @@ ggplot(metro_data, aes(retention, paam, color = rrm_gap)) +
      scale_color_viridis_c() +
    geom_smooth(method = "lm") +
    labs(title = "Scatter Plot of Retention with Racial Opportunity Gap and \n Premature Age Adjusted Mortality for Metro",
-        x = "Retention",
+        x = "Prosperity",
         y = "Premature Age Adjusted Mortality",
         color = "Racial Opportunity Gap")
 
@@ -1898,6 +2254,8 @@ lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 # summary(api_noi)
 # summary(latine_noi)
 
+
+
 black_i = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_black, zero.policy = TRUE)
 white_i = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
@@ -1921,6 +2279,7 @@ summary(latine_i)
 
 ```
 
+##Full model- varying rpaam calc
 ```{r}
 latine_i = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_latine, zero.policy = TRUE)
