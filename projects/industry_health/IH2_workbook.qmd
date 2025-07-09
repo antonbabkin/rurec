@@ -265,7 +265,29 @@ mobile25 = mobile25_clean %>%
   mutate(CZ = sprintf("%05d",CZ)) %>%
   left_join(y=xwalk, by="CZ") %>%
   left_join(pop, by="FIPS") %>%
-  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot)
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind, pop_white)
+
+mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
+xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
+  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
+  dplyr::select(CZ, FIPS)
+
+mobile25 = mobile25_clean %>%
+  filter(cohort == "1992") %>%
+  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
+  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
+  mutate(CZ = sprintf("%05d",CZ)) %>%
+  left_join(y=xwalk, by="CZ") %>%
+  left_join(pop, by="FIPS") %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+
 
 temp = mobile25 %>%
   dplyr::select(FIPS, "rate_aian"=aian, "rate_asian"=asian, "rate_black"=black, "rate_hisp"=hisp, pct_black, pct_asian, "pct_aian"=pct_ind, pct_hisp) %>%
@@ -325,10 +347,12 @@ chetty = chetty %>%
 
 ```
 
+##Alt ROG
+
 ```{r}
 ### overriding prior calc of ROG by grouping asian with white
-pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
-
+# pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+# 
 pop = pop_clean %>%
   mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
          pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
@@ -348,55 +372,55 @@ mobile25 = mobile25_clean %>%
   left_join(y=xwalk, by="CZ") %>%
   left_join(pop, by="FIPS") %>%
   mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
-
-temp = mobile25 %>%
-  dplyr::select(FIPS, "rate_aian"=aian, "rate_black"=black, "rate_hisp"=hisp, pct_black, "pct_aian"=pct_ind, pct_hisp) %>%
-  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
-  separate_wider_delim(var, "_", names = c("var", "race")) %>%
-  pivot_wider(names_from = var, values_from = val) %>%
-  group_by(FIPS) %>%
-  dplyr::summarize(rrm_nw = weighted.mean(x=rate, w=pct, na.rm=TRUE))
-
-temp2 = mobile25 %>%
-  dplyr::select(FIPS, "rate_asian"=asian, "rate_white"=white, pct_white, pct_asian) %>%
-  pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
-  separate_wider_delim(var, "_", names = c("var", "race")) %>%
-  pivot_wider(names_from = var, values_from = val) %>%
-  group_by(FIPS) %>%
-  dplyr::summarize(rrm_white = weighted.mean(x=rate, w=pct, na.rm=TRUE))
-
-chetty = mobile25 %>%
-  dplyr::select(FIPS, pop) %>%
-  left_join(y=temp, by="FIPS") %>% 
-  left_join(y=temp2, by="FIPS") %>% 
-  mutate_all(~ifelse(is.nan(.), NA, .)) %>%
-  mutate(rrm_gap = rrm_white-rrm_nw, state = substr(FIPS, 1,2)) %>%
-  group_by(state) %>%
-  dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
-
-alt_chetty = mobile25 %>%
-  mutate(state = substr(FIPS, 1,2)) %>%
-  drop_na(pop) %>%
-  group_by(state) %>%
-  dplyr::summarize(
-    rrm_aian  = weighted.mean(x = aian,  w = pop, na.rm = TRUE),
-    rrm_asian = weighted.mean(x = asian, w = pop, na.rm = TRUE),
-    rrm_black = weighted.mean(x = black, w = pop, na.rm = TRUE),
-    rrm_hisp  = weighted.mean(x = hisp,  w = pop, na.rm = TRUE),
-    rrm_white = weighted.mean(x = white, w = pop, na.rm = TRUE),
-    .groups = "drop"  
-  ) %>%
-  mutate(
-    rrm_gap_aian  = rrm_white - rrm_aian,
-    rrm_gap_asian = rrm_white - rrm_asian,
-    rrm_gap_black = rrm_white - rrm_black,
-    rrm_gap_hisp  = rrm_white - rrm_hisp,
-    rrm_gap_white = national_rrm_white - rrm_white, 
-    rrm_gap_asian_alt = national_rrm_asian - rrm_asian
-  )
-
-chetty = chetty %>%
-  left_join(y=alt_chetty, by="state")
+# 
+# temp = mobile25 %>%
+#   dplyr::select(FIPS, "rate_aian"=aian, "rate_black"=black, "rate_hisp"=hisp, pct_black, "pct_aian"=pct_ind, pct_hisp) %>%
+#   pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+#   separate_wider_delim(var, "_", names = c("var", "race")) %>%
+#   pivot_wider(names_from = var, values_from = val) %>%
+#   group_by(FIPS) %>%
+#   dplyr::summarize(rrm_nw = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+# 
+# temp2 = mobile25 %>%
+#   dplyr::select(FIPS, "rate_asian"=asian, "rate_white"=white, pct_white, pct_asian) %>%
+#   pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
+#   separate_wider_delim(var, "_", names = c("var", "race")) %>%
+#   pivot_wider(names_from = var, values_from = val) %>%
+#   group_by(FIPS) %>%
+#   dplyr::summarize(rrm_white = weighted.mean(x=rate, w=pct, na.rm=TRUE))
+# 
+# chetty = mobile25 %>%
+#   dplyr::select(FIPS, pop) %>%
+#   left_join(y=temp, by="FIPS") %>% 
+#   left_join(y=temp2, by="FIPS") %>% 
+#   mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+#   mutate(rrm_gap = rrm_white-rrm_nw, state = substr(FIPS, 1,2)) %>%
+#   group_by(state) %>%
+#   dplyr::summarize(rrm_gap = weighted.mean(x=rrm_gap, w=pop, na.rm=TRUE))
+# 
+# alt_chetty = mobile25 %>%
+#   mutate(state = substr(FIPS, 1,2)) %>%
+#   drop_na(pop) %>%
+#   group_by(state) %>%
+#   dplyr::summarize(
+#     rrm_aian  = weighted.mean(x = aian,  w = pop, na.rm = TRUE),
+#     rrm_asian = weighted.mean(x = asian, w = pop, na.rm = TRUE),
+#     rrm_black = weighted.mean(x = black, w = pop, na.rm = TRUE),
+#     rrm_hisp  = weighted.mean(x = hisp,  w = pop, na.rm = TRUE),
+#     rrm_white = weighted.mean(x = white, w = pop, na.rm = TRUE),
+#     .groups = "drop"  
+#   ) %>%
+#   mutate(
+#     rrm_gap_aian  = rrm_white - rrm_aian,
+#     rrm_gap_asian = rrm_white - rrm_asian,
+#     rrm_gap_black = rrm_white - rrm_black,
+#     rrm_gap_hisp  = rrm_white - rrm_hisp,
+#     rrm_gap_white = national_rrm_white - rrm_white, 
+#     rrm_gap_asian_alt = national_rrm_asian - rrm_asian
+#   )
+# 
+# chetty = chetty %>%
+#   left_join(y=alt_chetty, by="state")
 ```
 
 ##Racial composition
@@ -411,7 +435,7 @@ rcomp = mobile25 %>%
 
 # racial PAAM
 ```{r}
-rpaam_clean = read.csv("data/projects/industry_health/rpaam_output_2025-06-11.csv")
+rpaam_clean = read.csv("data/projects/industry_health/rpaam_output_2025_06_30.csv")
 
 rpaam = rpaam_clean %>% 
   mutate(rpaam_orig = age_adjusted_rate,
@@ -642,7 +666,6 @@ data = data %>%
 ```
 
 
-
 # Summary Statistics- three regimes
 
 ```{r}
@@ -651,7 +674,7 @@ library(openxlsx)
 
 ##summary statistics- global
 summary_stats = data %>% 
-  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
@@ -661,7 +684,7 @@ summary_stats
 # Summary statistics for metro cases 
 summary_stats_lgmetro = data %>%
    filter(three_metro == "large_metro") %>% 
-  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_lgmetro = as.data.frame(summary_stats_lgmetro)  
@@ -670,7 +693,7 @@ summary_stats_lgmetro
 # Summary statistics for small metro cases 
 summary_stats_smallmetro = data %>%
    filter(three_metro == "small_metro") %>% 
-  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
@@ -680,7 +703,7 @@ summary_stats_smallmetro
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
   filter(three_metro == "nonmetro") %>% 
-  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
@@ -690,7 +713,7 @@ summary_stats_nonmetro
 write.xlsx(
   list(
     "Global Summary" = summary_stats,
-    "Metro Summary" = summary_stats_metro,
+    "Metro Summary" = summary_stats_lgmetro,
     "Small Metro Summary" = summary_stats_smallmetro,
     "Nonmetro Summary" = summary_stats_nonmetro
   ),
@@ -709,7 +732,7 @@ library(openxlsx)
 
 ##summary statistics- global
 summary_stats = data %>% 
-  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White,retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(, type = "common") %>% 
   relocate(variable, n, mean, median, min, max)
 summary_stats = as.data.frame(summary_stats)
@@ -719,9 +742,7 @@ summary_stats
 # Summary statistics for large metro cases 
 summary_stats_lgmetro = data %>%
    filter(four_metro == "large_metro") %>% 
-  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_lgmetro = as.data.frame(summary_stats_metro)  
@@ -730,9 +751,7 @@ summary_stats_lgmetro
 # Summary statistics for small metro cases 
 summary_stats_smallmetro = data %>%
    filter(four_metro == "small_metro") %>% 
-  select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_smallmetro = as.data.frame(summary_stats_smallmetro)  
@@ -742,9 +761,7 @@ summary_stats_smallmetro
 # Summary statistics for nonmetro cases 
 summary_stats_nonmetro = data %>%
   filter(four_metro == "large_nonmetro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_nonmetro = as.data.frame(summary_stats_nonmetro)  
@@ -753,9 +770,7 @@ summary_stats_nonmetro
 # Summary statistics for nonmetro cases 
 summary_stats_smallnonmetro = data %>%
   filter(four_metro == "small_nonmetro") %>% 
-  select(paam, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag, 
-         laborforce_part_rate, age, bach, poverty_rate, income_rate, 
-         logpop, uninsured) %>%
+  select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>%
   get_summary_stats(type = "common") %>%  
   relocate(variable, n, mean, median, min, max)  
 summary_stats_smallnonmetro = as.data.frame(summary_stats_smallnonmetro)  
@@ -765,7 +780,7 @@ summary_stats_smallnonmetro
 write.xlsx(
   list(
     "Global Summary" = summary_stats,
-    "Metro Summary" = summary_stats_metro,
+    "Metro Summary" = summary_stats_lgmetro,
     "Small Metro Summary" = summary_stats_smallmetro,
     "Nonmetro Summary" = summary_stats_nonmetro, 
     "Small Nonmetro Summary" = summary_stats_smallnonmetro
@@ -782,9 +797,11 @@ write.xlsx(
 # Histograms
 
 ```{r}
-data %>% select(paam, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White, retention, rrm_gap, prosperity, pct_mfg, pct_mine, pct_ag) %>% hist.data.frame()
+data %>% select(paam, log_paam_des, rpaam_AIAN, rpaam_API, rpaam_Black, rpaam_Latine, rpaam_White) %>% hist.data.frame()
 
-# data %>% select(laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
+data %>% select(rrm_gap, rrm_gap_aian, rrm_gap_asian, rrm_gap_black, rrm_gap_hisp, rrm_gap_white, rrm_gap_asian_alt) %>% hist.data.frame()
+
+data %>% select(retention, prosperity, pct_mfg, pct_mine, pct_ag, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured) %>% hist.data.frame()
 
 
 ```
@@ -801,15 +818,15 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
 
 
+#"log_paam_des",
  # Define the variables and titles
-vars = c("paam", "log_paam_des","rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap", "prosperity", "pct_mfg", "pct_ag", 
+vars = c("paam", "log_paam_des", "rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap","rrm_gap_aian", "rrm_gap_asian", "rrm_gap_black", "rrm_gap_hisp", "rrm_gap_white", "rrm_gap_asian_alt", "prosperity", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
-titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "Prosperity", "%\n Manufacturing",
-           "%\n Agriculture", 
-           "Labor \nForce\n Participation Rate", "% \nOver 65", 
-           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
-           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+#"Log PAAM",
+
+titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "AIAN-White ROG", "API-White ROG", "Black-White ROG", "Latine-White ROG", "White-White OG", "API-API OG", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "Labor \nForce\n Participation Rate", "% \nOver 65", 
+"% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
 # Function to create density plots
 create_density_plots <- function(data, vars, group_var, my_colors, titles) {
@@ -860,18 +877,14 @@ my_colors <- viridis_pal(option = "magma", begin = 0.1, end = 0.7)(num_colors)
 
 #"log_paam_des",
  # Define the variables and titles
-vars = c("paam", "rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap","rrm_gap_aian", "rrm_gap_asian", "rrm_gap_black", "rrm_gap_hisp", "rrm_gap_white", "rrm_gap_asian_alt", "prosperity", "pct_mfg", "pct_ag", 
+vars = c("paam", "log_paam_des", "rpaam_AIAN", "rpaam_API", "rpaam_Black", "rpaam_Latine", "rpaam_White", "retention", "rrm_gap","rrm_gap_aian", "rrm_gap_asian", "rrm_gap_black", "rrm_gap_hisp", "rrm_gap_white", "rrm_gap_asian_alt", "prosperity", "pct_mfg", "pct_ag", 
            "laborforce_part_rate", "age", "bach", "poverty_rate",  "income_rate", "logpop", "uninsured")
 
 #"Log PAAM",
 
-titles = c("Total Premature\n Death",  "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "AIAN-White ROG", "API-White ROG", "Black-White ROG", "Latine-White ROG", "White-White OG", "API-API OG", "Prosperity", "%\n Manufacturing",
-           "%\n Agriculture", 
-           "Labor \nForce\n Participation Rate", "% \nOver 65", 
-           "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
-           "Log\n Population", "Uninsured \n Rate \nUnder 65")
+titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API Premature\n Death","Black Premature\n Death", "Latine Premature\n Death","White Premature\n Death", "Retention", "Racial Opportunity Gap", "AIAN-White ROG", "API-White ROG", "Black-White ROG", "Latine-White ROG", "White-White OG", "API-API OG", "Prosperity", "%\n Manufacturing", "%\n Agriculture", "Labor \nForce\n Participation Rate", "% \nOver 65", 
+"% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", "Log\n Population", "Uninsured \n Rate \nUnder 65")
 
-# Function to create density plots
 create_density_plots <- function(data, vars, group_var, my_colors, titles) {
   plots <- list()
   
@@ -879,7 +892,12 @@ create_density_plots <- function(data, vars, group_var, my_colors, titles) {
     var <- vars[i]
     title <- titles[i]
     
-    plot <- ggplot(data, aes(
+    # Drop NA values for both var and group_var, then drop the lowest var value
+    data_filtered <- data %>%
+      filter(!is.na(!!sym(var)), !is.na(!!sym(group_var))) %>%
+      filter(!!sym(var) != min(!!sym(var), na.rm = TRUE))
+    
+    plot <- ggplot(data_filtered, aes(
       x = !!sym(var),
       group = !!sym(group_var),
       color = as.factor(!!sym(group_var))
@@ -1034,34 +1052,67 @@ titles = c("Total Premature\n Death", "Log PAAM", "AIAN Premature\n Death", "API
            "Labor \nForce\n Participation Rate", "% \nOver 65", 
            "% \nBachelors Plus", "Poverty\n Rate", "Income \nRate", 
            "Log\n Population", "Uninsured \n Rate \nUnder 65")
- 
-for (i in seq_along(vars)) {
-  v = vars[[i]]
-  legend_title = titles[i]
+#  
+# for (i in seq_along(vars)) {
+#   v = vars[[i]]
+#   legend_title = titles[i]
+# 
+#  mdn = median(df_map[[v]], na.rm = TRUE)
 
- mdn = median(df_map[[v]], na.rm = TRUE)
+  # Filter out NA and the minimum value for the variable
+  #df_filtered <- df_map %>%
+   # filter(!is.na(.data[[v]])) %>%
+   # filter(.data[[v]] != min(.data[[v]], na.rm = TRUE))
+# 
+#  tmap_mode("plot")
+#  output = df_map %>%
+#    tm_shape() +
+#   tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
+#                palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+#    tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
+#     tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+ #tm_legend(title = legend_title, title.fontface = 2)
+# 
+# print(output)
+# 
+#  }
+
 
  tmap_mode("plot")
- output = df_map %>%
-   tm_shape() +
-  tm_polygons(col = v, style = "quantile", n = 4, border.alpha = 0.1, style = "cont", id = v,
-               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-   tm_layout(legend.title.size = 1.0, fontface = 2, legend.position = c("LEFT","top"), frame = FALSE) +
-    tm_layout(legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
-    tm_legend(title = legend_title, title.fontface = 2)
-
-print(output)
-
+# 
+for (i in seq_along(vars)) {
+  v <- vars[[i]]
+  legend_title <- titles[i]
+# 
+#   # Filter out NA and the minimum value for the variable
+df_filtered <- df_map %>%
+  filter(!is.na(.data[[v]])) %>%
+   filter(.data[[v]] != min(.data[[v]], na.rm = TRUE))
+# 
+  output <- tm_shape(df_map) +  
+    tm_borders(lwd = 0.1, col = "gray80") +  
+    tm_shape(df_filtered) +  
+  tm_polygons( col = v, style = "quantile",  n = 4, border.alpha = 0.3,  id = v,
+               palette = c("#a8ddb5", "#7bccc4", "#43a2ca", "#0868ac") ) +
+  tm_layout(legend.title.size = 1.0, 
+      fontface = 2, legend.position = c("LEFT", "top"),
+    frame = FALSE   ) +
+     tm_legend(
+      title = legend_title,
+      title.fontface = 2
+     )
+# 
+ print(output)
  }
  
- output = df_map %>%
-   tm_shape() +
-  tm_polygons(col = "pct_mine", n = 4, border.alpha = 0.1, style = "jenks", id = "pct_mine",
-               palette = c("#f0f9e8","#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
-  tm_layout( legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
-  tm_legend(title = "% \n Mining", title.fontface = 2)
-
-print(output)
+#  output = df_map %>%
+#    tm_shape() +
+#   tm_polygons(col = "pct_mine", n = 4, border.alpha = 0.1, style = "jenks", id = "pct_mine",
+#                palette = c("#ccebc5", "#a8ddb5", "#7bccc4", "#43a2ca","#0868ac")) +
+#   tm_layout( legend.title.size = 1.0, legend.position = c("LEFT","top"), frame = FALSE) +
+#   tm_legend(title = "% \n Mining", title.fontface = 2)
+# 
+# print(output)
 
 #red color scheme
 # for (i in seq_along(vars)) {
@@ -1088,104 +1139,104 @@ print(output)
 #library(sf)
 
 #blue-red color scheme
-tmap_mode("plot")
-
-# fix paam title (if using)
-title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-                  label = "Premature Mortality Rate", crs = st_crs(df_map))
-
-n_na <- sum(is.na(df_map$paam)) #determine NA value
-
-paam_map <- df_map %>%
-  tm_shape() +
-  tm_polygons(
-    col = "paam", style = "quantile", n = 4, border.alpha = 0.1,
-    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
-    title = "Deaths <75 \nper 100,000",
-    showNA = FALSE  
-  ) +
-  tm_add_legend( #manually add NA value
-    type = "fill", 
-    labels = paste0("Missing (n = ", n_na, ")"), 
-    col = "gray",
-    group = "Deaths <75 \nper 100,000"
-  ) +
-  tm_layout(
-    inner.margins = c(0.01, 0.25, 0.01, 0.01),
-    outer.margins = c(0.01, 0.01, 0.01, 0.01),
-    legend.position = c("left", "center"),
-    legend.title.size = 1.2,
-    legend.text.size = 1.0,
-    frame = FALSE
-  )
-
-print(paam_map)
-
-
-# fix Retention title (if using)
-title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-                  label = "Economic Resource Retention", crs = st_crs(df_map))
-n_na <- sum(is.na(df_map$retention))
-
-retention_map <- df_map %>%
-  tm_shape() +
-  tm_polygons(
-    col = "retention", style = "quantile", n = 4, border.alpha = 0.1,
-    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
-    title = "Intermediate \nRetention \nRate",
-    legend.format = list(digits = 2, scientific = FALSE),
-    showNA = FALSE 
-  ) +
-  tm_add_legend( #Manually add NA values
-    type = "fill", 
-    labels = paste0("Missing (n = ", n_na, ")"), 
-    col = "gray",
-    group = "Intermediate \nRetention \nRate"
-  ) +
-  tm_layout(
-    inner.margins = c(0.01, 0.25, 0.01, 0.01),
-    outer.margins = c(0.01, 0.01, 0.01, 0.01),
-    legend.position = c("left", "center"),
-    legend.title.size = 1.2,
-    legend.text.size = 1.0,
-    frame = FALSE
-  )
-
-print(retention_map)
-
-# fix ROG title (if using)
-title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
-                  label = "Racial Opportunity Gap", crs = st_crs(df_map))
-
-n_na <- sum(is.na(df_map$rrm_gap))
-
-rog_map <- df_map %>%
-  tm_shape() +
-  tm_polygons(
-    col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1,
-    palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
-    title = "Rank-rank \nmobility gap",
-    legend.format = list(digits = 2, scientific = FALSE),
-    showNA = FALSE 
-  ) +
-  tm_add_legend( #Manually add NA values
-    type = "fill", 
-    labels = paste0("Missing (n = ", n_na, ")"), 
-    col = "gray",
-    group = "Rank-rank \nmobility gap"
-  ) +
-  tm_layout(
-    inner.margins = c(0.01, 0.25, 0.01, 0.01),
-    outer.margins = c(0.01, 0.01, 0.01, 0.01),
-    legend.position = c("left", "center"),
-    legend.title.size = 1.2,
-    legend.text.size = 1.0,
-    frame = FALSE
-  )
-
-print(rog_map)
-
-
+# tmap_mode("plot")
+# 
+# # fix paam title (if using)
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Premature Mortality Rate", crs = st_crs(df_map))
+# 
+# n_na <- sum(is.na(df_map$paam)) #determine NA value
+# 
+# paam_map <- df_map %>%
+#   tm_shape() +
+#   tm_polygons(
+#     col = "paam", style = "quantile", n = 4, border.alpha = 0.1,
+#     palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
+#     title = "Deaths <75 \nper 100,000",
+#     showNA = FALSE  
+#   ) +
+#   tm_add_legend( #manually add NA value
+#     type = "fill", 
+#     labels = paste0("Missing (n = ", n_na, ")"), 
+#     col = "gray",
+#     group = "Deaths <75 \nper 100,000"
+#   ) +
+#   tm_layout(
+#     inner.margins = c(0.01, 0.25, 0.01, 0.01),
+#     outer.margins = c(0.01, 0.01, 0.01, 0.01),
+#     legend.position = c("left", "center"),
+#     legend.title.size = 1.2,
+#     legend.text.size = 1.0,
+#     frame = FALSE
+#   )
+# 
+# print(paam_map)
+# 
+# 
+# # fix Retention title (if using)
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Economic Resource Retention", crs = st_crs(df_map))
+# n_na <- sum(is.na(df_map$retention))
+# 
+# retention_map <- df_map %>%
+#   tm_shape() +
+#   tm_polygons(
+#     col = "retention", style = "quantile", n = 4, border.alpha = 0.1,
+#     palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e"),
+#     title = "Intermediate \nRetention \nRate",
+#     legend.format = list(digits = 2, scientific = FALSE),
+#     showNA = FALSE 
+#   ) +
+#   tm_add_legend( #Manually add NA values
+#     type = "fill", 
+#     labels = paste0("Missing (n = ", n_na, ")"), 
+#     col = "gray",
+#     group = "Intermediate \nRetention \nRate"
+#   ) +
+#   tm_layout(
+#     inner.margins = c(0.01, 0.25, 0.01, 0.01),
+#     outer.margins = c(0.01, 0.01, 0.01, 0.01),
+#     legend.position = c("left", "center"),
+#     legend.title.size = 1.2,
+#     legend.text.size = 1.0,
+#     frame = FALSE
+#   )
+# 
+# print(retention_map)
+# 
+# # fix ROG title (if using)
+# title_sf <- st_sf(geometry = st_sfc(st_point(c(mean(st_bbox(df_map)[c("xmin", "xmax")]), st_bbox(df_map)["ymax"] + 1))), 
+#                   label = "Racial Opportunity Gap", crs = st_crs(df_map))
+# 
+# n_na <- sum(is.na(df_map$rrm_gap))
+# 
+# rog_map <- df_map %>%
+#   tm_shape() +
+#   tm_polygons(
+#     col = "rrm_gap", style = "quantile", n = 4, border.alpha = 0.1,
+#     palette = c("#d0e1f2", "#a6c8e1", "#2c7fb8", "#f4b6b6", "#d5303e", "#8A1B47"),
+#     title = "Rank-rank \nmobility gap",
+#     legend.format = list(digits = 2, scientific = FALSE),
+#     showNA = FALSE 
+#   ) +
+#   tm_add_legend( #Manually add NA values
+#     type = "fill", 
+#     labels = paste0("Missing (n = ", n_na, ")"), 
+#     col = "gray",
+#     group = "Rank-rank \nmobility gap"
+#   ) +
+#   tm_layout(
+#     inner.margins = c(0.01, 0.25, 0.01, 0.01),
+#     outer.margins = c(0.01, 0.01, 0.01, 0.01),
+#     legend.position = c("left", "center"),
+#     legend.title.size = 1.2,
+#     legend.text.size = 1.0,
+#     frame = FALSE
+#   )
+# 
+# print(rog_map)
+# 
+# 
 
 
 # #red-grey color scheme
@@ -1311,6 +1362,18 @@ ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]),
     color = "Racial Opportunity Gap"
   )
 
+ggplot(data %>% filter(rpaam_AIAN > min_vals["rpaam_AIAN"]), 
+       aes(retention, rpaam_AIAN, color = rrm_gap_aian)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with AIAN-White Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – AIAN (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – AIAN", 
+    color = "AIAN-White Racial Opportunity Gap"
+  )
+
 
 ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
        aes(retention, rpaam_API, color = rrm_gap)) +
@@ -1322,6 +1385,30 @@ ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]),
     x = "Retention",
     y = "Premature Age Adjusted Mortality – API", 
     color = "Racial Opportunity Gap"
+  )
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(retention, rpaam_API, color = rrm_gap_asian)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Asian-White Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – API (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – API", 
+    color = "Asian-White Racial Opportunity Gap"
+  )
+
+ggplot(data %>% filter(rpaam_API > min_vals["rpaam_API"]), 
+       aes(retention, rpaam_API, color = rrm_gap_asian_alt)) +
+  geom_point() +
+  scale_color_viridis_c() +
+  geom_smooth(method = "lm") +
+  labs(
+    title = "Scatter Plot of Retention with Asian-White Racial Opportunity Gap (2012) \n and Premature Age Adjusted Mortality – API (2013–2015)",
+    x = "Retention",
+    y = "Premature Age Adjusted Mortality – API", 
+    color = "Asian-Asian Racial Opportunity Gap"
   )
 
 
@@ -1645,8 +1732,7 @@ ggplot(nonmetro_data, aes(prosperity, paam, color = rrm_gap)) +
 
 ```{r}
 map = ih_dp$call_geog(2012)
-df_map <- left_join(map, data, by = "place") %>% 
-  drop_na(paam, retention, rrm_gap, prosperity, state_fe)
+df_map <- left_join(map, data, by = "place") 
 
 
 nb <- poly2nb(df_map, queen=TRUE)
@@ -1660,14 +1746,22 @@ lw$weights[5]
 ###moran global paam 
 
 ```{r}
-moran.test(df_map$paam,lw, zero.policy=TRUE)
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$paam), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$paam))
+
+# Run Moran's I test
+moran.test(df_map_clean$paam, lw_clean, zero.policy = TRUE)
 
 ```
 
 
 ###lisa paam
 ```{r}
-df_lisa<- df_map %>% 
+df_lisa<- df_map[!is.na(df_map$paam), ] %>% 
   shift_geometry()
 
 
@@ -1689,18 +1783,208 @@ title(main = "LISA, Premature Age-Adjusted Mortality")
 # legend("bottomleft", border = "#eeeeee")
 ```
 
+##rpaam-AIAN
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rpaam_AIAN), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rpaam_AIAN))
+
+# Run Moran's I test
+moran.test(df_map_clean$rpaam_AIAN, lw_clean, zero.policy = TRUE)
+
+
+```
+
+```{r}
+df_lisa<- df_map[!is.na(df_map$rpaam_AIAN), ] %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rpaam_AIAN'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality-AIAN")
+
+
+
+
+
+```
+##rpaam_API
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rpaam_API), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rpaam_API))
+
+# Run Moran's I test
+moran.test(df_map_clean$rpaam_API, lw_clean, zero.policy = TRUE)
+
+
+```
+
+
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rpaam_API), ] %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rpaam_API'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality-API")
+
+
+
+```
+##rpaam_Black 
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rpaam_Black), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rpaam_Black))
+
+# Run Moran's I test
+moran.test(df_map_clean$rpaam_Black, lw_clean, zero.policy = TRUE)
+
+
+
+```
+
+```{r}
+
+
+df_lisa<- df_map[!is.na(df_map$rpaam_Black), ] %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rpaam_Black'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality-Black")
+
+
+
+```
+
+
+##rpaam_Latine
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rpaam_Latine), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rpaam_Latine))
+
+# Run Moran's I test
+moran.test(df_map_clean$rpaam_Latine, lw_clean, zero.policy = TRUE)
+
+
+```
+
+```{r}
+df_lisa<- df_map[!is.na(df_map$rpaam_Latine, ] %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rpaam_Latine'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality-Latine")
+
+
+```
+
+##rpaam_white
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rpaam_White), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rpaam_White))
+
+# Run Moran's I test
+moran.test(df_map_clean$rpaam_White, lw_clean, zero.policy = TRUE)
+
+
+```
+
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rpaam_White, ] %>% 
+  shift_geometry()
+
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rpaam_White'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.1)
+title(main = "LISA, Premature Age-Adjusted Mortality-White")
+
+
+
+```
+
+
 ##Retention
 ###moran global retention 
 
 ```{r}
-moran.test(df_map$retention,lw, zero.policy=TRUE)
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$retention), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$retention
+# Run Moran's I test
+moran.test(df_map_clean$retention, lw_clean, zero.policy = TRUE)
 
 ```
 
 
 ###lisa retention
 ```{r}
-
+df_lisa<- df_map[!is.na(df_map$retention), ] %>% 
+  shift_geometry()
 
 w <- queen_weights(df_lisa)
 lisa <- local_moran(w, df_lisa['retention'])
@@ -1725,10 +2009,14 @@ title(main = "LISA, Retention")
 
 ```{r}
 
-#rrm_gap
+#Drop NA
 
-moran.test(df_map$rrm_gap,lw, zero.policy=TRUE)
+df_map_clean <- df_map[!is.na(df_map$rrm_gap), ]
 
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap))
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap, lw_clean, zero.policy = TRUE)
 ```
 
 
@@ -1753,19 +2041,193 @@ title(main = "LISA, Racial Opportunity Gap")
 # legend_colors <- unlist(lisa_colors)
 # legend("bottomleft", border = "#eeeeee")
 ```
+##AIAN_rog
+```{r}
+
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_aian), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap_aian))
+
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap_aian, lw_clean, zero.policy = TRUE)
+
+
+```
+
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rrm_gap_aian), ] %>% 
+  shift_geometry()
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap_aian'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap-AIAN")
+```
+##API_ROG
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_asian), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap_asian))
+
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap_asian, lw_clean, zero.policy = TRUE)
+
+
+```
+
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rrm_gap_asian), ] %>% 
+  shift_geometry()
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap_asian'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap-API")
+
+```
+##Black_ROG
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_black), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap_black))
+
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap_black, lw_clean, zero.policy = TRUE)
+
+
+```
+
+```{r}
+
+
+df_lisa<- df_map[!is.na(df_map$rrm_gap_black), ] %>% 
+  shift_geometry()
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap_black'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap-Black")
+
+```
+
+##Latine_ROG
+```{r}
+
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_hisp), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap_hisp))
+
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap_hisp, lw_clean, zero.policy = TRUE)
+
+
+```
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rrm_gap_hisp), ] %>% 
+  shift_geometry()
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap_hisp'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap-Latine")
+
+
+```
+##White_ROG
+
+```{r}
+#Drop NA
+
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_white), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$rrm_gap_white))
+
+# Run Moran's I test
+moran.test(df_map_clean$rrm_gap_white, lw_clean, zero.policy = TRUE)
+
+
+```
+
+
+```{r}
+
+df_lisa<- df_map[!is.na(df_map$rrm_gap_white), ] %>% 
+  shift_geometry()
+
+w <- queen_weights(df_lisa)
+lisa <- local_moran(w, df_lisa['rrm_gap_white'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(st_geometry(df_lisa), 
+     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), 
+     border = "#333333", lwd=0.2)
+title(main = "LISA, Racial Opportunity Gap-White")
+
+
+```
+
 
 ##Prosperity
 ###moran global prosperity 
 
 ```{r}
-moran.test(df_map$prosperity,lw, zero.policy=TRUE)
+#Drop NA
 
+df_map_clean <- df_map[!is.na(df_map$prosperity), ]
+
+# Subset the spatial weights list to match the cleaned data
+lw_clean <- subset(lw, !is.na(df_map$prosperity))
+# Run Moran's I test
+moran.test(df_map_clean$prosperity, lw_clean, zero.policy = TRUE)
 ```
 
 
 ###lisa prosperity
 ```{r}
-
+df_lisa<- df_map[!is.na(df_map$prosperity), ] %>% 
+  shift_geometry()
 
 w <- queen_weights(df_lisa)
 lisa <- local_moran(w, df_lisa['prosperity'])
@@ -1785,7 +2247,7 @@ title(main = "LISA, Prosperity")
 # legend("bottomleft", border = "#eeeeee")
 ```
 
-# Models
+# PAA Models
 ```{r}
 
 # Column to delete
@@ -2209,7 +2671,7 @@ ggplot(cca4, aes(y = fitted, x = retentionint, color = sr3)) +
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% shift_geometry()
 
-temp = df_map %>% drop_na(c(paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured, state_fe)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention = (retention - mean(retention, na.rm=TRUE))/sd(retention, na.rm=TRUE), rrm_gap = (rrm_gap - mean(rrm_gap, na.rm=TRUE))/sd(rrm_gap, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE)) %>% 
+temp = df_map %>% drop_na(c(paam, retention, rrm_gap, pct_mfg, pct_mine, pct_ag, pct_fire, pct_edmed, laborforce_part_rate, age, bach, poverty_rate, income_rate, logpop, uninsured, state_fe)) %>% mutate(metro = ifelse(ruc_code >= 4, 1, 0), paam = (paam - mean(paam, na.rm=TRUE))/sd(paam, na.rm=TRUE), retention = (retention - mean(retention, na.rm=TRUE))/sd(retention, na.rm=TRUE), rrm_gap = (rrm_gap - mean(rrm_gap, na.rm=TRUE))/sd(rrm_gap, na.rm=TRUE), rrm_gap_aian = (rrm_gap_aian - mean(rrm_gap_aian, na.rm=TRUE))/sd(rrm_gap_aian, na.rm=TRUE), rrm_gap_asian = (rrm_gap_aian - mean(rrm_gap_aian, na.rm=TRUE))/sd(rrm_gap_aian, na.rm=TRUE), rrm_gap_black = (rrm_gap_black - mean(rrm_gap_black, na.rm=TRUE))/sd(rrm_gap_black, na.rm=TRUE), rrm_gap_hisp = (rrm_gap_hisp - mean(rrm_gap_hisp, na.rm=TRUE))/sd(rrm_gap_hisp, na.rm=TRUE), rrm_gap_white = (rrm_gap_white - mean(rrm_gap_white, na.rm=TRUE))/sd(rrm_gap_white, na.rm=TRUE), rrm_gap_asian_alt = (rrm_gap_asian_alt - mean(rrm_gap_asian_alt, na.rm=TRUE))/sd(rrm_gap_asian_alt, na.rm=TRUE), pct_mfg = (pct_mfg - mean(pct_mfg, na.rm=TRUE))/sd(pct_mfg, na.rm=TRUE), pct_mine = (pct_mine - mean(pct_mine, na.rm=TRUE))/sd(pct_mine, na.rm=TRUE), pct_ag = (pct_ag - mean(pct_ag, na.rm=TRUE))/sd(pct_ag, na.rm=TRUE), pct_fire = (pct_fire - mean(pct_fire, na.rm=TRUE))/sd(pct_fire, na.rm=TRUE), pct_edmed = (pct_edmed - mean(pct_edmed, na.rm=TRUE))/sd(pct_edmed, na.rm=TRUE), laborforce_part_rate = (laborforce_part_rate - mean(laborforce_part_rate, na.rm=TRUE))/sd(laborforce_part_rate, na.rm=TRUE), age = (age - mean(age, na.rm=TRUE))/sd(age, na.rm=TRUE), bach = (bach - mean(bach, na.rm=TRUE))/sd(bach, na.rm=TRUE), poverty_rate = (poverty_rate - mean(poverty_rate, na.rm=TRUE))/sd(poverty_rate, na.rm=TRUE), income_rate = (income_rate - mean(income_rate, na.rm=TRUE))/sd(income_rate, na.rm=TRUE), logpop = (logpop - mean(logpop, na.rm=TRUE))/sd(logpop, na.rm=TRUE), uninsured = (uninsured - mean(uninsured, na.rm=TRUE))/sd(uninsured, na.rm=TRUE)) %>% 
   mutate(sr = metro_nonmetro, sr2 = three_metro, sr3 = four_metro)
 
 
@@ -2222,8 +2684,47 @@ df_latine = temp %>% left_join(y=rpaam, "place") %>% filter(racegr == "Latine")
 
 ```
 
+#ASA Models
 
-### part 3 - full model
+###Model SE-ROG + controls > rpaam
+
+```{r}
+
+nb <- poly2nb(df_black, queen=TRUE)
+lw_black <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_white, queen=TRUE)
+lw_white <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_aian, queen=TRUE)
+lw_aian <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_api, queen=TRUE)
+lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_latine, queen=TRUE)
+lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+black_SE = errorsarlm(rpaam ~ rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
+  listw = lw_black,zero.policy = TRUE)
+white_SE = errorsarlm(rpaam ~ rrm_gap_white + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
+  listw = lw_white,zero.policy = TRUE)
+aian_SE = errorsarlm(rpaam ~ rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
+  listw = lw_aian,zero.policy = TRUE)
+api_SE = errorsarlm(rpaam ~ rrm_gap_asian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
+  listw = lw_api,zero.policy = TRUE)
+latine_SE = errorsarlm(rpaam ~ rrm_gap_hisp + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
+  listw = lw_latine,zero.policy = TRUE)
+
+
+summary(black_SE)
+summary(white_SE)
+summary(aian_SE)
+summary(api_SE)
+summary(latine_SE)
+
+```
+
+
+
+###Model SR-ROG + controls > rpaam
 
 ```{r}
 nb <- poly2nb(df_black, queen=TRUE)
@@ -2237,107 +2738,207 @@ lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
 nb <- poly2nb(df_latine, queen=TRUE)
 lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-# black_noi = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-#                   lw_black, zero.policy = TRUE)
-# white_noi = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-#                   lw_white, zero.policy = TRUE)
-# aian_noi = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-#                   lw_aian, zero.policy = TRUE)
-# api_noi = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-#                   lw_api, zero.policy = TRUE)
-# latine_noi = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-#                   lw_latine, zero.policy = TRUE)
-# 
-# summary(black_noi)
-# summary(white_noi)
-# summary(aian_noi)
-# summary(api_noi)
-# summary(latine_noi)
 
 
-
-black_i = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+black_S = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_black, zero.policy = TRUE)
-white_i = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+white_S = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_white, zero.policy = TRUE)
-aian_i = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+aian_S = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_aian, zero.policy = TRUE)
-api_i = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+api_S = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(rrm_gap_asian +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_api, zero.policy = TRUE)
-latine_i = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+latine_S = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(rrm_gap_hisp +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_latine, zero.policy = TRUE)
-latine_i_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_latine, zero.policy = TRUE)
-latine_i_orig = errorsarlm(data = df_latine_orig, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_latine, zero.policy = TRUE)
+# latine_S_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(rrm_gap +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# latine_S_orig = errorsarlm(data = df_latine_orig, rpaam ~ 0 + sr3/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
 
-summary(black_i)
-summary(white_i)
-summary(aian_i)
-summary(api_i)
-summary(latine_i)
+summary(black_S)
+summary(white_S)
+summary(aian_S)
+summary(api_S)
+summary(latine_S)
+
+
+
+
+```
+
+
+###Model 1- SE- retention + controls > rpaam
+
+```{r}
+nb <- poly2nb(df_black, queen=TRUE)
+lw_black <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_white, queen=TRUE)
+lw_white <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_aian, queen=TRUE)
+lw_aian <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_api, queen=TRUE)
+lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_latine, queen=TRUE)
+lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+black_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
+  listw = lw_black,zero.policy = TRUE)
+white_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
+  listw = lw_white,zero.policy = TRUE)
+aian_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
+  listw = lw_aian,zero.policy = TRUE)
+api_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
+  listw = lw_api,zero.policy = TRUE)
+latine_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
+  listw = lw_latine,zero.policy = TRUE)
+
+# latine_1_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# latine_i_orig = errorsarlm(data = df_latine_orig, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+
+summary(black_1)
+summary(white_1)
+summary(aian_1)
+summary(api_1)
+summary(latine_1)
+
+```
+### Model 2 - SR- retention  + Controls > rpaam
+
+```{r}
+
+nb <- poly2nb(df_black, queen=TRUE)
+lw_black <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_white, queen=TRUE)
+lw_white <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_aian, queen=TRUE)
+lw_aian <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_api, queen=TRUE)
+lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_latine, queen=TRUE)
+lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+black_2 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_black, zero.policy = TRUE)
+
+white_2 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_white, zero.policy = TRUE)
+
+aian_2 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_aian, zero.policy = TRUE)
+
+api_2 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_api, zero.policy = TRUE)
+
+latine_2 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_latine, zero.policy = TRUE)
+# 
+summary(black_2)
+summary(white_2)
+summary(aian_2)
+summary(api_2)
+summary(latine_2)
+
+
+
+```
+
+
+### Model 3 - full model
+
+```{r}
+nb <- poly2nb(df_black, queen=TRUE)
+lw_black <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_white, queen=TRUE)
+lw_white <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_aian, queen=TRUE)
+lw_aian <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_api, queen=TRUE)
+lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
+nb <- poly2nb(df_latine, queen=TRUE)
+lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
+
+
+
+black_3 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap_black + retention*rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw_black, zero.policy = TRUE)
+white_3 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw_white, zero.policy = TRUE)
+aian_3 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap_aian + retention*rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw_aian, zero.policy = TRUE)
+api_3 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap_asian + retention*rrm_gap_asian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw_api, zero.policy = TRUE)
+latine_3 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap_hisp + retention*rrm_gap_hisp + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+                  lw_latine, zero.policy = TRUE)
+# latine_i_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(retention + rrm_gap_hisp_hisp + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# latine_3_orig = errorsarlm(data = df_latine_orig, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+
+summary(black_3)
+summary(white_3)
+summary(aian_3)
+summary(api_3)
+summary(latine_3)
 
 ```
 
 ##Full model- varying rpaam calc
 ```{r}
-latine_i = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_latine, zero.policy = TRUE)
-latine_i_top = errorsarlm(data = df_latine, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_latine, zero.policy = TRUE)
-latine_i_orig = errorsarlm(data = df_latine, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_latine, zero.policy = TRUE)
-
-summary(latine_i)
-summary(latine_i_top)
-summary(latine_i_orig)
-
-
-black_i = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_black, zero.policy = TRUE)
-black_i_top = errorsarlm(data = df_black, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_black, zero.policy = TRUE)
-black_i_orig = errorsarlm(data = df_black, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_black, zero.policy = TRUE)
-
-summary(black_i)
-summary(black_i_top)
-summary(black_i_orig)
-
-
-white_i = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_white, zero.policy = TRUE)
-white_i_top = errorsarlm(data = df_white, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_white, zero.policy = TRUE)
-white_i_orig = errorsarlm(data = df_white, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_white, zero.policy = TRUE)
-
-summary(white_i)
-summary(white_i_top)
-summary(white_i_orig)
-
-
-api_i = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_api, zero.policy = TRUE)
-api_i_top = errorsarlm(data = df_api, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_api, zero.policy = TRUE)
-api_i_orig = errorsarlm(data = df_api, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_api, zero.policy = TRUE)
-
-summary(api_i)
-summary(api_i_top)
-summary(api_i_orig)
-
-aian_i = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_aian, zero.policy = TRUE)
-aian_i_top = errorsarlm(data = df_aian, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_aian, zero.policy = TRUE)
-aian_i_orig = errorsarlm(data = df_aian, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
-                  lw_aian, zero.policy = TRUE)
-
-summary(aian_i)
-summary(aian_i_top)
-summary(aian_i_orig)
+# latine_i = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# latine_i_top = errorsarlm(data = df_latine, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# latine_i_orig = errorsarlm(data = df_latine, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_latine, zero.policy = TRUE)
+# 
+# summary(latine_i)
+# summary(latine_i_top)
+# summary(latine_i_orig)
+# 
+# 
+# black_i = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_black, zero.policy = TRUE)
+# black_i_top = errorsarlm(data = df_black, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_black, zero.policy = TRUE)
+# black_i_orig = errorsarlm(data = df_black, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_black, zero.policy = TRUE)
+# 
+# summary(black_i)
+# summary(black_i_top)
+# summary(black_i_orig)
+# 
+# 
+# white_i = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_white, zero.policy = TRUE)
+# white_i_top = errorsarlm(data = df_white, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_white, zero.policy = TRUE)
+# white_i_orig = errorsarlm(data = df_white, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_white, zero.policy = TRUE)
+# 
+# summary(white_i)
+# summary(white_i_top)
+# summary(white_i_orig)
+# 
+# 
+# api_i = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_api, zero.policy = TRUE)
+# api_i_top = errorsarlm(data = df_api, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_api, zero.policy = TRUE)
+# api_i_orig = errorsarlm(data = df_api, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_api + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_api, zero.policy = TRUE)
+# 
+# summary(api_i)
+# summary(api_i_top)
+# summary(api_i_orig)
+# 
+# aian_i = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_aian, zero.policy = TRUE)
+# aian_i_top = errorsarlm(data = df_aian, rpaam_top ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_aian, zero.policy = TRUE)
+# aian_i_orig = errorsarlm(data = df_aian, rpaam_orig ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_aian + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+#                   lw_aian, zero.policy = TRUE)
+# 
+# summary(aian_i)
+# summary(aian_i_top)
+# summary(aian_i_orig)
 
 
 ```
@@ -2346,11 +2947,11 @@ summary(aian_i_orig)
 
 #### ANOVA
 ```{r}
-anova(black_noi, black_i)
-anova(white_noi, white_i)
-anova(aian_noi, aian_i)
-anova(api_noi, api_i)
-anova(latine_noi, latine_i)
+anova(black_2, black_3)
+anova(white_2, white_3)
+anova(aian_2, aian_3)
+anova(api_2, api_3)
+anova(latine_2, latine_3)
 ```
 
 
@@ -2384,84 +2985,197 @@ plot(st_geometry(Q2ar),
 #  #### print results  -->
 # # Write OLS retention & autonomy results to excel file  -->
 # #
-# # install.packages("broom")
-# # install.packages("writexl")
-# library(broom)
-# library(writexl)
-# #
-# # ## Tidy results
-# tidy_sr1a <- tidy(sr1a)
-# tidy_sr1b <- tidy(sr1b)
-# tidy_sr2a <- tidy(sr2a)
-# tidy_sr2b <- tidy(sr2b)
-# tidy_sr3a <- tidy(sr3a)
-# #
-# #
-# #
-# # # Identify each model
-# #
-# tidy_sr1a$model <- "Retention-Industry"
-# tidy_sr1b$model <- "RRG-Industry"
-# tidy_sr2a$model <- "Trade-Industry-Prosperity"
-# tidy_sr2b$model <- "Trade-Industry-PAAM"
-# tidy_sr3a$model <- "FULL"
-# #
-# #
-# # # # # Combine results into single DF
-# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
-# #
-# #
-# # # Create a list of data frames to be written to different sheets -->
-# results_list <- list(
-#   "Retention-Industry" = tidy_sr1a,
-#   "RRG-Industry" = tidy_sr1b,
-#   "Trade-Industry-Prosperity" = tidy_sr2a,
-#     "Trade-Industry-PAAM" = tidy_sr2b,
-#   "FULL" = tidy_sr3a
-# )
-# 
-# # Write the list of data frames to an Excel file -->
-#   write_xlsx(results_list, path = "SR_regression_results-rural1.xlsx")
-# 
-# 
-#    #### print interaction results  -->
-# # Write OLS retention and rrm_gap results to excel file  -->
-# #
-# 
-# #
-# # ## Tidy results
-# tidy_sr1a <- tidy(sr1a)
-# tidy_sr1b <- tidy(sr1b)
-# tidy_sr2ai <- tidy(sr2ai)
-# tidy_sr2bi <- tidy(sr2bi)
-# tidy_sr3ai <- tidy(sr3ai)
+#install.packages("broom")
+#install.packages("writexl")
+library(broom)
+library(writexl)
+
+##--------------------------###
+
+# #Print AIAN Resupts
+# # ## Tidy AIAN results
+tidy_aian_SE <- tidy(aian_SE)
+tidy_aian_S <- tidy(aian_S)
+tidy_aian_1 <- tidy(aian_1)
+tidy_aian_2 <- tidy(aian_2)
+tidy_aian_3 <- tidy(aian_3)
 # #
 # #
 # #
 # # # Identify each model
 # #
-# tidy_sr1a$model <- "Retention-Industry_int"
-# tidy_sr1b$model <- "RRG-Industry_int"
-# tidy_sr2ai$model <- "Trade-Industry-Prosperity_int"
-# tidy_sr2bi$model <- "Trade-Industry-PAAM_int"
-# tidy_sr3ai$model <- "FULL_int"
+tidy_aian_SE$model <- "ROG-PAAM-SE"
+tidy_aian_S$model <- "ROG-PAAM"
+tidy_aian_1$model <- "TRADE-PAAM"
+tidy_aian_2$model <- "TRADE-ROG-PAAM"
+tidy_aian_3$model <- "FULL_INT"
 # #
 # #
 # # # # # Combine results into single DF
-# # tidy_results <- bind_rows(tidy_sr1a, tidy_sr1b, tidy_sr2a, tidy_sr2b, tidy_sr3a)
+tidy_results <- bind_rows(tidy_aian_SE,tidy_aian_S, tidy_aian_1, tidy_aian_2, tidy_aian_3)
 # #
 # #
 # # # Create a list of data frames to be written to different sheets -->
-# results_list <- list(
-#   "Retention-Industry_int" = tidy_sr1a,
-#   "RRG-Industry_int" = tidy_sr1b,
-#   "Trade-Industry-Prosperity_int" = tidy_sr2ai,
-#     "Trade-Industry-PAAM_int" = tidy_sr2bi,
-#   "FULL_int" = tidy_sr3ai
-# )
+results_list <- list(
+   "ROG-PAAM-SE" = tidy_aian_SE,
+     "ROG-PAAM" = tidy_aian_S,
+   "TRADE-PAAM" = tidy_aian_1,
+   "TRADE-ROG-PAAM" = tidy_aian_2,
+   "FULL_INT"= tidy_aian_3
+ )
 # 
 # # Write the list of data frames to an Excel file -->
-#   write_xlsx(results_list, path = "SR_regression_results-rural1_int.xlsx")
+write_xlsx(results_list, path = "SR_regression_results-AIAN.xlsx")
+
+
+##-----------------------------------##
+# #Print API Resupts
+# # ## Tidy AIAN results
+tidy_api_SE <- tidy(api_SE)
+tidy_api_S <- tidy(api_S)
+tidy_api_1 <- tidy(api_1)
+tidy_api_2<- tidy(api_2)
+tidy_api_3 <- tidy(api_3)
+# #
+# #
+# #
+# # # Identify each model
+# #
+tidy_api_SE$model <- "ROG-PAAM-SE"
+tidy_api_S$model <- "ROG-PAAM"
+tidy_api_1$model <- "TRADE-PAAM"
+tidy_api_2$model <- "TRADE-ROG-PAAM"
+tidy_api_3$model <- "FULL_INT"
+# #
+# #
+# # # # # Combine results into single DF
+tidy_results <- bind_rows(tidy_api_SE, tidy_api_S, tidy_api_1, tidy_api_2, tidy_api_3)
+# #
+# #
+# # # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+   "ROG-PAAM-SE" = tidy_api_SE,
+     "ROG-PAAM" = tidy_api_S,
+   "TRADE-PAAM" = tidy_api_1,
+   "TRADE-ROG-PAAM" = tidy_api_2,
+   "FULL_INT"= tidy_api_3
+ )
+# 
+# # Write the list of data frames to an Excel file -->
+write_xlsx(results_list, path = "SR_regression_results-API.xlsx")
+
+##-----------------------------------##
+
+# #Print Black Results
+# # ## Tidy Black results
+tidy_black_SE <- tidy(black_SE)
+tidy_black_S <- tidy(black_S)
+tidy_black_1 <- tidy(black_1)
+tidy_black_2<- tidy(black_2)
+tidy_black_3 <- tidy(black_3)
+# #
+# #
+# #
+#Identify each model
+# #
+tidy_black_SE$model <- "ROG-PAAM-SE"
+tidy_black_S$model <- "ROG-PAAM"
+tidy_black_1$model <- "TRADE-PAAM"
+tidy_black_2$model <- "TRADE-ROG-PAAM"
+tidy_black_3$model <- "FULL_INT"
+# #
+# #
+# # # # # Combine results into single DF
+tidy_results <- bind_rows(tidy_black_SE, tidy_black_S, tidy_black_1, tidy_black_2, tidy_black_3)
+# #
+# #
+# # # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+     "ROG-PAAM-SE" = tidy_black_SE,
+   "ROG-PAAM" = tidy_black_S,
+   "TRADE-PAAM" = tidy_black_1,
+   "TRADE-ROG-PAAM" = tidy_black_2,
+   "FULL_INT"= tidy_black_3
+ )
+# 
+# # Write the list of data frames to an Excel file -->
+write_xlsx(results_list, path = "SR_regression_results-black.xlsx")
+
+##-----------------------------------##
+
+# #Print latine Results
+# # ## Tidy latine results
+tidy_latine_SE <- tidy(latine_SE)
+tidy_latine_S <- tidy(latine_S)
+tidy_latine_1 <- tidy(latine_1)
+tidy_latine_2<- tidy(latine_2)
+tidy_latine_3 <- tidy(latine_3)
+# #
+# #
+# #
+#Identify each model
+# #
+tidy_latine_SE$model <- "ROG-PAAM-SE"
+tidy_latine_S$model <- "ROG-PAAM"
+tidy_latine_1$model <- "TRADE-PAAM"
+tidy_latine_2$model <- "TRADE-ROG-PAAM"
+tidy_latine_3$model <- "FULL_INT"
+# #
+# #
+# # # # # Combine results into single DF
+tidy_results <- bind_rows(tidy_latine_SE, tidy_latine_S, tidy_latine_1, tidy_latine_2, tidy_latine_3)
+# #
+# #
+# # # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+   "ROG-PAAM-SE" = tidy_latine_SE,
+     "ROG-PAAM" = tidy_latine_S,
+   "TRADE-PAAM" = tidy_latine_1,
+   "TRADE-ROG-PAAM" = tidy_latine_2,
+   "FULL_INT"= tidy_latine_3
+ )
+# 
+# # Write the list of data frames to an Excel file -->
+write_xlsx(results_list, path = "SR_regression_results-latine.xlsx")
+
+##-----------------------------------##
+
+# #Print white Resupts
+# # ## Tidy whiteresults
+tidy_white_SE <- tidy(white_SE)
+tidy_white_S <- tidy(white_S)
+tidy_white_1 <- tidy(white_1)
+tidy_white_2<- tidy(white_2)
+tidy_white_3 <- tidy(white_3)
+# #
+# #
+# #
+#Identify each model
+# #
+tidy_white_SE$model <- "ROG-PAAM-SE"
+tidy_white_S$model <- "ROG-PAAM"
+tidy_white_1$model <- "TRADE-PAAM"
+tidy_white_2$model <- "TRADE-ROG-PAAM"
+tidy_white_3$model <- "FULL_INT"
+# #
+# #
+# # # # # Combine results into single DF
+tidy_results <- bind_rows(tidy_white_SE, tidy_white_S, tidy_white_1, tidy_white_2, tidy_white_3)
+# #
+# #
+# # # Create a list of data frames to be written to different sheets -->
+results_list <- list(
+   "ROG-PAAM-SE" = tidy_white_SE,
+     "ROG-PAAM" = tidy_white_S,
+   "TRADE-PAAM" = tidy_white_1,
+   "TRADE-ROG-PAAM" = tidy_white_2,
+   "FULL_INT"= tidy_white_3
+ )
+# 
+# # Write the list of data frames to an Excel file -->
+write_xlsx(results_list, path = "SR_regression_results-white.xlsx")
+
+##-----------------------------------##
 
 ```
 
