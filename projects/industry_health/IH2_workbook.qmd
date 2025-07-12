@@ -172,7 +172,7 @@ ers = read.csv("data/2015CountyTypologyCodes.csv") %>%
 # util$zip_unpack("tmp/datapack_agcen_v240709.zip", overwrite = TRUE)
 
 ```
-
+#load industry data
 ```{r}
 
 # # not working
@@ -246,27 +246,6 @@ jobs = jobs %>%
 #TO DO: Update file paths
 
 pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
-
-pop = pop_clean %>%
-  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
-         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP) %>%
-  filter(YEAR == 5 & AGEGRP == 0) %>%
-  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind)
-
-mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
-xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
-  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
-  dplyr::select(CZ, FIPS)
-
-mobile25 = mobile25_clean %>%
-  filter(cohort == "1992") %>%
-  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
-  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
-  mutate(CZ = sprintf("%05d",CZ)) %>%
-  left_join(y=xwalk, by="CZ") %>%
-  left_join(pop, by="FIPS") %>%
-  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
-
 
 pop = pop_clean %>%
   mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
@@ -353,26 +332,26 @@ chetty = chetty %>%
 ### overriding prior calc of ROG by grouping asian with white
 # pop_clean = pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
 # 
-pop = pop_clean %>%
-  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
-         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
-  filter(YEAR == 5 & AGEGRP == 0) %>%
-  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind, pop_white)
-
-mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
-xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
-  mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
-  dplyr::select(CZ, FIPS)
-
-mobile25 = mobile25_clean %>%
-  filter(cohort == "1992") %>%
-  dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
-  dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
-  mutate(CZ = sprintf("%05d",CZ)) %>%
-  left_join(y=xwalk, by="CZ") %>%
-  left_join(pop, by="FIPS") %>%
-  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+# pop = pop_clean %>%
+#   mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+#          pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP, pop_white = WA_MALE + WA_FEMALE) %>%
+#   filter(YEAR == 5 & AGEGRP == 0) %>%
+#   dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind, pop_white)
 # 
+# mobile25_clean = read.csv("data/RRG_data/Table_4_cz_by_cohort_estimates.csv")
+# xwalk = read.csv("data/RRG_data/czlma903.csv") %>%
+#   mutate(CZ = sprintf("%05d", CZ90), FIPS = sprintf("%05d", County.FIPS.Code)) %>%
+#   dplyr::select(CZ, FIPS)
+# 
+# mobile25 = mobile25_clean %>%
+#   filter(cohort == "1992") %>%
+#   dplyr::select("CZ"=cz, "name"=cz_name, kfr_aian_pooled_p25, kfr_aian_pooled_p25_se, kfr_asian_pooled_p25, kfr_asian_pooled_p25_se, kfr_black_pooled_p25, kfr_black_pooled_p25_se, kfr_hisp_pooled_p25, kfr_hisp_pooled_p25_se, kfr_white_pooled_p25, kfr_white_pooled_p25_se) %>%
+#   dplyr::select(CZ, name, "aian"=kfr_aian_pooled_p25, "asian"=kfr_asian_pooled_p25, "black"=kfr_black_pooled_p25, "hisp"=kfr_hisp_pooled_p25, "white"=kfr_white_pooled_p25) %>%
+#   mutate(CZ = sprintf("%05d",CZ)) %>%
+#   left_join(y=xwalk, by="CZ") %>%
+#   left_join(pop, by="FIPS") %>%
+#   mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/tot, pct_asian = pop_asian/tot, pct_ind = pop_ind/tot, pct_hisp = pop_hisp/tot, pct_white = pop_white/tot)
+# # 
 # temp = mobile25 %>%
 #   dplyr::select(FIPS, "rate_aian"=aian, "rate_black"=black, "rate_hisp"=hisp, pct_black, "pct_aian"=pct_ind, pct_hisp) %>%
 #   pivot_longer(!FIPS, names_to="var", values_to="val") %>% 
@@ -468,18 +447,6 @@ rpaam_wide = rpaam %>%
 
 ```
 
-
-#log paam for descriptives
-
-```{r}
-
-data <- data %>%
-  mutate(log_paam_des = log(1 + paam))
-
-#compare logged rpaam 
-
-
-```
 
 
 # data joins
@@ -580,6 +547,20 @@ print(data)
 # data<- left_join (data, circu, by = "place")
 
 ```
+
+
+#log paam for descriptives
+
+```{r}
+
+data <- data %>%
+  mutate(log_paam_des = log(1 + paam))
+
+#compare logged rpaam 
+
+
+```
+
 
 ## 7/9/24 circularity
 
@@ -790,6 +771,34 @@ write.xlsx(
 )
 
 
+
+```
+
+## N for R by metro 
+
+```{r}
+# Identify all rpaam_* variables
+rpaam_vars <- data %>%
+  select(starts_with("rpaam_")) %>%
+  names()
+
+# Long-format data: group, metro, and whether that group has a non-missing value
+df_long <- data %>%
+  pivot_longer(cols = all_of(rpaam_vars), names_to = "group", values_to = "rpaam_value") %>%
+  filter(!is.na(rpaam_value)) %>%
+  group_by(group, four_metro) %>%
+  summarise(N = n(), .groups = "drop")
+
+# Optional: reshape to wide for easier viewing
+table_N <- df_long %>%
+  pivot_wider(names_from = four_metro, values_from = N, values_fill = 0)
+
+# View the result
+print(table_N)
+
+library(writexl)
+
+write_xlsx(table_N, path = "rpaam_N_by_four_metro.xlsx")
 
 ```
 
@@ -1910,7 +1919,7 @@ moran.test(df_map_clean$rpaam_Latine, lw_clean, zero.policy = TRUE)
 ```
 
 ```{r}
-df_lisa<- df_map[!is.na(df_map$rpaam_Latine, ] %>% 
+df_lisa<- df_map[!is.na(df_map$rpaam_Latine) ] %>% 
   shift_geometry()
 
 
@@ -1946,7 +1955,7 @@ moran.test(df_map_clean$rpaam_White, lw_clean, zero.policy = TRUE)
 
 ```{r}
 
-df_lisa<- df_map[!is.na(df_map$rpaam_White, ] %>% 
+df_lisa<- df_map[!is.na(df_map$rpaam_White) ] %>% 
   shift_geometry()
 
 
@@ -1974,7 +1983,7 @@ title(main = "LISA, Premature Age-Adjusted Mortality-White")
 df_map_clean <- df_map[!is.na(df_map$retention), ]
 
 # Subset the spatial weights list to match the cleaned data
-lw_clean <- subset(lw, !is.na(df_map$retention
+lw_clean <- subset(lw, !is.na(df_map$retention))
 # Run Moran's I test
 moran.test(df_map_clean$retention, lw_clean, zero.policy = TRUE)
 
@@ -1983,7 +1992,7 @@ moran.test(df_map_clean$retention, lw_clean, zero.policy = TRUE)
 
 ###lisa retention
 ```{r}
-df_lisa<- df_map[!is.na(df_map$retention), ] %>% 
+df_lisa<- df_map[!is.na(df_map$retention) ] %>% 
   shift_geometry()
 
 w <- queen_weights(df_lisa)
@@ -2046,7 +2055,7 @@ title(main = "LISA, Racial Opportunity Gap")
 
 #Drop NA
 
-df_map_clean <- df_map[!is.na(df_map$rrm_gap_aian), ]
+df_map_clean <- df_map[!is.na(df_map$rrm_gap_aian) ]
 
 # Subset the spatial weights list to match the cleaned data
 lw_clean <- subset(lw, !is.na(df_map$rrm_gap_aian))
@@ -2521,6 +2530,59 @@ anova(sr3ai, sr3a)
 
 ```
 
+#Sara's margin plot code: 
+
+```{r}
+
+# Extract coefficients from spatial error model
+results <- tidy(sr3ai, conf.int = TRUE)
+
+# Filter relevant terms
+results <- results %>%
+  filter(grepl("retention|rrm_gap|prosperity", term)) %>%
+  mutate(significance = ifelse(p.value < 0.05, "Significant", "Not Significant"))
+
+# Extract regime from term name (assuming terms follow "sr3{regime}:{variable}" pattern)
+results <- results %>%
+  mutate(
+    Regime = case_when(
+      grepl("sr3large\\.metro", term) ~ "Large Metro",
+      grepl("sr3small\\.metro", term) ~ "Small Metro",
+      grepl("sr3large\\.nonmetro", term) ~ "Large Nonmetro",
+      grepl("sr3small\\.nonmetro", term) ~ "Small Nonmetro",
+      TRUE ~ "Overall"
+    )
+  )
+
+# Ensure Regime is a factor to control order in plots
+results$Regime <- factor(results$Regime,
+                         levels = c("Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro"))
+
+# Clean variable names for clarity
+results$term <- gsub("sr3large\\.metro:|sr3small\\.metro:|sr3large\\.nonmetro:|sr3small\\.nonmetro:", "", results$term)
+
+# Ensure no empty rows remain after filtering
+results <- results %>% filter(!is.na(estimate))
+
+# Create coefficient plots faceted by Regime (2x2 grid layout)
+plot2 <- ggplot(results, aes(x = estimate, y = term, color = significance)) +
+  geom_point(size = 3) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  facet_wrap(~Regime, ncol = 2, scales = "free_y") +
+  theme_minimal() +
+  scale_color_manual(values = c("Significant" = "#8b0037ff", "Not Significant" = "gray")) +
+  labs(
+    title = "Effects of Retention, ROG, and Interaction on Premature Mortality",
+    x = "Premature Age-Adjusted Mortality",
+    y = "Variable",
+    color = "Significance"
+  ) +
+  theme(legend.position = "bottom")
+
+# plot2
+
+
+```
 
 
 # margin plots
@@ -2667,6 +2729,8 @@ ggplot(cca4, aes(y = fitted, x = retentionint, color = sr3)) +
 
 # rpaam, large metro & large nonmetro
 
+#ASA Model Data
+
 ```{r}
 map = ih_dp$call_geog(2012)
 df_map <- left_join(map, data, by = "place") %>% shift_geometry()
@@ -2686,6 +2750,337 @@ df_latine = temp %>% left_join(y=rpaam, "place") %>% filter(racegr == "Latine")
 
 #ASA Models
 
+###OLS Model 1 + sp auto
+
+####Black 
+
+```{r}
+
+#ols1
+
+##Black
+
+Q2ar <- df_black %>%
+  dplyr::select(rpaam, retention, pct_black, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols1_black = lm(data = Q2ar, rpaam ~ retention + pct_black + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols1_black)
+
+Q2ar$r = ols1_black$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+```
+
+####AIAN
+```{r}
+
+Q2ar <- df_aian %>%
+  dplyr::select(rpaam, retention, pct_ind, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols1_aian = lm(data = Q2ar, rpaam ~ retention + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols1_aian)
+
+Q2ar$r = ols1_aian$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+```
+####API
+```{r}
+
+Q2ar <- df_api %>%
+  dplyr::select(rpaam, retention, pct_asian, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols1_api = lm(data = Q2ar, rpaam ~ retention + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols1_api)
+
+Q2ar$r = ols1_api$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+```
+
+####Latine
+
+```{r}
+
+Q2ar <- df_latine %>%
+  dplyr::select(rpaam, retention, pct_hisp, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols1_latine = lm(data = Q2ar, rpaam ~ retention + pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols1_latine)
+
+Q2ar$r = ols1_latine$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+```
+
+####White
+
+```{r}
+
+Q2ar <- df_white %>%
+  dplyr::select(rpaam, retention, pct_white, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols1_white = lm(data = Q2ar, rpaam ~ retention + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+
+summary(ols1_white)
+
+
+Q2ar$r = ols1_white$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+
+
+```
+
+
+
+
+###OLS Model 3 + sp auto
+
+####Black 
+
+```{r}
+
+#ols1
+
+##Black
+
+Q2ar <- df_black %>%
+  dplyr::select(rpaam, retention, rrm_gap_black, pct_black, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+ols3_black = lm(data = Q2ar, rpaam ~ retention + rrm_gap_black + retention*rrm_gap_black + pct_black + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols3_black)
+
+Q2ar$r = ols3_black$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+```
+
+####AIAN
+```{r}
+
+Q2ar <- df_aian %>%
+  dplyr::select(rpaam, retention, rrm_gap_aian, pct_ind, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+
+ols3_aian = lm(data = Q2ar, rpaam ~ retention + rrm_gap_aian + retention*rrm_gap_aian +  pct_ind  + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+
+summary(ols3_aian)
+
+Q2ar$r = ols3_aian$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+```
+####API
+```{r}
+
+Q2ar <- df_api %>%
+  dplyr::select(rpaam, retention, rrm_gap_asian, pct_asian, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+
+ols3_api = lm(data = Q2ar, rpaam ~ retention + rrm_gap_asian + retention*rrm_gap_asian + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ols3_api)
+
+Q2ar$r = ols3_api$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+```
+
+####Latine
+
+```{r}
+
+Q2ar <- df_latine %>%
+  dplyr::select(rpaam, retention, rrm_gap_hisp, pct_hisp, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+
+ols3_latine = lm(data = Q2ar, rpaam ~ retention + rrm_gap_hisp + retention*rrm_gap_hisp +  pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+summary(ol31_latine)
+
+Q2ar$r = ols3_latine$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+```
+
+####White
+
+```{r}
+
+Q2ar <- df_white %>%
+  dplyr::select(rpaam, retention, rrm_gap, pct_white, pct_mfg, pct_ag, pct_mine, age, prosperity, logpop, uninsured, geometry) %>%
+  na.omit()
+
+
+ols3_white = lm(data = Q2ar, rpaam ~ retention + rrm_gap + retention*rrm_gap + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured)
+
+
+summary(ols3_white)
+
+
+Q2ar$r = ols3_white$resid
+nb <- poly2nb(Q2ar, queen=TRUE)
+lw <- nb2listw(nb, style="W", zero.policy=TRUE)
+lw$weights[5]
+moran.test(Q2ar$r,lw, zero.policy=TRUE)
+w <- queen_weights(Q2ar)
+lisa <- local_moran(w, Q2ar['r'])
+lisa_colors <- lisa_colors(lisa)
+lisa_labels <- lisa_labels(lisa)
+lisa_clusters <- lisa_clusters(lisa)
+plot(
+  Q2ar["r"],  
+  col = sapply(lisa_clusters, function(x) lisa_colors[[x + 1]]),
+  border = "#333333", lwd = 0.2
+)
+
+
+
+
+```
+
+
+
+
 ###Model SE-ROG + controls > rpaam
 
 ```{r}
@@ -2702,15 +3097,15 @@ nb <- poly2nb(df_latine, queen=TRUE)
 lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
-black_SE = errorsarlm(rpaam ~ rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
+black_SE = errorsarlm(rpaam ~ rrm_gap_black + pct_black + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
   listw = lw_black,zero.policy = TRUE)
-white_SE = errorsarlm(rpaam ~ rrm_gap_white + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
+white_SE = errorsarlm(rpaam ~ rrm_gap_white + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
   listw = lw_white,zero.policy = TRUE)
-aian_SE = errorsarlm(rpaam ~ rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
+aian_SE = errorsarlm(rpaam ~ rrm_gap_aian + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
   listw = lw_aian,zero.policy = TRUE)
-api_SE = errorsarlm(rpaam ~ rrm_gap_asian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
+api_SE = errorsarlm(rpaam ~ rrm_gap_asian + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
   listw = lw_api,zero.policy = TRUE)
-latine_SE = errorsarlm(rpaam ~ rrm_gap_hisp + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
+latine_SE = errorsarlm(rpaam ~ rrm_gap_hisp + pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
   listw = lw_latine,zero.policy = TRUE)
 
 
@@ -2740,15 +3135,15 @@ lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
 
-black_S = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+black_S = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(rrm_gap_black + pct_black  + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_black, zero.policy = TRUE)
-white_S = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+white_S = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(rrm_gap + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_white, zero.policy = TRUE)
-aian_S = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+aian_S = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(rrm_gap_aian + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_aian, zero.policy = TRUE)
-api_S = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(rrm_gap_asian +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+api_S = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(rrm_gap_asian +  pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_api, zero.policy = TRUE)
-latine_S = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(rrm_gap_hisp +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+latine_S = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(rrm_gap_hisp +  pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_latine, zero.policy = TRUE)
 # latine_S_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(rrm_gap +  pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
 #                   lw_latine, zero.policy = TRUE)
@@ -2782,15 +3177,15 @@ nb <- poly2nb(df_latine, queen=TRUE)
 lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
-black_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
+black_1 = errorsarlm(rpaam ~ retention + pct_black + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_black,
   listw = lw_black,zero.policy = TRUE)
-white_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
+white_1 = errorsarlm(rpaam ~ retention + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_white,
   listw = lw_white,zero.policy = TRUE)
-aian_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
+aian_1 = errorsarlm(rpaam ~ retention + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_aian,
   listw = lw_aian,zero.policy = TRUE)
-api_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
+api_1 = errorsarlm(rpaam ~ retention + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_api,
   listw = lw_api,zero.policy = TRUE)
-latine_1 = errorsarlm(rpaam ~ retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
+latine_1 = errorsarlm(rpaam ~ retention + pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured, data = df_latine,
   listw = lw_latine,zero.policy = TRUE)
 
 # latine_1_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
@@ -2804,7 +3199,93 @@ summary(aian_1)
 summary(api_1)
 summary(latine_1)
 
+
 ```
+###sp auto
+
+```{r}
+
+#Black_1
+df_black_model <- black_1$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = black_1$y) 
+
+rows_used <- as.numeric(rownames(black_1$X)) 
+df_black_used <- df_black[rows_used, ]    
+
+nb_used <- poly2nb(df_black_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_black <- residuals(black_1)
+moran.test(resid_black, lw_used, zero.policy = TRUE)
+
+
+#AIAN_1
+df_aian_model <- aian_1$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = aian_1$y) 
+
+rows_used <- as.numeric(rownames(aian_1$X)) 
+df_aian_used <- df_aian[rows_used, ]    
+
+nb_used <- poly2nb(df_aian_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_aian <- residuals(aian_1)
+moran.test(resid_aian, lw_used, zero.policy = TRUE)
+
+
+
+#API_1
+df_api_model <- api_1$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = api_1$y) 
+
+rows_used <- as.numeric(rownames(api_1$X)) 
+df_api_used <- df_api[rows_used, ]    
+
+nb_used <- poly2nb(df_api_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_api <- residuals(api_1)
+moran.test(resid_api, lw_used, zero.policy = TRUE)
+
+#Latine_1
+
+df_latine_model <- latine_1$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = latine_1$y) 
+
+rows_used <- as.numeric(rownames(latine_1$X)) 
+df_latine_used <- df_latine[rows_used, ]    
+
+nb_used <- poly2nb(df_latine_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_latine <- residuals(latine_1)
+moran.test(resid_latine, lw_used, zero.policy = TRUE)
+
+
+#White_1
+
+df_white_model <- white_1$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = white_1$y) 
+
+rows_used <- as.numeric(rownames(white_1$X)) 
+df_white_used <- df_white[rows_used, ]    
+
+nb_used <- poly2nb(df_white_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_white <- residuals(white_1)
+moran.test(resid_white, lw_used, zero.policy = TRUE)
+
+
+```
+
+
+
 ### Model 2 - SR- retention  + Controls > rpaam
 
 ```{r}
@@ -2820,15 +3301,15 @@ lw_api <- nb2listw(nb, style="W", zero.policy=TRUE)
 nb <- poly2nb(df_latine, queen=TRUE)
 lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
-black_2 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_black, zero.policy = TRUE)
+black_2 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + pct_black  + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_black, zero.policy = TRUE)
 
-white_2 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_white, zero.policy = TRUE)
+white_2 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention  + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_white, zero.policy = TRUE)
 
-aian_2 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_aian, zero.policy = TRUE)
+aian_2 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention  + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_aian, zero.policy = TRUE)
 
-api_2 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_api, zero.policy = TRUE)
+api_2 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),lw_api, zero.policy = TRUE)
 
-latine_2 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention  + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_latine, zero.policy = TRUE)
+latine_2 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention  + pct_hisp + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured), lw_latine, zero.policy = TRUE)
 # 
 summary(black_2)
 summary(white_2)
@@ -2840,6 +3321,88 @@ summary(latine_2)
 
 ```
 
+###sp auto
+
+```{r}
+
+#Black_2
+df_black_model <- black_2$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = black_2$y) 
+
+rows_used <- as.numeric(rownames(black_2$X)) 
+df_black_used <- df_black[rows_used, ]    
+
+nb_used <- poly2nb(df_black_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_black <- residuals(black_2)
+moran.test(resid_black, lw_used, zero.policy = TRUE)
+
+
+#AIAN_1
+df_aian_model <- aian_2$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = aian_2$y) 
+
+rows_used <- as.numeric(rownames(aian_2$X)) 
+df_aian_used <- df_aian[rows_used, ]    
+
+nb_used <- poly2nb(df_aian_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_aian <- residuals(aian_2)
+moran.test(resid_aian, lw_used, zero.policy = TRUE)
+
+
+
+#API_1
+df_api_model <- api_2$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = api_2$y) 
+
+rows_used <- as.numeric(rownames(api_2$X)) 
+df_api_used <- df_api[rows_used, ]    
+
+nb_used <- poly2nb(df_api_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_api <- residuals(api_2)
+moran.test(resid_api, lw_used, zero.policy = TRUE)
+
+#Latine_1
+
+df_latine_model <- latine_2$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = latine_2$y) 
+
+rows_used <- as.numeric(rownames(latine_2$X)) 
+df_latine_used <- df_latine[rows_used, ]    
+
+nb_used <- poly2nb(df_latine_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_latine <- residuals(latine_2)
+moran.test(resid_latine, lw_used, zero.policy = TRUE)
+
+
+#White_1
+
+df_white_model <- white_2$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = white_2$y) 
+
+rows_used <- as.numeric(rownames(white_2$X)) 
+df_white_used <- df_white[rows_used, ]    
+
+nb_used <- poly2nb(df_white_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_white <- residuals(white_2)
+moran.test(resid_white, lw_used, zero.policy = TRUE)
+
+
+```
 
 ### Model 3 - full model
 
@@ -2857,15 +3420,15 @@ lw_latine <- nb2listw(nb, style="W", zero.policy=TRUE)
 
 
 
-black_3 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap_black + retention*rrm_gap_black + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+black_3 = errorsarlm(data = df_black, rpaam ~ 0 + sr3/(retention + rrm_gap_black + retention*rrm_gap_black + pct_black  + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_black, zero.policy = TRUE)
-white_3 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+white_3 = errorsarlm(data = df_white, rpaam ~ 0 + sr3/(retention + rrm_gap + retention*rrm_gap + pct_white + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_white, zero.policy = TRUE)
-aian_3 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap_aian + retention*rrm_gap_aian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+aian_3 = errorsarlm(data = df_aian, rpaam ~ 0 + sr3/(retention + rrm_gap_aian + retention*rrm_gap_aian + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_aian, zero.policy = TRUE)
-api_3 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap_asian + retention*rrm_gap_asian + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+api_3 = errorsarlm(data = df_api, rpaam ~ 0 + sr3/(retention + rrm_gap_asian + retention*rrm_gap_asian + pct_asian + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_api, zero.policy = TRUE)
-latine_3 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap_hisp + retention*rrm_gap_hisp + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
+latine_3 = errorsarlm(data = df_latine, rpaam ~ 0 + sr3/(retention + rrm_gap_hisp + retention*rrm_gap_hisp + pct_hisp  + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
                   lw_latine, zero.policy = TRUE)
 # latine_i_top = errorsarlm(data = df_latine_top, rpaam ~ 0 + sr3/(retention + rrm_gap_hisp_hisp + retention*rrm_gap + pct_black + pct_hisp + pct_ind + pct_mfg + pct_ag + pct_mine + age + prosperity + logpop + uninsured),
 #                   lw_latine, zero.policy = TRUE)
@@ -2879,6 +3442,93 @@ summary(api_3)
 summary(latine_3)
 
 ```
+
+###sp auto
+
+```{r}
+
+#Black
+df_black_model <- black_3$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = black_3$y) 
+
+rows_used <- as.numeric(rownames(black_3$X)) 
+df_black_used <- df_black[rows_used, ]    
+
+nb_used <- poly2nb(df_black_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_black <- residuals(black_3)
+moran.test(resid_black, lw_used, zero.policy = TRUE)
+
+
+#AIAN
+df_aian_model <- aian_3$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = aian_3$y) 
+
+rows_used <- as.numeric(rownames(aian_3$X)) 
+df_aian_used <- df_aian[rows_used, ]    
+
+nb_used <- poly2nb(df_aian_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_aian <- residuals(aian_3)
+moran.test(resid_aian, lw_used, zero.policy = TRUE)
+
+
+
+#API_1
+df_api_model <- api_3$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = api_3$y) 
+
+rows_used <- as.numeric(rownames(api_3$X)) 
+df_api_used <- df_api[rows_used, ]    
+
+nb_used <- poly2nb(df_api_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_api <- residuals(api_3)
+moran.test(resid_api, lw_used, zero.policy = TRUE)
+
+#Latine_1
+
+df_latine_model <- latine_3$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = latine_3$y) 
+
+rows_used <- as.numeric(rownames(latine_3$X)) 
+df_latine_used <- df_latine[rows_used, ]    
+
+nb_used <- poly2nb(df_latine_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_latine <- residuals(latine_3)
+moran.test(resid_latine, lw_used, zero.policy = TRUE)
+
+
+#White_1
+
+df_white_model <- white_3$X %>%
+  as.data.frame() %>%
+  mutate(rpaam = white_3$y) 
+
+rows_used <- as.numeric(rownames(white_3$X)) 
+df_white_used <- df_white[rows_used, ]    
+
+nb_used <- poly2nb(df_white_used, queen = TRUE)
+lw_used <- nb2listw(nb_used, style = "W", zero.policy = TRUE)
+
+resid_white <- residuals(white_3)
+moran.test(resid_white, lw_used, zero.policy = TRUE)
+
+
+```
+
+
+
+
 
 ##Full model- varying rpaam calc
 ```{r}
@@ -2955,28 +3605,28 @@ anova(latine_2, latine_3)
 ```
 
 
-### sp auto
+<!-- ### sp auto -->
 
-```{r}
+<!-- ```{r} -->
 
-Q2ar = df_black
-Q2ar$r = sr3a$resid
-nb <- poly2nb(Q2ar, queen=TRUE)
-lw <- nb2listw(nb, style="W", zero.policy=TRUE)
-lw$weights[5]
-moran.test(Q2ar$r,lw, zero.policy=TRUE)
-w <- queen_weights(Q2ar)
-lisa <- local_moran(w, Q2ar['r'])
-lisa_colors <- lisa_colors(lisa)
-lisa_labels <- lisa_labels(lisa)
-lisa_clusters <- lisa_clusters(lisa)
-Q2ar = Q2ar %>%
-  filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii")
-plot(st_geometry(Q2ar),
-     col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}),
-     border = "#333333", lwd=0.2)
+<!-- Q2ar = df_black -->
+<!-- Q2ar$r = black_1$resid -->
+<!-- nb <- poly2nb(Q2ar, queen=TRUE) -->
+<!-- lw <- nb2listw(nb, style="W", zero.policy=TRUE) -->
+<!-- lw$weights[5] -->
+<!-- moran.test(Q2ar$r,lw, zero.policy=TRUE) -->
+<!-- w <- queen_weights(Q2ar) -->
+<!-- lisa <- local_moran(w, Q2ar['r']) -->
+<!-- lisa_colors <- lisa_colors(lisa) -->
+<!-- lisa_labels <- lisa_labels(lisa) -->
+<!-- lisa_clusters <- lisa_clusters(lisa) -->
+<!-- Q2ar = Q2ar %>% -->
+<!--   filter(STATE_NAME != "Alaska" & STATE_NAME != "Hawaii") -->
+<!-- plot(st_geometry(Q2ar), -->
+<!--      col=sapply(lisa_clusters, function(x){return(lisa_colors[[x+1]])}), -->
+<!--      border = "#333333", lwd=0.2) -->
 
-```
+<!-- ``` -->
 
 ###Print Results to Excel
 
@@ -3182,6 +3832,98 @@ write_xlsx(results_list, path = "SR_regression_results-white.xlsx")
 
 
 # margin plots
+
+#Sara's margin plot code: 
+```{r}
+
+library(broom)
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(stringr)
+
+## Define your list of models by group name
+model_list <- list(
+  aian = aian_3,
+  api = api_3,
+  black = black_3,
+  latine = latine_3,
+  white = white_3
+)
+
+
+plot_data <- map_dfr(names(model_list), function(group) {
+  model <- model_list[[group]]
+  
+  results <- tidy(model, conf.int = TRUE)
+
+  results$term_clean <- case_when(
+    grepl(paste0("sr3.*:retention:rrm_gap_", group, "$"), results$term) ~ "Retention:ROG",
+    grepl("retention", results$term) & !grepl("rrm_gap", results$term) ~ "Retention",
+    TRUE ~ NA_character_
+  )
+  
+  results <- results %>%
+    filter(!is.na(term_clean)) %>%
+    mutate(
+      significance = ifelse(p.value < 0.05, "Significant", "Not Significant"),
+      Regime = case_when(
+        grepl("large_metro", term) ~ "Large Metro",
+        grepl("small_metro", term) ~ "Small Metro",
+        grepl("large_nonmetro", term) ~ "Large Nonmetro",
+        grepl("small_nonmetro", term) ~ "Small Nonmetro",
+        TRUE ~ "Other"
+      ),
+      racial_group = str_to_title(group)
+    )
+  
+  return(results)
+})
+
+
+plot_data <- plot_data %>%
+  mutate(
+    Regime = factor(Regime, levels = c("Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro")),
+    term_clean = factor(term_clean, levels = c("Retention", "Retention:ROG")),
+    racial_group = factor(racial_group, levels = c("White", "Black", "Latine", "Api", "Aian"))
+  )
+
+# Split the data by racial group and create plots
+plot_data_list <- split(plot_data, plot_data$racial_group)
+
+group_plots <- map(names(plot_data_list), function(group_name) {
+  group_df <- plot_data_list[[group_name]]
+  
+  ggplot(group_df, aes(x = estimate, y = term_clean, color = significance)) +
+    geom_point(size = 3) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+    facet_wrap(~ Regime, ncol = 2) +
+    scale_color_manual(values = c("Significant" = "#8b0037ff", "Not Significant" = "gray70")) +
+    labs(
+      title = paste("Effects for", group_name),
+      x = "Premature Age-Adjusted Mortality",
+      y = "Variable",
+      color = "Significance"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(legend.position = "bottom")
+})
+
+
+names(group_plots) <- names(plot_data_list)
+
+# Example: Show plot for Black group
+group_plots$Black
+group_plots$White
+group_plots$Latine
+group_plots$Api
+group_plots$Aian
+
+```
+
+
+
+
 
 clayton's notes:
 okay, so I think I figured out to do something similar to margin plots manually. What I'm doing is extracting the predicted (fitted) values from our models, reading in other data, and plotting fitted values as our Y axis and a number of X vars as our X axis and colors.
