@@ -4173,6 +4173,334 @@ plot_retention_rog
 
 ```
 
+###Model 3- Marginal Effects Plot
+
+
+```{r}
+
+
+sr3_labels <- c(
+  large_metro = "Large Metro",
+  small_metro = "Small Metro",
+  large_nonmetro = "Large Nonmetro",
+  small_nonmetro = "Small Nonmetro"
+)
+
+#compute quantiles for a specific ROG variable in a data frame
+ get_rog_quantiles  <- function(df, racial_group, rog_var, regime_var = "sr3", regime_lookup = sr3_labels) {
+  if (!rog_var %in% colnames(df) || !regime_var %in% colnames(df)) {
+    return(tibble(
+      racial_group = racial_group,
+      Regime = character(),
+      ROG_25 = numeric(),
+      ROG_50 = numeric(),
+      ROG_75 = numeric()
+    ))
+  }
+
+  regime_df <- tibble::enframe(regime_lookup, name = "sr3_code", value = "Regime")
+
+  df %>%
+    filter(!is.na(.data[[rog_var]]), !is.na(.data[[regime_var]])) %>%
+    group_by(sr3_code = .data[[regime_var]]) %>%
+    summarise(
+      ROG_25 = quantile(.data[[rog_var]], 0.25, na.rm = TRUE),
+      ROG_50 = quantile(.data[[rog_var]], 0.50, na.rm = TRUE),
+      ROG_75 = quantile(.data[[rog_var]], 0.75, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    left_join(regime_df, by = "sr3_code") %>%
+    mutate(racial_group = racial_group) %>%
+    select(racial_group, Regime, ROG_25, ROG_50, ROG_75)
+}
+
+
+ #model dataframes
+df_list <- list(
+  "Black" = df_black,
+  "White" = df_white,
+  "Latine" = df_latine,
+  "API" = df_api,
+  "AIAN" = df_aian
+)
+
+
+# Lookup for the ROG variable used in each model
+rog_lookup <- list(
+  "Black" = "rrm_gap_black",
+  "White" = "rrm_gap",
+  "Latine" = "rrm_gap_hisp",
+  "API" = "rrm_gap_asian",
+  "AIAN" = "rrm_gap_aian"
+)
+
+
+# Apply quantile function to each model
+rog_quants <- map2_dfr(
+  names(df_list),
+  df_list,
+  ~ get_rog_quantiles (
+      df = .y,
+      racial_group = .x,
+      rog_var = rog_lookup[[.x]],
+      regime_lookup = sr3_labels
+    )
+)
+
+rog_quants <- rog_quants %>%
+  mutate(
+    racial_group = recode(racial_group,
+      "API" = "Asian Pacific Islander",
+      "AIAN" = "Indigenous"
+    )
+  )
+
+plot_data_complete_ME <- plot_data_complete %>%
+  left_join(rog_quants, by = c("racial_group", "Regime"))
+
+
+
+#create dataframe for easier ME calcuation: 
+rog_long <- plot_data_complete_ME %>%
+  pivot_longer(
+    cols = starts_with("ROG_"),
+    names_to = "quantile",
+    names_prefix = "ROG_",
+    values_to = "rog_value"
+  )
+
+estimates_wide <- plot_data_complete %>%
+  filter(term_label %in% c("Retention", "Retention × ROG")) %>%
+  select(racial_group, Regime, term_label, estimate, std.error) %>%
+  pivot_wider(names_from = term_label, values_from = c(estimate, std.error)) %>%
+  left_join(rog_quants, by = c("racial_group", "Regime")) 
+
+estimates_wide <- estimates_wide %>%
+  rename(
+    estimate_interaction = `estimate_Retention × ROG`,
+    std_error_interaction = `std.error_Retention × ROG`
+  )
+
+
+## calculate marginal effects
+marginal_effects_df <- estimates_wide %>%
+ pivot_longer(
+    cols = starts_with("ROG_"),
+    names_to = "quantile",
+    names_prefix = "ROG_",
+    values_to = "rog_value"
+  ) %>%
+  mutate(
+    estimate = estimate_Retention + estimate_interaction * rog_value,
+    se = sqrt(std.error_Retention^2 + (rog_value^2) * std_error_interaction^2),
+    conf.low = estimate - 1.96 * se,
+    conf.high = estimate + 1.96 * se,
+    significance = if_else(conf.low > 0 | conf.high < 0, "Significant", "Not Significant")
+  )
+
+
+plot_marginal_effects<- ggplot(marginal_effects_df, aes(x = estimate, y = racial_group)) +
+  geom_point(aes(shape = significance, color = racial_group), size = 3) +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high, color = racial_group), height = 0.2) +
+  facet_wrap(~ Regime, ncol = 4) +
+  geom_vline(xintercept = 0, color = "black") +
+  # add your preferred styling from previous versions here
+  labs(title = "Marginal Effects of Retention on Premature Mortality\nat Different ROG Quantiles")
+
+## plot marginal effects
+
+
+marginal_effects_df <- marginal_effects_df %>%
+  mutate(racial_group = factor(racial_group, levels = c(
+    "Indigenous", "Asian Pacific Islander", "Black", "Latine", "White"
+  )))
+
+
+marginal_effects_df <- marginal_effects_df %>%
+  mutate(Regime = factor(Regime, levels = c(
+    "Large Metro", "Small Metro", "Large Nonmetro", "Small Nonmetro"
+  )))
+
+marginal_effects_df$quantile <- factor(marginal_effects_df$quantile, levels = c("25", "50", "75"))
+
+plot_marginal_effects <- ggplot(marginal_effects_df, aes(x = estimate, y = racial_group)) +
+  geom_point(
+    aes(shape = significance, color = racial_group),
+    size = 3,
+    position = position_dodge(width = 0.6),
+    na.rm = TRUE
+  ) +
+  geom_errorbarh(
+    aes(xmin = conf.low, xmax = conf.high, color = racial_group),
+    height = 0.2,
+    position = position_dodge(width = 0.6),
+    na.rm = TRUE
+  ) +
+  geom_vline(xintercept = 0, linetype = "solid", color = "black", linewidth = 0.6) +
+  facet_wrap(~ Regime, ncol = 4) +
+  scale_color_manual(values = c(
+    "White" = "#377eb8",
+    "Latine" = "#ff7f00",
+    "Black" = "#e41a1c",
+    "Asian Pacific Islander" = "#4daf4a",
+    "Indigenous" = "#984ea3"
+  ), guide = "none") +
+  scale_shape_manual(values = c("Not Significant" = 16, "Significant" = 17, "Not Estimated" = NA)) +
+  labs(
+    title = "Marginal Effects of Retention on Premature Mortality\nat Different ROG Quantiles",
+    x = "Estimated Effect",
+    y = NULL,
+    shape = "Significance"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "bottom",
+    legend.box = "vertical",
+    legend.title.align = 0.5,
+    strip.text = element_text(size = 10, face = "bold"),
+    axis.text.x = element_text(size = 8),
+    axis.text.y = element_text(size = 10),
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold"),
+    panel.spacing.x = unit(1.5, "lines")
+  )
+
+plot_marginal_effects
+
+###separate plots with patchwork 
+
+plot_by_regime <- function(df, regime_label) {
+  df %>%
+    filter(Regime == regime_label) %>%
+    mutate(
+      racial_group = factor(
+        racial_group,
+        levels = rev(c("Indigenous", "Asian Pacific Islander", "Black", "Latine", "White"))
+      ),
+      shape = case_when(
+        quantile == 25 ~ 21,
+        quantile == 50 ~ 22,
+        quantile == 75 ~ 24
+      ),
+      fill = if_else(
+        significance == "Significant",
+        case_when(
+          racial_group == "White" ~ "#377eb8",
+          racial_group == "Latine" ~ "#ff7f00",
+          racial_group == "Black" ~ "#e41a1c",
+          racial_group == "Asian Pacific Islander" ~ "#4daf4a",
+          racial_group == "Indigenous" ~ "#984ea3"
+        ),
+        "white"
+      )
+    ) %>%
+    ggplot(aes(x = estimate, y = racial_group)) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high, color = racial_group),
+                   height = 0.2, na.rm = TRUE) +
+    geom_point(aes(shape = factor(quantile), fill = fill, color = racial_group),
+               size = 3, stroke = 1, na.rm = TRUE) +
+    geom_vline(xintercept = 0, linetype = "solid", color = "black", linewidth = 0.6) +
+    scale_shape_manual(
+      name = "ROG Quantile",
+      values = c("25" = 21, "50" = 22, "75" = 24)
+    ) +
+    scale_fill_identity() +
+    scale_color_manual(
+      values = c(
+        "White" = "#377eb8",
+        "Latine" = "#ff7f00",
+        "Black" = "#e41a1c",
+        "Asian Pacific Islander" = "#4daf4a",
+        "Indigenous" = "#984ea3"
+      ),
+      guide = "none"
+    ) +
+    labs(
+      title = regime_label,
+      x = NULL,
+      y = NULL
+    ) +
+    theme_minimal(base_size = 14) +
+theme(
+  legend.position = "bottom",
+  legend.title = element_text(size = 12),
+  strip.text = element_text(size = 10, face = "bold"),
+  axis.text.x = element_text(size = 8),
+  axis.text.y = if (regime_label %in% c("Small Metro", "Small Nonmetro")) element_blank() else element_text(size = 10),
+  plot.title = element_text(hjust = 0.5, size = 10, face = "bold"),
+  panel.spacing.x = unit(1.5, "lines")
+)
+}
+  
+LMP <- plot_by_regime(marginal_effects_df, "Large Metro")
+SMP <- plot_by_regime(marginal_effects_df, "Small Metro")
+LNP <- plot_by_regime(marginal_effects_df, "Large Nonmetro")
+SNP <- plot_by_regime(marginal_effects_df, "Small Nonmetro")
+
+print(LMP)
+print(SMP)
+print(LNP)
+print(SNP)
+
+
+LMPp <- LMP + theme(legend.position = "none") + labs(x = NULL)
+SMPp <- SMP + theme(legend.position = "none") + labs(x = NULL)
+LNPp <- LNP + theme(legend.position = "none") + labs(x = NULL)
+
+final_plot <- (LMPp + SMPp) / (LNPp + SNP) +
+  plot_annotation(
+    title = "Marginal Effects of Retention on Premature Mortality\n by ROG Quantile and Rurality Regime",
+    theme = theme(
+      plot.title = element_text(hjust = 0.5, size = 14, face = "bold")
+    )
+  )
+
+final_plot
+
+```
+
+####Alt Marginal Effects Code
+```{r}
+
+# Ensure racial group is ordered as desired
+marginal_effects_df$racial_group <- factor(
+  marginal_effects_df$racial_group,
+  levels = c("White", "Latine", "Black", "Asian Pacific Islander", "Indigenous")
+)
+
+# Plot
+alt_margins_plot <- ggplot(marginal_effects_df, aes(x = rog_value, y = estimate,
+                                color = racial_group, shape = racial_group)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ Regime, ncol = 2) +
+  scale_color_manual(values = c(
+    "White" = "#377eb8",
+    "Latine" = "#ff7f00",
+    "Black" = "#e41a1c",
+    "Asian Pacific Islander" = "#4daf4a",
+    "Indigenous" = "#984ea3"
+  )) +
+  labs(
+    title = "Marginal Effect of Retention on Premature Mortality\nAcross ROG Levels by Regime and Racial Group",
+    x = "ROG Value (Quantile Level)",
+    y = "Estimated Marginal Effect",
+    color = "Racial Group",
+    shape = "Racial Group"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",
+    legend.box = "vertical",
+    legend.title = element_text(size = 12),
+    strip.text = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10),
+    plot.title = element_text(hjust = 0.5, face = "bold")
+  )
+
+
+alt_margins_plot
+
+```
 
 
 
