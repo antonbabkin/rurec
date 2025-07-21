@@ -4381,17 +4381,7 @@ plot_by_regime <- function(df, regime_label) {
         quantile == 50 ~ 22,
         quantile == 75 ~ 24
       ),
-      fill = if_else(
-        significance == "Significant",
-        case_when(
-          racial_group == "White" ~ "#377eb8",
-          racial_group == "Latine" ~ "#ff7f00",
-          racial_group == "Black" ~ "#e41a1c",
-          racial_group == "Asian Pacific Islander" ~ "#4daf4a",
-          racial_group == "Indigenous" ~ "#984ea3"
-        ),
-        "white"
-      )
+      fill =  "white"
     ) %>%
     ggplot(aes(x = estimate, y = racial_group)) +
     geom_errorbarh(aes(xmin = conf.low, xmax = conf.high, color = racial_group),
