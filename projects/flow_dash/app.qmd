@@ -1,0 +1,48 @@
+---
+title: "flow_dash"
+format: html
+---
+
+```{r}
+
+library(tidyverse)
+library(leaflet)
+options(tigris_use_cache = TRUE)
+
+source("R/bea_io.R", local = (bea_io <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+
+
+appdata <- list()
+saveRDS(appdata, "projects/flow_dash/app.rds")
+```
+
+
+# commodity classification
+
+```{r}
+appdata$com_codes <- bea_io$concordance() %>%
+  filter(commodity) %>%
+  select(!c(naics, naics6, industry, commodity)) %>%
+  distinct() %>%
+  mutate(code = case_match(ilevel, "sector" ~ sector, "summary" ~ summary, "u_summary" ~ u_summary, "detail" ~ detail), .before = title)
+
+```
+
+
+
+
+
+# sup-dem balance
+
+```{r}
+df_supdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  mutate(exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+
+
+```
+
+
