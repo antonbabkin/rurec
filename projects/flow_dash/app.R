@@ -28,10 +28,32 @@ agg_outsupdem <- function(
     summarize(across(output:exdem, sum), .by = place)
 }
 
+com_selector_choices <- function(ilevel, higher_code = NULL) {
+  if (!is.null(higher_code) && higher_code == "TOTAL") return("TOTAL")
+  
+  x <- appdata$com_codes |>
+    filter(ilevel == !!ilevel)
+  x <- switch(
+    ilevel,
+    sector = x,
+    summary = filter(x, sector == higher_code),
+    u_summary = filter(x, summary == higher_code),
+    detail = filter(x, u_summary == higher_code)
+  )
+  x |>
+    mutate(label = paste0(code, ": ", title)) |> 
+    pull(code, name = label) |> 
+    as.list() %>%
+    c(list("TOTAL" = "TOTAL"), .)
+}
+
 ui <- fluidPage(
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+  ),
   fluidRow(
     # sector selector
-    column(3, selectInput("com_sector", "Sector:", choices = appdata$com_codes %>% filter(ilevel == "sector") %>% pull(code) %>% c("TOTAL", .))),
+    column(3, selectInput("com_sector", "Sector:", choices = com_selector_choices("sector"))),
     # summary selector: only show if sector is selected
     column(3, conditionalPanel(
       "input.com_sector !== 'TOTAL'",
@@ -40,7 +62,7 @@ ui <- fluidPage(
     # u_summary selector: only show if summary is selected
     column(3, conditionalPanel(
       "input.com_summary !== 'TOTAL'",
-      selectInput("com_u_summary", "Und. Summary:", choices = "TOTAL")
+      selectInput("com_u_summary", "Underlying Summary:", choices = "TOTAL")
     )),
     # detail selector: only show if u_summary is selected
     column(3, conditionalPanel(
@@ -49,7 +71,7 @@ ui <- fluidPage(
     ))
   ),
   fluidRow(tabsetPanel(
-    tabPanel("codes", reactableOutput("com_codes")),
+    tabPanel("commodities", reactableOutput("com_codes")),
     tabPanel("outsupdem", reactableOutput("tbl_outsupdem"))
   ))
 )
@@ -87,26 +109,20 @@ server <- function(input, output) {
   })
   
   
+  # when sector changes, update available summary choices
   observeEvent(input$com_sector, {
     freezeReactiveValue(input, "com_summary")
     freezeReactiveValue(input, "com_u_summary")
-    updateSelectInput(
-      inputId = "com_summary", 
-      choices = if (input$com_sector == "TOTAL") "TOTAL" 
-      else appdata$com_codes %>% filter(sector == input$com_sector, ilevel == "summary") %>% pull(code) %>% c("TOTAL", .))
+    updateSelectInput(inputId = "com_summary", choices = com_selector_choices("summary", input$com_sector))
   })
+  # when summary changes, update available u_summary choices
   observeEvent(input$com_summary, {
     freezeReactiveValue(input, "com_u_summary")
-    updateSelectInput(
-      inputId = "com_u_summary", 
-      choices = if (input$com_summary == "TOTAL") "TOTAL"
-      else appdata$com_codes %>% filter(summary == input$com_summary, ilevel == "u_summary") %>% pull(code) %>% c("TOTAL", .))
+    updateSelectInput(inputId = "com_u_summary", choices = com_selector_choices("u_summary", input$com_summary))
   })
+  # when u_summary changes, update available detail choices
   observeEvent(input$com_u_summary, {
-    updateSelectInput(
-      inputId = "com_detail", 
-      choices = if (input$com_u_summary == "TOTAL") "TOTAL"
-      else appdata$com_codes %>% filter(u_summary == input$com_u_summary, ilevel == "detail") %>% pull(code) %>% c("TOTAL", .))
+    updateSelectInput(inputId = "com_detail", choices = com_selector_choices("detail", input$com_u_summary))
   })
   
   output$com_codes <- renderReactable(
