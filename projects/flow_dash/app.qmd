@@ -4,7 +4,6 @@ format: html
 ---
 
 ```{r}
-
 library(tidyverse)
 library(leaflet)
 options(tigris_use_cache = TRUE)
@@ -14,10 +13,23 @@ source("R/geography.R", local = (geography <- new.env()))
 source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
 source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
 source("R/place_io.R", local = (place_io <- new.env()))
+```
 
 
+```{r}
 appdata <- list()
-saveRDS(appdata, "projects/flow_dash/app.rds")
+# saveRDS(appdata, "projects/flow_dash/app.rds")
+
+input <- list(
+  # com_sector = "TOTAL",
+  com_sector = "11",
+  # com_summary = "TOTAL",
+  com_summary = "111CA",
+  # com_u_summary = "TOTAL",
+  com_u_summary = "111",
+  # com_detail = "TOTAL",
+  com_detail = "1111A0"
+)
 ```
 
 
@@ -30,19 +42,21 @@ appdata$com_codes <- bea_io$concordance() %>%
   distinct() %>%
   mutate(code = case_match(ilevel, "sector" ~ sector, "summary" ~ summary, "u_summary" ~ u_summary, "detail" ~ detail), .before = title)
 
+appdata$com_codes
 ```
 
 
 
+# output, supply, demand
 
-
-# sup-dem balance
+At detail level.
 
 ```{r}
-df_supdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
-  mutate(exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+appdata$outsupdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  select(!com_name) %>%
+  mutate(netsup = supply - demand, exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
 
-
+appdata$outsupdem
 ```
 
 

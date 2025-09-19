@@ -5,6 +5,8 @@ library(tidyverse)
 
 appdata <- readRDS("app.rds")
 
+
+
 ui <- fluidPage(
   fluidRow(
     column(3, selectInput("com_sector", "Sector:", choices = appdata$com_codes %>% filter(ilevel == "sector") %>% pull(code) %>% c("TOTAL", .))),
@@ -12,7 +14,10 @@ ui <- fluidPage(
     column(3, selectInput("com_u_summary", "Und. Summary:", choices = "TOTAL")),
     column(3, selectInput("com_detail", "Detail:", choices = "TOTAL"))
   ),
-  fluidRow(reactableOutput("com_codes"))
+  fluidRow(tabsetPanel(
+    tabPanel("outsupdem", reactableOutput("tbl_outsupdem")),
+    tabPanel("codes", reactableOutput("com_codes"))
+  ))
 )
 
 
@@ -26,6 +31,39 @@ server <- function(input, output) {
       {if (input$com_u_summary != "TOTAL") filter(., u_summary == input$com_u_summary) else .} %>%
       {if (input$com_detail != "TOTAL") filter(., detail == input$com_detail) else .}
   })
+  
+  # filter and aggregate output, supply and demand for selected industry
+  tbl_outsupdem <- reactive({
+    if (input$com_sector == "TOTAL") {
+      # aggregate across all industries
+      appdata$outsupdem |>
+        summarize(across(output:exdem, sum), .by = place)
+    } else if (input$com_summary == "TOTAL") {
+      # aggregate across industries within selected sector
+      appdata$outsupdem |>
+        left_join(distinct(appdata$com_codes, detail, sector), join_by(com_code == detail)) |>
+        filter(sector == input$com_sector) |>
+        summarize(across(output:exdem, sum), .by = place)
+    } else if (input$com_u_summary == "TOTAL") {
+      # aggregate across industries within selected summary
+      appdata$outsupdem |>
+        left_join(distinct(appdata$com_codes, detail, summary), join_by(com_code == detail)) |>
+        filter(summary == input$com_summary) |>
+        summarize(across(output:exdem, sum), .by = place)
+    } else if (input$com_detail == "TOTAL") {
+      # aggregate across industries within selected u_summary
+      appdata$outsupdem |>
+        left_join(distinct(appdata$com_codes, detail, u_summary), join_by(com_code == detail)) |>
+        filter(u_summary == input$com_u_summary) |>
+        summarize(across(output:exdem, sum), .by = place)
+    } else {
+      # filter selected detail industry
+      appdata$outsupdem |>
+        filter(com_code == input$com_detail) |>
+        select(!com_code)
+    }
+  })
+  
   
   observeEvent(input$com_sector, {
     freezeReactiveValue(input, "com_summary")
@@ -53,6 +91,11 @@ server <- function(input, output) {
     com_codes() %>% 
       select(!c(ilevel, code)) %>% 
       reactable(sortable = FALSE, defaultColDef = colDef(maxWidth = 100), columns = list(title = colDef(maxWidth = 1000))))
+  
+  output$tbl_outsupdem <- renderReactable(
+    tbl_outsupdem() |>
+      reactable()
+  )
 }
 
 shinyApp(ui = ui, server = server)
