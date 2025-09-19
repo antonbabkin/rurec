@@ -6,6 +6,7 @@ format: html
 ```{r}
 library(tidyverse)
 library(leaflet)
+library(tmap)
 options(tigris_use_cache = TRUE)
 
 source("R/bea_io.R", local = (bea_io <- new.env()))
@@ -58,5 +59,37 @@ appdata$outsupdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
 
 appdata$outsupdem
 ```
+
+
+```{r}
+agg_outsupdem("total") |>
+  reactable(defaultColDef = colDef(format = colFormat(digits = 0, separators = TRUE)))
+```
+
+
+# shapes
+
+```{r}
+# tigris::counties(cb = TRUE, resolution = "20m", year == 2023)
+
+appdata$geo <- readRDS("data/geo/county/2013_20m_TRUE.rds") |>
+  rename_with(tolower) |>
+  filter(!(state_code %in% c("02", "15", "72")))
+  
+# state
+# readRDS("data/geo/state/20m_FALSE.rds")
+```
+
+```{r}
+appdata$geo |>
+  left_join(agg_outsupdem("total"), join_by(code == place)) |>
+  tm_shape() +
+  tm_fill("output")
+  # tm_fill("imports") +
+  #   tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
+  #   tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
+  #   tm_layout(main.title = glue("Imports of \"{industry_code}\" to {focus_county}"))
+```
+
 
 

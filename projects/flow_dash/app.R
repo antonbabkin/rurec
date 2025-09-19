@@ -5,18 +5,52 @@ library(tidyverse)
 
 appdata <- readRDS("app.rds")
 
-
+agg_outsupdem <- function(
+    ilevel = c("total", "sector", "summary", "u_summary", "detail"), 
+    code = NULL) {
+  ilevel <- match.arg(ilevel)
+  
+  switch(
+    ilevel,
+    total = appdata$outsupdem,
+    sector = appdata$outsupdem |>
+      left_join(distinct(appdata$com_codes, detail, sector), join_by(com_code == detail)) |>
+      filter(sector == code),
+    summary = appdata$outsupdem |>
+      left_join(distinct(appdata$com_codes, detail, summary), join_by(com_code == detail)) |>
+      filter(summary == code),
+    u_summary = appdata$outsupdem |>
+      left_join(distinct(appdata$com_codes, detail, u_summary), join_by(com_code == detail)) |>
+      filter(u_summary == code),
+    detail = appdata$outsupdem |>
+      filter(com_code == code)
+  ) |>
+    summarize(across(output:exdem, sum), .by = place)
+}
 
 ui <- fluidPage(
   fluidRow(
+    # sector selector
     column(3, selectInput("com_sector", "Sector:", choices = appdata$com_codes %>% filter(ilevel == "sector") %>% pull(code) %>% c("TOTAL", .))),
-    column(3, selectInput("com_summary", "Summary:", choices = "TOTAL")),
-    column(3, selectInput("com_u_summary", "Und. Summary:", choices = "TOTAL")),
-    column(3, selectInput("com_detail", "Detail:", choices = "TOTAL"))
+    # summary selector: only show if sector is selected
+    column(3, conditionalPanel(
+      "input.com_sector !== 'TOTAL'",
+      selectInput("com_summary", "Summary:", choices = "TOTAL")
+    )),
+    # u_summary selector: only show if summary is selected
+    column(3, conditionalPanel(
+      "input.com_summary !== 'TOTAL'",
+      selectInput("com_u_summary", "Und. Summary:", choices = "TOTAL")
+    )),
+    # detail selector: only show if u_summary is selected
+    column(3, conditionalPanel(
+      "input.com_u_summary !== 'TOTAL'",
+      selectInput("com_detail", "Detail:", choices = "TOTAL")
+    ))
   ),
   fluidRow(tabsetPanel(
-    tabPanel("outsupdem", reactableOutput("tbl_outsupdem")),
-    tabPanel("codes", reactableOutput("com_codes"))
+    tabPanel("codes", reactableOutput("com_codes")),
+    tabPanel("outsupdem", reactableOutput("tbl_outsupdem"))
   ))
 )
 
@@ -36,31 +70,19 @@ server <- function(input, output) {
   tbl_outsupdem <- reactive({
     if (input$com_sector == "TOTAL") {
       # aggregate across all industries
-      appdata$outsupdem |>
-        summarize(across(output:exdem, sum), .by = place)
+      agg_outsupdem("total")
     } else if (input$com_summary == "TOTAL") {
       # aggregate across industries within selected sector
-      appdata$outsupdem |>
-        left_join(distinct(appdata$com_codes, detail, sector), join_by(com_code == detail)) |>
-        filter(sector == input$com_sector) |>
-        summarize(across(output:exdem, sum), .by = place)
+      agg_outsupdem("sector", input$com_sector)
     } else if (input$com_u_summary == "TOTAL") {
       # aggregate across industries within selected summary
-      appdata$outsupdem |>
-        left_join(distinct(appdata$com_codes, detail, summary), join_by(com_code == detail)) |>
-        filter(summary == input$com_summary) |>
-        summarize(across(output:exdem, sum), .by = place)
+      agg_outsupdem("summary", input$com_summary)
     } else if (input$com_detail == "TOTAL") {
       # aggregate across industries within selected u_summary
-      appdata$outsupdem |>
-        left_join(distinct(appdata$com_codes, detail, u_summary), join_by(com_code == detail)) |>
-        filter(u_summary == input$com_u_summary) |>
-        summarize(across(output:exdem, sum), .by = place)
+      agg_outsupdem("u_summary", input$com_u_summary)
     } else {
       # filter selected detail industry
-      appdata$outsupdem |>
-        filter(com_code == input$com_detail) |>
-        select(!com_code)
+      agg_outsupdem("detail", input$com_detail)
     }
   })
   
@@ -94,7 +116,7 @@ server <- function(input, output) {
   
   output$tbl_outsupdem <- renderReactable(
     tbl_outsupdem() |>
-      reactable()
+      reactable(defaultColDef = colDef(format = colFormat(digits = 0, separators = TRUE)))
   )
 }
 
