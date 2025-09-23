@@ -20,6 +20,7 @@ source("R/place_io.R", local = (place_io <- new.env()))
 ```{r}
 appdata <- list()
 # saveRDS(appdata, "projects/flow_dash/app.rds")
+# appdata <- readRDS("projects/flow_dash/app.rds")
 
 input <- list(
   # com_sector = "TOTAL",
@@ -29,7 +30,8 @@ input <- list(
   # com_u_summary = "TOTAL",
   com_u_summary = "111",
   # com_detail = "TOTAL",
-  com_detail = "1111A0"
+  com_detail = "1111A0",
+  map_osd_var = "netsup"
 )
 ```
 
@@ -61,34 +63,82 @@ appdata$outsupdem
 ```
 
 
-```{r}
-agg_outsupdem("total") |>
-  reactable(defaultColDef = colDef(format = colFormat(digits = 0, separators = TRUE)))
-```
 
 
-# shapes
+# maps
 
 ```{r}
-# tigris::counties(cb = TRUE, resolution = "20m", year == 2023)
-
-appdata$geo <- readRDS("data/geo/county/2013_20m_TRUE.rds") |>
+appdata$geo <- tigris::counties(cb = TRUE, resolution = "20m", year = 2013) |>
   rename_with(tolower) |>
-  filter(!(state_code %in% c("02", "15", "72")))
-  
-# state
-# readRDS("data/geo/state/20m_FALSE.rds")
+  filter(!(statefp %in% c("02", "15", "72"))) |>
+  # convert to source NAD83 to WGS84, which is preferred by leaflet
+  st_transform(crs = 4326)
 ```
 
 ```{r}
-appdata$geo |>
-  left_join(agg_outsupdem("total"), join_by(code == place)) |>
-  tm_shape() +
-  tm_fill("output")
-  # tm_fill("imports") +
-  #   tm_shape(filter(df, place == focus_county)) + tm_fill("blue") +
-  #   tm_shape(filter(geo$pubdata$get_state_df(TRUE), CONTIGUOUS)) + tm_borders() +
-  #   tm_layout(main.title = glue("Imports of \"{industry_code}\" to {focus_county}"))
+d <- appdata$geo |>
+  left_join(agg_outsupdem("total"), join_by(geoid == place))
+d
+```
+
+```{r}
+leaflet()
+
+appdata$geo |> 
+  leaflet() |>
+  addTiles() |>
+  addPolygons()
+```
+
+
+```{r}
+
+pal <- colorQuantile(palette = "RdYlBu", domain = NULL, n = 5, reverse = TRUE)
+val <- d[[input$map_osd_var]]
+col <- pal(val)
+d |>
+  leaflet() |>
+  setView(-96, 37.8, 4) |>
+  addProviderTiles("CartoDB.Positron") |> 
+  addPolygons(
+    color = col,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) |>
+  addLegend(pal = pal, values = val)
+
+```
+
+
+```{r}
+pal <- colorQuantile(palette = "RdYlBu", domain = NULL, n = 5, reverse = TRUE)
+quantileFormat <- function(type, cuts, p) {
+  n <- length(cuts)
+  cuts <- format(round(cuts, 3), trim = TRUE, scientific = FALSE)
+  paste(cuts[-n], "-", cuts[-1])
+}
+
+leaflet(df) %>%
+  addTiles() %>%
+  addPolygons(
+    color = ~pal(emp_gr), group = "emp_gr",
+    layerId = ~paste0("emp", place),
+    label = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~emp_gr, title = "emp_gr", labFormat = quantileFormat, group = "emp_gr", position = "bottomright") %>%
+  addPolygons(
+    color = ~pal(pop_gr), group = "pop_gr",
+    layerId = ~paste0("pop", place),
+    label = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~pop_gr, title = "pop_gr", labFormat = quantileFormat, group = "pop_gr", position = "bottomright") %>%
+  setView(lng = -95, lat = 38, zoom = 4) %>%
+  addLayersControl(overlayGroups = c("emp_gr", "pop_gr"))
+
 ```
 
 

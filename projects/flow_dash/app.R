@@ -1,7 +1,9 @@
 
 library(shiny)
 library(reactable)
+library(leaflet)
 library(tidyverse)
+library(sf)
 
 appdata <- readRDS("app.rds")
 
@@ -72,12 +74,22 @@ ui <- fluidPage(
   ),
   fluidRow(tabsetPanel(
     tabPanel("commodities", reactableOutput("com_codes")),
-    tabPanel("outsupdem", reactableOutput("tbl_outsupdem"))
+    tabPanel("outsupdem", reactableOutput("tbl_outsupdem")),
+    tabPanel(
+      "osd map",
+      radioButtons(
+        "map_osd_var", 
+        "Map variable", 
+        choices = c("output", "supply", "demand", "netsup", "exsup", "exdem"), 
+        inline = TRUE,
+        selected = character(0)),
+      leafletOutput("map_osd")
+    )
   ))
 )
 
 
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   com_codes <- reactive({
     req(input$com_sector, input$com_summary, input$com_u_summary, input$com_detail)
@@ -108,7 +120,7 @@ server <- function(input, output) {
     }
   })
   
-  
+
   # when sector changes, update available summary choices
   observeEvent(input$com_sector, {
     freezeReactiveValue(input, "com_summary")
@@ -134,6 +146,46 @@ server <- function(input, output) {
     tbl_outsupdem() |>
       reactable(defaultColDef = colDef(format = colFormat(digits = 0, separators = TRUE)))
   )
+
+  # initial load of map when tab is first activated
+  # init variable req'd in map update code
+  map_osd_initialized <- reactiveVal(FALSE)
+  output$map_osd <- renderLeaflet({
+    cat("Initial map_osd render\n")
+    m <- leaflet() |>
+      setView(-96, 37.8, 4) |>
+      addProviderTiles("CartoDB.Positron")
+    map_osd_initialized(TRUE)
+    m
+  })
+  
+  # update OSD map polygons when map variable or commodity selection changes
+  observe({
+    # do not trigger until map has been initialized
+    req(map_osd_initialized())
+    cat("map_osd update\n")
+    d <- appdata$geo |>
+      left_join(tbl_outsupdem(), join_by(geoid == place))
+    pal <- colorQuantile(palette = "RdYlBu", domain = NULL, n = 5)
+    val <- d[[input$map_osd_var]]
+    col <- pal(val)
+    leafletProxy("map_osd", session) |>
+      clearShapes() |>
+      addPolygons(
+        data = d,
+        fillColor = col,
+        fillOpacity = 0.6,
+        weight = 0.2,
+        color = "white"
+      ) |>
+      clearControls() |>
+      addLegend(
+        pal = pal, values = val, opacity = 0.7, title = NULL,
+        position = "bottomright"
+      )
+  }) |>
+    bindEvent(input$map_osd_var, tbl_outsupdem())
+  
 }
 
 shinyApp(ui = ui, server = server)
