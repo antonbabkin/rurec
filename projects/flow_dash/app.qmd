@@ -14,6 +14,8 @@ source("R/geography.R", local = (geography <- new.env()))
 source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
 source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
 source("R/place_io.R", local = (place_io <- new.env()))
+
+source("projects/flow_dash/app_fns.R")
 ```
 
 
@@ -31,8 +33,12 @@ input <- list(
   com_u_summary = "111",
   # com_detail = "TOTAL",
   com_detail = "1111A0",
-  map_osd_var = "netsup"
+  map_osd_var = "netsup",
+  flow_dir = "in"
 )
+flow_county <- function() "55025"
+selected_com <- function() list(ilevel = "sector", code = "11")
+
 ```
 
 
@@ -79,15 +85,6 @@ appdata$geo <- tigris::counties(cb = TRUE, resolution = "20m", year = 2013) |>
 d <- appdata$geo |>
   left_join(agg_outsupdem("total"), join_by(geoid == place))
 d
-```
-
-```{r}
-leaflet()
-
-appdata$geo |> 
-  leaflet() |>
-  addTiles() |>
-  addPolygons()
 ```
 
 
@@ -142,4 +139,74 @@ leaflet(df) %>%
 ```
 
 
+# flows
+
+```{r}
+appdata$flows <- trade_flows$opath$flows_all_ %>%
+  str_glue(bus_data = "cbp_imp", ilevel = "det", year = 2012) %>%
+  open_dataset() %>%
+  collect()
+```
+
+
+```{r}
+# verify aggregation function
+x1 <- appdata$outsupdem %>%
+  agg_ilevel(value_cols = c("output"), detail_col = "com_code", ilevel = "total")
+
+x2 <- appdata$com_codes %>%
+  pull(sector) %>%
+  unique() %>%
+  set_names() %>%
+  map(\(x) agg_ilevel(appdata$outsupdem, value_cols = c("output"), detail_col = "com_code", ilevel = "sector", com_code = x)) %>%
+  bind_rows(.id = "sector")
+x3 <- appdata$outsupdem %>%
+  agg_ilevel(value_cols = c("output"), detail_col = "com_code", ilevel = "sector", id_cols = "sector")
+
+
+x1$output
+x2$output %>% sum()
+x2$output %>% sum()
+bind_cols(x2, x3)
+```
+
+
+
+
+
+
+
+```{r}
+if (input$flow_dir == "in") {
+  focus_col <- "to"
+  id_col <- "from"
+} else {
+  focus_col <- "from"
+  id_col <- "to"
+}
+d <- appdata$flows %>%
+  filter(.data[[focus_col]] == flow_county()) %>%
+  agg_ilevel(
+    id_cols = id_col,
+    detail_col = "com_code",
+    value_cols = "flow",
+    ilevel = selected_com()$ilevel,
+    com_code = selected_com()$code
+  )
+d <- appdata$geo |>
+  left_join(d, join_by(geoid == {{ id_col }}))
+
+pal <- colorNumeric("Reds", domain = NULL, na.color = "#808080")
+leaflet() |>
+  addPolygons(
+    data = d,
+    layerId = ~ geoid,
+    weight = 0.2,
+    color = "white",
+    label = ~ paste(geoid, flow),
+    fillColor = ~ pal(log10(flow)),
+    fillOpacity = 0.6
+  ) |>
+  addPolygons(data = filter(appdata$geo, geoid == flow_county()), stroke = FALSE, fillColor = "black", fillOpacity = 1)
+```
 
