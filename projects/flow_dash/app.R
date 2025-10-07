@@ -1,15 +1,53 @@
 
 library(shiny)
+library(dplyr)
+library(arrow)
+library(sf)
 library(reactable)
 library(leaflet)
-library(tidyverse)
-library(sf)
 
-source("app_fns.R")
 
+# packaged data
 appdata <- readRDS("app.rds")
 
-
+#' Aggregate dataframe values at an ilevel
+#' 
+#' @param x dataframe to aggregate
+#' @param id_cols additional columns to group by
+#' @param detail_col column name with detail level code
+#' @param value_cols columns to aggregate
+#' @param ilevel level of aggregation
+#' @param com_code only aggregate this code
+agg_ilevel <- function(x,
+                       id_cols = character(),
+                       detail_col = "detail",
+                       value_cols = c("value"),
+                       ilevel = c("total", "sector", "summary", "u_summary", "detail"), 
+                       com_code = NULL) {
+  ilevel <- match.arg(ilevel)
+  
+  
+  if (ilevel == "total") {
+    y <- x %>%
+      summarize(across(all_of(value_cols), sum),
+                .by = (if (length(id_cols) > 0) id_cols else NULL))
+  } else if (ilevel == "detail") {
+    y <- x %>%
+      select(all_of(id_cols), all_of(detail_col), all_of(value_cols)) %>%
+      filter(.data[[detail_col]] == {{ com_code }})
+  } else {
+    if (is.null(com_code)) {
+      concordance <- filter(appdata$com_codes, !is.na(detail))
+    } else {
+      concordance <- filter(appdata$com_codes, .data[[ilevel]] == {{ com_code }}, !is.na(detail))
+    }
+    y <- concordance %>%
+      inner_join(x, join_by(detail == {{ detail_col }})) %>%
+      summarize(across(all_of(value_cols), sum),
+                .by = (if (length(id_cols) > 0) id_cols else NULL))
+  }
+  y
+}
 
 com_selector_choices <- function(ilevel, higher_code = NULL) {
   if (!is.null(higher_code) && higher_code == "TOTAL") return("TOTAL")
@@ -187,7 +225,7 @@ server <- function(input, output, session) {
   # update OSD map polygons when map variable or commodity selection changes
   observe({
     # do not trigger until map has been initialized
-    req(map_osd_initialized())
+    req(map_osd_initialized(), input$map_osd_var, tbl_outsupdem())
     cat("map_osd update\n")
     d <- appdata$geo |>
       left_join(tbl_outsupdem(), join_by(geoid == place))
