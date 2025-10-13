@@ -1,0 +1,294 @@
+---
+title: "Solving trade flows with JuMP"
+format: html
+engine: julia
+---
+
+In this notebook I try out Julia to solve the transportation problem.
+Taking excess demand and supply for one commodity across counties, the objective
+is to minimize total transportation cost assuming unit cost per one mile of distance.
+
+Data prep and review of results are done in R, Julia is only used to run the optimization.
+
+Solutions for one particular commodity turn out to be numerically identical,
+and while Julia solves the problem x3 faster, it might not be worth the complexity of managing two languages.
+
+
+# R imports
+
+```{r}
+library(tidyverse)
+library(hdf5r)
+library(arrow)
+
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+
+ppath <- \(x) file.path("projects/jump", x)
+
+venn <- function(x, y) {
+  and <- base::intersect(x, y)
+  or <- base::union(x, y)
+  list(
+    x = x,
+    y = y,
+    and = and,
+    or = or,
+    x_y = base::setdiff(x, y),
+    y_x = base::setdiff(y, x),
+    xor = base::setdiff(or, and)
+  )
+}
+```
+
+
+# Solve one commodity in R
+
+Solving took 3 minutes.
+
+```{r}
+logger::log_threshold(logger::DEBUG)
+df <- place_io$outsupdem(2012, ilevel = "det", bus_data = "cbp_imp") %>%
+  filter(com_code == "1111A0") %>%
+  mutate(netsup = supply - demand, exsup = pmax(netsup, 0), exdem = pmax(-netsup, 0)) %>%
+  arrange(place) %>%
+  select(place, exsup, exdem) %>%
+  # balance demand with supply
+  mutate(exdem = exdem / sum(exdem) * sum(exsup))
+places <- df %>% distinct(place) %>% pull() %>% sort()
+dmat <- trade_flows$distance_matrix(2013)
+dmat <- dmat[places, places]
+
+sol <- trade_flows$solve_lp_trade_flows(
+  pull(df, exsup, name = place),
+  pull(df, exdem, name = place),
+  dmat)
+sol$objval
+
+sol$solution_full %>%
+  saveRDS("projects/jump/sol_r.rds")
+
+```
+
+Output log:
+```
+DEBUG [2025-10-13 15:02:53] Solving LP problem with 1607 rows and 1250 columns...
+DEBUG [2025-10-13 15:02:53] Attempting to solve with constraints supply =, demand =
+DEBUG [2025-10-13 15:05:55] LP solved in 3.04 mins
+> sol$objval
+[1] 4195928465
+```
+
+# Prepare and save data in R
+
+```{r}
+df <- place_io$outsupdem(2012, ilevel = "det", bus_data = "cbp_imp") %>%
+  mutate(netsup = supply - demand, exsup = pmax(netsup, 0), exdem = pmax(-netsup, 0)) %>%
+  arrange(com_code, place)
+places <- df %>% distinct(place) %>% pull() %>% sort()
+dmat <- trade_flows$distance_matrix(2013)
+dmat <- dmat[places, places]
+
+# balance demand with supply
+d <- df %>%
+  select(com_code, place, exsup, exdem) %>%
+  mutate(exdem = exdem / sum(exdem) * sum(exsup), .by = com_code)
+
+arrow::write_parquet(d, ppath("supdem.pq"))
+
+file <- hdf5r::H5File$new(ppath("data.h5"), mode = "w")
+file$create_group("distance")
+file[["distance/matrix"]] <- dmat
+file[["distance/rownames"]] <- rownames(dmat)
+file[["distance/colnames"]] <- colnames(dmat) 
+file$close_all()
+
+```
+
+
+# Julia environment
+
+Both `Arrow.jl` and `Parquet.jl` failed to read the Parquet file produced above.
+It worked with `Parquet2.jl`.
+This [discussion](https://discourse.julialang.org/t/challenges-with-arrow-and-parquet-in-a-reasonably-substantial-julia-project/113209) indidicates that the state of Julia IO is not very robust.
+
+```{r}
+using Pkg
+
+Pkg.add("Plots")
+Pkg.add("HDF5")
+Pkg.add("DataFrames")
+Pkg.add("Arrow")
+Pkg.add("Parquet")
+Pkg.add("Parquet2")
+Pkg.add("JuMP")
+Pkg.add("HiGHS")
+
+```
+
+# Read data into Julia
+
+```{julia}
+using HDF5
+using DataFrames
+using Parquet2: Dataset
+using JuMP
+using HiGHS
+
+distance_matrix = h5read("projects/jump/data.h5", "distance/matrix")
+distance_src = h5read("projects/jump/data.h5", "distance/rownames")
+distance_dst = h5read("projects/jump/data.h5", "distance/colnames")
+
+ds = Dataset("projects/jump/supdem.pq")
+df = DataFrame(ds; copycols=false)
+
+```
+
+# solve one commodity in Julia
+
+## prepare primitives
+
+```{julia}
+df_sup = subset(df, :com_code => ByRow(x -> x == "1111A0"), :exsup => ByRow(x -> x > 0))
+sup_vals = Vector{Float64}(df_sup.exsup)
+sup_names = Vector{String}(df_sup.place)
+n_sup = length(sup_vals)
+
+df_dem = subset(df, :com_code => ByRow(x -> x == "1111A0"), :exdem => ByRow(x -> x > 0))
+dem_vals = Vector{Float64}(df_dem.exdem)
+dem_names = Vector{String}(df_dem.place)
+n_dem = length(dem_vals)
+
+(sum(sup_vals) - sum(dem_vals))
+
+
+sup_indices = [findfirst(==(name), distance_src) for name in sup_names]
+dem_indices = [findfirst(==(name), distance_dst) for name in dem_names]
+cost = distance_matrix[sup_indices, dem_indices]
+
+```
+
+## model
+
+```{julia}
+
+model = Model(HiGHS.Optimizer)
+
+# Decision variable: x[i,j] = amount shipped from supplier i to demander j
+@variable(model, x[1:n_sup, 1:n_dem] >= 0)
+
+# Objective: Minimize total transportation cost
+@objective(model, Min, sum(cost[i,j] * x[i,j] for i in 1:n_sup, j in 1:n_dem))
+
+# Supply constraints: Total shipped from each supplier ≤ supply capacity
+@constraint(model, supply_constraints[i=1:n_sup],
+            sum(x[i,j] for j in 1:n_dem) <= sup_vals[i])
+
+# Demand constraints: Total received at each customer ≥ demand requirement
+@constraint(model, demand_constraints[j=1:n_dem],
+            sum(x[i,j] for i in 1:n_sup) >= dem_vals[j])
+
+```
+
+
+## solve
+
+Solves one of the biggest commodity problems (`1607 * 1250 = 2008750`) in about one minute.
+
+```{julia}
+optimize!(model)
+
+```
+
+Output log:
+```
+Running HiGHS 1.11.0 (git hash: 364c83a51e): Copyright (c) 2025 HiGHS under MIT licence terms
+LP   has 2857 rows; 2008750 cols; 4017500 nonzeros
+Coefficient ranges:
+  Matrix [1e+00, 1e+00]
+  Cost   [5e+00, 5e+03]
+  Bound  [0e+00, 0e+00]
+  RHS    [4e-04, 9e+05]
+Presolving model
+2857 rows, 2008750 cols, 4017500 nonzeros  1s
+2857 rows, 2008750 cols, 4017500 nonzeros  1s
+Presolve : Reductions: rows 2857(-0); columns 2008750(-0); elements 4017500(-0) - Not reduced
+Problem not reduced by presolve: solving the LP
+Using EKK dual simplex solver - serial
+  Iteration        Objective     Infeasibilities num(sum)
+          0     0.0000000000e+00 Pr: 1250(1.85769e+07) 3s
+       3254     3.1329623175e+09 Pr: 1203(2.35186e+07) 8s
+       4320     3.4300953756e+09 Pr: 1175(1.40837e+07) 13s
+       5307     3.6269910347e+09 Pr: 1157(3.0362e+07) 19s
+       5993     3.7937988355e+09 Pr: 1146(1.93085e+07) 24s
+       6653     3.9715523234e+09 Pr: 1125(2.70434e+07) 29s
+       7298     4.0628355156e+09 Pr: 1097(2.47207e+07) 35s
+       7910     4.1244749412e+09 Pr: 1044(1.08158e+07) 40s
+       8642     4.1722141553e+09 Pr: 950(2.49407e+06) 46s
+       9360     4.1900135297e+09 Pr: 808(1.52365e+06) 52s
+      10599     4.1959284646e+09 Pr: 0(0) 57s
+      10599     4.1959284646e+09 Pr: 0(0) 57s
+Model status        : Optimal
+Simplex   iterations: 10599
+Objective value     :  4.1959284646e+09
+P-D objective error :  3.2956418831e-15
+HiGHS run time      :         56.89
+```
+
+
+## export solution
+
+
+```{julia}
+
+# Get the solution values
+x_solution = value.(x)
+
+# Save to HDF5
+h5open("projects/jump/solution.h5", "w") do file
+    write(file, "x_matrix", x_solution)
+    write(file, "suppliers", sup_names)
+    write(file, "demanders", dem_names)
+    write(file, "objective_value", objective_value(model))
+end
+```
+
+
+
+# Compare solutions
+
+From the logs, objective function value between R and Julia solutions is the same.
+Solved flows are also identical.
+
+
+```{r}
+# R solution
+x1 <- readRDS("projects/jump/sol_r.rds") %>%
+  as_tibble(rownames = "from") %>%
+  pivot_longer(!from, names_to = "to") %>%
+  filter(value > 0)
+
+# Julia solution
+x2 <- local({
+  file <- hdf5r::H5File$new("projects/jump/solution.h5", mode = "r")
+  x_matrix <- file[["x_matrix"]][,]
+  suppliers <- file[["suppliers"]][]
+  demanders <- file[["demanders"]][]
+  file$close_all()
+
+  rownames(x_matrix) <- suppliers
+  colnames(x_matrix) <- demanders
+  x_matrix %>%
+    as_tibble(rownames = "from") %>%
+    pivot_longer(!from, names_to = "to") %>%
+    filter(value > 0)
+})
+
+
+# combine and compare
+df <- full_join(x1, x2, c("from", "to"), suffix = c("_r", "_jl")) %>%
+  mutate(across(c(value_jl, value_r), \(x) replace_na(x, 0))) %>%
+  mutate(adiff = value_jl - value_r, rdiff = adiff * 2 / (value_jl + value_r))
+df$adiff %>% summary()
+
+```

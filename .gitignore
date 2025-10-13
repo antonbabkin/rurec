@@ -14,6 +14,7 @@ data/*
 *.xlsx
 *.zip
 *.png
+*.h5
 
 # Vim
 *.swp
@@ -56,4 +57,3 @@ renv/
 
 # RStudio connect config
 rsconnect/
-
