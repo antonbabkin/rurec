@@ -25,7 +25,6 @@ source("R/geography.R", local = (geography <- new.env()))
 source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
 
 log_threshold(INFO)
-tmap_mode("plot")
 ```
 
 # compute all
@@ -187,5 +186,19 @@ df_solp %>%
 ```
 
 
+# Julia solver
 
+
+```{r}
+df_supdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  mutate(exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+
+df_supdem %>%
+  summarize(nsup = sum(exsup > 0), ndem = sum(exdem > 0), nn = nsup * ndem, .by = c("com_code", "com_name")) %>%
+  arrange(nn)
+
+df_supdem %>%
+  mutate()
+
+```
 

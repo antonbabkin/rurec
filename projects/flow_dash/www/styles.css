@@ -1,0 +1,16 @@
+/* selectInput active selection: trim long lines instead of word wrapping */
+.selectize-input > .item {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 20px;
+}
+
+/* selectInput dropdown options: trim long lines instead of word wrapping */
+.selectize-dropdown-content > .option {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

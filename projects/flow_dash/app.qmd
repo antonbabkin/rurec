@@ -1,0 +1,212 @@
+---
+title: "flow_dash"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(leaflet)
+library(tmap)
+options(tigris_use_cache = TRUE)
+
+source("R/bea_io.R", local = (bea_io <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/pubdatapy.R", local = (pubdatapy <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+
+source("projects/flow_dash/app_fns.R")
+```
+
+
+```{r}
+appdata <- list()
+# saveRDS(appdata, "projects/flow_dash/app.rds")
+# appdata <- readRDS("projects/flow_dash/app.rds")
+
+input <- list(
+  # com_sector = "TOTAL",
+  com_sector = "11",
+  # com_summary = "TOTAL",
+  com_summary = "111CA",
+  # com_u_summary = "TOTAL",
+  com_u_summary = "111",
+  # com_detail = "TOTAL",
+  com_detail = "1111A0",
+  map_osd_var = "netsup",
+  flow_dir = "in"
+)
+flow_county <- function() "55025"
+selected_com <- function() list(ilevel = "sector", code = "11")
+
+```
+
+
+# commodity classification
+
+```{r}
+appdata$com_codes <- bea_io$concordance() %>%
+  filter(commodity) %>%
+  select(!c(naics, naics6, industry, commodity)) %>%
+  distinct() %>%
+  mutate(code = case_match(ilevel, "sector" ~ sector, "summary" ~ summary, "u_summary" ~ u_summary, "detail" ~ detail), .before = title)
+
+appdata$com_codes
+```
+
+
+
+# output, supply, demand
+
+At detail level.
+
+```{r}
+appdata$outsupdem <- place_io$outsupdem(2012, "det", "cbp_imp") %>%
+  select(!com_name) %>%
+  mutate(netsup = supply - demand, exsup = pmax(supply - demand, 0), exdem = pmax(demand - supply, 0))
+
+appdata$outsupdem
+```
+
+
+
+
+# maps
+
+```{r}
+appdata$geo <- tigris::counties(cb = TRUE, resolution = "20m", year = 2013) |>
+  rename_with(tolower) |>
+  filter(!(statefp %in% c("02", "15", "72"))) |>
+  # convert to source NAD83 to WGS84, which is preferred by leaflet
+  st_transform(crs = 4326)
+```
+
+```{r}
+d <- appdata$geo |>
+  left_join(agg_outsupdem("total"), join_by(geoid == place))
+d
+```
+
+
+```{r}
+
+pal <- colorQuantile(palette = "RdYlBu", domain = NULL, n = 5, reverse = TRUE)
+val <- d[[input$map_osd_var]]
+col <- pal(val)
+d |>
+  leaflet() |>
+  setView(-96, 37.8, 4) |>
+  addProviderTiles("CartoDB.Positron") |> 
+  addPolygons(
+    color = col,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) |>
+  addLegend(pal = pal, values = val)
+
+```
+
+
+```{r}
+pal <- colorQuantile(palette = "RdYlBu", domain = NULL, n = 5, reverse = TRUE)
+quantileFormat <- function(type, cuts, p) {
+  n <- length(cuts)
+  cuts <- format(round(cuts, 3), trim = TRUE, scientific = FALSE)
+  paste(cuts[-n], "-", cuts[-1])
+}
+
+leaflet(df) %>%
+  addTiles() %>%
+  addPolygons(
+    color = ~pal(emp_gr), group = "emp_gr",
+    layerId = ~paste0("emp", place),
+    label = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~emp_gr, title = "emp_gr", labFormat = quantileFormat, group = "emp_gr", position = "bottomright") %>%
+  addPolygons(
+    color = ~pal(pop_gr), group = "pop_gr",
+    layerId = ~paste0("pop", place),
+    label = ~place,
+    weight = 1, opacity = 0.9,
+    highlightOptions = highlightOptions(color = "black", weight = 2, bringToFront = TRUE)
+  ) %>%
+  addLegend(pal = pal, values = ~pop_gr, title = "pop_gr", labFormat = quantileFormat, group = "pop_gr", position = "bottomright") %>%
+  setView(lng = -95, lat = 38, zoom = 4) %>%
+  addLayersControl(overlayGroups = c("emp_gr", "pop_gr"))
+
+```
+
+
+# flows
+
+```{r}
+appdata$flows <- trade_flows$opath$flows_all_ %>%
+  str_glue(bus_data = "cbp_imp", ilevel = "det", year = 2012) %>%
+  open_dataset() %>%
+  collect()
+```
+
+
+```{r}
+# verify aggregation function
+x1 <- appdata$outsupdem %>%
+  agg_ilevel(value_cols = c("output"), detail_col = "com_code", ilevel = "total")
+
+x2 <- appdata$com_codes %>%
+  pull(sector) %>%
+  unique() %>%
+  set_names() %>%
+  map(\(x) agg_ilevel(appdata$outsupdem, value_cols = c("output"), detail_col = "com_code", ilevel = "sector", com_code = x)) %>%
+  bind_rows(.id = "sector")
+x3 <- appdata$outsupdem %>%
+  agg_ilevel(value_cols = c("output"), detail_col = "com_code", ilevel = "sector", id_cols = "sector")
+
+
+x1$output
+x2$output %>% sum()
+x2$output %>% sum()
+bind_cols(x2, x3)
+```
+
+
+
+
+
+
+
+```{r}
+if (input$flow_dir == "in") {
+  focus_col <- "to"
+  id_col <- "from"
+} else {
+  focus_col <- "from"
+  id_col <- "to"
+}
+d <- appdata$flows %>%
+  filter(.data[[focus_col]] == flow_county()) %>%
+  agg_ilevel(
+    id_cols = id_col,
+    detail_col = "com_code",
+    value_cols = "flow",
+    ilevel = selected_com()$ilevel,
+    com_code = selected_com()$code
+  )
+d <- appdata$geo |>
+  left_join(d, join_by(geoid == {{ id_col }}))
+
+pal <- colorNumeric("Reds", domain = NULL, na.color = "#808080")
+leaflet() |>
+  addPolygons(
+    data = d,
+    layerId = ~ geoid,
+    weight = 0.2,
+    color = "white",
+    label = ~ paste(geoid, flow),
+    fillColor = ~ pal(log10(flow)),
+    fillOpacity = 0.6
+  ) |>
+  addPolygons(data = filter(appdata$geo, geoid == flow_county()), stroke = FALSE, fillColor = "black", fillOpacity = 1)
+```
+
