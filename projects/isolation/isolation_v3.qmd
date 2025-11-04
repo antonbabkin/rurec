@@ -1,0 +1,2084 @@
+---
+title: "isolation"
+format:
+  html:
+    date: today
+    toc: true
+    toc-depth: 2
+    code-fold: true
+    code-overflow: wrap
+    embed-resources: true
+    df-print: paged
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+# Header
+
+```{r}
+library(tidyverse)
+library(ggridges)
+library(tidycensus)
+library(tigris)
+library(tmap)
+library(ipumsr)
+library(economiccomplexity)
+library(scales)
+library(migraph)
+library(igraph)
+library(scoredec)
+library(brainGraph)
+library(sf)
+library(purrr)
+library(spatstat)
+library(boot)
+library(furrr)
+library(purrr)
+
+source("R/basic_utilities.R", local = (util <- new.env()))
+source("R/geography.R", local = (geography <- new.env()))
+source("R/place_io.R", local = (place_io <- new.env()))
+source("R/circularity.R", local = (circularity <- new.env()))
+source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
+
+# paths within project subfolder
+ppath <- function(...) {
+  file.path("projects/isolation", ...)
+}
+
+# input data files
+ipath <- list(
+  dist = str_glue(geography$opath$dist_mat_, from = "center", year = 2013, cbsa = FALSE),
+  outsupdem = str_glue(place_io$opath$outsupdem_, year = 2012, ilevel = "det", bus_data = "cbp_imp"),
+  tf = str_glue(trade_flows$opath$flows_, bus_data = "cbp_imp", ilevel = "det", year = 2012, ind_code = "all_industries"),
+  tf17 = str_glue(trade_flows$opath$flows_, bus_data = "cbp_imp", ilevel = "det", year = 2017, ind_code = "all_industries"),
+  tf_com = str_glue(trade_flows$opath$flows_all_, bus_data = "cbp_imp", ilevel = "det", year = 2012)
+)
+
+# output data files
+opath <- list(
+  
+)
+
+# pack all data files
+# util$zip_pack(ppath("data/datacache_2025-05-28.zip"), files = c(ipath, opath))
+# unpack
+util$zip_unpack(ppath("data/datacache_2025-05-28.zip"))
+
+```
+
+# Data
+
+```{r}
+# county-to-county centroid distance in miles
+df_dist <- local({
+  # convert from matrix in meters to unitless dataframe in miles
+  x <- readRDS(ipath$dist)
+  x1 <- x %>%
+    units::set_units("mi") %>%
+    units::set_units(NULL)
+  dimnames(x1) <- dimnames(x)
+  x1 %>%
+    as_tibble(rownames = "from") %>%
+    pivot_longer(!from, names_to = "to", values_to = "distance")
+})
+
+# county-commodity output, supply and demand
+df_outsupdem <- arrow::read_parquet(ipath$outsupdem) %>% 
+    mutate(exsup = pmax(0, supply - demand), exdem = pmax(0, demand - supply))
+
+
+# county circularity indicators, depends on outsupdem data file
+df_circ <- circularity$circularity_indicators(year = 2012, bus_data = "cbp_imp")
+
+# county-to-county trade flows across all commodities
+df_tf <- readRDS(ipath$tf) %>%
+  as_tibble(rownames = "from") %>%
+  pivot_longer(!from, names_to = "to", values_to = "flow") %>%
+  filter(flow > 0)
+
+# county-to-county trade flows by commodity
+df_tf_com <- arrow::read_parquet(ipath$tf_com)
+
+df_dist %>% head()
+df_outsupdem %>% head()
+df_circ %>% head()
+df_tf %>% head()
+df_tf_com %>% head()
+
+```
+
+```{r}
+
+census_map <- get_acs(
+  geography = "county",
+  variables = "B01002_001",
+  year = 2019,
+  survey = "acs5",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  dplyr::select(place="GEOID")
+states  <- get_acs(
+  geography = "state",
+  variables = "B01002_001",
+  year = 2019,
+  survey = "acs5",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  dplyr::select(state="GEOID")
+
+```
+
+## poverty
+
+#### puma-level
+
+```{r}
+inf_clean = read.csv("projects/isolation/data/raw/inflation.csv")
+
+inf23 = inf_clean %>%
+  filter(Year == 2023)
+inf23 = inf23$inflation
+
+inf = inf_clean %>% 
+  mutate(inf23 = inf23,
+         deflate = inflation/inf23) %>% 
+  dplyr::select("year"=Year, deflate)
+
+```
+
+```{r}
+cola_clean = read.csv("projects/isolation/data/raw/cola2.csv") %>% 
+  dplyr::select(-X) %>% 
+  mutate(FIPS = sprintf("%05d", FIPS))
+
+```
+
+```{r}
+xwalk12 = read.csv("projects/isolation/data/raw/county_puma12.csv") %>% 
+  filter(state != "State code") %>% 
+  mutate(FIPS = sprintf("%05d", as.numeric(county)),
+         puma12 = sprintf("%05d", as.numeric(puma12)),
+         state = sprintf("%02d", as.numeric(state)),
+         PUMA = str_c(state, puma12), afact = as.numeric(afact)) %>% 
+  dplyr::select(PUMA, FIPS, afact)
+xwalk22 = read.csv("projects/isolation/data/raw/county_puma22.csv") %>% 
+  filter(state != "State code") %>% 
+  mutate(county = sprintf("%05d", as.numeric(county)),
+         puma22 = sprintf("%05d", as.numeric(puma22)),
+         state = sprintf("%02d", as.numeric(state)),
+         PUMA = str_c(state, puma22), afact = as.numeric(afact)) %>% 
+  dplyr::select(PUMA, "FIPS"=county, afact)
+```
+
+```{r}
+ddi <- read_ipums_ddi("projects/isolation/data/raw/usa_00048.xml")
+pums_clean <- read_ipums_micro(ddi, data_file = "projects/isolation/data/raw/usa_00048.dat.gz")
+
+```
+
+```{r}
+puma1222 = read.csv("projects/isolation/data/raw/puma2010-to-puma2020.csv") %>% 
+  filter(state != "State code") %>% 
+  mutate(puma12 = sprintf("%05d", as.numeric(puma12)),
+         puma22 = sprintf("%05d", as.numeric(puma22)),
+         state = sprintf("%02d", as.numeric(state)),
+         puma12 = str_c(state, puma12),
+         puma22 = str_c(state, puma22)
+         ) %>% 
+  dplyr::select(puma12, puma22, afact) %>% 
+  distinct() %>% 
+  mutate(afact = as.numeric(afact))
+```
+
+```{r}
+
+pums12 = pums_clean %>% 
+  filter(FTOTINC < 9999993 & PERNUM == 1) %>% 
+  mutate(PUMA = str_c(sprintf("%02d", STATEFIP), sprintf("%05d", PUMA)),
+         NADULT = ifelse(MARST == 1, 2, 1),
+         fsizeadj = ifelse(NCHILD == 0, NADULT^0.5,
+                    ifelse(NCHILD > 0 & NADULT == 1, (NADULT+0.8*1+0.5*(NCHILD-1))^0.7,
+                    ifelse(NCHILD > 0 & NADULT > 1, (NADULT+0.5*NCHILD)^0.7, NA))),
+         mar = ifelse(MARST == 1 | MARST == 2, "2p", "1p"),
+         ch = ifelse(NCHILD == 0, "0c",
+              ifelse(NCHILD == 1, "1c",
+                     ifelse(NCHILD == 2, "2c",
+                     ifelse(NCHILD == 3, "3c",
+                     ifelse(NCHILD > 3, "4c", NA
+                     ))))),
+         fsize = str_c(mar, ch)) %>% 
+  dplyr::select(PUMA, fsize, FTOTINC, "year"=YEAR, PERWT, fsizeadj) %>% 
+  left_join(y=xwalk12, by="PUMA") %>% 
+  left_join(y=inf, by="year") %>% 
+  left_join(y=cola_clean, by=c("FIPS","fsize","year")) %>% 
+  mutate(wgt = PERWT*afact,
+         cola = FTOTINC/col/fsizeadj/deflate) %>% 
+  ungroup() %>% 
+  mutate(usavg = weighted.median(x=cola, w=wgt, na.rm=TRUE),
+         ccapov = ifelse(cola < (0.60*usavg), 1,
+                         ifelse(cola >= (0.60*usavg), 0, NA))) %>%
+  group_by("puma12"=PUMA) %>% 
+  dplyr::summarize(ccapov = weighted.mean(x=ccapov, w=wgt, na.rm=TRUE)) %>% 
+  mutate(ccapov = ifelse(ccapov == "NaN", NA, ccapov)) %>% 
+  mutate(year = 2012)
+
+
+pums22 = pums_clean %>% 
+  filter(FTOTINC < 9999993 & PERNUM == 1) %>% 
+  mutate(PUMA = str_c(sprintf("%02d", STATEFIP), sprintf("%05d", PUMA)),
+         NADULT = ifelse(MARST == 1, 2, 1),
+         fsizeadj = ifelse(NCHILD == 0, NADULT^0.5,
+                    ifelse(NCHILD > 0 & NADULT == 1, (NADULT+0.8*1+0.5*(NCHILD-1))^0.7,
+                    ifelse(NCHILD > 0 & NADULT > 1, (NADULT+0.5*NCHILD)^0.7, NA))),
+         mar = ifelse(MARST == 1 | MARST == 2, "2p", "1p"),
+         ch = ifelse(NCHILD == 0, "0c",
+              ifelse(NCHILD == 1, "1c",
+                     ifelse(NCHILD == 2, "2c",
+                     ifelse(NCHILD == 3, "3c",
+                     ifelse(NCHILD > 3, "4c", NA
+                     ))))),
+         fsize = str_c(mar, ch)) 
+pums22 = pums22 %>% 
+  dplyr::select(PUMA, fsize, FTOTINC, "year"=YEAR, PERWT, fsizeadj) %>% 
+  left_join(y=xwalk22, by="PUMA") %>% 
+  left_join(y=inf, by="year") %>% 
+  left_join(y=cola_clean, by=c("FIPS","fsize","year")) %>% 
+  mutate(wgt = PERWT*afact,
+         cola = FTOTINC/col/fsizeadj/deflate) %>% 
+  ungroup() %>% 
+  mutate(usavg = weighted.median(x=cola, w=wgt, na.rm=TRUE),
+         ccapov = ifelse(cola < (0.60*usavg), 1,
+                         ifelse(cola >= (0.60*usavg), 0, NA))) %>%
+  group_by("puma22"=PUMA) %>% 
+  dplyr::summarize(ccapov = weighted.mean(x=ccapov, w=wgt, na.rm=TRUE)) %>% 
+  left_join(y=puma1222, by="puma22") %>% 
+  group_by(puma12) %>% 
+  mutate(ccapov = ifelse(ccapov == "NaN", NA, ccapov)) %>% 
+  dplyr::summarize(ccapov = weighted.mean(x=ccapov, w=afact, na.rm=TRUE)) %>% 
+  mutate(year = 2022)
+
+```
+
+```{r}
+
+ccapov = rbind(pums12, pums22) %>% 
+  mutate(year = str_c("ccapov",year)) %>% 
+  pivot_wider(names_from = year, values_from = ccapov) %>% 
+  mutate(filt = ifelse(is.na(ccapov2012) & is.na(ccapov2022), "drop", "keep")) %>% 
+  filter(filt != "drop") %>% 
+  dplyr::select(-filt)
+
+
+```
+
+```{r}
+# write.csv(ccapov, "ccapov.csv")
+ccapov = read.csv("ccapov.csv")
+```
+
+#### tract-level
+
+take tract10-puma12 xwalk, allocate ccapov to tracts based on tract:puma
+poverty ratio
+
+-   seems a little complicated, since not only have partial tracts
+    within pumas but they have different poverty ratios
+
+```{r}
+puma1222 = read.csv("projects/isolation/data/raw/puma2010-to-puma2020.csv") %>% 
+  filter(state != "State code") %>% 
+  mutate(puma12 = sprintf("%05d", as.numeric(puma12)),
+         puma22 = sprintf("%05d", as.numeric(puma22)),
+         state = sprintf("%02d", as.numeric(state)),
+         puma12 = str_c(state, puma12),
+         puma22 = str_c(state, puma22)
+         ) %>% 
+  dplyr::select(puma12, puma22, afact) %>% 
+  distinct() %>% 
+  mutate(afact = as.numeric(afact))
+```
+
+```{r}
+xwalk_tpuma = read.csv("projects/isolation/data/raw/2010_Census_Tract_to_2010_PUMA.txt") %>% 
+  mutate(puma12 = str_c(sprintf("%02d", STATEFP), sprintf("%05d", PUMA5CE)),
+         tract12 = str_c(sprintf("%02d", STATEFP), sprintf("%03d", COUNTYFP), 
+                         sprintf("%06d", TRACTCE))
+         ) %>% 
+  dplyr::select(puma12, tract12) %>% 
+  distinct()
+```
+
+```{r}
+nhgis_clean = read.csv("projects/isolation/data/raw/nhgis0031_ts_nominal_tract.csv")
+nhgis2_clean = read.csv("projects/isolation/data/raw/nhgis0032_ds192_20125_puma.csv")
+nhgis3_clean = read.csv("projects/isolation/data/raw/nhgis0032_ds268_20235_puma.csv")
+
+```
+
+```{r}
+xwalk_tract = read.csv("projects/isolation/data/raw/tract1222.csv") %>% 
+  mutate(tract12 = str_pad(GEOID_TRACT_10, width = 11, pad = "0", side = "left"),
+         tract22 = str_pad(GEOID_TRACT_20, width = 11, pad = "0", side = "left"))
+```
+
+```{r}
+altwalk_tract = read.csv("projects/isolation/data/raw/xwalk_tract.csv") %>% 
+  mutate(tract12 = str_pad(TRTID2010, width = 11, pad = "0", side = "left"),
+         tract22 = str_pad(TRTID2020, width = 11, pad = "0", side = "left")) %>% 
+  dplyr::select(tract12, tract22, "afact"=TR20_TO_TR10_WEIGHT) %>% 
+  distinct()
+```
+
+```{r}
+
+```
+
+```{r}
+nhgis_tract = nhgis_clean %>% 
+  mutate(tract12 = str_c(sprintf("%02d", STATEFP), sprintf("%03d", COUNTYFP), 
+                         sprintf("%06d", TRACTA))) %>% 
+  dplyr::select(tract12, 
+                YEAR,
+                "inlf_2529"=BT7AU,
+                "outlf_2529"=BT7AX,
+                "emp_2529"=BT7AV, 
+                "inlf_3034"=BT7BA,
+                "outlf_3034"=BT7BD,
+                "emp_3034"=BT7BB,
+                "inlf_3544"=BT7BG,
+                "outlf_3544"=BT7BJ,
+                "emp_3544"=BT7BH,
+                "inlf_4554"=BT7BM,
+                "outlf_4554"=BT7BP,
+                "emp_4554"=BT7BN,
+                "pov"=CL6AA,
+                "povpop"=AX6AA
+                ) %>% 
+  mutate(pop = inlf_2529+outlf_2529+inlf_3034+outlf_3034+inlf_3544+outlf_3544+inlf_4554+outlf_4554,
+         emp = emp_2529+emp_3034+emp_3544+emp_4554,
+         emprt = emp/pop,
+         povrt = pov/povpop,
+         year = ifelse(YEAR == "2008-2012", 2012,
+                       ifelse(YEAR == "2019-2023", 2023, NA))) %>% 
+  dplyr::select(tract12, year, emprt, povrt)
+```
+
+```{r}
+nhgis_tract12 = nhgis_tract %>% 
+  filter(year == 2012)
+
+nhgis_tract23 = nhgis_tract %>% 
+  filter(year == 2023) %>% 
+  rename("tract22"="tract12") %>% 
+  left_join(y=altwalk_tract, by="tract22") %>% 
+  group_by(tract12, year) %>% 
+  dplyr::summarize(emprt = weighted.mean(x=emprt, w=afact, na.rm=TRUE),
+                   povrt = weighted.mean(x=povrt, w=afact, na.rm=TRUE),
+                   )
+
+nhgis_tract_alt = rbind(nhgis_tract12, nhgis_tract23) %>% 
+  mutate(povrt = ifelse(povrt == "NaN", NA, povrt),
+         emprt = ifelse(emprt == "NaN", NA, emprt)
+         )
+
+```
+
+```{r}
+nhgis_puma12 = nhgis2_clean %>% 
+  mutate(povrt = RAZE002/RAZE001) %>% 
+  mutate(puma12 = str_c(sprintf("%02d", STATEA), 
+                         sprintf("%05d", PUMAA))) %>% 
+  dplyr::select(puma12, povrt) %>% 
+  mutate(year = 2012)
+
+nhgis_puma22 = nhgis3_clean %>% 
+  mutate(povrt = AS7TE002/AS7TE001) %>% 
+  mutate(puma22 = str_c(sprintf("%02d", STATEA), 
+                         sprintf("%05d", PUMAA))) %>% 
+  dplyr::select(puma22, "year"=YEAR, povrt) %>% 
+  left_join(y=puma1222, by="puma22") %>% 
+  group_by(puma12) %>% 
+  dplyr::summarize(povrt = weighted.mean(x=povrt, w=afact, na.rm=TRUE)) %>% 
+  mutate(year = 2023)
+
+nhgis_puma = rbind(nhgis_puma12, nhgis_puma22)
+```
+
+```{r}
+nhgis = xwalk_tpuma %>% 
+  left_join(y=nhgis_puma, by=c("puma12")) %>% 
+  rename("pov_puma"="povrt") %>% 
+  left_join(y=nhgis_tract_alt, by=c("tract12","year")) %>% 
+  rename("pov_tract"="povrt") %>% 
+  mutate(tpratio = pov_tract/pov_puma)
+```
+
+```{r}
+
+temp = nhgis %>% 
+  dplyr::select(tract12, year, emprt)
+
+socex = nhgis %>% 
+  dplyr::select(puma12, tract12, year, tpratio) %>% 
+  drop_na(year) %>% 
+  pivot_wider(names_from = year, values_from = tpratio) %>% 
+  rename("tpratio_2012"="2012",
+         "tpratio_2023"="2023") %>% 
+  left_join(y=ccapov, by=c("puma12")) %>% 
+  mutate(pov_2012 = ccapov2012*tpratio_2012,
+         pov_2023 = ccapov2022*tpratio_2023
+         ) %>% 
+  dplyr::select(tract12, pov_2012, pov_2023) %>% 
+  pivot_longer(cols=!c(tract12), names_to = "year", values_to = "pov") %>% 
+  mutate(year = as.numeric(substr(year, 5, 8))) %>% 
+  left_join(y=temp, by=c("tract12","year")) %>% 
+  pivot_wider(names_from = year, values_from = c(pov, emprt)) %>% 
+  rename("tract"="tract12") %>% 
+  mutate(povch = (pov_2023-pov_2012)/pov_2012,
+         emprtch = (emprt_2023-emprt_2012)/emprt_2012,
+         povch = ifelse(povch > 2, 2,
+                        ifelse(povch == "Inf", NA,
+                        ifelse(povch == "NaN", NA,
+                        povch))),
+         emprtch = ifelse(emprtch > 1, 1,
+                        ifelse(emprtch == "Inf", NA,
+                        ifelse(emprtch == "NaN", NA,
+                        emprtch))))
+```
+
+```{r}
+test = nhgis %>% dplyr::select(tract12, year, tpratio) %>%
+  drop_na() %>% 
+  pivot_wider(names_from=year, values_from=tpratio) %>% 
+  rename("a2012"="2012", "a2023"="2023") %>% 
+  mutate(test = a2023-a2012,
+         test = ifelse(test > 1, 1,
+                       ifelse(test < -1, -1, test)))
+
+hist(test$test)
+
+nhgis %>% 
+  drop_na() %>% 
+  group_by(year) %>% 
+  dplyr::summarize(d = n())
+
+```
+
+# core-periphery
+
+```{r}
+# Create a sample trade flow data frame
+trade_data <- data.frame(
+  from = c("USA", "USA", "USA", "CAN", "CAN", "MEX"),
+  to = c("CAN", "MEX", "BRA", "MEX", "USA", "USA"),
+  value = c(100, 150, 50, 80, 200, 75)
+)
+```
+
+##### using
+
+added log, see what that looks like
+
+double check with anton what units are on trade volume
+
+```{r}
+
+df_tf_clean = df_tf
+df_tf2 = df_tf_clean
+
+df_tf = df_tf2 %>% 
+  filter(flow > 100)
+
+```
+
+```{r}
+xwalk = read.csv("C:/Users/adams/Downloads/xwalk_cz.csv") %>% 
+  mutate(place = sprintf("%05d", cty)) %>% 
+  dplyr::select(cz, place) %>% 
+  mutate(cz = as.character(cz))
+```
+
+```{r}
+
+
+
+temp1 = xwalk %>% 
+  rename("from"="place",
+         "cz_from"="cz")
+
+temp2 = xwalk %>% 
+  rename("to"="place",
+         "cz_to"="cz")
+
+df_tf4 = df_tf2 %>% 
+  left_join(y=temp1, by="from") %>% 
+  left_join(y=temp2, by="to") %>% 
+  dplyr::select(-to, -from) %>% 
+  mutate(filt = ifelse(cz_from == cz_to, "same", "diff")) %>% 
+  drop_na() %>% 
+  filter(filt == "diff") %>% 
+  group_by(cz_from, cz_to) %>% 
+  dplyr::summarize(flow = sum(flow, na.rm=TRUE)) %>% 
+  rename("from"="cz_from",
+         "to"="cz_to")
+
+```
+
+```{r}
+df = df_tf4 %>% 
+  filter(flow > 50000)
+
+g <- igraph::graph_from_data_frame(d = df, directed = FALSE)
+
+# Calculate s-coreness using the brainGraph::s_core() function
+weighted_coreness_scores <- brainGraph::s_core(g)
+
+# Display the results
+print(weighted_coreness_scores)
+
+core_brain3 = as.data.frame(weighted_coreness_scores) %>%
+  rownames_to_column(var = "cz") %>% 
+  left_join(y=xwalk, by="cz") %>% 
+  dplyr::select(place, "alt_core"=weighted_coreness_scores)
+
+```
+
+## iso
+
+```{r}
+ruc = read.csv("projects/isolation/data/raw/ruralurbancodes2013.csv") %>% 
+  dplyr::select("place"=FIPS, "metro"=RUCC_2013) %>% 
+  mutate(metro = ifelse(metro > 3, 0,
+                        ifelse(metro <= 3, 1, NA)),
+         place = sprintf("%05d", place))
+```
+
+```{r}
+isolation = census_map  %>% 
+  left_join(y=core_brain3, by="place") %>% 
+  left_join(y=ruc, by="place")
+
+iso2 = isolation%>%
+  st_drop_geometry()
+  
+  
+```
+
+```{r}
+write.csv(iso2, "temp_data_v2.csv")
+# isolation = read.csv("temp_data_v2.csv") %>% dplyr::select(-X)
+```
+
+moran's i
+
+```{r}
+
+```
+
+## geo
+
+```{r}
+ruca_clean = read.csv("projects/isolation/data/raw/usda_ruca.csv")
+far_clean = read.csv("projects/isolation/data/raw/usda_far.csv")
+xwalk_trzip = read.csv("projects/isolation/data/raw/zip_tract_092016.csv") %>% 
+  dplyr::select(ZIP, "tract"=TRACT)
+
+```
+
+```{r}
+far = far_clean %>% 
+  dplyr::select(ZIP, far1) %>% 
+  distinct() %>% 
+  left_join(y=xwalk_trzip, by="ZIP") %>% 
+  group_by(tract) %>% 
+  dplyr::summarize(far = sum(far1, na.rm=TRUE)) %>% 
+  mutate(far = ifelse(far >= 1, 1,
+                      ifelse(far == 0, 0, NA)),
+         tract = str_pad(tract, width = 11, pad = "0", side = "left"))
+```
+
+```{r}
+ruca = ruca_clean %>% 
+  dplyr::select(tract, "ruca"=primary) %>% 
+  mutate(noncore = ifelse(ruca == 1, 0,
+                        ifelse(ruca == 99, NA,
+                        ifelse(ruca > 1, 1, NA))),
+         tract = str_pad(tract, width = 11, pad = "0", side = "left")) %>% 
+  left_join(y=far, by="tract")
+```
+
+```{r}
+
+```
+
+```{r}
+options(tigris_use_cache = TRUE)
+us_states <- states(class = "sf", progress_bar = FALSE)
+state_list <- us_states$STUSPS
+all_tracts_sf <- map_dfr(state_list, ~ {
+  tracts(state = .x, class = "sf", progress_bar = TRUE, year = 2010)
+}) %>% 
+  shift_geometry()
+```
+
+```{r}
+geo = all_tracts_sf %>% 
+  mutate(FIPS = str_c(STATEFP, COUNTYFP)) %>% 
+  dplyr::select("tract"=GEOID10, FIPS) %>%
+  left_join(y=ruca, by="tract") %>% 
+  mutate(geoiso = ifelse(far == 1 & noncore == 1, "iso",
+                         ifelse(far == 1 & noncore == 0, "core far",
+                                ifelse(far == 0 & noncore == 1, "noncore nonfar",
+                                       ifelse(far == 0 & noncore == 0, "core nonfar",
+                                       NA)))),
+         st = as.numeric(substr(FIPS, 1, 2))) %>%
+  filter(st <= 56)
+
+temp = iso2 %>% 
+  dplyr::select("FIPS"=place, alt_core, metro)  %>%
+  mutate(alt_core = ifelse(is.na(alt_core), 0, alt_core),
+         econiso = ifelse(alt_core >= 10, 0,
+                       ifelse(alt_core < 10, 1, NA)))
+
+data = geo %>% 
+  left_join(y=temp, by="FIPS") %>% 
+  left_join(y=socex, by="tract")
+
+temp = data %>%
+  st_drop_geometry() %>% 
+  filter(noncore == 1 & far == 1)
+
+test = data %>%
+  st_drop_geometry() %>% 
+  filter(noncore == 1 & far == 1) %>%
+  mutate(d = 1) %>% 
+  group_by(econiso) %>% 
+  dplyr::summarize(d = sum(d, na.rm=TRUE))
+```
+
+# data-clean
+
+```{r}
+# saveRDS(data, "data.rds")
+data <- readRDS("data.rds")
+
+states  <- get_acs(
+  geography = "state",
+  variables = "B01002_001",
+  year = 2019,
+  survey = "acs5",
+  geometry = TRUE,
+  resolution = "20m"
+) %>%
+  shift_geometry() %>%
+  dplyr::select(state="GEOID")
+```
+
+# descriptives
+
+## geo map
+
+```{r}
+# isolation %>%
+#   filter(metro == 0) %>% 
+#   tm_shape() + 
+#   tm_polygons(col = "econiso", midpoint = 0.5, border.alpha = 0.0, style = "cont", 
+#               palette = c("#6FA8DC","#20124d")) +
+#   tm_layout(title = "Coreness", title.size = 2) +
+#   tm_shape(states) + 
+#   tm_borders(lwd=0.6)
+
+
+data %>%
+  filter(noncore == 1 & far == 1) %>% 
+  tm_shape() + 
+  tm_polygons(col = "econiso", midpoint = 0.5, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","#20124d"), 
+              legend.show = FALSE) +
+  tm_layout(title = "", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+```
+
+```{r}
+
+# data %>%
+#   filter(noncore == 1 & far == 1) %>% 
+#   tm_shape() + 
+#   tm_polygons(col = "povch", midpoint = 0, border.alpha = 0.0, style = "cont", 
+#               palette = c("#d9d2e9","#351c75"), 
+#               legend.show = FALSE) +
+#   tm_layout(title = "", title.size = 2) +
+#   tm_shape(states) + 
+#   tm_borders(lwd=0.6)
+
+data %>%
+  mutate(povch = ifelse(noncore != 1, NA, povch)) %>% 
+  filter(!is.na(far)) %>% 
+  tm_shape() + 
+  tm_polygons(col = "povch", midpoint = 0, border.alpha = 0.0, style = "cont", 
+              palette = c("#133337","#fff2cc","#660000")) +
+  tm_layout(title = "", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+```
+
+```{r}
+
+
+temp = data %>% 
+  mutate(quad_combo = ifelse(geoiso == "iso" & econiso == 1, "geo & econ",
+                      ifelse(geoiso == "iso" & econiso == 0, "geo",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 1, "econ (non-core metro)",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 0, "neither (non-core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 1, "econ (core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 0, "neither (core metro)", NA
+                      
+  )))))),
+  quad_nonmetro = ifelse(noncore == 0, "core metro", quad_combo),
+  quad_metro = ifelse(noncore == 1, "non-core metro", quad_combo)) %>% 
+  drop_na(econiso, noncore, geoiso)
+
+
+temp_nonmetro = temp %>% 
+  mutate(quad_nonmetro = ifelse(quad_nonmetro == "econ (non-core metro)", "econ", quad_nonmetro),
+         quad_nonmetro = ifelse(quad_nonmetro == "neither (non-core metro)", "neither", quad_nonmetro))
+temp_metro = temp %>% 
+  mutate(quad_metro = ifelse(quad_metro == "econ (core metro)", "econ", quad_metro),
+         quad_metro = ifelse(quad_metro == "neither (core metro)", "neither", quad_metro))
+         
+
+  quad_nonmetro_colors <- c(
+    "geo & econ"   = "#FFEEAD",
+    "geo"  = "#52BF90",
+    "econ"  = "#20124d",
+    "core metro"  = "white",
+    "neither" = "#6FA8DC"
+  )
+
+    quad_metro_colors <- c(
+    "econ"  = "#20124d",
+    "non-core metro"  = "white",
+    "non" = "#6FA8DC"
+  )
+
+
+  
+tmap_mode(mode = "plot")
+
+  # Map
+  tm_shape(temp_nonmetro) + 
+    tm_polygons(
+      col = "quad_nonmetro",
+      border.alpha = 0.0,
+      style = "cat",
+      palette = quad_nonmetro_colors,
+      legend.show = FALSE
+    ) +
+    tm_layout(
+      title = "",
+      title.size = 2
+    ) +
+    tm_shape(states) + 
+    tm_borders(lwd = 0.6)
+```
+
+##### moran's i
+
+```{r}
+temp = xwalk %>% 
+  rename("FIPS"="place")
+
+czdata = data %>% 
+  left_join(y=temp, by="FIPS") %>% 
+  group_by(cz) %>% 
+  dplyr::summarize(econiso = mean(econiso, na.rm=TRUE))
+```
+
+```{r}
+temp = czdata
+
+nb <- poly2nb(temp, queen = TRUE)
+listw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+moran_test_result <- moran.test(temp$econiso, listw)
+print(moran_test_result)
+```
+
+```{r}
+temp = data %>% 
+  dplyr::select(tract, far) %>% 
+  drop_na()
+
+nb <- poly2nb(temp, queen = TRUE)
+listw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+moran_test_result <- moran.test(temp$far, listw)
+print(moran_test_result)
+```
+
+## distributions
+
+```{r}
+
+temp = data %>% 
+  mutate(quad_combo = ifelse(geoiso == "iso" & econiso == 1, "geo & econ",
+                      ifelse(geoiso == "iso" & econiso == 0, "geo",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 1, "econ (non-core metro)",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 0, "neither (non-core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 1, "econ (core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 0, "neither (core metro)", NA
+                      
+  )))))),
+  quad_nonmetro = ifelse(noncore == 0, "core metro", quad_combo),
+  quad_metro = ifelse(noncore == 1, "non-core metro", quad_combo)) %>% 
+  drop_na(econiso, noncore, geoiso) %>% 
+  mutate(pov_2012 = ifelse(pov_2012 > 1, 1, pov_2012),
+         pov_2023 = ifelse(pov_2023 > 1, 1, pov_2023)
+         )
+
+
+temp_nonmetro = temp %>% 
+  mutate(quad_nonmetro = ifelse(quad_nonmetro == "econ (non-core metro)", "econ", quad_nonmetro),
+         quad_nonmetro = ifelse(quad_nonmetro == "neither (non-core metro)", "neither", quad_nonmetro)) %>% 
+  filter(noncore == 1)
+temp_metro = temp %>% 
+  mutate(quad_metro = ifelse(quad_metro == "econ (core metro)", "econ", quad_metro),
+         quad_metro = ifelse(quad_metro == "neither (core metro)", "neither", quad_metro)) %>% 
+  filter(noncore == 0)
+
+
+ggplot(data = temp_nonmetro, aes(x = povch, y = quad_nonmetro, fill = quad_nonmetro)) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient",
+    alpha = 0.8,
+    quantile_lines = TRUE,
+    quantiles = c(0.25, 0.50, 0.75),
+    quantile_colour = "white" # Keeps quantile lines visible on dark colors
+  ) +
+  # Use scale_fill_viridis_d() for discrete data
+  scale_fill_viridis_d(
+    option = "mako", 
+    begin = 0.4 # Avoids the darkest colors at the start of the palette
+  ) +
+  labs(
+    title = "Distributions of tract changes in poverty",
+    subtitle = "2012-2023",
+    x = "Change in poverty rate, 2012-2023",
+    y = "Tract typology"
+  ) +
+  theme_ridges() +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 14, hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none"
+  )
+
+ggplot(data = temp_nonmetro, aes(x = emprtch, y = quad_nonmetro, fill = quad_nonmetro)) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient",
+    alpha = 0.8,
+    quantile_lines = TRUE,
+    quantiles = c(0.25, 0.50, 0.75),
+    quantile_colour = "white" # Keeps quantile lines visible on dark colors
+  ) +
+  # Use scale_fill_viridis_d() for discrete data
+  scale_fill_viridis_d(
+    option = "mako", 
+    begin = 0.4 # Avoids the darkest colors at the start of the palette
+  ) +
+  labs(
+    title = "Distributions of tract changes in employmnet rate",
+    subtitle = "2012-2023",
+    x = "Change in employment rate, 2012-2023",
+    y = "Tract typology"
+  ) +
+  theme_ridges() +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 14, hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none"
+  )
+
+
+ggplot(data = temp_nonmetro, aes(x = pov_2023, y = quad_nonmetro, fill = quad_nonmetro)) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient",
+    alpha = 0.8,
+    quantile_lines = TRUE,
+    quantiles = c(0.25, 0.50, 0.75),
+    quantile_colour = "white" # Keeps quantile lines visible on dark colors
+  ) +
+  # Use scale_fill_viridis_d() for discrete data
+  scale_fill_viridis_d(
+    option = "mako", 
+    begin = 0.4 # Avoids the darkest colors at the start of the palette
+  ) +
+  labs(
+    title = "Distributions of tract poverty rate",
+    subtitle = "",
+    x = "Poverty rate, 2023",
+    y = "Tract typology"
+  ) +
+  theme_ridges() +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 14, hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none"
+  )
+
+ggplot(data = temp_nonmetro, aes(x = emprt_2023, y = quad_nonmetro, fill = quad_nonmetro)) +
+  stat_density_ridges(
+    geom = "density_ridges_gradient",
+    alpha = 0.8,
+    quantile_lines = TRUE,
+    quantiles = c(0.25, 0.50, 0.75),
+    quantile_colour = "white" # Keeps quantile lines visible on dark colors
+  ) +
+  # Use scale_fill_viridis_d() for discrete data
+  scale_fill_viridis_d(
+    option = "mako", 
+    begin = 0.4 # Avoids the darkest colors at the start of the palette
+  ) +
+  labs(
+    title = "Distributions of tract employment rate",
+    subtitle = "",
+    x = "Employment rate, 2023",
+    y = "Tract typology"
+  ) +
+  theme_ridges() +
+  theme(
+    plot.title.position = "plot",
+    plot.title = element_text(size = 14, hjust = 0),
+    plot.subtitle = element_text(hjust = 0),
+    axis.text.y = element_text(size = 8),
+    legend.position = "none"
+  )
+```
+
+# tests
+
+```{r}
+temp = data %>% 
+  mutate(quad_combo = ifelse(geoiso == "iso" & econiso == 1, "geo & econ",
+                      ifelse(geoiso == "iso" & econiso == 0, "geo",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 1, "econ (non-core metro)",
+                      ifelse(geoiso == "noncore nonfar" & econiso == 0, "neither (non-core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 1, "econ (core metro)",
+                      ifelse(geoiso == "core nonfar" & econiso == 0, "neither (core metro)", NA
+                      
+  )))))),
+  quad_nonmetro = ifelse(noncore == 0, "core metro", quad_combo),
+  quad_metro = ifelse(noncore == 1, "non-core metro", quad_combo)) %>% 
+  drop_na(econiso, noncore, geoiso) %>% 
+  mutate(pov_2012 = ifelse(pov_2012 > 1, 1, pov_2012),
+         pov_2023 = ifelse(pov_2023 > 1, 1, pov_2023)
+         )
+
+
+temp_nonmetro = temp %>% 
+  mutate(quad_nonmetro = ifelse(quad_nonmetro == "econ (non-core metro)", "econ", quad_nonmetro),
+         quad_nonmetro = ifelse(quad_nonmetro == "neither (non-core metro)", "neither", quad_nonmetro)) %>% 
+  filter(noncore == 1)
+temp_metro = temp %>% 
+  mutate(quad_metro = ifelse(quad_metro == "econ (core metro)", "econ", quad_metro),
+         quad_metro = ifelse(quad_metro == "neither (core metro)", "neither", quad_metro)) %>% 
+  filter(noncore == 0)
+
+```
+
+## PS
+
+### poverty level
+
+```{r}
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$pov_2023[d$quad_nonmetro == g1]
+  y <- d$pov_2023[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+
+```
+
+### employment rate level
+
+```{r}
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$emprt_2023[d$quad_nonmetro == g1]
+  y <- d$emprt_2023[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+```
+
+### other years
+
+```{r}
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$pov_2012[d$quad_nonmetro == g1]
+  y <- d$pov_2012[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$emprt_2012[d$quad_nonmetro == g1]
+  y <- d$emprt_2012[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+```
+
+### ch pov
+
+```{r}
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$povch[d$quad_nonmetro == g1]
+  y <- d$povch[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+```
+
+### ch emprt
+
+```{r}
+
+# --- PS function ---
+ps_stat <- function(data, indices, g1, g2) {
+  d <- data[indices, ]
+  x <- d$emprtch[d$quad_nonmetro == g1]
+  y <- d$emprtch[d$quad_nonmetro == g2]
+  
+  # guard: if one group vanishes in resample, return NA
+  if (length(x) == 0 || length(y) == 0) return(NA_real_)
+  
+  mean(outer(x, y, ">")) + 0.5 * mean(outer(x, y, "=="))
+}
+
+# --- Safe boot wrapper ---
+boot_ps <- function(data, g1, g2, R = 2000) {
+  b <- boot(
+    data = data,
+    statistic = function(d, idx) ps_stat(d, idx, g1, g2),
+    R = R,
+    parallel = "snow",
+    ncpus = 1
+  )
+  
+  # try CI
+  ci <- tryCatch(
+    boot.ci(b, type = "perc")$percent[4:5],
+    error = function(e) c(NA, NA)
+  )
+  
+  tibble(
+    group1 = g1,
+    group2 = g2,
+    ps_est = b$t0,
+    ci_low = ci[1],
+    ci_high = ci[2]
+  )
+}
+
+# --- Parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Run all pairwise ---
+groups <- unique(temp2$quad_nonmetro) |> as.character()
+
+pairwise_results <- expand.grid(group1 = groups, group2 = groups, 
+                                stringsAsFactors = FALSE) %>%
+  filter(group1 < group2)
+
+results <- future_pmap_dfr(
+  list(pairwise_results$group1, pairwise_results$group2),
+  ~ boot_ps(temp2, ..1, ..2, R = 2000)
+)
+
+results
+```
+
+## permutation
+
+```{r}
+
+# --- Function to compute nonparametric effect stats ---
+compute_effects <- function(data, outcome) {
+  # group means
+  means <- data %>%
+    group_by(econiso, far) %>%
+    summarise(mean_outcome = mean(.data[[outcome]], na.rm = TRUE), .groups = "drop")
+  
+  # main effects (marginal means)
+  mean_econ1 <- means %>% filter(econiso == 1) %>% summarise(m = mean(mean_outcome)) %>% pull(m)
+  mean_econ0 <- means %>% filter(econiso == 0) %>% summarise(m = mean(mean_outcome)) %>% pull(m)
+  f_econ <- mean_econ1 - mean_econ0
+  
+  mean_far1 <- means %>% filter(far == 1) %>% summarise(m = mean(mean_outcome)) %>% pull(m)
+  mean_far0 <- means %>% filter(far == 0) %>% summarise(m = mean(mean_outcome)) %>% pull(m)
+  f_far <- mean_far1 - mean_far0
+  
+  # interaction: difference of differences
+  g11 <- means %>% filter(econiso==1, far==1) %>% pull(mean_outcome)
+  g10 <- means %>% filter(econiso==1, far==0) %>% pull(mean_outcome)
+  g01 <- means %>% filter(econiso==0, far==1) %>% pull(mean_outcome)
+  g00 <- means %>% filter(econiso==0, far==0) %>% pull(mean_outcome)
+  f_interact <- (g11 - g10) - (g01 - g00)
+  
+  c(main_econ = f_econ, main_far = f_far, interact = f_interact)
+}
+
+# --- Permutation test ---
+perm_test_np <- function(data, outcome, n_perm = 2000, seed = 123) {
+  set.seed(seed)
+  f_obs <- compute_effects(data, outcome)
+  
+  f_perm <- replicate(n_perm, {
+    data_perm <- data
+    data_perm[[outcome]] <- sample(data_perm[[outcome]])  # shuffle outcome
+    compute_effects(data_perm, outcome)
+  })
+  
+  pvals <- sapply(1:3, function(i) mean(abs(f_perm[i, ]) >= abs(f_obs[i])))
+  
+  tibble(
+    outcome = outcome,
+    effect  = names(f_obs),
+    effect_obs = f_obs,
+    p_perm = pvals
+  )
+}
+
+# --- Run for your outcomes ---
+results_pov <- perm_test_np(temp_nonmetro, "pov_2023", n_perm = 2000)
+results_emprt <- perm_test_np(temp_nonmetro, "emprt_2023", n_perm = 2000)
+
+results_perm <- bind_rows(results_pov, results_emprt)
+results_perm
+
+```
+
+```{r}
+
+temp_nonmetro2 = temp_nonmetro %>% 
+  st_drop_geometry()
+
+# --- Set up parallel plan ---
+plan(multisession, workers = parallel::detectCores())
+
+# --- Parallel permutation test function ---
+perm_test_np_parallel <- function(data, outcome, n_perm = 2000, seed = 123) {
+  set.seed(seed)
+  f_obs <- compute_effects(data, outcome)
+  
+  # Run permutations in parallel using future_map
+  f_perm_list <- future_map(1:n_perm, ~{
+    data_perm <- data
+    data_perm[[outcome]] <- sample(data_perm[[outcome]])
+    compute_effects(data_perm, outcome)
+  })
+  
+  # Convert list to matrix: rows = effects, cols = permutations
+  f_perm <- do.call(cbind, f_perm_list)
+  
+  # Compute permutation p-values
+  pvals <- map_dbl(1:3, ~mean(abs(f_perm[., ]) >= abs(f_obs[.])) )
+  
+  tibble(
+    outcome = outcome,
+    effect  = names(f_obs),
+    effect_obs = f_obs,
+    p_perm = pvals
+  )
+}
+
+# --- Multiple outcomes in parallel ---
+outcomes <- c("pov_2023", "emprt_2023")
+
+results_perm <- future_map_dfr(outcomes, ~perm_test_np_parallel(temp_nonmetro2, .x, n_perm = 2000))
+results_perm
+```
+
+interaction plot - haven't tested if it works
+
+```{r}
+# --- Compute observed group means ---
+means <- temp_nonmetro %>%
+  group_by(econiso, far) %>%
+  summarise(poverty_rate = mean(pov_2023, na.rm = TRUE), .groups = "drop")
+
+# --- Compute additive expectations ---
+grand_mean <- mean(means$poverty_rate)
+
+econ_effect <- means %>%
+  group_by(econiso) %>%
+  summarise(econ_mean = mean(poverty_rate)) %>%
+  mutate(effect = econ_mean - grand_mean) %>%
+  select(econiso, effect)
+
+far_effect <- means %>%
+  group_by(far) %>%
+  summarise(far_mean = mean(poverty_rate)) %>%
+  mutate(effect = far_mean - grand_mean) %>%
+  select(far, effect)
+
+means <- means %>%
+  left_join(econ_effect, by = "econiso") %>%
+  rename(econ_effect = effect) %>%
+  left_join(far_effect, by = "far") %>%
+  rename(far_effect = effect) %>%
+  mutate(expected_additive = grand_mean + econ_effect + far_effect)
+
+# --- Plot observed vs additive ---
+ggplot(means, aes(x = factor(far), y = poverty_rate,
+                  group = factor(econiso), color = factor(econiso))) +
+  geom_line(aes(linetype = "Observed")) +
+  geom_point() +
+  geom_line(aes(y = expected_additive, linetype = "Additive")) +
+  labs(x = "Geographic Isolation (far)",
+       y = "Poverty Rate",
+       color = "Economic Isolation",
+       linetype = "Line Type",
+       title = "Observed vs Expected (Additive) Interaction: Poverty") +
+  theme_minimal()
+```
+
+change
+
+```{r}
+
+# --- Multiple outcomes in parallel ---
+outcomes <- c("povch", "emprtch")
+
+results_perm <- future_map_dfr(outcomes, ~perm_test_np_parallel(temp_nonmetro2, .x, n_perm = 2000))
+results_perm
+```
+
+## supply and demand map
+
+```{r}
+com = "334413"
+x <- df_outsupdem %>%
+  filter(com_code == com) %>%
+  mutate(netsup = supply - demand,
+         log_netsup = if_else(netsup > 0, log10(netsup), -log10(-netsup)))
+
+
+isolation %>%
+  left_join(x, "place") %>%
+  filter(is.finite(log_netsup)) %>%
+  tm_shape() +
+  tm_polygons(
+    title = com,
+    col = "log_netsup",
+    border.alpha = 0.0,
+    style = "cont",
+    midpoint = 0)
+
+# exposure to buyers market power
+NMS3a %>%
+  filter(com_code == com) %>%
+  ungroup() %>%
+  skimr::skim(NMS3a)
+
+# exposure to sellers market power
+NMS3b %>%
+  filter(com_code == com) %>%
+  ungroup() %>%
+  skimr::skim(NMS3b)
+
+```
+
+## univariate
+
+merge messed up (cuz cz is trying to merge with fips)
+
+```{r}
+
+isolation %>%
+  st_drop_geometry() %>% 
+  pivot_longer(cols = !c(place), names_to = "var", values_to = "val") %>% 
+  group_by(var) %>%
+  summarise(
+    count = n(),
+    mean = mean(val, na.rm = TRUE),
+    sd = sd(val, na.rm = TRUE),
+    median = median(val, na.rm = TRUE),
+    p25 = quantile(val, 0.25, na.rm = TRUE),
+    p75 = quantile(val, 0.75, na.rm = TRUE),
+    min = min(val, na.rm = TRUE),
+    max = max(val, na.rm = TRUE)
+  )
+
+```
+
+```{r}
+
+ggplot(isolation, aes(x = twd_ex)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance of Exports",
+    x = "twd",
+    y = "Density"
+  )
+
+ggplot(isolation, aes(x = twd_im)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance of Imports",
+    x = "twd",
+    y = "Density"
+  )
+
+ggplot(isolation, aes(x = logtwd_ex)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance of Exports (log)",
+    x = "twd",
+    y = "Density"
+  )
+ggplot(isolation, aes(x = logtwd_im)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Trade-Weighted Distance of Imports (log)",
+    x = "twd",
+    y = "Density"
+  )
+
+
+ggplot(isolation, aes(x = coreness)) +
+  geom_density(fill = "#6FA8DC", color = "black", alpha = 1.3) +
+  theme_minimal() +
+  labs(
+    title = "Density Plot of Coreness",
+    x = "coreness",
+    y = "Density"
+  )
+
+# temp <- isolation %>%
+#   pivot_longer(cols = c(lsh50_ex, lsh100_ex, lsh200_ex, lsh400_ex),
+#                names_to = "Distance",
+#                values_to = "Value")
+# temp$Distance <- factor(temp$Distance, levels = c("lsh400_ex","lsh200_ex","lsh100_ex","lsh50_ex"))
+# 
+# 
+# ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
+#   geom_density_ridges(scale = 1.2, alpha = 0.8, color = "white") +
+#   scale_fill_viridis_d(option = "D", end = 0.8) +
+#   theme_minimal() +
+#   labs(title = "Share of intermediate exports sent within __ miles",
+#        subtitle = "Distribution of US counties",
+#        x = "Value",
+#        y = "Distance") +
+#   theme(legend.position = "none")
+# 
+# 
+# temp <- isolation %>%
+#   pivot_longer(cols = c(lsh50_im, lsh100_im, lsh200_im, lsh400_im),
+#                names_to = "Distance",
+#                values_to = "Value")
+# temp$Distance <- factor(temp$Distance, levels = c("lsh400_im","lsh200_im","lsh100_im","lsh50_im"))
+# 
+# 
+# ggplot(temp, aes(x = Value, y = Distance, fill = Distance)) +
+#   geom_density_ridges(scale = 1.2, alpha = 0.8, color = "white") +
+#   scale_fill_viridis_d(option = "D", end = 0.8) +
+#   theme_minimal() +
+#   labs(title = "Share of intermediate imports received from within __ miles",
+#        subtitle = "Distribution of US counties",
+#        x = "Value",
+#        y = "Distance") +
+#   theme(legend.position = "none")
+
+
+```
+
+```{r}
+
+tmap_mode("view")
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "twd_ex", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of exports", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("view")
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "twd_im", border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of imports", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd_ex, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_ex", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of exports (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd_im, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_im", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of imports (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+# mx = median(isolation$coreness, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "coreness", midpoint = 0.5, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Coreness", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+# mx = median(isolation$coreness, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "alt_cpi", midpoint = 0.5, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "Coreness", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+isolation$core <- as.factor(isolation$core)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(
+    col = "core",
+    palette = c("0" = "#6FA8DC", "1" = "#20124d"), # Use named colors for clarity
+    border.alpha = 0.0,
+    title = "Core vs. periphery"
+  ) +
+  tm_layout(title = "Core vs. periphery states", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd = 0.6)
+
+mx = median(isolation$alt_core, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "alt_core", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "alt coreness", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+# mx = median(isolation$coreness, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "econiso", midpoint = 0.5, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","#20124d")) +
+  tm_layout(title = "Coreness", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+```
+
+```{r}
+mx = median(isolation$alt_core, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "alt_core", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "alt coreness", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+mx = median(isolation$logtwd_ex, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_ex", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of exports (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+mx = median(isolation$logtwd_im, na.rm=TRUE)
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_im", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("white","#20124d")) +
+  tm_layout(title = "Average trade-weighted distance of imports (log)", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+
+```
+
+```{r}
+
+tmap_mode("plot")
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_ex", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("plot")
+
+isolation %>%
+  tm_shape() + 
+  tm_polygons(col = "logtwd_im", border.alpha = 0.0, style = "quantile", 
+              palette = c("white","#20124d")) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
+
+## bivariate
+
+```{r}
+cor.test(x=isolation$logtwd_ex, y=isolation$logtwd_im)
+cor.test(x=isolation$logtwd_ex, y=isolation$NMS_supply)
+cor.test(x=isolation$logtwd_im, y=isolation$NMS_demand)
+cor.test(x=isolation$logtwd_ex, y=isolation$LMS_supply)
+cor.test(x=isolation$logtwd_im, y=isolation$LMS_demand)
+cor.test(x=isolation$logtwd_ex, y=isolation$lsh200_ex)
+cor.test(x=isolation$logtwd_ex, y=isolation$lsh200_im)
+cor.test(x=isolation$logtwd_ex, y=isolation$trade_capacity)
+cor.test(x=isolation$logtwd_im, y=isolation$trade_capacity)
+cor.test(x=isolation$logtwd_ex, y=isolation$ubiquity)
+cor.test(x=isolation$logtwd_im, y=isolation$ubiquity)
+
+cor.test(x=isolation$NMS_supply, y=isolation$NMS_demand)
+cor.test(x=isolation$NMS_supply, y=isolation$LMS_supply)
+cor.test(x=isolation$NMS_demand, y=isolation$LMS_demand)
+cor.test(x=isolation$NMS_supply, y=isolation$lsh200_ex)
+cor.test(x=isolation$NMS_demand, y=isolation$lsh200_im)
+cor.test(x=isolation$NMS_supply, y=isolation$trade_capacity)
+cor.test(x=isolation$NMS_demand, y=isolation$trade_capacity)
+cor.test(x=isolation$NMS_supply, y=isolation$ubiquity)
+cor.test(x=isolation$NMS_demand, y=isolation$ubiquity)
+
+cor.test(x=isolation$LMS_supply, y=isolation$LMS_demand)
+cor.test(x=isolation$LMS_supply, y=isolation$lsh200_ex)
+cor.test(x=isolation$LMS_demand, y=isolation$lsh200_im)
+cor.test(x=isolation$LMS_supply, y=isolation$trade_capacity)
+cor.test(x=isolation$LMS_demand, y=isolation$trade_capacity)
+cor.test(x=isolation$LMS_supply, y=isolation$ubiquity)
+cor.test(x=isolation$LMS_demand, y=isolation$ubiquity)
+
+cor.test(x=isolation$lsh200_ex, y=isolation$lsh200_im)
+cor.test(x=isolation$lsh200_ex, y=isolation$trade_capacity)
+cor.test(x=isolation$lsh200_im, y=isolation$trade_capacity)
+cor.test(x=isolation$lsh200_ex, y=isolation$ubiquity)
+cor.test(x=isolation$lsh200_im, y=isolation$ubiquity)
+
+cor.test(x=isolation$trade_capacity, y=isolation$ubiquity)
+
+
+
+
+```
+
+### quadrants
+
+```{r}
+iso_quads <- function(data, econ, geo) {
+  # Convert string column names to symbols
+  econ_col <- sym(econ)
+  geo_col  <- sym(geo)
+  
+  data2 <- data %>%
+    mutate(
+      md_econ = median(!!econ_col, na.rm = TRUE),
+      md_geo  = median(!!geo_col, na.rm = TRUE),
+      quad_econ = ifelse(!!econ_col >= md_econ, "high", "low"),
+      quad_geo = ifelse(!!geo_col >= md_geo, "high", "low"),
+      quad_combo = case_when(
+        quad_econ == "high" & quad_geo == "high" ~ "High Econ/High Geo",
+        quad_econ == "high" & quad_geo == "low"  ~ "High Econ/Low Geo",
+        quad_econ == "low" & quad_geo == "high"  ~ "Low Econ/High Geo",
+        quad_econ == "low" & quad_geo == "low"   ~ "Low Econ/Low Geo",
+        TRUE ~ NA_character_
+      )
+    )
+
+  quad_colors <- c(
+    "Low Econ/Low Geo"   = "#FFEEAD",
+    "High Econ/Low Geo"  = "#52BF90",
+    "Low Econ/High Geo"  = "#6FA8DC",
+    "High Econ/High Geo" = "#20124d"
+  )
+
+  # Map
+  tm_shape(data2) + 
+    tm_polygons(
+      col = "quad_combo",
+      border.alpha = 0.0,
+      style = "cat",
+      palette = quad_colors
+    ) +
+    tm_layout(
+      title = "Geographic and Economic Isolation",
+      title.size = 2
+    ) +
+    tm_shape(states) + 
+    tm_borders(lwd = 0.6)
+}
+
+```
+
+Below, you are able to input variables in the economic isolation and
+geographic isolation categories. Listing: **economic** --\> market share
+(mksh) --\> trade capacity (trade_capacity) **geographic** --\>
+trade-weighted distance (twd, logtwd) --\> share of exports within
+(lsh50, lsh100, lsh200, lsh400)
+
+```{r}
+tmap_mode("view")
+
+iso_quads(data = isolation, econ="LMS_supply", geo="logtwd_ex")
+
+```
+
+### scatter
+
+```{r}
+
+iso_scat <- function(data, econ, geo) {
+  ggplot(data, aes_string(x = econ, y = geo)) +
+    geom_point(color = "#52BF90", size = 2, alpha = 0.7) +
+    geom_smooth(method = "lm", color = "#20124d", se = FALSE, linetype = "dashed", size = 2) +
+    labs(x = econ, y = geo, title = paste("Scatterplot of", geo, "vs", econ)) +
+    theme_minimal()
+}
+
+```
+
+```{r}
+iso_scat(data = isolation, econ="LMS_supply", geo="logtwd_ex")
+
+```
+
+# multivariate
+
+```{r}
+
+temp = extra %>% st_drop_geometry()
+
+data2 = isolation %>% 
+  left_join(y=temp, by="place")
+  
+```
+
+```{r}
+
+summary(lm(data = data2, spm150 ~ lsh200_ex + ubiquity + trade_capacity + pct_nhw + logpop))
+summary(lm(data = data2, spm150 ~ LMS_demand + trade_capacity + pct_nhw + logpop))
+
+summary(lm(data = data2, spm150 ~ LMS_supply + ubiquity + trade_capacity + pct_nhw + logpop))
+summary(lm(data = data2, spm150 ~ LMS_demand + ubiquity + trade_capacity + pct_nhw + logpop))
+
+```
+
+# extra materials (temp)
+
+```{r}
+
+ddi <- read_ipums_ddi("data/ipums/usa_00037.xml")
+pums_clean <- read_ipums_micro(ddi)
+
+```
+
+```{r}
+xwalk = read.csv("data/ipums/county_puma22.csv") %>%
+  filter(state != "State code") %>%
+  mutate(PUMA = str_c(state, puma22),
+         FIPS = county, pumapop = as.numeric(pop20)) %>%
+  dplyr::select(PUMA, FIPS, pumapop, afact)
+```
+
+```{r}
+
+spm = pums_clean %>% 
+  drop_na(SPMTHRESH) %>% 
+  filter(SPMTHRESH != 999999) %>% 
+  mutate(spm100 = ifelse(ADJGINC>1*SPMTHRESH, 0, 1),
+         spm150 = ifelse(ADJGINC>1.5*SPMTHRESH, 0, 1),
+         spm200 = ifelse(ADJGINC>2*SPMTHRESH, 0, 1),
+         PUMA = str_c(sprintf("%02d", STATEFIP),"",sprintf("%05d", PUMA))
+         ) %>% 
+  dplyr::select(HHWT, PUMA, SPMPOV, SPMTHRESH, spm100, spm150, spm200) %>% 
+  distinct() %>% 
+  group_by(PUMA) %>% 
+  dplyr::summarize(spm100 = weighted.mean(x=spm100, w=HHWT, na.rm=TRUE),
+                   spm150 = weighted.mean(x=spm150, w=HHWT, na.rm=TRUE),
+                   spm200 = weighted.mean(x=spm200, w=HHWT, na.rm=TRUE)
+                   )
+
+spm = xwalk %>%
+  left_join(y=spm, by="PUMA") %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(spm100 = weighted.mean(x=spm100, w=pumapop, na.rm=TRUE),
+                   spm150 = weighted.mean(x=spm150, w=pumapop, na.rm=TRUE),
+                   spm200 = weighted.mean(x=spm200, w=pumapop, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="FIPS")
+
+opm <- get_acs(
+  geography = "puma",
+  variables = c("S1702_C01_001E","S1702_C01_045E"),
+  year = 2023,
+  survey = "acs1"
+) %>% 
+  dplyr::select("PUMA"=GEOID, variable, estimate) %>% 
+  pivot_wider(names_from = variable, values_from = estimate) %>% 
+  mutate(opm150 = S1702_C01_045/S1702_C01_001) %>% 
+  dplyr::select(PUMA, opm150)
+
+opm = xwalk %>%
+  left_join(y=opm, by="PUMA") %>%
+  group_by(FIPS) %>%
+  dplyr::summarize(opm150 = weighted.mean(x=opm150, w=pumapop, na.rm=TRUE)
+                   ) %>% 
+  rename("place"="FIPS")
+
+pov = opm %>% 
+  left_join(y=spm, by="place") %>%
+  mutate(across(c(opm150, spm150), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "z_{.col}")) %>% 
+  mutate(diff = z_spm150-z_opm150) %>% 
+  mutate(state = substr(place, 1, 2)) %>% 
+  filter(state != "72")
+
+
+pov2 = census_map %>%
+  left_join(y=pov, by="place")
+
+```
+
+```{r}
+pop_clean = read.csv("data/RRG_data/cc-est2015-alldata.csv")
+
+pop = pop_clean %>%
+  mutate(FIPS = str_c(sprintf("%02d", STATE),"",sprintf("%03d", COUNTY)),
+         pop_black = BA_MALE + BA_FEMALE, pop_asian = AA_MALE + AA_FEMALE, pop_ind = IA_MALE + IA_FEMALE, pop_hisp = H_MALE + H_FEMALE, pop = TOT_POP) %>%
+  filter(YEAR == 5 & AGEGRP == 0) %>%
+  dplyr::select(FIPS, pop, pop_black, pop_asian, pop_hisp, pop_ind) %>%
+  mutate(tot = pop_black + pop_asian + pop_ind + pop_hisp, pct_black = pop_black/pop, pct_asian = pop_asian/pop, pct_ind = pop_ind/pop, pct_hisp = pop_hisp/pop, pct_nhw = (pop-tot)/pop) %>% 
+  mutate(pct_nhw = ifelse(pct_nhw < 0, 0, pct_nhw)) %>% 
+  dplyr::select("place"=FIPS, pct_nhw, pct_black, pct_hisp, pct_asian, pct_ind, pop)
+```
+
+```{r}
+
+extra = pov2 %>% 
+  left_join(y=pop, by="place") %>% 
+  mutate(logpop = log(pop))
+
+```
+
+```{r}
+
+tmap_mode("view")
+mx = median(extra$opm150, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "opm150", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "OPM150", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("view")
+mx = median(extra$spm150, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "spm150", midpoint = mx, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "SPM150", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+tmap_mode("view")
+mx = median(extra$diff, na.rm=TRUE)
+extra %>%
+  tm_shape() + 
+  tm_polygons(col = "diff", midpoint = 0, border.alpha = 0.0, style = "cont", 
+              palette = c("#6FA8DC","white","#20124d")) +
+  tm_layout(title = "diff", title.size = 2) +
+  tm_shape(states) + 
+  tm_borders(lwd=0.6)
+
+```
+
+```{r}
+
+summary(lm(data=extra, diff ~ pct_nhw + logpop))
+
+cor.test(x=extra$pct_nhw, y=extra$logpop)
+
+```
