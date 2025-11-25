@@ -46,6 +46,8 @@ source("R/circularity.R", local = (circularity <- new.env()))
 source("R/trade_flows_wip.R", local = (trade_flows <- new.env()))
 
 
+# TODO: use this variable to branch coreness calculation
+coreness_type = "s" # "s" for weighted s-core, "k" for unweighted k-core
 input_ptile = 0.50
 # bootstrap size
 # TODO: use these numbers in the test sections
@@ -681,7 +683,8 @@ if (file.exists(opath$data)) {
   
   data = geo %>% 
     left_join(y=temp, by="FIPS") %>% 
-    left_join(y=socex, by="tract")
+    left_join(y=socex, by="tract") %>% 
+    mutate(econiso = ifelse(alt_core > ptile, 0, 1))
   
   temp = data %>%
     st_drop_geometry() %>% 
@@ -868,6 +871,7 @@ data %>%
 
 ```{r}
 isolation %>%
+# TODO: different modification for k-core and s-core
   mutate(alt_core = ifelse(place == "12086", 681, alt_core),
          econiso = ifelse(alt_core >= ptile, 0,
                           ifelse(alt_core < ptile, 1, NA))) %>% 
